@@ -1,6 +1,7 @@
 use ratatui::DefaultTerminal;
 
 use tui::{
+    config::Config,
     data_object::{Model, RunningState},
     manager::{event_manager::EventManager, message_manager::MessageManager},
     page::editor::Editor,
@@ -8,16 +9,17 @@ use tui::{
 };
 
 fn main() -> color_eyre::Result<()> {
+    let config = Config::load()?;
     terminal::install_panic_hook();
     let mut terminal = terminal::init_terminal()?;
-    let result = run(&mut terminal);
+    let result = run(&mut terminal, &config);
     terminal::restore_terminal()?;
     result
 }
 
-fn run(terminal: &mut DefaultTerminal) -> color_eyre::Result<()> {
+fn run(terminal: &mut DefaultTerminal, config: &Config) -> color_eyre::Result<()> {
     let mut model = Model::default();
-    let event_manager = EventManager;
+    let event_manager = EventManager::new(config);
     let message_manager = MessageManager;
     let editor_page = Editor;
 

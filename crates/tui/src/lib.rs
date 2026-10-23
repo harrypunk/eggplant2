@@ -1,4 +1,5 @@
 pub mod component;
+pub mod config;
 pub mod manager;
 pub mod page;
 pub mod terminal;

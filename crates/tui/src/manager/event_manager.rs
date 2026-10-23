@@ -2,23 +2,30 @@ use std::time::Duration;
 
 use ratatui::crossterm::event::{self, Event, KeyEvent, KeyEventKind};
 
+use crate::config::Config;
 use crate::data_object::{EditMode, Message, Model};
 use crate::manager::{app_key_manager::AppKeyManager, edit_key_manager::EditKeyManager};
 
-const POLL_TIMEOUT: Duration = Duration::from_millis(250);
-
-#[derive(Debug, Default)]
-pub struct EventManager;
+#[derive(Debug)]
+pub struct EventManager {
+    poll_timeout: Duration,
+}
 
 impl EventManager {
+    pub fn new(config: &Config) -> Self {
+        Self {
+            poll_timeout: Duration::from_millis(config.event_poll_timeout),
+        }
+    }
+
     /// Wait for the next terminal event and translate it into a [`Message`].
     pub fn next_message(&self, model: &Model) -> color_eyre::Result<Option<Message>> {
-        Ok(Self::read_event()?.and_then(|event| Self::translate(event, model)))
+        Ok(self.read_event()?.and_then(|event| Self::translate(event, model)))
     }
 
     /// Raw I/O: poll crossterm for the next event.
-    fn read_event() -> color_eyre::Result<Option<Event>> {
-        if event::poll(POLL_TIMEOUT)? {
+    fn read_event(&self) -> color_eyre::Result<Option<Event>> {
+        if event::poll(self.poll_timeout)? {
             return Ok(Some(event::read()?));
         }
         Ok(None)
