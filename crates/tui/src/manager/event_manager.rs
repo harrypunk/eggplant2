@@ -5,29 +5,27 @@ use ratatui::crossterm::event::{self, Event};
 
 use crate::config::Config;
 use crate::data_object::{Message, Model};
-use crate::manager::keyboard_input_registry::Registry;
+use crate::manager::{context::KeyChord, keyboard_input_registry::Registry};
 
 #[derive(Debug)]
 pub struct EventManager {
     poll_timeout: Duration,
+    keymap: Registry,
 }
 
 impl EventManager {
-    pub fn new(config: &Config) -> Self {
+    pub fn new(config: &Config, keymap: Registry) -> Self {
         Self {
             poll_timeout: Duration::from_millis(config.event_poll_timeout),
+            keymap,
         }
     }
 
     /// Wait for the next terminal event and translate it into a [`Message`].
-    pub fn next_message(
-        &self,
-        model: &Model,
-        keymap: Registry,
-    ) -> color_eyre::Result<Option<Message>> {
+    pub fn next_message(&self, model: &Model) -> color_eyre::Result<Option<Message>> {
         Ok(self
             .read_event()?
-            .and_then(|event| self.translate(event, model, keymap)))
+            .and_then(|event| self.translate(event, model)))
     }
 
     /// Raw I/O: poll crossterm for the next event.
@@ -39,12 +37,12 @@ impl EventManager {
     }
 
     /// Pure routing: dispatch on the event kind.
-    fn translate(&self, event: Event, model: &Model, keymap: Registry) -> Option<Message> {
+    fn translate(&self, event: Event, model: &Model) -> Option<Message> {
         let ctx = model.context_stack.last()?;
         match event {
             Event::Key(key) if key.kind == KeyEventKind::Press => {
-                let current_bindings = keymap.get_binding(ctx)?;
-                current_bindings.resolve(key.code)
+                let current_bindings = self.keymap.get_binding(ctx)?;
+                current_bindings.resolve(KeyChord::new(key.code, key.modifiers))
             }
             // Event::Mouse(mouse) => MouseManager.translate(mouse, model),
             // Event::Resize(..)   => Some(Message::Redraw),

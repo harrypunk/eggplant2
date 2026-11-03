@@ -1,10 +1,11 @@
 theme = "tokyo-night"
 event_poll_timeout = 300
 
+# Keymaps map action names to key bindings.
+# Supported modifiers: ctrl, alt, and shift (for example, "ctrl-q").
 [keymap.normal]
-leader_key = "space"
 quit = "q"
-open_agent_chat_dialog = "ctrl-i"
+enter_insert_mode = "i"
 
-[keymap.example]
-test_no_use = "empty"
+[keymap.editor_input]
+exit_insert_mode = "esc"

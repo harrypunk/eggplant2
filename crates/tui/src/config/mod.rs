@@ -1,9 +1,14 @@
-use std::{fs, io::ErrorKind};
+use std::{collections::HashMap, fs, io::ErrorKind};
 
 use serde::Deserialize;
 
 const DEFAULT_FOLDER: &str = ".eggplant";
 const CONFIG_FILE: &str = "config.toml";
+
+/// Raw keymap entries: context -> action -> key binding.
+///
+/// Validation and conversion into runtime keybindings happen in the keymap registry.
+pub type KeymapConfig = HashMap<String, HashMap<String, String>>;
 
 #[derive(Debug, Deserialize)]
 #[serde(default)]
@@ -12,6 +17,7 @@ pub struct Config {
     pub event_poll_timeout: u64,
     // todo theme
     pub theme: String,
+    pub keymap: KeymapConfig,
 }
 
 impl Default for Config {
@@ -19,6 +25,19 @@ impl Default for Config {
         Self {
             event_poll_timeout: 250,
             theme: "default".to_string(),
+            keymap: HashMap::from([
+                (
+                    "normal".to_string(),
+                    HashMap::from([
+                        ("quit".to_string(), "q".to_string()),
+                        ("enter_insert_mode".to_string(), "i".to_string()),
+                    ]),
+                ),
+                (
+                    "editor_input".to_string(),
+                    HashMap::from([("exit_insert_mode".to_string(), "esc".to_string())]),
+                ),
+            ]),
         }
     }
 }
@@ -55,5 +74,17 @@ mod tests {
         let config: Config = toml::from_str("event_poll_timeout = 16").unwrap();
         assert_eq!(config.event_poll_timeout, 16);
         assert_eq!(config.theme, "default");
+    }
+
+    #[test]
+    fn example_file_is_valid() {
+        let config: Config = toml::from_str(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../config.example.toml"
+        )))
+        .unwrap();
+
+        assert_eq!(config.keymap["normal"]["quit"], "q");
+        assert_eq!(config.keymap["editor_input"]["exit_insert_mode"], "esc");
     }
 }
