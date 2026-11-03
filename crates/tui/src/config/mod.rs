@@ -26,7 +26,9 @@ impl Default for Config {
 impl Config {
     /// Load `~/.eggplant/config.toml`, falling back to defaults when it does not exist.
     pub fn load() -> color_eyre::Result<Self> {
-        let Some(path) = std::env::home_dir().map(|home| home.join(DEFAULT_FOLDER).join(CONFIG_FILE)) else {
+        let Some(path) =
+            std::env::home_dir().map(|home| home.join(DEFAULT_FOLDER).join(CONFIG_FILE))
+        else {
             return Ok(Self::default());
         };
         match fs::read_to_string(&path) {

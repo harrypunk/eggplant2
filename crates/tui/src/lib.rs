@@ -11,6 +11,7 @@ pub mod data_object {
         pub running_state: RunningState,
         pub edit_mode: EditMode,
         pub current_focus: FocusTarget,
+        pub context_stack: Vec<Context>,
     }
 
     #[derive(Debug, Default, PartialEq, Eq)]
@@ -37,10 +38,22 @@ pub mod data_object {
         AgentChatDialog,
     }
 
-    #[derive(PartialEq)]
+    #[derive(Debug, Clone, Copy, PartialEq)]
     pub enum Message {
         Quit,
         EnterInsertMode,
         ExitInsertMode,
+        GotoBuffer(usize),
+    }
+
+    // context for input events
+    #[derive(Debug, Default, Hash, Clone, Copy, PartialEq, Eq)]
+    pub enum Context {
+        #[default]
+        AppNormal,
+        AgentChat,
+        AgentChatDialog,
+        VCS,
+        EditorInput,
     }
 }

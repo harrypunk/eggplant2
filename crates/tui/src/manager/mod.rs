@@ -1,5 +1,5 @@
-pub mod app_key_manager;
-pub mod edit_key_manager;
+pub mod context;
 pub mod event_manager;
+pub mod keyboard_input_registry;
 pub mod message_manager;
 pub mod mouse_manager;

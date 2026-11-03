@@ -1,0 +1,10 @@
+theme = "tokyo-night"
+event_poll_timeout = 300
+
+[keymap.normal]
+leader_key = "space"
+quit = "q"
+open_agent_chat_dialog = "ctrl-i"
+
+[keymap.example]
+test_no_use = "empty"
