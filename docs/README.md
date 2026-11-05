@@ -1,0 +1,1 @@
+# Documentation: architecture and manual
