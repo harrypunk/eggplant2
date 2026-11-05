@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use color_eyre::eyre::eyre;
+use editor::CursorMovement;
 
 use crate::{
     config::KeymapConfig,
@@ -57,9 +58,7 @@ fn parse_binding(
     key_name: &str,
 ) -> color_eyre::Result<(KeyChord, Message)> {
     let message = parse_message(action_name).ok_or_else(|| {
-        eyre!(
-            "unknown action `{action_name}` in keymap context `{context_name}`; expected quit, enter_insert_mode, or exit_insert_mode"
-        )
+        eyre!("unknown action `{action_name}` in keymap context `{context_name}`")
     })?;
     let key = key_name
         .parse::<KeyChord>()
@@ -84,6 +83,14 @@ fn parse_message(value: &str) -> Option<Message> {
         "quit" => Some(Message::Quit),
         "enter_insert_mode" => Some(Message::EnterInsertMode),
         "exit_insert_mode" => Some(Message::ExitInsertMode),
+        "move_left" => Some(Message::MoveCursor(CursorMovement::Left)),
+        "move_right" => Some(Message::MoveCursor(CursorMovement::Right)),
+        "move_up" => Some(Message::MoveCursor(CursorMovement::Up)),
+        "move_down" => Some(Message::MoveCursor(CursorMovement::Down)),
+        "backspace" => Some(Message::Backspace),
+        "insert_newline" => Some(Message::InsertNewline),
+        "undo" => Some(Message::Undo),
+        "redo" => Some(Message::Redo),
         _ => None,
     }
 }

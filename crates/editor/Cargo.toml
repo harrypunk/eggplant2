@@ -1,0 +1,15 @@
+[package]
+name = "editor"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+arc-swap = "1.9"
+helix-core = { git = "http://git.z.lan/fork/helix" }
+helix-stdx = { git = "http://git.z.lan/fork/helix" }
+helix-view = { git = "http://git.z.lan/fork/helix" }
+thiserror = "2"
+
+[dev-dependencies]
+tempfile = "3.27"
+tokio = { version = "1", features = ["macros", "rt"] }

@@ -8,4 +8,5 @@ edition = "2024"
 
 [workspace.dependencies]
 api = { path = "crates/api" }
+editor = { path = "crates/editor" }
 tui = { path = "crates/tui" }

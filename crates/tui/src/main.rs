@@ -1,8 +1,8 @@
-use ratatui::DefaultTerminal;
+use ratatui::{DefaultTerminal, backend::Backend as _};
 
 use tui::{
     config::Config,
-    data_object::{Context, Model, RunningState},
+    data_object::{Context, Message, Model, RunningState},
     manager::{
         event_manager::EventManager, keyboard_input_registry::Registry,
         message_manager::MessageManager,
@@ -33,6 +33,12 @@ fn run(
     let event_manager = EventManager::new(config, keymap);
     let message_manager = MessageManager;
     let editor_page = Editor;
+
+    let initial_size = terminal.backend().size()?;
+    message_manager.update(
+        &mut model,
+        Message::Resize(initial_size.width, initial_size.height),
+    );
 
     while model.running_state != RunningState::Done {
         // Render the current view

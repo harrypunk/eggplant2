@@ -6,10 +6,12 @@ pub mod terminal;
 
 pub mod data_object {
 
+    use editor::CursorMovement;
+
     #[derive(Debug, Default)]
     pub struct Model {
         pub running_state: RunningState,
-        pub edit_mode: EditMode,
+        pub editor: editor::EditorSession,
         pub current_focus: FocusTarget,
         pub context_stack: Vec<Context>,
     }
@@ -19,14 +21,6 @@ pub mod data_object {
         #[default]
         Running,
         Done,
-    }
-
-    // vim style edit mode
-    #[derive(Debug, Default, PartialEq, Eq)]
-    pub enum EditMode {
-        #[default]
-        Normal,
-        Insert,
     }
 
     #[derive(Debug, Default, PartialEq, Eq)]
@@ -43,6 +37,13 @@ pub mod data_object {
         Quit,
         EnterInsertMode,
         ExitInsertMode,
+        MoveCursor(CursorMovement),
+        InsertChar(char),
+        InsertNewline,
+        Backspace,
+        Undo,
+        Redo,
+        Resize(u16, u16),
         GotoBuffer(usize),
     }
 

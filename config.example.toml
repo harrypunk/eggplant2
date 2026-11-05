@@ -6,6 +6,18 @@ event_poll_timeout = 300
 [keymap.normal]
 quit = "q"
 enter_insert_mode = "i"
+move_left = "h"
+move_right = "l"
+move_up = "k"
+move_down = "j"
+undo = "u"
+redo = "ctrl-r"
 
 [keymap.editor_input]
 exit_insert_mode = "esc"
+backspace = "backspace"
+insert_newline = "enter"
+move_left = "left"
+move_right = "right"
+move_up = "up"
+move_down = "down"

@@ -7,6 +7,7 @@ edition.workspace = true
 api.workspace = true
 color-eyre = "0.6.5"
 crossterm = "0.29.0"
+editor.workspace = true
 ratatui = "0.30.2"
 serde = { version = "1.0.229", features = ["derive"] }
 toml = "1.1.8"

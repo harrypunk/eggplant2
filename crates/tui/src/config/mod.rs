@@ -31,11 +31,25 @@ impl Default for Config {
                     HashMap::from([
                         ("quit".to_string(), "q".to_string()),
                         ("enter_insert_mode".to_string(), "i".to_string()),
+                        ("move_left".to_string(), "h".to_string()),
+                        ("move_right".to_string(), "l".to_string()),
+                        ("move_up".to_string(), "k".to_string()),
+                        ("move_down".to_string(), "j".to_string()),
+                        ("undo".to_string(), "u".to_string()),
+                        ("redo".to_string(), "ctrl-r".to_string()),
                     ]),
                 ),
                 (
                     "editor_input".to_string(),
-                    HashMap::from([("exit_insert_mode".to_string(), "esc".to_string())]),
+                    HashMap::from([
+                        ("exit_insert_mode".to_string(), "esc".to_string()),
+                        ("backspace".to_string(), "backspace".to_string()),
+                        ("insert_newline".to_string(), "enter".to_string()),
+                        ("move_left".to_string(), "left".to_string()),
+                        ("move_right".to_string(), "right".to_string()),
+                        ("move_up".to_string(), "up".to_string()),
+                        ("move_down".to_string(), "down".to_string()),
+                    ]),
                 ),
             ]),
         }
