@@ -1,22 +1,28 @@
 use std::{fmt::Display, path::Path};
 
+use editor::SaveRequest;
 use ratatui::layout::Rect;
 
 use crate::{
-    data_object::{Context, FocusTarget, Message, Model, RunningState, StatusMessage},
+    data_object::{
+        Context, DeferredAction, FocusTarget, Message, Model, RunningState, StatusMessage,
+    },
     explorer::ExplorerEntryKind,
     page::editor::editor_content_area,
 };
+
+pub enum Effect {
+    Save(SaveRequest),
+}
 
 #[derive(Debug, Default)]
 pub struct MessageManager;
 
 impl MessageManager {
-    pub fn update(&self, model: &mut Model, msg: Message) -> Option<Message> {
+    pub fn update(&self, model: &mut Model, msg: Message) -> Option<Effect> {
         match msg {
-            Message::Quit => {
-                model.running_state = RunningState::Done;
-            }
+            Message::Quit => return Self::request_quit(model),
+            Message::CloseActive => return Self::request_close(model),
             Message::EnterInsertMode => {
                 if model.editor.active_buffer().is_some() {
                     model.context_stack.push(Context::EditorInput);
@@ -47,6 +53,21 @@ impl MessageManager {
             Message::Redo => {
                 let _ = model.editor.redo();
             }
+            Message::SaveActive => {
+                let Some(id) = model.editor.active_buffer() else {
+                    model.status = Some(StatusMessage::info("No file open"));
+                    return None;
+                };
+                match model.editor.save_buffer(id) {
+                    Ok(request) => return Some(Effect::Save(request)),
+                    Err(error) => {
+                        model.status = Some(StatusMessage::error(error.to_string()));
+                    }
+                }
+            }
+            Message::SaveFinished(completion) => {
+                return Self::finish_save(model, completion);
+            }
             Message::ExplorerNext => model.explorer.select_next(),
             Message::ExplorerPrevious => model.explorer.select_previous(),
             Message::OpenSelected => Self::open_selected(model),
@@ -64,6 +85,103 @@ impl MessageManager {
             _ => {}
         }
         None
+    }
+
+    fn request_quit(model: &mut Model) -> Option<Effect> {
+        if !model.editor.has_modified_buffers() && !model.editor.has_saving_buffers() {
+            model.deferred_action = None;
+            model.running_state = RunningState::Done;
+            return None;
+        }
+
+        model.deferred_action = Some(DeferredAction::Quit);
+        model.status = Some(StatusMessage::info("Saving before quit"));
+        model
+            .editor
+            .first_dirty_buffer()
+            .filter(|&id| !model.editor.is_saving(id))
+            .and_then(|id| Self::start_save(model, id))
+    }
+
+    fn request_close(model: &mut Model) -> Option<Effect> {
+        let Some(id) = model.editor.active_buffer() else {
+            model.status = Some(StatusMessage::info("No file open"));
+            return None;
+        };
+
+        if model.editor.is_modified(id) == Some(true) || model.editor.is_saving(id) {
+            model.deferred_action = Some(DeferredAction::CloseBuffer(id));
+            model.status = Some(StatusMessage::info("Saving before close"));
+            if model.editor.is_saving(id) {
+                return None;
+            }
+            return Self::start_save(model, id);
+        }
+
+        model.deferred_action = None;
+        match model.editor.close_buffer(id) {
+            Ok(()) => model.status = None,
+            Err(error) => model.status = Some(StatusMessage::error(error.to_string())),
+        }
+        None
+    }
+
+    fn start_save(model: &mut Model, id: editor::BufferId) -> Option<Effect> {
+        match model.editor.save_buffer(id) {
+            Ok(request) => Some(Effect::Save(request)),
+            Err(error) => {
+                model.deferred_action = None;
+                model.status = Some(StatusMessage::error(error.to_string()));
+                None
+            }
+        }
+    }
+
+    fn finish_save(model: &mut Model, completion: editor::SaveCompletion) -> Option<Effect> {
+        if let Err(error) = model.editor.complete_save(completion) {
+            model.deferred_action = None;
+            model.status = Some(StatusMessage::error(error.to_string()));
+            return None;
+        }
+        model.status = Some(StatusMessage::info("Saved"));
+
+        match model.deferred_action {
+            Some(DeferredAction::Quit) => {
+                if !model.editor.has_modified_buffers() && !model.editor.has_saving_buffers() {
+                    model.deferred_action = None;
+                    model.running_state = RunningState::Done;
+                    return None;
+                }
+                model
+                    .editor
+                    .first_dirty_buffer()
+                    .filter(|&id| !model.editor.is_saving(id))
+                    .and_then(|id| Self::start_save(model, id))
+            }
+            Some(DeferredAction::CloseBuffer(id)) => {
+                if model.editor.is_saving(id) {
+                    return None;
+                }
+                match model.editor.is_modified(id) {
+                    Some(true) => Self::start_save(model, id),
+                    Some(false) => {
+                        model.deferred_action = None;
+                        match model.editor.close_buffer(id) {
+                            Ok(()) => model.status = None,
+                            Err(error) => {
+                                model.status = Some(StatusMessage::error(error.to_string()));
+                            }
+                        }
+                        None
+                    }
+                    None => {
+                        model.deferred_action = None;
+                        None
+                    }
+                }
+            }
+            None => None,
+        }
     }
 
     fn open_selected(model: &mut Model) {
@@ -208,6 +326,113 @@ mod tests {
         assert_eq!(model.editor.active_snapshot().unwrap().lines[0], "a");
         manager.update(&mut model, Message::Redo);
         assert_eq!(model.editor.active_snapshot().unwrap().lines[0], "ac");
+    }
+
+    #[tokio::test]
+    async fn dirty_quit_saves_then_exits() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("note.txt");
+        std::fs::write(&path, "a").unwrap();
+        let manager = MessageManager;
+        let mut model = Model::default();
+        model.editor.open_file(&path).unwrap();
+        model.editor.enter_insert_mode();
+        model.editor.insert_text("b").unwrap();
+        model.editor.enter_normal_mode();
+
+        let Effect::Save(request) = manager.update(&mut model, Message::Quit).unwrap();
+        assert_eq!(model.deferred_action, Some(DeferredAction::Quit));
+        assert_eq!(model.running_state, RunningState::Running);
+        let completion = request.perform().await;
+        manager.update(&mut model, Message::SaveFinished(completion));
+        assert_eq!(model.running_state, RunningState::Done);
+    }
+
+    #[tokio::test]
+    async fn dirty_close_saves_then_closes() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("note.txt");
+        std::fs::write(&path, "a").unwrap();
+        let manager = MessageManager;
+        let mut model = Model::default();
+        model.editor.open_file(&path).unwrap();
+        model.editor.enter_insert_mode();
+        model.editor.insert_text("b").unwrap();
+        model.editor.enter_normal_mode();
+
+        let Effect::Save(request) = manager.update(&mut model, Message::CloseActive).unwrap();
+        assert_eq!(model.editor.buffer_count(), 1);
+        let completion = request.perform().await;
+        manager.update(&mut model, Message::SaveFinished(completion));
+        assert!(model.editor.is_empty());
+    }
+
+    #[test]
+    fn failed_save_keeps_buffer_dirty() {
+        let manager = MessageManager;
+        let mut model = Model::default();
+        model.editor.create_buffer("scratch");
+        model.editor.enter_insert_mode();
+        model.editor.insert_text("!").unwrap();
+        model.editor.enter_normal_mode();
+
+        let effect = manager.update(&mut model, Message::SaveActive);
+        assert!(effect.is_none());
+        assert!(model.editor.active_is_modified());
+        assert_eq!(
+            model.status.unwrap().kind,
+            crate::data_object::StatusKind::Error
+        );
+    }
+
+    #[tokio::test]
+    async fn quit_waits_for_save_completion() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("note.txt");
+        std::fs::write(&path, "hello").unwrap();
+        let mut model = Model::default();
+        model.editor.open_file(&path).unwrap();
+        let manager = MessageManager;
+        let Effect::Save(request) = manager.update(&mut model, Message::SaveActive).unwrap();
+
+        manager.update(&mut model, Message::Quit);
+        assert_eq!(model.running_state, RunningState::Running);
+        let completion = request.perform().await;
+        manager.update(&mut model, Message::SaveFinished(completion));
+        manager.update(&mut model, Message::Quit);
+        assert_eq!(model.running_state, RunningState::Done);
+    }
+
+    #[tokio::test]
+    async fn manual_save_executes_effect_and_applies_completion() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("note.txt");
+        std::fs::write(&path, "hello").unwrap();
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+        model.editor.open_file(&path).unwrap();
+        for _ in 0..5 {
+            model
+                .editor
+                .move_cursor(editor::CursorMovement::Right)
+                .unwrap();
+        }
+        model.editor.enter_insert_mode();
+        model.editor.insert_text("!").unwrap();
+        model.editor.enter_normal_mode();
+        let manager = MessageManager;
+
+        let effect = manager.update(&mut model, Message::SaveActive).unwrap();
+        let Effect::Save(request) = effect;
+        let completion = request.perform().await;
+        manager.update(&mut model, Message::SaveFinished(completion));
+
+        assert_eq!(std::fs::read_to_string(path).unwrap(), "hello!");
+        assert!(!model.editor.active_is_modified());
+        assert_eq!(
+            model.status.unwrap().kind,
+            crate::data_object::StatusKind::Info
+        );
     }
 
     #[test]

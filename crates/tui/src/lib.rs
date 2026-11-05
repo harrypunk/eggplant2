@@ -10,7 +10,7 @@ pub mod data_object {
 
     use std::path::{Path, PathBuf};
 
-    use editor::CursorMovement;
+    use editor::{CursorMovement, SaveCompletion};
 
     #[derive(Debug, Default)]
     pub struct Model {
@@ -21,6 +21,13 @@ pub mod data_object {
         pub current_focus: FocusTarget,
         pub context_stack: Vec<Context>,
         pub status: Option<StatusMessage>,
+        pub deferred_action: Option<DeferredAction>,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum DeferredAction {
+        Quit,
+        CloseBuffer(editor::BufferId),
     }
 
     /// A workspace whose root is fixed after startup.
@@ -52,6 +59,13 @@ pub mod data_object {
     }
 
     impl StatusMessage {
+        pub fn info(text: impl Into<String>) -> Self {
+            Self {
+                kind: StatusKind::Info,
+                text: text.into(),
+            }
+        }
+
         pub fn error(text: impl Into<String>) -> Self {
             Self {
                 kind: StatusKind::Error,
@@ -76,7 +90,7 @@ pub mod data_object {
         AgentChatDialog,
     }
 
-    #[derive(Debug, Clone, Copy, PartialEq)]
+    #[derive(Debug, Clone)]
     pub enum Message {
         Quit,
         EnterInsertMode,
@@ -87,6 +101,9 @@ pub mod data_object {
         Backspace,
         Undo,
         Redo,
+        SaveActive,
+        CloseActive,
+        SaveFinished(SaveCompletion),
         Resize(u16, u16),
         ExplorerNext,
         ExplorerPrevious,

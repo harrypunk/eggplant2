@@ -1,8 +1,10 @@
 //! Eggplant's editor core and Helix adapter.
 
+mod save;
 mod session;
 mod snapshot;
 
+pub use save::{SaveCompletion, SaveError, SaveRequest};
 pub use session::{BufferId, CursorMovement, EditMode, EditorError, EditorSession};
 pub use snapshot::{CursorPosition, EditorSnapshot};
 

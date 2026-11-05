@@ -108,7 +108,7 @@ impl ContextBindings {
     }
 
     pub fn resolve(&self, key: KeyChord) -> Option<Message> {
-        self.key_command_map.get(&key).copied()
+        self.key_command_map.get(&key).cloned()
     }
 }
 

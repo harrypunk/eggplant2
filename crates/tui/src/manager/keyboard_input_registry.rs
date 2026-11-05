@@ -92,6 +92,8 @@ fn parse_message(value: &str) -> Option<Message> {
         "insert_newline" => Some(Message::InsertNewline),
         "undo" => Some(Message::Undo),
         "redo" => Some(Message::Redo),
+        "save" => Some(Message::SaveActive),
+        "close_buffer" => Some(Message::CloseActive),
         "explorer_next" => Some(Message::ExplorerNext),
         "explorer_previous" => Some(Message::ExplorerPrevious),
         "open_selected" => Some(Message::OpenSelected),
@@ -114,20 +116,20 @@ mod tests {
     fn loads_default_bindings() {
         let registry = Registry::from_config(&Config::default().keymap).unwrap();
 
-        assert_eq!(
+        assert!(matches!(
             registry
                 .get_binding(&Context::AppNormal)
                 .unwrap()
                 .resolve(KeyChord::new(KeyCode::Char('q'), KeyModifiers::NONE)),
             Some(Message::Quit)
-        );
-        assert_eq!(
+        ));
+        assert!(matches!(
             registry
                 .get_binding(&Context::EditorInput)
                 .unwrap()
                 .resolve(KeyChord::new(KeyCode::Esc, KeyModifiers::NONE)),
             Some(Message::ExitInsertMode)
-        );
+        ));
     }
 
     #[test]
@@ -138,19 +140,19 @@ mod tests {
         )]);
         let registry = Registry::from_config(&config).unwrap();
 
-        assert_eq!(
+        assert!(matches!(
             registry
                 .get_binding(&Context::AppNormal)
                 .unwrap()
                 .resolve(KeyChord::new(KeyCode::Char('q'), KeyModifiers::CONTROL)),
             Some(Message::Quit)
-        );
-        assert_eq!(
+        ));
+        assert!(
             registry
                 .get_binding(&Context::AppNormal)
                 .unwrap()
-                .resolve(KeyChord::new(KeyCode::Char('q'), KeyModifiers::NONE)),
-            None
+                .resolve(KeyChord::new(KeyCode::Char('q'), KeyModifiers::NONE))
+                .is_none()
         );
     }
 

@@ -1,7 +1,7 @@
 # Eggplant first-edition plan
 
 Last updated: 2026-11-05  
-Current baseline: `main` at `9aa350e`
+Current baseline: `main` at `8da49bc`
 
 ## Purpose
 
@@ -11,7 +11,7 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 
 ## Current state
 
-**The running application now accepts an optional file or folder path.** File and missing-file startup open an editable buffer; folder startup initializes a workspace and focuses the explorer without creating a buffer. Saving has been validated in the Helix spike but is not yet exposed through `EditorSession` or the TUI. The workspace root is fixed after startup. The explorer renders a flattened filesystem tree with selection, file opening, `h`/`l` fold/unfold, Enter to unfold folders, refresh, and `Ctrl-E` focus toggling. Expansion changes only visible tree entries, never the workspace root. Explorer failures appear in a shared bottom status bar, and focused panels use a double border.
+**The running application now accepts an optional file or folder path.** File and missing-file startup open an editable buffer; folder startup initializes a workspace and focuses the explorer without creating a buffer. `EditorSession` now supports owned asynchronous save requests and revision-aware completion, including stale-save and untitled-buffer handling. Manual Save (`Ctrl-S`) executes non-blocking save effects and applies completion messages through the application loop. Close/quit saves dirty buffers and waits for in-flight writes, completing only after successful persistence; failures keep the current state open. Auto-save is not yet wired. The workspace root is fixed after startup. The explorer renders a flattened filesystem tree with selection, file opening, `h`/`l` fold/unfold, Enter to unfold folders, refresh, and `Ctrl-E` focus toggling. Expansion changes only visible tree entries, never the workspace root. Explorer failures appear in a shared bottom status bar, and focused panels use a double border.
 
 ### Completed
 
@@ -45,6 +45,9 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 - [x] Explorer navigation, file opening, path deduplication, and editor/explorer focus switching.
 - [x] Fixed-root filesystem tree with fold/unfold, nested visible entries, and explicit refresh.
 - [x] Shared status/error bar and focus-aware panel borders.
+- [x] Revision-aware `EditorSession` save requests/completion with in-flight edit and untitled-buffer tests.
+- [x] Manual Save (`Ctrl-S`) through spawned effects and completion messages with status feedback.
+- [x] Save-before-close/quit with deferred actions, serial dirty-buffer saves, and in-flight lifecycle tracking.
 - [x] Workspace tests and Clippy with warnings denied.
 
 ### Current default commands
@@ -58,6 +61,8 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 | Insert | Return to Normal | `Esc` |
 | Insert | Backspace / newline | `Backspace` / `Enter` |
 | Insert | Move | Arrow keys |
+| Normal / Insert | Save current buffer | `Ctrl-S` |
+| Normal | Close active buffer (saves first when dirty) | `Ctrl-W` |
 | Normal / Explorer | Toggle explorer/editor focus | `Ctrl-E` |
 | Explorer | Move selection | `j`, `k` |
 | Explorer | Open file / unfold folder | `Enter` |
@@ -69,11 +74,9 @@ See `config.example.toml` for the configurable action names.
 ### Known gaps and limitations
 
 - Tools panel is hidden and remains a placeholder for future agent/search/file-info panels.
-- No interactive open, buffer-switch, close, new-file, or Save As workflow.
-- No production `EditorSession` save method or manual Save binding.
+- No buffer-switch UI, new-file, or Save As workflow.
 - No auto-save scheduler; only its design is documented.
 - The status bar handles explorer errors; save/quit and other editor errors are not wired yet.
-- Dirty-close protection exists in the core, but quit/close UX is not wired.
 - No soft-wrap rendering, syntax highlighting, LSP, or split views.
 - Existing keymap configuration replaces the configured keymap section rather than offering sophisticated default merging/unbinding.
 - Horizontal rendering and Unicode behavior need broader edge-case testing.
@@ -117,14 +120,15 @@ Each milestone should remain small enough to review independently. Update this f
 
 **Goal:** provide one correct save path before adding automation.
 
-- [ ] Add `EditorSession` save support using stable buffer IDs and document revisions.
-- [ ] Execute Helix save futures through the application effect/runtime boundary.
-- [ ] Apply `set_last_saved_revision` on successful completion.
-- [ ] Keep edits made during an in-flight save dirty.
-- [ ] Add manual Save with a configurable binding; `Ctrl-S` is the current candidate.
-- [ ] Add a small status/error model and display open/save failures.
-- [ ] Define close/quit behavior for dirty, untitled, saving, and failed-save buffers.
-- [ ] Test successful save, save failure, stale completion, and close/quit safety.
+- [x] Add `EditorSession` save support using stable buffer IDs and document revisions.
+- [x] Execute Helix save futures through the application effect/runtime boundary.
+- [x] Apply `set_last_saved_revision` on successful completion.
+- [x] Keep edits made during an in-flight save dirty.
+- [x] Add manual Save with a configurable binding; `Ctrl-S` is the default.
+- [x] Add a small status/error model and display open/save failures.
+- [x] Save before close/quit for dirty, untitled, saving, and failed-save buffers; never auto-discard.
+- [x] Test core save success, stale completion, and untitled-buffer failure.
+- [x] Test application save failures and close/quit safety.
 
 **Exit criteria:** open → edit → manual save → reopen verifies persisted content, and failed/stale saves cannot silently lose or clean newer edits.
 

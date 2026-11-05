@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashSet},
     fmt,
     path::{Path, PathBuf},
     sync::Arc,
@@ -17,7 +17,10 @@ use helix_core::{
 use helix_view::{Document, View, document::DocumentOpenError, editor::Config, graphics::Rect};
 use thiserror::Error;
 
-use crate::snapshot::{CursorPosition, EditorSnapshot};
+use crate::{
+    save::{SaveCompletion, SaveError, SaveRequest},
+    snapshot::{CursorPosition, EditorSnapshot},
+};
 
 type MoveFn = fn(
     RopeSlice,
@@ -74,11 +77,19 @@ pub enum EditorError {
     UnknownBuffer(BufferId),
     #[error("buffer {0} has unsaved changes")]
     BufferModified(BufferId),
+    #[error("buffer {0} has a save in progress")]
+    SaveInProgress(BufferId),
     #[error("failed to open `{}`: {source}", path.display())]
     OpenDocument {
         path: PathBuf,
         #[source]
         source: DocumentOpenError,
+    },
+    #[error("failed to save buffer {buffer_id}: {source}")]
+    SaveDocument {
+        buffer_id: BufferId,
+        #[source]
+        source: SaveError,
     },
 }
 
@@ -96,6 +107,7 @@ pub struct EditorSession {
     buffers: BTreeMap<BufferId, Buffer>,
     active_view: Option<EditorView>,
     view_area: Rect,
+    saving_buffers: HashSet<BufferId>,
     next_buffer_id: u64,
     mode: EditMode,
     config: SharedConfig,
@@ -108,6 +120,7 @@ impl EditorSession {
             buffers: BTreeMap::new(),
             active_view: None,
             view_area: Rect::default(),
+            saving_buffers: HashSet::new(),
             next_buffer_id: 1,
             mode: EditMode::Normal,
             // Helix's Document::from accepts a DynAccess<Config>. ArcSwap
@@ -166,8 +179,7 @@ impl EditorSession {
         Ok(())
     }
 
-    /// Close an unmodified buffer.
-    ///
+    /// Close an unmodified buffer that is not being saved.
     /// Closing the active buffer selects the next buffer by ID, wrapping to the
     /// first buffer. Closing the last buffer restores the empty editor state.
     pub fn close_buffer(&mut self, id: BufferId) -> Result<(), EditorError> {
@@ -175,6 +187,9 @@ impl EditorSession {
             .buffers
             .get(&id)
             .ok_or(EditorError::UnknownBuffer(id))?;
+        if self.saving_buffers.contains(&id) {
+            return Err(EditorError::SaveInProgress(id));
+        }
         if buffer.document.is_modified() {
             return Err(EditorError::BufferModified(id));
         }
@@ -198,6 +213,32 @@ impl EditorSession {
         self.active_view
             .as_ref()
             .is_some_and(|active| self.buffers[&active.buffer].document.is_modified())
+    }
+
+    pub fn has_modified_buffers(&self) -> bool {
+        self.buffers
+            .values()
+            .any(|buffer| buffer.document.is_modified())
+    }
+
+    pub fn has_saving_buffers(&self) -> bool {
+        !self.saving_buffers.is_empty()
+    }
+
+    pub fn is_saving(&self, id: BufferId) -> bool {
+        self.saving_buffers.contains(&id)
+    }
+
+    pub fn is_modified(&self, id: BufferId) -> Option<bool> {
+        self.buffers
+            .get(&id)
+            .map(|buffer| buffer.document.is_modified())
+    }
+
+    pub fn first_dirty_buffer(&self) -> Option<BufferId> {
+        self.buffers
+            .iter()
+            .find_map(|(&id, buffer)| buffer.document.is_modified().then_some(id))
     }
 
     /// Store the latest view dimensions and keep the active cursor visible.
@@ -377,6 +418,49 @@ impl EditorSession {
         Ok(changed)
     }
 
+    /// Prepare an asynchronous save of one buffer's current snapshot.
+    pub fn save_buffer(&mut self, id: BufferId) -> Result<SaveRequest, EditorError> {
+        if self.saving_buffers.contains(&id) {
+            return Err(EditorError::SaveInProgress(id));
+        }
+        let buffer = self
+            .buffers
+            .get_mut(&id)
+            .ok_or(EditorError::UnknownBuffer(id))?;
+        let future = buffer
+            .document
+            .save(None::<&Path>, false)
+            .map_err(|source| EditorError::SaveDocument {
+                buffer_id: id,
+                source: SaveError::from(source),
+            })?;
+        self.saving_buffers.insert(id);
+        Ok(SaveRequest {
+            buffer_id: id,
+            future: Box::pin(future),
+        })
+    }
+
+    /// Apply a save completion without clearing edits made after its snapshot.
+    pub fn complete_save(&mut self, completion: SaveCompletion) -> Result<usize, EditorError> {
+        let id = completion.buffer_id;
+        self.saving_buffers.remove(&id);
+        let buffer = self
+            .buffers
+            .get_mut(&id)
+            .ok_or(EditorError::UnknownBuffer(id))?;
+        let saved = completion
+            .result
+            .map_err(|source| EditorError::SaveDocument {
+                buffer_id: id,
+                source,
+            })?;
+        buffer
+            .document
+            .set_last_saved_revision(saved.revision, saved.save_time);
+        Ok(saved.revision)
+    }
+
     fn apply_active_transaction(&mut self, transaction: Transaction) -> Result<(), EditorError> {
         let scrolloff = self.config.load().scrolloff;
         let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
@@ -481,6 +565,15 @@ mod tests {
             .selection(view.id)
             .primary()
             .cursor(document.text().slice(..))
+    }
+
+    fn append_text(session: &mut EditorSession, text: &str) {
+        session.enter_insert_mode();
+        let (document, view) = active_parts(session);
+        let end = document.text().len_chars();
+        document.set_selection(view.id, Selection::point(end));
+        session.insert_text(text).unwrap();
+        session.enter_normal_mode();
     }
 
     #[test]
@@ -732,6 +825,75 @@ mod tests {
         assert_eq!(snapshot.lines.len(), 3);
         assert!(snapshot.lines.contains(&"6".to_string()));
         assert!(cursor.row < snapshot.lines.len());
+    }
+
+    #[tokio::test]
+    async fn buffer_cannot_close_during_save() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("note.txt");
+        std::fs::write(&path, "hello").unwrap();
+        let mut session = EditorSession::new();
+        let id = session.open_file(&path).unwrap();
+        let request = session.save_buffer(id).unwrap();
+
+        assert!(session.has_saving_buffers());
+        assert!(matches!(
+            session.close_buffer(id),
+            Err(EditorError::SaveInProgress(closed_id)) if closed_id == id
+        ));
+
+        let completion = request.perform().await;
+        session.complete_save(completion).unwrap();
+        assert!(!session.has_saving_buffers());
+        session.close_buffer(id).unwrap();
+        assert!(session.is_empty());
+    }
+
+    #[tokio::test]
+    async fn saves_buffer_and_clears_its_dirty_state() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("note.txt");
+        std::fs::write(&path, "hello").unwrap();
+        let mut session = EditorSession::new();
+        let id = session.open_file(&path).unwrap();
+        append_text(&mut session, ", world");
+
+        let request = session.save_buffer(id).unwrap();
+        let completion = request.perform().await;
+        session.complete_save(completion).unwrap();
+
+        assert!(!session.active_is_modified());
+        assert_eq!(std::fs::read_to_string(path).unwrap(), "hello, world");
+    }
+
+    #[tokio::test]
+    async fn save_completion_does_not_clear_newer_edits() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("note.txt");
+        std::fs::write(&path, "hello").unwrap();
+        let mut session = EditorSession::new();
+        let id = session.open_file(&path).unwrap();
+        append_text(&mut session, " one");
+
+        let request = session.save_buffer(id).unwrap();
+        append_text(&mut session, " two");
+        let completion = request.perform().await;
+        session.complete_save(completion).unwrap();
+
+        assert!(session.active_is_modified());
+        assert_eq!(std::fs::read_to_string(path).unwrap(), "hello one");
+        assert_eq!(session.buffers[&id].document.text(), "hello one two");
+    }
+
+    #[test]
+    fn untitled_buffer_cannot_save_without_a_path() {
+        let mut session = EditorSession::new();
+        let id = session.create_buffer("scratch");
+
+        match session.save_buffer(id) {
+            Err(EditorError::SaveDocument { buffer_id, .. }) => assert_eq!(buffer_id, id),
+            _ => panic!("untitled save unexpectedly created a save request"),
+        }
     }
 
     #[test]

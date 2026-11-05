@@ -87,13 +87,13 @@ mod tests {
         model.context_stack.push(Context::EditorInput);
 
         let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
-        assert_eq!(
+        assert!(matches!(
             manager.translate(event, &model),
             Some(Message::InsertChar('x'))
-        );
+        ));
 
         let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
-        assert_eq!(manager.translate(event, &model), None);
+        assert!(manager.translate(event, &model).is_none());
     }
 
     #[test]
@@ -102,18 +102,18 @@ mod tests {
         let mut normal_model = Model::default();
         normal_model.context_stack.push(Context::AppNormal);
         let event = Event::Key(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE));
-        assert_eq!(
+        assert!(matches!(
             manager.translate(event, &normal_model),
             Some(Message::MoveCursor(CursorMovement::Left))
-        );
+        ));
 
         let mut insert_model = Model::default();
         insert_model.context_stack.push(Context::EditorInput);
         let event = Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
-        assert_eq!(
+        assert!(matches!(
             manager.translate(event, &insert_model),
             Some(Message::ExitInsertMode)
-        );
+        ));
     }
 
     #[test]
@@ -123,15 +123,15 @@ mod tests {
         model.context_stack.push(Context::Explorer);
 
         let event = Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
-        assert_eq!(
+        assert!(matches!(
             manager.translate(event, &model),
             Some(Message::OpenSelected)
-        );
+        ));
         let event = Event::Key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::CONTROL));
-        assert_eq!(
+        assert!(matches!(
             manager.translate(event, &model),
             Some(Message::ToggleExplorerFocus)
-        );
+        ));
     }
 
     #[test]
@@ -139,9 +139,9 @@ mod tests {
         let manager = event_manager();
         let model = Model::default();
 
-        assert_eq!(
+        assert!(matches!(
             manager.translate(Event::Resize(100, 40), &model),
             Some(Message::Resize(100, 40))
-        );
+        ));
     }
 }

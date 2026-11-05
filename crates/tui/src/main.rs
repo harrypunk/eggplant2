@@ -4,15 +4,17 @@ use tui::{
     config::Config,
     data_object::{Message, Model, RunningState},
     manager::{
-        event_manager::EventManager, keyboard_input_registry::Registry,
-        message_manager::MessageManager,
+        event_manager::EventManager,
+        keyboard_input_registry::Registry,
+        message_manager::{Effect, MessageManager},
     },
     page::editor::Editor,
     startup::{initial_model, startup_path_from},
     terminal,
 };
 
-fn main() -> color_eyre::Result<()> {
+#[tokio::main]
+async fn main() -> color_eyre::Result<()> {
     let initial_path = startup_path_from(std::env::args_os().skip(1))?;
     let model = initial_model(initial_path)?;
     let config = Config::load()?;
@@ -33,6 +35,7 @@ fn run(
     let event_manager = EventManager::new(config, keymap);
     let message_manager = MessageManager;
     let editor_page = Editor;
+    let (message_sender, mut message_receiver) = tokio::sync::mpsc::unbounded_channel();
 
     let initial_size = terminal.backend().size()?;
     message_manager.update(
@@ -41,17 +44,32 @@ fn run(
     );
 
     while model.running_state != RunningState::Done {
+        while let Ok(message) = message_receiver.try_recv() {
+            apply_message(&mut model, &message_manager, message, &message_sender);
+        }
+
         // Render the current view
         terminal.draw(|frame| editor_page.view(&model, frame))?;
 
-        // Handle events and map to a Message
-        let mut current_msg = event_manager.next_message(&model)?;
-
-        // Process updates as long as they return a non-None message
-        while let Some(msg) = current_msg {
-            current_msg = message_manager.update(&mut model, msg);
+        if let Some(message) = event_manager.next_message(&model)? {
+            apply_message(&mut model, &message_manager, message, &message_sender);
         }
     }
 
     Ok(())
+}
+
+fn apply_message(
+    model: &mut Model,
+    manager: &MessageManager,
+    message: Message,
+    sender: &tokio::sync::mpsc::UnboundedSender<Message>,
+) {
+    if let Some(Effect::Save(request)) = manager.update(model, message) {
+        let sender = sender.clone();
+        tokio::spawn(async move {
+            let completion = request.perform().await;
+            let _ = sender.send(Message::SaveFinished(completion));
+        });
+    }
 }
