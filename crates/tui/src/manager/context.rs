@@ -31,7 +31,7 @@ impl FromStr for KeyChord {
         for modifier in parts {
             modifiers |= match modifier.to_ascii_lowercase().as_str() {
                 "ctrl" | "control" => KeyModifiers::CONTROL,
-                "alt" | "meta" => KeyModifiers::ALT,
+                "alt" => KeyModifiers::ALT,
                 "shift" => KeyModifiers::SHIFT,
                 _ => {
                     return Err(format!(
@@ -147,6 +147,7 @@ mod tests {
     fn rejects_invalid_keys() {
         assert!("ctrl-".parse::<KeyChord>().is_err());
         assert!("hyper-q".parse::<KeyChord>().is_err());
+        assert!("meta-q".parse::<KeyChord>().is_err());
         assert!("not-a-key".parse::<KeyChord>().is_err());
     }
 }
