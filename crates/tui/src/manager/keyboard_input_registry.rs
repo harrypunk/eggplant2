@@ -41,7 +41,7 @@ fn parse_context_bindings(
 ) -> color_eyre::Result<ContextBindings> {
     let context = parse_context(context_name).ok_or_else(|| {
         eyre!(
-            "unknown keymap context `{context_name}`; expected normal, editor_input, agent_chat, agent_chat_dialog, or vcs"
+            "unknown keymap context `{context_name}`; expected normal, editor_input, explorer, agent_chat, agent_chat_dialog, or vcs"
         )
     })?;
 
@@ -74,6 +74,7 @@ fn parse_context(value: &str) -> Option<Context> {
         "agent_chat_dialog" => Some(Context::AgentChatDialog),
         "vcs" => Some(Context::VCS),
         "editor_input" => Some(Context::EditorInput),
+        "explorer" => Some(Context::Explorer),
         _ => None,
     }
 }
@@ -91,6 +92,12 @@ fn parse_message(value: &str) -> Option<Message> {
         "insert_newline" => Some(Message::InsertNewline),
         "undo" => Some(Message::Undo),
         "redo" => Some(Message::Redo),
+        "explorer_next" => Some(Message::ExplorerNext),
+        "explorer_previous" => Some(Message::ExplorerPrevious),
+        "open_selected" => Some(Message::OpenSelected),
+        "explorer_parent" => Some(Message::ExplorerParent),
+        "refresh_explorer" => Some(Message::RefreshExplorer),
+        "toggle_explorer_focus" => Some(Message::ToggleExplorerFocus),
         _ => None,
     }
 }

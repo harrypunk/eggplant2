@@ -1,5 +1,6 @@
 pub mod component;
 pub mod config;
+pub mod explorer;
 pub mod manager;
 pub mod page;
 pub mod startup;
@@ -7,7 +8,7 @@ pub mod terminal;
 
 pub mod data_object {
 
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     use editor::CursorMovement;
 
@@ -16,13 +17,47 @@ pub mod data_object {
         pub running_state: RunningState,
         pub editor: editor::EditorSession,
         pub workspace: Option<Workspace>,
+        pub explorer: crate::explorer::ExplorerState,
         pub current_focus: FocusTarget,
         pub context_stack: Vec<Context>,
+        pub status: Option<StatusMessage>,
+    }
+
+    /// A workspace whose root is fixed after startup.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct Workspace {
+        root: PathBuf,
+    }
+
+    impl Workspace {
+        pub(crate) fn new(root: PathBuf) -> Self {
+            Self { root }
+        }
+
+        pub fn root(&self) -> &Path {
+            &self.root
+        }
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum StatusKind {
+        Info,
+        Error,
     }
 
     #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct Workspace {
-        pub root: PathBuf,
+    pub struct StatusMessage {
+        pub kind: StatusKind,
+        pub text: String,
+    }
+
+    impl StatusMessage {
+        pub fn error(text: impl Into<String>) -> Self {
+            Self {
+                kind: StatusKind::Error,
+                text: text.into(),
+            }
+        }
     }
 
     #[derive(Debug, Default, PartialEq, Eq)]
@@ -53,6 +88,12 @@ pub mod data_object {
         Undo,
         Redo,
         Resize(u16, u16),
+        ExplorerNext,
+        ExplorerPrevious,
+        OpenSelected,
+        ExplorerParent,
+        RefreshExplorer,
+        ToggleExplorerFocus,
         GotoBuffer(usize),
     }
 
@@ -65,5 +106,6 @@ pub mod data_object {
         AgentChatDialog,
         VCS,
         EditorInput,
+        Explorer,
     }
 }

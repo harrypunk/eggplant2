@@ -117,6 +117,24 @@ mod tests {
     }
 
     #[test]
+    fn routes_explorer_keys_in_explorer_context() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::Explorer);
+
+        let event = Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert_eq!(
+            manager.translate(event, &model),
+            Some(Message::OpenSelected)
+        );
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::CONTROL));
+        assert_eq!(
+            manager.translate(event, &model),
+            Some(Message::ToggleExplorerFocus)
+        );
+    }
+
+    #[test]
     fn translates_resize_events() {
         let manager = event_manager();
         let model = Model::default();

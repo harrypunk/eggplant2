@@ -12,6 +12,7 @@ move_up = "k"
 move_down = "j"
 undo = "u"
 redo = "ctrl-r"
+toggle_explorer_focus = "ctrl-e"
 
 [keymap.editor_input]
 exit_insert_mode = "esc"
@@ -21,3 +22,12 @@ move_left = "left"
 move_right = "right"
 move_up = "up"
 move_down = "down"
+
+[keymap.explorer]
+quit = "q"
+explorer_next = "j"
+explorer_previous = "k"
+open_selected = "enter"
+explorer_parent = "backspace"
+refresh_explorer = "r"
+toggle_explorer_focus = "ctrl-e"

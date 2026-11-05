@@ -11,7 +11,7 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 
 ## Current state
 
-**The running application now accepts an optional file or folder path.** File and missing-file startup open an editable buffer; folder startup initializes a workspace and focuses the explorer without creating a buffer. Saving has been validated in the Helix spike but is not yet exposed through `EditorSession` or the TUI. The explorer currently displays the workspace root but does not yet list or navigate directory entries.
+**The running application now accepts an optional file or folder path.** File and missing-file startup open an editable buffer; folder startup initializes a workspace and focuses the explorer without creating a buffer. Saving has been validated in the Helix spike but is not yet exposed through `EditorSession` or the TUI. The workspace root is fixed after startup. The explorer supports sorted entries, selection, file opening, directory entry, root-bounded parent navigation, refresh, and `Ctrl-E` focus toggling; navigation changes only the explorer's current directory. Explorer failures appear in a shared bottom status bar, and focused panels use a double border.
 
 ### Completed
 
@@ -41,6 +41,10 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 - [x] Initial/terminal resize propagation and focus-aware cursor placement.
 - [x] Optional startup file/folder path with pre-terminal initialization and startup tests.
 - [x] Bottom mode status bar and explorer/editor layout with the tools panel hidden.
+- [x] Explorer directory loading, directories-first sorting, selection, and list rendering.
+- [x] Explorer navigation, file opening, path deduplication, and editor/explorer focus switching.
+- [x] Directory entry, root-bounded parent navigation, and explicit explorer refresh.
+- [x] Shared status/error bar and focus-aware panel borders.
 - [x] Workspace tests and Clippy with warnings denied.
 
 ### Current default commands
@@ -54,17 +58,20 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 | Insert | Return to Normal | `Esc` |
 | Insert | Backspace / newline | `Backspace` / `Enter` |
 | Insert | Move | Arrow keys |
+| Normal / Explorer | Toggle explorer/editor focus | `Ctrl-E` |
+| Explorer | Move selection | `j`, `k` |
+| Explorer | Open selected file / enter directory | `Enter` |
+| Explorer | Parent directory / refresh | `Backspace` / `r` |
 
 See `config.example.toml` for the configurable action names.
 
 ### Known gaps and limitations
 
-- Explorer displays only the workspace root; directory entries, navigation, and file opening are not implemented.
 - Tools panel is hidden and remains a placeholder for future agent/search/file-info panels.
 - No interactive open, buffer-switch, close, new-file, or Save As workflow.
 - No production `EditorSession` save method or manual Save binding.
 - No auto-save scheduler; only its design is documented.
-- No user-facing status/error channel for editor and filesystem failures.
+- The status bar handles explorer errors; save/quit and other editor errors are not wired yet.
 - Dirty-close protection exists in the core, but quit/close UX is not wired.
 - No soft-wrap rendering, syntax highlighting, LSP, or split views.
 - Existing keymap configuration replaces the configured keymap section rather than offering sophisticated default merging/unbinding.
@@ -91,13 +98,17 @@ Each milestone should remain small enough to review independently. Update this f
 
 **Goal:** open files without relying on startup arguments.
 
-- [ ] Model directory entries, selection, loading, empty, and error states.
-- [ ] Navigate entries and open the selected file through application messages/effects.
-- [ ] Switch focus between explorer and editor with configured commands.
-- [ ] Opening an already-open file activates its existing buffer.
-- [ ] Refresh directories after relevant filesystem changes or on explicit request.
-- [ ] Render selection, focus, and errors with Ratatui.
-- [ ] Add temporary-directory and `TestBackend` integration tests.
+- [x] Load immediate directory entries, sort directories first, and model selection/empty states.
+- [x] Surface in-app directory loading errors through the shared status model.
+- [x] Navigate into directories and return to parents without losing the workspace root.
+- [x] Navigate entries and open the selected file through application messages/effects.
+- [x] Switch focus between explorer and editor with configured commands.
+- [x] Opening an already-open file activates its existing buffer.
+- [x] Refresh directories after relevant filesystem changes or on explicit request.
+- [x] Render sorted entries and the selected row with Ratatui.
+- [x] Render focus and in-app filesystem errors.
+- [x] Add temporary-directory and `TestBackend` tests for the initial directory listing.
+- [x] Add navigation/open/focus integration tests.
 
 **Exit criteria:** start with a folder, navigate the explorer, open a file, edit it, and return to the explorer without losing buffer state.
 

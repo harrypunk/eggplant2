@@ -2,7 +2,7 @@ use editor::EditorSnapshot;
 use ratatui::{
     buffer::Buffer,
     layout::{Position, Rect},
-    widgets::{Block, Paragraph, Widget},
+    widgets::{Block, BorderType, Paragraph, Widget},
 };
 
 #[derive(Debug)]
@@ -49,7 +49,12 @@ impl Widget for Editor {
             }
             None => "Editor".to_string(),
         };
-        let block = Block::bordered().title(title);
+        let border = if self.is_focused {
+            BorderType::Double
+        } else {
+            BorderType::Plain
+        };
+        let block = Block::bordered().border_type(border).title(title);
         let inner = Self::content_area(area);
         block.render(area, buf);
 

@@ -37,6 +37,7 @@ impl Default for Config {
                         ("move_down".to_string(), "j".to_string()),
                         ("undo".to_string(), "u".to_string()),
                         ("redo".to_string(), "ctrl-r".to_string()),
+                        ("toggle_explorer_focus".to_string(), "ctrl-e".to_string()),
                     ]),
                 ),
                 (
@@ -49,6 +50,18 @@ impl Default for Config {
                         ("move_right".to_string(), "right".to_string()),
                         ("move_up".to_string(), "up".to_string()),
                         ("move_down".to_string(), "down".to_string()),
+                    ]),
+                ),
+                (
+                    "explorer".to_string(),
+                    HashMap::from([
+                        ("quit".to_string(), "q".to_string()),
+                        ("explorer_next".to_string(), "j".to_string()),
+                        ("explorer_previous".to_string(), "k".to_string()),
+                        ("open_selected".to_string(), "enter".to_string()),
+                        ("explorer_parent".to_string(), "backspace".to_string()),
+                        ("refresh_explorer".to_string(), "r".to_string()),
+                        ("toggle_explorer_focus".to_string(), "ctrl-e".to_string()),
                     ]),
                 ),
             ]),

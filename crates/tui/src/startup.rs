@@ -2,7 +2,10 @@ use std::{ffi::OsString, path::PathBuf};
 
 use color_eyre::eyre::{WrapErr, bail};
 
-use crate::data_object::{Context, FocusTarget, Model, Workspace};
+use crate::{
+    data_object::{Context, FocusTarget, Model, Workspace},
+    explorer::ExplorerState,
+};
 
 /// Parse the optional file or folder argument without adding a CLI framework.
 pub fn startup_path_from(
@@ -25,8 +28,11 @@ pub fn initial_model(path: Option<PathBuf>) -> color_eyre::Result<Model> {
         Some(path) if path.is_dir() => {
             let root = std::fs::canonicalize(&path)
                 .wrap_err_with(|| format!("failed to open folder `{}`", path.display()))?;
-            model.workspace = Some(Workspace { root });
+            model.explorer = ExplorerState::load(&root)
+                .wrap_err_with(|| format!("failed to read folder `{}`", root.display()))?;
+            model.workspace = Some(Workspace::new(root));
             model.current_focus = FocusTarget::FileExplorer;
+            model.context_stack.push(Context::Explorer);
         }
         Some(path) => {
             model
@@ -72,13 +78,17 @@ mod tests {
     fn folder_path_opens_workspace_without_buffer() {
         let directory = tempfile::tempdir().unwrap();
         let expected_root = std::fs::canonicalize(directory.path()).unwrap();
+        std::fs::write(directory.path().join("note.txt"), "hello").unwrap();
 
         let model = initial_model(Some(directory.path().to_path_buf())).unwrap();
 
         assert!(model.editor.is_empty());
         assert_eq!(model.editor.active_buffer(), None);
-        assert_eq!(model.workspace.unwrap().root, expected_root);
+        assert_eq!(model.workspace.unwrap().root(), expected_root);
+        assert_eq!(model.explorer.entries.len(), 1);
+        assert_eq!(model.explorer.selected, Some(0));
         assert_eq!(model.current_focus, FocusTarget::FileExplorer);
+        assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
     }
 
     #[test]

@@ -95,6 +95,7 @@ struct EditorView {
 pub struct EditorSession {
     buffers: BTreeMap<BufferId, Buffer>,
     active_view: Option<EditorView>,
+    view_area: Rect,
     next_buffer_id: u64,
     mode: EditMode,
     config: SharedConfig,
@@ -106,6 +107,7 @@ impl EditorSession {
         Self {
             buffers: BTreeMap::new(),
             active_view: None,
+            view_area: Rect::default(),
             next_buffer_id: 1,
             mode: EditMode::Normal,
             // Helix's Document::from accepts a DynAccess<Config>. ArcSwap
@@ -198,14 +200,12 @@ impl EditorSession {
             .is_some_and(|active| self.buffers[&active.buffer].document.is_modified())
     }
 
-    /// Update the active view's dimensions and keep its cursor visible.
-    /// Resizing an empty editor is intentionally a no-op.
+    /// Store the latest view dimensions and keep the active cursor visible.
+    /// The size is retained while empty so the first newly opened buffer can use it.
     pub fn resize_active_view(&mut self, width: u16, height: u16) {
-        {
-            let Some(active) = self.active_view.as_mut() else {
-                return;
-            };
-            active.view.area = Rect::new(0, 0, width, height);
+        self.view_area = Rect::new(0, 0, width, height);
+        if let Some(active) = self.active_view.as_mut() {
+            active.view.area = self.view_area;
         }
 
         let scrolloff = self.config.load().scrolloff;
@@ -430,7 +430,8 @@ impl EditorSession {
                 document.ensure_view_init(active.view.id);
             }
             None => {
-                let view = View::new(document.id(), gutters);
+                let mut view = View::new(document.id(), gutters);
+                view.area = self.view_area;
                 document.ensure_view_init(view.id);
                 self.active_view = Some(EditorView { buffer: id, view });
             }
@@ -684,6 +685,17 @@ mod tests {
         assert!(session.redo().unwrap());
         assert_eq!(session.buffers[&id].document.text(), "abc");
         assert!(session.active_is_modified());
+    }
+
+    #[test]
+    fn first_buffer_uses_size_received_while_empty() {
+        let mut session = EditorSession::new();
+        session.resize_active_view(20, 4);
+        session.create_buffer("visible");
+
+        let snapshot = session.active_snapshot().unwrap();
+        assert_eq!(snapshot.lines, ["visible"]);
+        assert!(snapshot.cursor.is_some());
     }
 
     #[test]

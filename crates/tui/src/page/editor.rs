@@ -20,9 +20,19 @@ impl Editor {
         );
         let cursor = editor.cursor_position(areas.editor);
 
-        frame.render_widget(FileExplorer::new(model.workspace.as_ref()), areas.explorer);
+        frame.render_widget(
+            FileExplorer::new(
+                model.workspace.as_ref(),
+                &model.explorer,
+                model.current_focus == FocusTarget::FileExplorer,
+            ),
+            areas.explorer,
+        );
         frame.render_widget(editor, areas.editor);
-        frame.render_widget(StatusBar::new(model.editor.mode()), areas.status);
+        frame.render_widget(
+            StatusBar::new(model.editor.mode(), model.status.as_ref()),
+            areas.status,
+        );
 
         if let Some(cursor) = cursor {
             frame.set_cursor_position(cursor);
