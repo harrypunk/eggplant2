@@ -1,0 +1,107 @@
+use std::{ffi::OsString, path::PathBuf};
+
+use color_eyre::eyre::{WrapErr, bail};
+
+use crate::data_object::{Context, FocusTarget, Model, Workspace};
+
+/// Parse the optional file or folder argument without adding a CLI framework.
+pub fn startup_path_from(
+    args: impl IntoIterator<Item = OsString>,
+) -> color_eyre::Result<Option<PathBuf>> {
+    let mut args = args.into_iter();
+    let path = args.next().map(PathBuf::from);
+    if args.next().is_some() {
+        bail!("expected at most one file or folder path; usage: tui [PATH]");
+    }
+    Ok(path)
+}
+
+/// Build the initial application model before terminal raw mode is enabled.
+pub fn initial_model(path: Option<PathBuf>) -> color_eyre::Result<Model> {
+    let mut model = Model::default();
+    model.context_stack.push(Context::AppNormal);
+
+    match path {
+        Some(path) if path.is_dir() => {
+            let root = std::fs::canonicalize(&path)
+                .wrap_err_with(|| format!("failed to open folder `{}`", path.display()))?;
+            model.workspace = Some(Workspace { root });
+            model.current_focus = FocusTarget::FileExplorer;
+        }
+        Some(path) => {
+            model
+                .editor
+                .open_file(&path)
+                .wrap_err_with(|| format!("failed to open `{}`", path.display()))?;
+        }
+        None => {}
+    }
+
+    Ok(model)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_path_starts_with_empty_editor() {
+        let model = initial_model(None).unwrap();
+
+        assert!(model.editor.is_empty());
+        assert!(model.workspace.is_none());
+        assert_eq!(model.current_focus, FocusTarget::Editor);
+        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+    }
+
+    #[test]
+    fn file_path_opens_file_buffer() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("note.txt");
+        std::fs::write(&path, "hello").unwrap();
+
+        let model = initial_model(Some(path)).unwrap();
+
+        assert_eq!(model.editor.buffer_count(), 1);
+        assert!(model.editor.active_buffer().is_some());
+        assert!(model.workspace.is_none());
+        assert_eq!(model.current_focus, FocusTarget::Editor);
+    }
+
+    #[test]
+    fn folder_path_opens_workspace_without_buffer() {
+        let directory = tempfile::tempdir().unwrap();
+        let expected_root = std::fs::canonicalize(directory.path()).unwrap();
+
+        let model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+
+        assert!(model.editor.is_empty());
+        assert_eq!(model.editor.active_buffer(), None);
+        assert_eq!(model.workspace.unwrap().root, expected_root);
+        assert_eq!(model.current_focus, FocusTarget::FileExplorer);
+    }
+
+    #[test]
+    fn missing_file_path_creates_new_file_buffer() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("new.txt");
+
+        let model = initial_model(Some(path.clone())).unwrap();
+
+        assert!(model.editor.active_buffer().is_some());
+        let display_name = model.editor.active_snapshot().unwrap().display_name;
+        assert_eq!(
+            std::path::Path::new(&display_name).file_name().unwrap(),
+            "new.txt"
+        );
+        assert!(model.workspace.is_none());
+    }
+
+    #[test]
+    fn rejects_multiple_paths() {
+        let args = [OsString::from("first"), OsString::from("second")];
+        let error = startup_path_from(args).unwrap_err();
+
+        assert!(error.to_string().contains("at most one"));
+    }
+}

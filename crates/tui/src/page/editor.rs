@@ -18,7 +18,7 @@ impl Editor {
         let snapshot = model.editor.active_snapshot();
         let cursor = snapshot.as_ref().and_then(|snapshot| snapshot.cursor);
 
-        frame.render_widget(FileExplorer, explorer_area);
+        frame.render_widget(FileExplorer::new(model.workspace.as_ref()), explorer_area);
         frame.render_widget(EditorComponent::new(snapshot), editor_area);
         frame.render_widget(ToolsPanel, tools_area);
 

@@ -2773,6 +2773,7 @@ dependencies = [
  "editor",
  "ratatui",
  "serde",
+ "tempfile",
  "toml",
 ]
 

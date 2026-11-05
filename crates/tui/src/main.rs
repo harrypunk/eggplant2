@@ -2,21 +2,24 @@ use ratatui::{DefaultTerminal, backend::Backend as _};
 
 use tui::{
     config::Config,
-    data_object::{Context, Message, Model, RunningState},
+    data_object::{Message, Model, RunningState},
     manager::{
         event_manager::EventManager, keyboard_input_registry::Registry,
         message_manager::MessageManager,
     },
     page::editor::Editor,
+    startup::{initial_model, startup_path_from},
     terminal,
 };
 
 fn main() -> color_eyre::Result<()> {
+    let initial_path = startup_path_from(std::env::args_os().skip(1))?;
+    let model = initial_model(initial_path)?;
     let config = Config::load()?;
     let keymap = Registry::from_config(&config.keymap)?;
     terminal::install_panic_hook();
     let mut terminal = terminal::init_terminal()?;
-    let result = run(&mut terminal, &config, keymap);
+    let result = run(&mut terminal, &config, keymap, model);
     terminal::restore_terminal()?;
     result
 }
@@ -25,11 +28,8 @@ fn run(
     terminal: &mut DefaultTerminal,
     config: &Config,
     keymap: Registry,
+    mut model: Model,
 ) -> color_eyre::Result<()> {
-    let mut model = Model::default();
-    // push app normal
-    model.context_stack.push(Context::AppNormal);
-
     let event_manager = EventManager::new(config, keymap);
     let message_manager = MessageManager;
     let editor_page = Editor;

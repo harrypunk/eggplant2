@@ -1,7 +1,7 @@
 # Eggplant first-edition plan
 
 Last updated: 2026-11-05  
-Current baseline: `main` at `011b734`
+Current baseline: `main` at `9aa350e`
 
 ## Purpose
 
@@ -11,7 +11,7 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 
 ## Current state
 
-**The editor core and TUI message/rendering path work in tests, but the running application is not yet a usable file editor.** There is no startup path handling or interactive file-opening workflow, so no buffer is opened during normal startup. Saving has been validated in the Helix spike but is not yet exposed through `EditorSession` or the TUI.
+**The running application now accepts an optional file or folder path.** File and missing-file startup open an editable buffer; folder startup initializes a workspace and focuses the explorer without creating a buffer. Saving has been validated in the Helix spike but is not yet exposed through `EditorSession` or the TUI. The explorer currently displays the workspace root but does not yet list or navigate directory entries.
 
 ### Completed
 
@@ -39,6 +39,7 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 - [x] Ratatui buffer rendering, visible-line limits, horizontal scrolling, and empty state.
 - [x] TUI model integration and input-driven editing messages.
 - [x] Initial/terminal resize propagation and focus-aware cursor placement.
+- [x] Optional startup file/folder path with pre-terminal initialization and startup tests.
 - [x] Workspace tests and Clippy with warnings denied.
 
 ### Current default commands
@@ -57,8 +58,8 @@ See `config.example.toml` for the configurable action names.
 
 ### Known gaps and limitations
 
-- Startup does not accept a file/folder path and does not open a buffer.
-- Explorer and tools panels are placeholders.
+- Explorer displays only the workspace root; directory entries, navigation, and file opening are not implemented.
+- Tools panel is a placeholder.
 - No interactive open, buffer-switch, close, new-file, or Save As workflow.
 - No production `EditorSession` save method or manual Save binding.
 - No auto-save scheduler; only its design is documented.
@@ -76,12 +77,12 @@ Each milestone should remain small enough to review independently. Update this f
 
 **Goal:** make the running app display an actual file or an empty-folder workspace.
 
-- [ ] Accept an optional startup path using the smallest appropriate CLI handling.
-- [ ] Opening a file creates/activates its file-backed buffer.
-- [ ] Opening a folder initializes workspace/explorer state without creating a buffer.
-- [ ] No path starts with the explicit empty state.
-- [ ] Startup/open errors restore the terminal and report clearly.
-- [ ] Add file, folder, missing-path, and no-path tests.
+- [x] Accept an optional startup path using the smallest appropriate CLI handling.
+- [x] Opening a file creates/activates its file-backed buffer.
+- [x] Opening a folder initializes workspace/explorer state without creating a buffer.
+- [x] No path starts with the explicit empty state.
+- [x] Startup/open errors restore the terminal and report clearly.
+- [x] Add file, folder, missing-path, and no-path tests.
 
 **Exit criteria:** `cargo run -p tui -- <file>` displays and edits the file; `<folder>` shows an explorer with no active document.
 
