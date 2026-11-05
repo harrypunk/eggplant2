@@ -11,7 +11,7 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 
 ## Current state
 
-**The running application now accepts an optional file or folder path.** File and missing-file startup open an editable buffer; folder startup initializes a workspace and focuses the explorer without creating a buffer. `EditorSession` now supports owned asynchronous save requests and revision-aware completion, including stale-save and untitled-buffer handling. Manual Save (`Ctrl-S`) executes non-blocking save effects and applies completion messages through the application loop. Close/quit saves dirty buffers and waits for in-flight writes, completing only after successful persistence; failures keep the current state open. Auto-save is not yet wired. The workspace root is fixed after startup. The explorer renders a flattened filesystem tree with selection, file opening, `h`/`l` fold/unfold, Enter to unfold folders, refresh, and `Ctrl-E` focus toggling. Expansion changes only visible tree entries, never the workspace root. Explorer failures appear in a shared bottom status bar, and focused panels use a double border.
+**The running application now accepts an optional file or folder path.** File and missing-file startup open an editable buffer; folder startup initializes a workspace and focuses the explorer without creating a buffer. `EditorSession` now supports owned asynchronous save requests and revision-aware completion, including stale-save and untitled-buffer handling. Accepted edits automatically execute non-blocking save effects and apply completion messages through the application loop. Close/quit saves dirty buffers and waits for in-flight writes, completing only after successful persistence; failures keep the current state open. Auto-save runs after Normal-mode edits and when leaving Insert, with no manual Save command or timer configuration. The workspace root is fixed after startup. The explorer renders a flattened filesystem tree with selection, file opening, `h`/`l` fold/unfold, Enter to unfold folders, refresh, and `Ctrl-E` focus toggling. Expansion changes only visible tree entries, never the workspace root. Explorer failures appear in a shared bottom status bar, and focused panels use a double border.
 
 ### Completed
 
@@ -46,7 +46,7 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 - [x] Fixed-root filesystem tree with fold/unfold, nested visible entries, and explicit refresh.
 - [x] Shared status/error bar and focus-aware panel borders.
 - [x] Revision-aware `EditorSession` save requests/completion with in-flight edit and untitled-buffer tests.
-- [x] Manual Save (`Ctrl-S`) through spawned effects and completion messages with status feedback.
+- [x] Automatic save after edits/Insert exit through spawned effects and completion messages with status feedback.
 - [x] Save-before-close/quit with deferred actions, serial dirty-buffer saves, and in-flight lifecycle tracking.
 - [x] Workspace tests and Clippy with warnings denied.
 
@@ -61,7 +61,6 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 | Insert | Return to Normal | `Esc` |
 | Insert | Backspace / newline | `Backspace` / `Enter` |
 | Insert | Move | Arrow keys |
-| Normal / Insert | Save current buffer | `Ctrl-S` |
 | Normal | Close active buffer (saves first when dirty) | `Ctrl-W` |
 | Normal / Explorer | Toggle explorer/editor focus | `Ctrl-E` |
 | Explorer | Move selection | `j`, `k` |
@@ -75,7 +74,6 @@ See `config.example.toml` for the configurable action names.
 
 - Tools panel is hidden and remains a placeholder for future agent/search/file-info panels.
 - No buffer-switch UI, new-file, or Save As workflow.
-- No auto-save scheduler; only its design is documented.
 - The status bar handles explorer errors; save/quit and other editor errors are not wired yet.
 - No soft-wrap rendering, syntax highlighting, LSP, or split views.
 - Existing keymap configuration replaces the configured keymap section rather than offering sophisticated default merging/unbinding.
@@ -118,34 +116,32 @@ Each milestone should remain small enough to review independently. Update this f
 
 ### Milestone 3: Production save and dirty-buffer safety
 
-**Goal:** provide one correct save path before adding automation.
+**Goal:** provide one correct automatic save path and safe close/quit behavior.
 
 - [x] Add `EditorSession` save support using stable buffer IDs and document revisions.
 - [x] Execute Helix save futures through the application effect/runtime boundary.
 - [x] Apply `set_last_saved_revision` on successful completion.
 - [x] Keep edits made during an in-flight save dirty.
-- [x] Add manual Save with a configurable binding; `Ctrl-S` is the default.
+- [x] Auto-save after Normal-mode content changes and when leaving Insert; no manual command.
 - [x] Add a small status/error model and display open/save failures.
 - [x] Save before close/quit for dirty, untitled, saving, and failed-save buffers; never auto-discard.
 - [x] Test core save success, stale completion, and untitled-buffer failure.
 - [x] Test application save failures and close/quit safety.
 
-**Exit criteria:** open → edit → manual save → reopen verifies persisted content, and failed/stale saves cannot silently lose or clean newer edits.
+**Exit criteria:** open → edit → automatic save → reopen verifies persisted content, and failed/stale saves cannot silently lose or clean newer edits.
 
 ### Milestone 4: Auto-save and multiple-buffer workflows
 
 **Goal:** implement the documented modern persistence behavior and make existing multi-buffer support reachable.
 
-- [ ] Add the 800 ms configurable edit debounce.
-- [ ] Auto-save only dirty, file-backed buffers; never auto-write untitled buffers.
+- [x] Auto-save dirty file-backed buffers after edits; never auto-write untitled buffers.
 - [ ] Save on buffer switch, terminal focus loss, and clean exit.
-- [ ] Allow at most one in-flight save per buffer and schedule a follow-up for newer edits.
-- [ ] Route manual and automatic saving through the same implementation.
+- [x] Allow at most one in-flight save per buffer and start a follow-up for newer edits.
 - [ ] Expose buffer switching and safe closing through commands/UI.
 - [ ] Preserve cursor/scroll state and surface save failures across switches.
-- [ ] Test debounce restart, disabled/untitled behavior, in-flight edits, focus transitions, and exit flushing.
+- [ ] Test untitled behavior, in-flight edits, focus transitions, and exit flushing.
 
-**Exit criteria:** normal editing persists without manual Save, manual Save remains available, and switching/closing buffers never silently discards changes.
+**Exit criteria:** normal editing persists automatically, and switching/closing buffers never silently discards changes.
 
 ### Milestone 5: First-edition hardening and review
 
@@ -155,7 +151,7 @@ Each milestone should remain small enough to review independently. Update this f
 - [ ] Test narrow terminals, resize, Unicode/graphemes, wide characters, horizontal scrolling, and empty documents.
 - [ ] Test large files, permissions, missing files, external modification handling, and save failures.
 - [ ] Verify panic-safe terminal restoration and clean shutdown with pending saves.
-- [ ] Run an end-to-end explorer → open → edit → auto/manual save → switch/close test suite.
+- [ ] Run an end-to-end explorer → open → edit → automatic save → switch/close test suite.
 - [ ] Review public editor/application APIs against future AI command use without implementing agents.
 - [ ] Update README, editor design, and this plan to match actual behavior.
 
@@ -169,7 +165,7 @@ The first edition is complete when a user can, on Linux:
 2. Navigate the explorer and open files without duplicate buffers.
 3. Move, insert, delete, undo, and redo using the documented simplified keymap.
 4. Switch and safely close multiple buffers while retaining cursor/scroll state.
-5. Rely on revision-safe auto-save and use manual Save when needed.
+5. Rely on revision-safe automatic saving after edits and before close/quit.
 6. See actionable open/save/filesystem errors without terminal corruption or silent data loss.
 7. Resize the terminal and work with ordinary Unicode text predictably.
 8. Run the complete workspace test suite and documented smoke tests successfully.

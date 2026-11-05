@@ -20,7 +20,7 @@ The repository is currently an early prototype. The existing `tui` crate demonst
 | Helix responsibility | Low-level text/document/edit operations only. Eggplant owns product behavior. |
 | Editing style | Vim-inspired and customized for simplicity; not Helix's selection-first UI or full Vim compatibility. |
 | First release | File explorer plus basic open/edit/save workflows. |
-| Persistence | Auto-save file-backed buffers by default, with manual Save using the same save path. |
+| Persistence | Always auto-save after editing and before close/quit; no manual Save command or debounce settings. |
 | Initial platform | Linux. Keep platform-specific terminal code isolated, but do not design for other platforms yet. |
 | Deferred features | LSP, DAP, advanced syntax UI, full Helix command compatibility, macros, plugins, and agent execution. |
 

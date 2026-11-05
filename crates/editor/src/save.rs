@@ -42,3 +42,9 @@ pub struct SaveCompletion {
     pub(crate) buffer_id: BufferId,
     pub(crate) result: Result<DocumentSavedEvent, SaveError>,
 }
+
+impl SaveCompletion {
+    pub fn buffer_id(&self) -> BufferId {
+        self.buffer_id
+    }
+}

@@ -4,9 +4,8 @@ use tui::{
     config::Config,
     data_object::{Message, Model, RunningState},
     manager::{
-        event_manager::EventManager,
-        keyboard_input_registry::Registry,
-        message_manager::{Effect, MessageManager},
+        effect::Effect, event_manager::EventManager, keyboard_input_registry::Registry,
+        message_manager::MessageManager,
     },
     page::editor::Editor,
     startup::{initial_model, startup_path_from},

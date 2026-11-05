@@ -6,7 +6,6 @@ event_poll_timeout = 300
 [keymap.normal]
 quit = "q"
 enter_insert_mode = "i"
-save = "ctrl-s"
 close_buffer = "ctrl-w"
 move_left = "h"
 move_right = "l"
@@ -18,7 +17,6 @@ toggle_explorer_focus = "ctrl-e"
 
 [keymap.editor_input]
 exit_insert_mode = "esc"
-save = "ctrl-s"
 backspace = "backspace"
 insert_newline = "enter"
 move_left = "left"

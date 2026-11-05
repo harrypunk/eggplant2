@@ -9,7 +9,7 @@ The first editing implementation should support:
 - Opening a folder without implicitly opening a file.
 - Multiple open file buffers with stable identity.
 - Switching, editing, saving, and closing buffers.
-- Auto-save by default for file-backed buffers, with manual Save available.
+- Always-on auto-save after edits and before close/quit, without a manual Save command.
 - One visible editor view with predictable cursor and scrolling behavior.
 - A small Vim-inspired Normal/Insert command set.
 - Ratatui rendering without adopting Helix's terminal application.
@@ -166,11 +166,10 @@ The exact return type can remain small: a single `Option<Effect>` is sufficient 
 | `OpenPath(path)` | Route directory and file paths differently; record pending intent if needed. | Read a file or directory. |
 | `FileOpened { path, result }` | Insert a buffer and create/retarget the view on success; report failure without corrupting state. | None. |
 | `ActivateBuffer(id)` | Retarget the active view and restore its document/view state. | Schedule or start saving the previously active dirty buffer. |
-| `Editor(Move/Insert/Delete/Undo/Redo)` | Update only the active document through editor commands. | After content changes, debounce auto-save for that buffer ID and revision. |
-| `SaveBuffer(id)` | Capture the target buffer ID and revision for either manual or automatic saving. | Save a consistent document snapshot. |
-| `AutoSaveDue(id)` | Check that the buffer still exists, is dirty, and is eligible for automatic saving. | Start the shared `SaveBuffer` path when appropriate. |
-| `SaveFinished { id, revision, result }` | Update saved state only for the completed revision; preserve newer dirty edits and report errors. | Schedule another save if newer edits arrived while saving. |
-| `CloseBuffer(id)` | Apply the dirty-buffer policy and select another view or the empty state. | Optional confirmation workflow. |
+| `Editor(Move/Insert/Delete/Undo/Redo)` | Update only the active document through editor commands. | Auto-save after Normal-mode changes or when leaving Insert. |
+| `SaveBuffer(id)` | Capture the target buffer ID and revision. | Save a consistent document snapshot. |
+| `SaveFinished { id, revision, result }` | Update saved state only for the completed revision; preserve newer dirty edits and report errors. | Save again if newer edits arrived while saving. |
+| `CloseBuffer(id)` | Save first when needed, then select another view or the empty state. | Save effect; failure cancels closure. |
 | `Resize(terminal_size)` | Recalculate layout/view dimensions and keep the cursor visible. | None. |
 
 ### Keymap integration
@@ -185,58 +184,45 @@ Movement, editing, activation, and resize handling update viewport state. Render
 
 Use a shared pure layout calculation when cursor-following needs the editor area before rendering: update derives the area from terminal size and layout state, while Ratatui rendering uses the same calculation. Avoid mutating `View.area` or scroll offsets as a hidden side effect of `Widget::render`.
 
-Effects may execute synchronously in the first implementation if that is sufficient. The completion-message boundary still keeps I/O out of state transition logic and allows asynchronous execution later.
+Effects may execute synchronously when sufficient; saves use owned asynchronous tasks. The completion-message boundary keeps I/O out of state transition logic and keeps terminal input responsive.
 
-## 6. Save and auto-save policy
+## 6. Auto-save policy
 
-Eggplant should default to **auto-save for file-backed buffers**, while keeping a manual Save command for immediate persistence. Manual and automatic saving must use the same save operation and completion handling; auto-save is scheduling policy, not a second implementation.
+Eggplant **always auto-saves** after accepted content changes. There is no manual Save command, debounce timer, or auto-save configuration. Git remains responsible for intentional version history; auto-save keeps the working file current and provides crash protection.
 
-Git is complementary rather than a replacement for saving. Auto-save provides crash protection and ensures external tools and future AI workflows see current file content; Git records intentional version history.
+### Trigger behavior
 
-### Default behavior
+- Normal-mode content changes and undo/redo start saving directly.
+- Insert-mode changes are saved as one session when leaving Insert, avoiding a write per keystroke and preserving a useful undo group.
+- Close and quit save dirty buffers first and finish only after successful persistence.
+- A scratch/untitled buffer is never written without an explicit path. An attempted save reports the missing-path error and leaves the buffer open/dirty.
+- Saving does not implicitly run formatters, code actions, or other content-changing hooks.
 
-- Debounce auto-save until **800 ms after the latest edit** to a dirty, file-backed buffer. Make the delay configurable.
-- Start saving a dirty buffer when switching away from it, losing terminal focus, or exiting cleanly.
-- Keep manual Save available to flush the current buffer immediately.
-- Never auto-write a scratch/untitled buffer. Saving it requires an explicit path through Save As or an equivalent workflow.
-- Do not run formatters, code actions, or other content-changing hooks merely because a save is automatic.
-
-The initial implementation may schedule saves only for the active buffer, provided switching away schedules the previous buffer. A future background-save-all policy can build on the same messages.
-
-### Shared save pipeline
+### Save flow
 
 ```text
-DocumentChanged { id, revision }
-        │
-        ▼
-ScheduleSave { id, revision, due: now + debounce }
-        │
-        ▼
-AutoSaveDue { id }
-        │
-        ├── buffer missing, clean, untitled, or disabled: no-op
-        └── otherwise: SaveBuffer(id)
-                          │
-                          ▼
-                 save a consistent snapshot
-                          │
-                          ▼
+Normal-mode edit / ExitInsert / Close / Quit
+                    │
+                    ▼
+              SaveBuffer(id)
+                    │
+                    ▼
+        save a consistent async snapshot
+                    │
+                    ▼
 SaveFinished { id, saved_revision, result }
 ```
 
-Manual Save enters the same pipeline directly at `SaveBuffer(id)` without waiting for the debounce timer.
-
 ### Ownership and correctness rules
 
-- The application/effect runtime owns timers and debouncing; `EditorSession` owns document state and revision transitions.
+- The application/effect runtime executes writes; `EditorSession` owns document state and revision transitions.
 - Every save targets a stable `BufferId` and a specific document revision.
-- A save completion marks only its saved revision clean. If the document has advanced, the buffer remains dirty.
-- Allow at most one in-flight save per buffer. Edits received during saving schedule a follow-up save rather than starting overlapping writes.
-- Save errors keep the buffer dirty and remain visible to the user. They must not be hidden merely because the save was automatic.
+- A save completion marks only its saved revision clean. If the document has advanced, the buffer remains dirty and another save starts.
+- Allow at most one in-flight save per buffer. An edit received during saving is saved by completion follow-up rather than overlapping writes.
+- Save errors keep the buffer dirty and remain visible. Close/quit actions are canceled on failure rather than discarding content.
 - Use atomic/replace-safe writes where supported and detect external file changes before overwriting them.
-- Clean exit waits for required in-flight saves or warns about unsaved/failed buffers. A failed auto-save must not turn into silent data loss.
 
-With standalone `helix-view::Document`, `Document::save` returns a future and completion event; the caller applies `set_last_saved_revision`. Helix's own auto-save behavior is implemented by `helix-term` handlers, so Eggplant must provide the scheduler described here rather than assuming the document saves itself.
+With standalone `helix-view::Document`, `Document::save` returns a future and completion event; the caller applies `set_last_saved_revision`. Helix's auto-save handlers live in `helix-term`, so Eggplant directly triggers its shared save path at the events listed above.
 
 ## 7. Choosing the Helix boundary
 
@@ -306,7 +292,7 @@ For a core-only first version without soft wrap, a small Eggplant viewport conta
 
 1. **Open file:** canonicalize the path; activate an existing buffer or load and insert a new one. Create/retarget the view only after successful loading.
 2. **Switch buffer:** retarget the active view, restore the target document's saved view state, and schedule/flush auto-save for the previous dirty buffer.
-3. **Edit:** resolve the active buffer through the view and apply a transaction. Never create a document implicitly when no view is active. Content changes restart the auto-save debounce.
+3. **Edit:** resolve the active buffer through the view and apply a transaction. Never create a document implicitly when no view is active. Content changes auto-save after Normal-mode edits or when leaving Insert.
 4. **Save:** route manual and automatic requests through one stable buffer-ID/revision-aware path. A late completion must not mark newer edits as saved.
 5. **Close:** a dirty file-backed buffer may be saved and then closed after success. Untitled buffers and save failures require an explicit user decision; never silently discard edits.
 6. **Close last buffer:** remove the active view and render the empty-editor state.
@@ -318,8 +304,8 @@ For a core-only first version without soft wrap, a small Eggplant viewport conta
 3. Implement `EditorSession`, stable buffer identity, empty state, and open/switch/close unit tests.
 4. Connect explorer file-opening messages and completion effects.
 5. Add visible-text rendering, cursor placement, and resize behavior.
-6. Add the small Normal/Insert command set and the shared manual save/dirty-buffer path.
-7. Add auto-save scheduling on top of that path: debounce edits, flush on transitions, handle in-flight saves, and surface failures.
+6. Add the small Normal/Insert command set and revision-aware asynchronous save path.
+7. Auto-save after edits and Insert exit, save before close/quit, handle in-flight follow-ups, and surface failures.
 
 ## 11. Essential tests
 
@@ -329,7 +315,7 @@ For a core-only first version without soft wrap, a small Eggplant viewport conta
 - Editing changes only the active document and updates dirty state.
 - Save completion for an older revision does not clear newer dirty edits.
 - Manual and automatic saving use the same save/completion path.
-- New edits restart the debounce, and an edit during an in-flight save schedules exactly one appropriate follow-up.
+- Normal-mode edits and leaving Insert trigger auto-save, and an edit during an in-flight save starts one appropriate follow-up.
 - Auto-save skips untitled buffers and leaves dirty state intact after errors.
 - Buffer switching, focus loss, and clean exit trigger the documented save behavior.
 - Closing the last buffer restores a safe empty state.

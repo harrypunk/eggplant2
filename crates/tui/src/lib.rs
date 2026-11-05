@@ -101,7 +101,6 @@ pub mod data_object {
         Backspace,
         Undo,
         Redo,
-        SaveActive,
         CloseActive,
         SaveFinished(SaveCompletion),
         Resize(u16, u16),

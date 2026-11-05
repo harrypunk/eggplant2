@@ -1,6 +1,5 @@
 use std::{fmt::Display, path::Path};
 
-use editor::SaveRequest;
 use ratatui::layout::Rect;
 
 use crate::{
@@ -8,12 +7,9 @@ use crate::{
         Context, DeferredAction, FocusTarget, Message, Model, RunningState, StatusMessage,
     },
     explorer::ExplorerEntryKind,
+    manager::effect::Effect,
     page::editor::editor_content_area,
 };
-
-pub enum Effect {
-    Save(SaveRequest),
-}
 
 #[derive(Debug, Default)]
 pub struct MessageManager;
@@ -34,35 +30,34 @@ impl MessageManager {
                     .context_stack
                     .pop_if(|ctx| ctx == &Context::EditorInput);
                 model.editor.enter_normal_mode();
+                return Self::auto_save_active(model);
             }
             Message::MoveCursor(movement) => {
                 let _ = model.editor.move_cursor(movement);
             }
             Message::InsertChar(character) => {
-                let _ = model.editor.insert_text(&character.to_string());
+                if model.editor.insert_text(&character.to_string()).is_ok() {
+                    return Self::auto_save_active(model);
+                }
             }
             Message::InsertNewline => {
-                let _ = model.editor.insert_text("\n");
+                if model.editor.insert_text("\n").is_ok() {
+                    return Self::auto_save_active(model);
+                }
             }
             Message::Backspace => {
-                let _ = model.editor.backspace();
+                if model.editor.backspace().is_ok() {
+                    return Self::auto_save_active(model);
+                }
             }
             Message::Undo => {
-                let _ = model.editor.undo();
+                if model.editor.undo().unwrap_or(false) {
+                    return Self::auto_save_active(model);
+                }
             }
             Message::Redo => {
-                let _ = model.editor.redo();
-            }
-            Message::SaveActive => {
-                let Some(id) = model.editor.active_buffer() else {
-                    model.status = Some(StatusMessage::info("No file open"));
-                    return None;
-                };
-                match model.editor.save_buffer(id) {
-                    Ok(request) => return Some(Effect::Save(request)),
-                    Err(error) => {
-                        model.status = Some(StatusMessage::error(error.to_string()));
-                    }
+                if model.editor.redo().unwrap_or(false) {
+                    return Self::auto_save_active(model);
                 }
             }
             Message::SaveFinished(completion) => {
@@ -88,6 +83,7 @@ impl MessageManager {
     }
 
     fn request_quit(model: &mut Model) -> Option<Effect> {
+        model.editor.enter_normal_mode();
         if !model.editor.has_modified_buffers() && !model.editor.has_saving_buffers() {
             model.deferred_action = None;
             model.running_state = RunningState::Done;
@@ -104,6 +100,7 @@ impl MessageManager {
     }
 
     fn request_close(model: &mut Model) -> Option<Effect> {
+        model.editor.enter_normal_mode();
         let Some(id) = model.editor.active_buffer() else {
             model.status = Some(StatusMessage::info("No file open"));
             return None;
@@ -126,6 +123,17 @@ impl MessageManager {
         None
     }
 
+    fn auto_save_active(model: &mut Model) -> Option<Effect> {
+        if model.editor.mode() == editor::EditMode::Insert {
+            return None;
+        }
+        let id = model.editor.active_buffer()?;
+        if model.editor.is_saving(id) {
+            return None;
+        }
+        Self::start_save(model, id)
+    }
+
     fn start_save(model: &mut Model, id: editor::BufferId) -> Option<Effect> {
         match model.editor.save_buffer(id) {
             Ok(request) => Some(Effect::Save(request)),
@@ -138,6 +146,7 @@ impl MessageManager {
     }
 
     fn finish_save(model: &mut Model, completion: editor::SaveCompletion) -> Option<Effect> {
+        let buffer_id = completion.buffer_id();
         if let Err(error) = model.editor.complete_save(completion) {
             model.deferred_action = None;
             model.status = Some(StatusMessage::error(error.to_string()));
@@ -179,6 +188,11 @@ impl MessageManager {
                         None
                     }
                 }
+            }
+            None if model.editor.is_modified(buffer_id) == Some(true)
+                && !model.editor.is_saving(buffer_id) =>
+            {
+                Self::start_save(model, buffer_id)
             }
             None => None,
         }
@@ -372,11 +386,11 @@ mod tests {
         let manager = MessageManager;
         let mut model = Model::default();
         model.editor.create_buffer("scratch");
-        model.editor.enter_insert_mode();
-        model.editor.insert_text("!").unwrap();
-        model.editor.enter_normal_mode();
+        model.context_stack.push(Context::AppNormal);
+        manager.update(&mut model, Message::EnterInsertMode);
 
-        let effect = manager.update(&mut model, Message::SaveActive);
+        manager.update(&mut model, Message::InsertChar('!'));
+        let effect = manager.update(&mut model, Message::ExitInsertMode);
         assert!(effect.is_none());
         assert!(model.editor.active_is_modified());
         assert_eq!(
@@ -392,8 +406,11 @@ mod tests {
         std::fs::write(&path, "hello").unwrap();
         let mut model = Model::default();
         model.editor.open_file(&path).unwrap();
+        model.context_stack.push(Context::AppNormal);
         let manager = MessageManager;
-        let Effect::Save(request) = manager.update(&mut model, Message::SaveActive).unwrap();
+        manager.update(&mut model, Message::EnterInsertMode);
+        manager.update(&mut model, Message::InsertChar('x'));
+        let Effect::Save(request) = manager.update(&mut model, Message::ExitInsertMode).unwrap();
 
         manager.update(&mut model, Message::Quit);
         assert_eq!(model.running_state, RunningState::Running);
@@ -404,7 +421,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn manual_save_executes_effect_and_applies_completion() {
+    async fn auto_save_on_edit_executes_effect_and_applies_completion() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("note.txt");
         std::fs::write(&path, "hello").unwrap();
@@ -417,12 +434,10 @@ mod tests {
                 .move_cursor(editor::CursorMovement::Right)
                 .unwrap();
         }
-        model.editor.enter_insert_mode();
-        model.editor.insert_text("!").unwrap();
-        model.editor.enter_normal_mode();
         let manager = MessageManager;
-
-        let effect = manager.update(&mut model, Message::SaveActive).unwrap();
+        manager.update(&mut model, Message::EnterInsertMode);
+        manager.update(&mut model, Message::InsertChar('!'));
+        let effect = manager.update(&mut model, Message::ExitInsertMode).unwrap();
         let Effect::Save(request) = effect;
         let completion = request.perform().await;
         manager.update(&mut model, Message::SaveFinished(completion));
