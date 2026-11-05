@@ -97,7 +97,7 @@ Do not duplicate both mechanisms. The spike should establish which adapter owns 
 
 ## 4. Folder-open and empty-editor behavior
 
-Workspace and editor state are independent. The workspace root is fixed after startup. Directory navigation changes only the explorer's current directory, which may move within—but never above or replace—that root.
+Workspace and editor state are independent. The workspace root is fixed after startup. The explorer presents a visible filesystem tree beneath that root; folding or unfolding directories changes only the tree's expansion state, never the workspace root.
 
 ```rust
 struct Model {

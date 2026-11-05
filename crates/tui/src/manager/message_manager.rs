@@ -50,7 +50,8 @@ impl MessageManager {
             Message::ExplorerNext => model.explorer.select_next(),
             Message::ExplorerPrevious => model.explorer.select_previous(),
             Message::OpenSelected => Self::open_selected(model),
-            Message::ExplorerParent => Self::open_parent(model),
+            Message::ExplorerFold => Self::change_expansion(model, false),
+            Message::ExplorerUnfold => Self::change_expansion(model, true),
             Message::RefreshExplorer => Self::refresh_explorer(model),
             Message::ToggleExplorerFocus => match model.current_focus {
                 FocusTarget::FileExplorer => Self::focus_editor(model),
@@ -78,38 +79,42 @@ impl MessageManager {
                 }
                 Err(error) => Self::report_error(model, "failed to open file", &path, error),
             },
-            ExplorerEntryKind::Directory => match crate::explorer::ExplorerState::load(&path) {
-                Ok(explorer) => {
-                    model.explorer = explorer;
-                    model.status = None;
-                }
-                Err(error) => Self::report_error(model, "failed to open directory", &path, error),
-            },
+            ExplorerEntryKind::Directory => Self::change_expansion(model, true),
             ExplorerEntryKind::Other => {}
         }
     }
 
-    fn open_parent(model: &mut Model) {
+    fn change_expansion(model: &mut Model, unfold: bool) {
         let Some(workspace) = &model.workspace else {
             return;
         };
-        let directory = model.explorer.current_dir.clone();
-        match model.explorer.open_parent(workspace.root()) {
+        let Some(entry) = model.explorer.selected_entry() else {
+            return;
+        };
+        let path = entry.path.clone();
+        let result = if unfold {
+            model.explorer.unfold_selected(workspace.root())
+        } else {
+            model.explorer.fold_selected(workspace.root())
+        };
+        match result {
             Ok(true) => model.status = None,
             Ok(false) => {}
-            Err(error) => Self::report_error(model, "failed to open parent", &directory, error),
+            Err(error) => {
+                Self::report_error(model, "failed to update directory tree", &path, error);
+            }
         }
     }
 
     fn refresh_explorer(model: &mut Model) {
-        if model.workspace.is_none() {
+        let Some(workspace) = &model.workspace else {
             return;
-        }
+        };
+        let root = workspace.root().to_path_buf();
 
-        let directory = model.explorer.current_dir.clone();
-        match model.explorer.reload() {
+        match model.explorer.reload(&root) {
             Ok(()) => model.status = None,
-            Err(error) => Self::report_error(model, "failed to refresh", &directory, error),
+            Err(error) => Self::report_error(model, "failed to refresh", &root, error),
         }
     }
 
@@ -240,7 +245,7 @@ mod tests {
     }
 
     #[test]
-    fn explorer_enters_directories_and_returns_to_workspace_root() {
+    fn explorer_unfolds_and_folds_without_changing_workspace_root() {
         let directory = tempfile::tempdir().unwrap();
         let child = directory.path().join("folder");
         std::fs::create_dir(&child).unwrap();
@@ -251,21 +256,19 @@ mod tests {
         let workspace_root = model.workspace.as_ref().unwrap().root().to_path_buf();
 
         manager.update(&mut model, Message::OpenSelected);
-        assert_eq!(model.explorer.current_dir, child);
-        assert_eq!(model.explorer.entries.len(), 1);
+        assert_eq!(model.explorer.entries.len(), 2);
+        assert_eq!(model.explorer.entries[1].depth, 1);
         assert_eq!(model.workspace.as_ref().unwrap().root(), workspace_root);
 
-        manager.update(&mut model, Message::ExplorerParent);
-        assert_eq!(model.explorer.current_dir, workspace_root);
-        manager.update(&mut model, Message::ExplorerParent);
-        assert_eq!(
-            model.explorer.current_dir,
-            model.workspace.as_ref().unwrap().root()
-        );
+        manager.update(&mut model, Message::ExplorerFold);
+        assert_eq!(model.explorer.entries.len(), 1);
+        manager.update(&mut model, Message::ExplorerUnfold);
+        assert_eq!(model.explorer.entries.len(), 2);
+        assert_eq!(model.workspace.as_ref().unwrap().root(), workspace_root);
     }
 
     #[test]
-    fn explorer_refresh_reloads_current_directory() {
+    fn explorer_refresh_reloads_workspace_tree() {
         let directory = tempfile::tempdir().unwrap();
         let mut model =
             crate::startup::initial_model(Some(directory.path().to_path_buf())).unwrap();
@@ -280,22 +283,23 @@ mod tests {
     }
 
     #[test]
-    fn explorer_failure_sets_status_without_changing_directory() {
+    fn explorer_failure_preserves_the_visible_tree() {
         let directory = tempfile::tempdir().unwrap();
         let child = directory.path().join("folder");
         std::fs::create_dir(&child).unwrap();
         let mut model =
             crate::startup::initial_model(Some(directory.path().to_path_buf())).unwrap();
         let manager = MessageManager;
-        let original_dir = model.explorer.current_dir.clone();
+        let original_entries = model.explorer.entries.clone();
         std::fs::remove_dir(&child).unwrap();
+        std::fs::remove_dir(directory.path()).unwrap();
 
         manager.update(&mut model, Message::OpenSelected);
 
         let status = model.status.as_ref().unwrap();
         assert_eq!(status.kind, crate::data_object::StatusKind::Error);
-        assert!(status.text.contains("failed to open directory"));
-        assert_eq!(model.explorer.current_dir, original_dir);
+        assert!(status.text.contains("failed to update directory tree"));
+        assert_eq!(model.explorer.entries, original_entries);
     }
 
     #[test]

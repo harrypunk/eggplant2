@@ -11,7 +11,7 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 
 ## Current state
 
-**The running application now accepts an optional file or folder path.** File and missing-file startup open an editable buffer; folder startup initializes a workspace and focuses the explorer without creating a buffer. Saving has been validated in the Helix spike but is not yet exposed through `EditorSession` or the TUI. The workspace root is fixed after startup. The explorer supports sorted entries, selection, file opening, directory entry, root-bounded parent navigation, refresh, and `Ctrl-E` focus toggling; navigation changes only the explorer's current directory. Explorer failures appear in a shared bottom status bar, and focused panels use a double border.
+**The running application now accepts an optional file or folder path.** File and missing-file startup open an editable buffer; folder startup initializes a workspace and focuses the explorer without creating a buffer. Saving has been validated in the Helix spike but is not yet exposed through `EditorSession` or the TUI. The workspace root is fixed after startup. The explorer renders a flattened filesystem tree with selection, file opening, `h`/`l` fold/unfold, Enter to unfold folders, refresh, and `Ctrl-E` focus toggling. Expansion changes only visible tree entries, never the workspace root. Explorer failures appear in a shared bottom status bar, and focused panels use a double border.
 
 ### Completed
 
@@ -43,7 +43,7 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 - [x] Bottom mode status bar and explorer/editor layout with the tools panel hidden.
 - [x] Explorer directory loading, directories-first sorting, selection, and list rendering.
 - [x] Explorer navigation, file opening, path deduplication, and editor/explorer focus switching.
-- [x] Directory entry, root-bounded parent navigation, and explicit explorer refresh.
+- [x] Fixed-root filesystem tree with fold/unfold, nested visible entries, and explicit refresh.
 - [x] Shared status/error bar and focus-aware panel borders.
 - [x] Workspace tests and Clippy with warnings denied.
 
@@ -60,8 +60,9 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 | Insert | Move | Arrow keys |
 | Normal / Explorer | Toggle explorer/editor focus | `Ctrl-E` |
 | Explorer | Move selection | `j`, `k` |
-| Explorer | Open selected file / enter directory | `Enter` |
-| Explorer | Parent directory / refresh | `Backspace` / `r` |
+| Explorer | Open file / unfold folder | `Enter` |
+| Explorer | Fold / unfold folder | `h` / `l` |
+| Explorer | Refresh tree | `r` |
 
 See `config.example.toml` for the configurable action names.
 
@@ -100,7 +101,7 @@ Each milestone should remain small enough to review independently. Update this f
 
 - [x] Load immediate directory entries, sort directories first, and model selection/empty states.
 - [x] Surface in-app directory loading errors through the shared status model.
-- [x] Navigate into directories and return to parents without losing the workspace root.
+- [x] Fold/unfold directories in a visible tree without changing the fixed workspace root.
 - [x] Navigate entries and open the selected file through application messages/effects.
 - [x] Switch focus between explorer and editor with configured commands.
 - [x] Opening an already-open file activates its existing buffer.

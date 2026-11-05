@@ -1,8 +1,11 @@
 use std::{
+    collections::HashSet,
     ffi::OsString,
     io,
     path::{Path, PathBuf},
 };
+
+use super::fs;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExplorerEntryKind {
@@ -12,7 +15,7 @@ pub enum ExplorerEntryKind {
 }
 
 impl ExplorerEntryKind {
-    fn sort_rank(self) -> u8 {
+    pub(super) fn sort_rank(self) -> u8 {
         match self {
             Self::Directory => 0,
             Self::File => 1,
@@ -26,71 +29,65 @@ pub struct ExplorerEntry {
     pub name: OsString,
     pub path: PathBuf,
     pub kind: ExplorerEntryKind,
+    pub depth: usize,
+    pub expanded: bool,
 }
 
+/// A flattened, visible tree under a fixed workspace root.
 #[derive(Debug, Default)]
 pub struct ExplorerState {
-    pub current_dir: PathBuf,
     pub entries: Vec<ExplorerEntry>,
     pub selected: Option<usize>,
+    expanded_directories: HashSet<PathBuf>,
 }
 
 impl ExplorerState {
-    /// Load a directory's immediate children and select the first entry.
+    /// Load the root's immediate children and select the first entry.
     pub fn load(root: &Path) -> io::Result<Self> {
-        let mut entries = std::fs::read_dir(root)?
-            .map(|entry| {
-                let entry = entry?;
-                let path = entry.path();
-                let kind = if path.is_dir() {
-                    ExplorerEntryKind::Directory
-                } else if path.is_file() {
-                    ExplorerEntryKind::File
-                } else {
-                    ExplorerEntryKind::Other
-                };
-                Ok(ExplorerEntry {
-                    name: entry.file_name(),
-                    path,
-                    kind,
-                })
-            })
-            .collect::<io::Result<Vec<_>>>()?;
-
-        entries.sort_by(|left, right| {
-            left.kind
-                .sort_rank()
-                .cmp(&right.kind.sort_rank())
-                .then_with(|| left.name.cmp(&right.name))
-        });
+        let state = Self::default();
+        let entries = fs::read_visible_entries(root, &state.expanded_directories)?;
         let selected = (!entries.is_empty()).then_some(0);
-
         Ok(Self {
-            current_dir: root.to_path_buf(),
             entries,
             selected,
+            ..state
         })
     }
 
-    pub fn reload(&mut self) -> io::Result<()> {
-        *self = Self::load(&self.current_dir)?;
-        Ok(())
+    /// Reload visible entries while preserving expansion and selected path.
+    pub fn reload(&mut self, root: &Path) -> io::Result<()> {
+        self.rebuild(root)
     }
 
-    /// Navigate to the parent directory without crossing the workspace root.
-    pub fn open_parent(&mut self, workspace_root: &Path) -> io::Result<bool> {
-        if self.current_dir == workspace_root {
-            return Ok(false);
-        }
-
-        let Some(parent) = self.current_dir.parent() else {
+    /// Unfold the selected directory. Returns false for files or expanded directories.
+    pub fn unfold_selected(&mut self, root: &Path) -> io::Result<bool> {
+        let Some(path) = self.selected_directory() else {
             return Ok(false);
         };
-        if !parent.starts_with(workspace_root) {
+        if !self.expanded_directories.insert(path.clone()) {
             return Ok(false);
         }
 
-        *self = Self::load(parent)?;
+        if let Err(error) = self.rebuild(root) {
+            self.expanded_directories.remove(&path);
+            return Err(error);
+        }
+        Ok(true)
+    }
+
+    /// Fold the selected directory. Returns false for files or folded directories.
+    pub fn fold_selected(&mut self, root: &Path) -> io::Result<bool> {
+        let Some(path) = self.selected_directory() else {
+            return Ok(false);
+        };
+        if !self.expanded_directories.remove(&path) {
+            return Ok(false);
+        }
+
+        if let Err(error) = self.rebuild(root) {
+            self.expanded_directories.insert(path);
+            return Err(error);
+        }
         Ok(true)
     }
 
@@ -115,6 +112,23 @@ impl ExplorerState {
 
     pub fn selected_entry(&self) -> Option<&ExplorerEntry> {
         self.entries.get(self.selected?)
+    }
+
+    fn selected_directory(&self) -> Option<PathBuf> {
+        self.selected_entry().and_then(|entry| {
+            (entry.kind == ExplorerEntryKind::Directory).then(|| entry.path.clone())
+        })
+    }
+
+    fn rebuild(&mut self, root: &Path) -> io::Result<()> {
+        let selected_path = self.selected_entry().map(|entry| entry.path.clone());
+        // Build first so read failures leave the current visible tree untouched.
+        let entries = fs::read_visible_entries(root, &self.expanded_directories)?;
+        self.selected = selected_path
+            .and_then(|path| entries.iter().position(|entry| entry.path == path))
+            .or_else(|| (!entries.is_empty()).then_some(0));
+        self.entries = entries;
+        Ok(())
     }
 }
 
@@ -142,6 +156,28 @@ mod tests {
             explorer.selected_entry().unwrap().kind,
             ExplorerEntryKind::Directory
         );
+        assert!(explorer.entries.iter().all(|entry| entry.depth == 0));
+    }
+
+    #[test]
+    fn unfolds_and_folds_selected_directory() {
+        let directory = tempfile::tempdir().unwrap();
+        let folder = directory.path().join("folder");
+        std::fs::create_dir(&folder).unwrap();
+        std::fs::write(folder.join("child.txt"), "child").unwrap();
+        let mut explorer = ExplorerState::load(directory.path()).unwrap();
+
+        assert!(explorer.unfold_selected(directory.path()).unwrap());
+        assert_eq!(explorer.entries.len(), 2);
+        assert!(explorer.entries[0].expanded);
+        assert_eq!(explorer.entries[1].depth, 1);
+        assert_eq!(explorer.selected, Some(0));
+
+        assert!(explorer.fold_selected(directory.path()).unwrap());
+        assert_eq!(explorer.entries.len(), 1);
+        assert!(!explorer.entries[0].expanded);
+        assert_eq!(explorer.selected, Some(0));
+        assert!(!explorer.fold_selected(directory.path()).unwrap());
     }
 
     #[test]
