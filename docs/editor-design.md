@@ -37,6 +37,8 @@ The design should optimize for correctness and incremental growth, not for futur
 
 A buffer can conceptually be displayed by more than one view. The first edition does not need a split-tree implementation, but it should avoid making document text subordinate to a Ratatui widget.
 
+`DocumentFactory` owns Helix configuration/loaders and document construction outside `EditorSession`. The session accepts constructed documents through `insert_document` and manages their buffer/view state. This keeps runtime resources and direct file opening out of the central state object.
+
 ## 3. Logical state and ownership
 
 A useful logical model is:

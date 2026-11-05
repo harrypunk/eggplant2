@@ -99,6 +99,8 @@ Owns editing state and exposes a narrow API to the application:
 - Conversion of commands into Helix transactions or document operations.
 - Read-only document/view snapshots needed by the renderer.
 
+`DocumentFactory` owns Helix configuration/loaders and constructs or opens documents outside `EditorSession`. The session inserts those documents and manages buffer/view state; runtime resources do not belong in the central model.
+
 Do not re-export broad Helix APIs throughout the application. Keep Helix types inside the adapter where practical so upstream changes do not spread into the explorer, widgets, or future AI tools.
 
 Ratatui and Crossterm types do not belong in this crate.

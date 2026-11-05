@@ -32,7 +32,7 @@ fn run(
     mut model: Model,
 ) -> color_eyre::Result<()> {
     let event_manager = EventManager::new(config, keymap);
-    let message_manager = MessageManager;
+    let message_manager = MessageManager::default();
     let editor_page = Editor;
     let (message_sender, mut message_receiver) = tokio::sync::mpsc::unbounded_channel();
 

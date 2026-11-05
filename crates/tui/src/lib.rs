@@ -6,6 +6,9 @@ pub mod page;
 pub mod startup;
 pub mod terminal;
 
+#[cfg(test)]
+mod test_utils;
+
 pub mod data_object {
 
     use std::path::{Path, PathBuf};

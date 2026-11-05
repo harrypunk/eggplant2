@@ -75,7 +75,7 @@ mod tests {
         let backend = TestBackend::new(100, 10);
         let mut terminal = Terminal::new(backend).unwrap();
         let mut model = Model::default();
-        model.editor.create_buffer("hello");
+        crate::test_utils::create_buffer(&mut model, "hello");
         let content = editor_content_area(Rect::new(0, 0, 100, 10));
         model
             .editor

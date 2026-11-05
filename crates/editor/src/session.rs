@@ -1,20 +1,21 @@
 use std::{
     collections::{BTreeMap, HashSet},
     fmt,
-    path::{Path, PathBuf},
-    sync::Arc,
+    path::Path,
 };
 
-use arc_swap::ArcSwap;
 use helix_core::{
-    Rope, RopeSlice, Transaction,
+    RopeSlice, Transaction,
     doc_formatter::TextFormat,
     graphemes,
     movement::{self, Direction, Movement},
-    syntax,
     text_annotations::TextAnnotations,
 };
-use helix_view::{Document, View, document::DocumentOpenError, editor::Config, graphics::Rect};
+use helix_view::{
+    Document, View,
+    editor::{Config, GutterConfig},
+    graphics::Rect,
+};
 use thiserror::Error;
 
 use crate::{
@@ -31,15 +32,6 @@ type MoveFn = fn(
     &TextFormat,
     &mut TextAnnotations,
 ) -> helix_core::Range;
-
-/// Shared Helix configuration with atomically replaceable snapshots.
-///
-/// `ArcSwap<Config>` stores an `Arc<Config>` internally. The outer `Arc`
-/// shares the swap cell with all documents owned by the session.
-type SharedConfig = Arc<ArcSwap<Config>>;
-
-/// Helix documents require a shared syntax loader, even when syntax is unused.
-type SharedSyntaxLoader = Arc<ArcSwap<syntax::Loader>>;
 
 /// Eggplant-owned identity for an open buffer.
 ///
@@ -79,12 +71,6 @@ pub enum EditorError {
     BufferModified(BufferId),
     #[error("buffer {0} has a save in progress")]
     SaveInProgress(BufferId),
-    #[error("failed to open `{}`: {source}", path.display())]
-    OpenDocument {
-        path: PathBuf,
-        #[source]
-        source: DocumentOpenError,
-    },
     #[error("failed to save buffer {buffer_id}: {source}")]
     SaveDocument {
         buffer_id: BufferId,
@@ -110,12 +96,13 @@ pub struct EditorSession {
     saving_buffers: HashSet<BufferId>,
     next_buffer_id: u64,
     mode: EditMode,
-    config: SharedConfig,
-    syntax_loader: SharedSyntaxLoader,
+    scrolloff: usize,
+    gutters: GutterConfig,
 }
 
 impl EditorSession {
     pub fn new() -> Self {
+        let config = Config::default();
         Self {
             buffers: BTreeMap::new(),
             active_view: None,
@@ -123,51 +110,22 @@ impl EditorSession {
             saving_buffers: HashSet::new(),
             next_buffer_id: 1,
             mode: EditMode::Normal,
-            // Helix's Document::from accepts a DynAccess<Config>. ArcSwap
-            // provides that interface and can later replace the whole config
-            // snapshot during a reload without mutating it under a lock.
-            config: Arc::new(ArcSwap::new(Arc::new(Config::default()))),
-            // Basic editing does not load grammars; the default loader simply
-            // satisfies Document's constructor and is shared by all buffers.
-            syntax_loader: Arc::new(ArcSwap::from_pointee(syntax::Loader::default())),
+            scrolloff: config.scrolloff,
+            gutters: config.gutters,
         }
     }
 
-    /// Create and activate an unsaved in-memory buffer.
-    pub fn create_buffer(&mut self, text: &str) -> BufferId {
-        let document = Document::from(
-            Rope::from(text),
-            None,
-            self.config.clone(),
-            self.syntax_loader.clone(),
-        );
-        self.insert_document(document)
-    }
-
-    /// Open and activate a file-backed buffer.
-    ///
-    /// Reopening the same canonical path activates its existing buffer. As in
-    /// Helix, a nonexistent path creates a new document that can be saved later.
-    pub fn open_file(&mut self, path: impl AsRef<Path>) -> Result<BufferId, EditorError> {
-        let path = helix_stdx::path::canonicalize(path);
-        if let Some(id) = self.buffer_by_path(&path) {
+    /// Insert and activate a document, deduplicating canonical file paths.
+    pub fn insert_document(&mut self, document: Document) -> BufferId {
+        if let Some(id) = document.path().and_then(|path| self.buffer_by_path(path)) {
             self.retarget_active_view(id);
-            return Ok(id);
+            return id;
         }
 
-        let document = Document::open(
-            &path,
-            None,
-            false,
-            self.config.clone(),
-            self.syntax_loader.clone(),
-        )
-        .map_err(|source| EditorError::OpenDocument {
-            path: path.clone(),
-            source,
-        })?;
-
-        Ok(self.insert_document(document))
+        let id = self.allocate_buffer_id();
+        self.buffers.insert(id, Buffer { document });
+        self.retarget_active_view(id);
+        id
     }
 
     pub fn activate_buffer(&mut self, id: BufferId) -> Result<(), EditorError> {
@@ -249,7 +207,7 @@ impl EditorSession {
             active.view.area = self.view_area;
         }
 
-        let scrolloff = self.config.load().scrolloff;
+        let scrolloff = self.scrolloff;
         if let Some((document, view)) = self.active_parts() {
             view.ensure_cursor_in_view(document, scrolloff);
         }
@@ -326,7 +284,7 @@ impl EditorSession {
 
     /// Move the active cursor without extending the selection.
     pub fn move_cursor(&mut self, movement: CursorMovement) -> Result<(), EditorError> {
-        let scrolloff = self.config.load().scrolloff;
+        let scrolloff = self.scrolloff;
         let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
         let text = document.text().slice(..);
         let text_format = document.text_format(view.inner_area(document).width, None);
@@ -403,7 +361,7 @@ impl EditorSession {
     }
 
     pub fn undo(&mut self) -> Result<bool, EditorError> {
-        let scrolloff = self.config.load().scrolloff;
+        let scrolloff = self.scrolloff;
         let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
         let changed = document.undo(view);
         view.ensure_cursor_in_view(document, scrolloff);
@@ -411,7 +369,7 @@ impl EditorSession {
     }
 
     pub fn redo(&mut self) -> Result<bool, EditorError> {
-        let scrolloff = self.config.load().scrolloff;
+        let scrolloff = self.scrolloff;
         let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
         let changed = document.redo(view);
         view.ensure_cursor_in_view(document, scrolloff);
@@ -462,7 +420,7 @@ impl EditorSession {
     }
 
     fn apply_active_transaction(&mut self, transaction: Transaction) -> Result<(), EditorError> {
-        let scrolloff = self.config.load().scrolloff;
+        let scrolloff = self.scrolloff;
         let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
         document.apply(&transaction, view.id);
         view.ensure_cursor_in_view(document, scrolloff);
@@ -473,13 +431,6 @@ impl EditorSession {
         let active = self.active_view.as_mut()?;
         let buffer = self.buffers.get_mut(&active.buffer)?;
         Some((&mut buffer.document, &mut active.view))
-    }
-
-    fn insert_document(&mut self, document: Document) -> BufferId {
-        let id = self.allocate_buffer_id();
-        self.buffers.insert(id, Buffer { document });
-        self.retarget_active_view(id);
-        id
     }
 
     fn buffer_by_path(&self, path: &Path) -> Option<BufferId> {
@@ -498,9 +449,7 @@ impl EditorSession {
     }
 
     fn retarget_active_view(&mut self, id: BufferId) {
-        // Load the current snapshot. Cloning the small gutter config keeps the
-        // guard independent of any later configuration swap.
-        let gutters = self.config.load().gutters.clone();
+        let gutters = self.gutters.clone();
         let document = &mut self
             .buffers
             .get_mut(&id)
@@ -554,6 +503,16 @@ mod tests {
     use helix_view::graphics::Rect;
 
     use super::*;
+    use crate::DocumentFactory;
+
+    fn create_buffer(session: &mut EditorSession, text: &str) -> BufferId {
+        session.insert_document(DocumentFactory::new().create(text))
+    }
+
+    fn open_file(session: &mut EditorSession, path: &Path) -> BufferId {
+        let document = DocumentFactory::new().open(path).unwrap();
+        session.insert_document(document)
+    }
 
     fn active_parts(session: &mut EditorSession) -> (&mut Document, &mut View) {
         session.active_parts().unwrap()
@@ -590,8 +549,8 @@ mod tests {
     #[test]
     fn creates_distinct_buffers_and_activates_by_id() {
         let mut session = EditorSession::new();
-        let first = session.create_buffer("first");
-        let second = session.create_buffer("second");
+        let first = create_buffer(&mut session, "first");
+        let second = create_buffer(&mut session, "second");
 
         assert_ne!(first, second);
         assert_eq!(session.buffer_count(), 2);
@@ -619,8 +578,8 @@ mod tests {
     #[test]
     fn closing_active_buffer_selects_next_or_empty_state() {
         let mut session = EditorSession::new();
-        let first = session.create_buffer("first");
-        let second = session.create_buffer("second");
+        let first = create_buffer(&mut session, "first");
+        let second = create_buffer(&mut session, "second");
 
         session.close_buffer(second).unwrap();
         assert_eq!(session.active_buffer(), Some(first));
@@ -633,7 +592,7 @@ mod tests {
     #[test]
     fn rejects_closing_modified_buffer() {
         let mut session = EditorSession::new();
-        let id = session.create_buffer("hello");
+        let id = create_buffer(&mut session, "hello");
         let (document, view) = active_parts(&mut session);
         document.set_selection(view.id, Selection::point(5));
         let transaction =
@@ -670,7 +629,7 @@ mod tests {
     #[test]
     fn moves_horizontally_within_document_boundaries() {
         let mut session = EditorSession::new();
-        session.create_buffer("ab");
+        create_buffer(&mut session, "ab");
         assert_eq!(active_cursor(&mut session), 0);
 
         session.move_cursor(CursorMovement::Right).unwrap();
@@ -691,7 +650,7 @@ mod tests {
     #[test]
     fn vertical_movement_remembers_the_desired_column() {
         let mut session = EditorSession::new();
-        session.create_buffer("abcd\nx\nwxyz");
+        create_buffer(&mut session, "abcd\nx\nwxyz");
         let (document, view) = active_parts(&mut session);
         document.set_selection(view.id, Selection::point(3));
         assert_eq!(active_cursor(&mut session), 3);
@@ -717,7 +676,7 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         let mut session = EditorSession::new();
-        session.create_buffer(&text);
+        create_buffer(&mut session, &text);
         let (_, view) = active_parts(&mut session);
         view.area = Rect::new(0, 0, 20, 4);
 
@@ -733,7 +692,7 @@ mod tests {
     #[test]
     fn inserts_text_and_deletes_previous_character() {
         let mut session = EditorSession::new();
-        let id = session.create_buffer("hello");
+        let id = create_buffer(&mut session, "hello");
         session.enter_insert_mode();
         let (document, view) = active_parts(&mut session);
         document.set_selection(view.id, Selection::point(5));
@@ -748,7 +707,7 @@ mod tests {
     #[test]
     fn backspace_removes_the_whole_grapheme() {
         let mut session = EditorSession::new();
-        let id = session.create_buffer("e\u{301}");
+        let id = create_buffer(&mut session, "e\u{301}");
         let (document, view) = active_parts(&mut session);
         let end = document.text().len_chars();
         document.set_selection(view.id, Selection::point(end));
@@ -763,7 +722,7 @@ mod tests {
     #[test]
     fn undo_and_redo_restore_an_insert_session() {
         let mut session = EditorSession::new();
-        let id = session.create_buffer("a");
+        let id = create_buffer(&mut session, "a");
         session.enter_insert_mode();
         let (document, view) = active_parts(&mut session);
         document.set_selection(view.id, Selection::point(1));
@@ -784,7 +743,7 @@ mod tests {
     fn first_buffer_uses_size_received_while_empty() {
         let mut session = EditorSession::new();
         session.resize_active_view(20, 4);
-        session.create_buffer("visible");
+        create_buffer(&mut session, "visible");
 
         let snapshot = session.active_snapshot().unwrap();
         assert_eq!(snapshot.lines, ["visible"]);
@@ -794,7 +753,7 @@ mod tests {
     #[test]
     fn snapshot_contains_visible_lines_and_cursor() {
         let mut session = EditorSession::new();
-        let id = session.create_buffer("zero\none\ntwo");
+        let id = create_buffer(&mut session, "zero\none\ntwo");
         session.resize_active_view(20, 3);
 
         let snapshot = session.active_snapshot().unwrap();
@@ -813,7 +772,7 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         let mut session = EditorSession::new();
-        session.create_buffer(&text);
+        create_buffer(&mut session, &text);
         session.resize_active_view(20, 4);
 
         for _ in 0..6 {
@@ -833,7 +792,7 @@ mod tests {
         let path = directory.path().join("note.txt");
         std::fs::write(&path, "hello").unwrap();
         let mut session = EditorSession::new();
-        let id = session.open_file(&path).unwrap();
+        let id = open_file(&mut session, &path);
         let request = session.save_buffer(id).unwrap();
 
         assert!(session.has_saving_buffers());
@@ -855,7 +814,7 @@ mod tests {
         let path = directory.path().join("note.txt");
         std::fs::write(&path, "hello").unwrap();
         let mut session = EditorSession::new();
-        let id = session.open_file(&path).unwrap();
+        let id = open_file(&mut session, &path);
         append_text(&mut session, ", world");
 
         let request = session.save_buffer(id).unwrap();
@@ -872,7 +831,7 @@ mod tests {
         let path = directory.path().join("note.txt");
         std::fs::write(&path, "hello").unwrap();
         let mut session = EditorSession::new();
-        let id = session.open_file(&path).unwrap();
+        let id = open_file(&mut session, &path);
         append_text(&mut session, " one");
 
         let request = session.save_buffer(id).unwrap();
@@ -888,7 +847,7 @@ mod tests {
     #[test]
     fn untitled_buffer_cannot_save_without_a_path() {
         let mut session = EditorSession::new();
-        let id = session.create_buffer("scratch");
+        let id = create_buffer(&mut session, "scratch");
 
         match session.save_buffer(id) {
             Err(EditorError::SaveDocument { buffer_id, .. }) => assert_eq!(buffer_id, id),
@@ -905,13 +864,13 @@ mod tests {
         std::fs::write(&second_path, "second").unwrap();
 
         let mut session = EditorSession::new();
-        let first = session.open_file(&first_path).unwrap();
-        let second = session.open_file(&second_path).unwrap();
+        let first = open_file(&mut session, &first_path);
+        let second = open_file(&mut session, &second_path);
         assert_ne!(first, second);
         assert_eq!(session.active_buffer(), Some(second));
 
         let aliased_path = directory.path().join(".").join("first.txt");
-        let reopened = session.open_file(aliased_path).unwrap();
+        let reopened = open_file(&mut session, &aliased_path);
         assert_eq!(reopened, first);
         assert_eq!(session.active_buffer(), Some(first));
         assert_eq!(session.buffer_count(), 2);
@@ -921,15 +880,12 @@ mod tests {
     #[test]
     fn rejects_directory_without_creating_buffer() {
         let directory = tempfile::tempdir().unwrap();
-        let mut session = EditorSession::new();
+        let session = EditorSession::new();
 
-        let error = session.open_file(directory.path()).unwrap_err();
+        let error = DocumentFactory::new().open(directory.path());
         assert!(matches!(
             error,
-            EditorError::OpenDocument {
-                source: DocumentOpenError::IrregularFile,
-                ..
-            }
+            Err(helix_view::document::DocumentOpenError::IrregularFile)
         ));
         assert!(session.is_empty());
         assert_eq!(session.active_buffer(), None);
@@ -942,7 +898,7 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         let mut session = EditorSession::new();
-        let first = session.create_buffer(&text);
+        let first = create_buffer(&mut session, &text);
 
         let (expected_offset, expected_selection) = {
             let (document, view) = active_parts(&mut session);
@@ -956,7 +912,7 @@ mod tests {
             )
         };
 
-        let second = session.create_buffer("second");
+        let second = create_buffer(&mut session, "second");
         assert_eq!(session.active_buffer(), Some(second));
         session.activate_buffer(first).unwrap();
 

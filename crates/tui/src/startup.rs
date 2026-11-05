@@ -1,6 +1,7 @@
 use std::{ffi::OsString, path::PathBuf};
 
 use color_eyre::eyre::{WrapErr, bail};
+use editor::DocumentFactory;
 
 use crate::{
     data_object::{Context, FocusTarget, Model, Workspace},
@@ -35,10 +36,10 @@ pub fn initial_model(path: Option<PathBuf>) -> color_eyre::Result<Model> {
             model.context_stack.push(Context::Explorer);
         }
         Some(path) => {
-            model
-                .editor
-                .open_file(&path)
+            let document = DocumentFactory::new()
+                .open(&path)
                 .wrap_err_with(|| format!("failed to open `{}`", path.display()))?;
+            model.editor.insert_document(document);
         }
         None => {}
     }

@@ -88,15 +88,19 @@ impl Widget for EditorBuffer<'_> {
 
 #[cfg(test)]
 mod tests {
-    use editor::EditorSession;
+    use editor::{DocumentFactory, EditorSession};
     use ratatui::{Terminal, backend::TestBackend};
 
     use super::*;
 
+    fn create_buffer(session: &mut EditorSession, text: &str) {
+        session.insert_document(DocumentFactory::new().create(text));
+    }
+
     #[test]
     fn renders_snapshot_lines() {
         let mut session = EditorSession::new();
-        session.create_buffer("zero\none");
+        create_buffer(&mut session, "zero\none");
         session.resize_active_view(10, 3);
         let snapshot = session.active_snapshot().unwrap();
         let backend = TestBackend::new(10, 2);
@@ -114,7 +118,7 @@ mod tests {
     #[test]
     fn applies_horizontal_scroll() {
         let mut session = EditorSession::new();
-        session.create_buffer("abcdef");
+        create_buffer(&mut session, "abcdef");
         let mut snapshot = session.active_snapshot().unwrap();
         snapshot.lines = vec!["abcdef".to_string()];
         snapshot.horizontal_offset = 2;
@@ -150,7 +154,7 @@ mod tests {
     #[test]
     fn renders_snapshot_inside_editor_border() {
         let mut session = EditorSession::new();
-        session.create_buffer("hello");
+        create_buffer(&mut session, "hello");
         session.resize_active_view(10, 3);
         let backend = TestBackend::new(20, 4);
         let mut terminal = Terminal::new(backend).unwrap();
