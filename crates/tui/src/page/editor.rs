@@ -4,7 +4,7 @@ use ratatui::{
 };
 
 use crate::component::{
-    editor::Editor as EditorComponent, file_explorer::FileExplorer, tools_panel::ToolsPanel,
+    editor::Editor as EditorComponent, file_explorer::FileExplorer, status_bar::StatusBar,
 };
 use crate::data_object::{FocusTarget, Model};
 
@@ -13,16 +13,16 @@ pub struct Editor;
 
 impl Editor {
     pub fn view(&self, model: &Model, frame: &mut Frame) {
-        let [explorer_area, editor_area, tools_area] = layout_areas(frame.area());
+        let areas = layout_areas(frame.area());
         let editor = EditorComponent::new(
             model.editor.active_snapshot(),
             model.current_focus == FocusTarget::Editor,
         );
-        let cursor = editor.cursor_position(editor_area);
+        let cursor = editor.cursor_position(areas.editor);
 
-        frame.render_widget(FileExplorer::new(model.workspace.as_ref()), explorer_area);
-        frame.render_widget(editor, editor_area);
-        frame.render_widget(ToolsPanel, tools_area);
+        frame.render_widget(FileExplorer::new(model.workspace.as_ref()), areas.explorer);
+        frame.render_widget(editor, areas.editor);
+        frame.render_widget(StatusBar::new(model.editor.mode()), areas.status);
 
         if let Some(cursor) = cursor {
             frame.set_cursor_position(cursor);
@@ -30,19 +30,28 @@ impl Editor {
     }
 }
 
-fn layout_areas(area: Rect) -> [Rect; 3] {
-    Layout::horizontal([
-        Constraint::Length(28),
-        Constraint::Fill(1),
-        Constraint::Length(32),
-    ])
-    .flex(Flex::Start)
-    .areas(area)
+struct PageLayout {
+    explorer: Rect,
+    editor: Rect,
+    status: Rect,
+}
+
+fn layout_areas(area: Rect) -> PageLayout {
+    let [main, status] = Layout::vertical([Constraint::Fill(1), Constraint::Length(1)]).areas(area);
+    let [explorer, editor] = Layout::horizontal([Constraint::Length(28), Constraint::Fill(1)])
+        .flex(Flex::Start)
+        .areas(main);
+
+    PageLayout {
+        explorer,
+        editor,
+        status,
+    }
 }
 
 /// The text area used both for Helix viewport sizing and terminal cursor placement.
 pub fn editor_content_area(area: Rect) -> Rect {
-    EditorComponent::content_area(layout_areas(area)[1])
+    EditorComponent::content_area(layout_areas(area).editor)
 }
 
 #[cfg(test)]
@@ -70,5 +79,26 @@ mod tests {
         model.current_focus = FocusTarget::FileExplorer;
         terminal.draw(|frame| page.view(&model, frame)).unwrap();
         assert!(!terminal.backend().cursor_visible());
+    }
+
+    #[test]
+    fn renders_bottom_status_bar_without_tools_panel() {
+        let backend = TestBackend::new(100, 10);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let model = Model::default();
+        let page = Editor;
+
+        terminal.draw(|frame| page.view(&model, frame)).unwrap();
+
+        let content = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(content.contains("NORMAL"));
+        assert!(!content.contains("Tools"));
+        assert_eq!(layout_areas(Rect::new(0, 0, 100, 10)).status.y, 9);
     }
 }

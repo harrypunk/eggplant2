@@ -40,6 +40,7 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 - [x] TUI model integration and input-driven editing messages.
 - [x] Initial/terminal resize propagation and focus-aware cursor placement.
 - [x] Optional startup file/folder path with pre-terminal initialization and startup tests.
+- [x] Bottom mode status bar and explorer/editor layout with the tools panel hidden.
 - [x] Workspace tests and Clippy with warnings denied.
 
 ### Current default commands
@@ -59,7 +60,7 @@ See `config.example.toml` for the configurable action names.
 ### Known gaps and limitations
 
 - Explorer displays only the workspace root; directory entries, navigation, and file opening are not implemented.
-- Tools panel is a placeholder.
+- Tools panel is hidden and remains a placeholder for future agent/search/file-info panels.
 - No interactive open, buffer-switch, close, new-file, or Save As workflow.
 - No production `EditorSession` save method or manual Save binding.
 - No auto-save scheduler; only its design is documented.

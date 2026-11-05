@@ -5,8 +5,6 @@ use ratatui::{
     widgets::{Block, Paragraph, Widget},
 };
 
-use editor::EditMode;
-
 #[derive(Debug)]
 pub struct Editor {
     snapshot: Option<EditorSnapshot>,
@@ -46,14 +44,10 @@ impl Widget for Editor {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let title = match self.snapshot.as_ref() {
             Some(snapshot) => {
-                let mode = match snapshot.mode {
-                    EditMode::Normal => "NORMAL",
-                    EditMode::Insert => "INSERT",
-                };
                 let modified = if snapshot.modified { " [+]" } else { "" };
-                format!("Editor | {mode} | {}{modified}", snapshot.display_name)
+                format!("Editor | {}{modified}", snapshot.display_name)
             }
-            None => "Editor | NORMAL".to_string(),
+            None => "Editor".to_string(),
         };
         let block = Block::bordered().title(title);
         let inner = Self::content_area(area);
@@ -170,6 +164,6 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
         assert!(content.contains("hello"));
-        assert!(content.contains("NORMAL"));
+        assert!(!content.contains("NORMAL"));
     }
 }
