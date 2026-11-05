@@ -1,7 +1,7 @@
 use editor::EditorSnapshot;
 use ratatui::{
     buffer::Buffer,
-    layout::Rect,
+    layout::{Position, Rect},
     widgets::{Block, Paragraph, Widget},
 };
 
@@ -10,11 +10,35 @@ use editor::EditMode;
 #[derive(Debug)]
 pub struct Editor {
     snapshot: Option<EditorSnapshot>,
+    is_focused: bool,
 }
 
 impl Editor {
-    pub fn new(snapshot: Option<EditorSnapshot>) -> Self {
-        Self { snapshot }
+    pub fn new(snapshot: Option<EditorSnapshot>, is_focused: bool) -> Self {
+        Self {
+            snapshot,
+            is_focused,
+        }
+    }
+
+    pub fn content_area(area: Rect) -> Rect {
+        Block::bordered().inner(area)
+    }
+
+    /// Calculate the terminal cursor without requiring access to a Frame.
+    pub fn cursor_position(&self, area: Rect) -> Option<Position> {
+        if !self.is_focused {
+            return None;
+        }
+
+        let cursor = self.snapshot.as_ref()?.cursor?;
+        let content = Self::content_area(area);
+        let column = u16::try_from(cursor.column).unwrap_or(u16::MAX);
+        let row = u16::try_from(cursor.row).unwrap_or(u16::MAX);
+        Some(Position::new(
+            content.x.saturating_add(column),
+            content.y.saturating_add(row),
+        ))
     }
 }
 
@@ -32,7 +56,7 @@ impl Widget for Editor {
             None => "Editor | NORMAL".to_string(),
         };
         let block = Block::bordered().title(title);
-        let inner = block.inner(area);
+        let inner = Self::content_area(area);
         block.render(area, buf);
 
         match self.snapshot {
@@ -111,7 +135,7 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
 
         terminal
-            .draw(|frame| frame.render_widget(Editor::new(None), frame.area()))
+            .draw(|frame| frame.render_widget(Editor::new(None, false), frame.area()))
             .unwrap();
 
         let content = terminal
@@ -134,7 +158,7 @@ mod tests {
 
         terminal
             .draw(|frame| {
-                frame.render_widget(Editor::new(session.active_snapshot()), frame.area());
+                frame.render_widget(Editor::new(session.active_snapshot(), true), frame.area());
             })
             .unwrap();
 

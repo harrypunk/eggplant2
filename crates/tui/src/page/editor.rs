@@ -1,7 +1,6 @@
 use ratatui::{
     Frame,
     layout::{Constraint, Flex, Layout, Rect},
-    widgets::Block,
 };
 
 use crate::component::{
@@ -15,23 +14,18 @@ pub struct Editor;
 impl Editor {
     pub fn view(&self, model: &Model, frame: &mut Frame) {
         let [explorer_area, editor_area, tools_area] = layout_areas(frame.area());
-        let snapshot = model.editor.active_snapshot();
-        let cursor = snapshot.as_ref().and_then(|snapshot| snapshot.cursor);
+        let editor = EditorComponent::new(
+            model.editor.active_snapshot(),
+            model.current_focus == FocusTarget::Editor,
+        );
+        let cursor = editor.cursor_position(editor_area);
 
         frame.render_widget(FileExplorer::new(model.workspace.as_ref()), explorer_area);
-        frame.render_widget(EditorComponent::new(snapshot), editor_area);
+        frame.render_widget(editor, editor_area);
         frame.render_widget(ToolsPanel, tools_area);
 
-        if model.current_focus == FocusTarget::Editor
-            && let Some(cursor) = cursor
-        {
-            let content_area = editor_content_area(frame.area());
-            let column = u16::try_from(cursor.column).unwrap_or(u16::MAX);
-            let row = u16::try_from(cursor.row).unwrap_or(u16::MAX);
-            frame.set_cursor_position((
-                content_area.x.saturating_add(column),
-                content_area.y.saturating_add(row),
-            ));
+        if let Some(cursor) = cursor {
+            frame.set_cursor_position(cursor);
         }
     }
 }
@@ -48,7 +42,7 @@ fn layout_areas(area: Rect) -> [Rect; 3] {
 
 /// The text area used both for Helix viewport sizing and terminal cursor placement.
 pub fn editor_content_area(area: Rect) -> Rect {
-    Block::bordered().inner(layout_areas(area)[1])
+    EditorComponent::content_area(layout_areas(area)[1])
 }
 
 #[cfg(test)]
