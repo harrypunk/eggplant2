@@ -49,6 +49,7 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 - [x] Automatic save after edits/Insert exit through spawned effects and completion messages with status feedback.
 - [x] Save-before-close/quit with deferred actions, serial dirty-buffer saves, and in-flight lifecycle tracking.
 - [x] `Ctrl-N`/`Ctrl-P` buffer cycling with outgoing-buffer auto-save.
+- [x] Editor-top buffer tabs with active/dirty styling and a borderless editor.
 - [x] Focus-loss auto-save without changing editor mode or focus.
 - [x] Workspace tests and Clippy with warnings denied.
 

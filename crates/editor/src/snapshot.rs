@@ -7,6 +7,14 @@ pub struct CursorPosition {
     pub column: usize,
 }
 
+/// Filename-only buffer summary used by tabs and other buffer lists.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BufferInfo {
+    pub id: BufferId,
+    pub name: String,
+    pub modified: bool,
+}
+
 /// Owned, read-only data needed to render one active editor view.
 ///
 /// This keeps Helix document/view types inside the editor crate. The snapshot
@@ -15,6 +23,7 @@ pub struct CursorPosition {
 pub struct EditorSnapshot {
     pub buffer_id: BufferId,
     pub display_name: String,
+    pub buffers: Vec<BufferInfo>,
     pub mode: EditMode,
     pub modified: bool,
     pub lines: Vec<String>,

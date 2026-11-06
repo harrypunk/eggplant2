@@ -21,7 +21,7 @@ use thiserror::Error;
 
 use crate::{
     save::{SaveCompletion, SaveError, SaveRequest},
-    snapshot::{CursorPosition, EditorSnapshot},
+    snapshot::{BufferInfo, CursorPosition, EditorSnapshot},
 };
 
 type MoveFn = fn(
@@ -279,6 +279,7 @@ impl EditorSession {
         Some(EditorSnapshot {
             buffer_id: active.buffer,
             display_name: document.display_name().into_owned(),
+            buffers: self.buffer_infos(),
             mode: self.mode,
             modified: document.is_modified(),
             lines,
@@ -463,6 +464,25 @@ impl EditorSession {
         let active = self.active_view.as_mut()?;
         let buffer = self.buffers.get_mut(&active.buffer)?;
         Some((&mut buffer.document, &mut active.view))
+    }
+
+    fn buffer_infos(&self) -> Vec<BufferInfo> {
+        self.buffers
+            .iter()
+            .map(|(&id, buffer)| {
+                let document = &buffer.document;
+                let name = document
+                    .path()
+                    .and_then(|path| path.file_name())
+                    .map(|name| name.to_string_lossy().into_owned())
+                    .unwrap_or_else(|| document.display_name().into_owned());
+                BufferInfo {
+                    id,
+                    name,
+                    modified: document.is_modified(),
+                }
+            })
+            .collect()
     }
 
     fn buffer_by_path(&self, path: &Path) -> Option<BufferId> {

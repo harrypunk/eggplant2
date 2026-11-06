@@ -1,9 +1,11 @@
 use editor::EditorSnapshot;
 use ratatui::{
     buffer::Buffer,
-    layout::{Position, Rect},
-    widgets::{Block, BorderType, Paragraph, Widget},
+    layout::{Constraint, Flex, Layout, Position, Rect},
+    widgets::{Paragraph, Widget},
 };
+
+use super::buffer_tabs::BufferTabs;
 
 #[derive(Debug)]
 pub struct Editor {
@@ -20,7 +22,10 @@ impl Editor {
     }
 
     pub fn content_area(area: Rect) -> Rect {
-        Block::bordered().inner(area)
+        let [_, content] = Layout::vertical([Constraint::Length(1), Constraint::Fill(1)])
+            .flex(Flex::Start)
+            .areas(area);
+        content
     }
 
     /// Calculate the terminal cursor without requiring access to a Frame.
@@ -42,25 +47,17 @@ impl Editor {
 
 impl Widget for Editor {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let title = match self.snapshot.as_ref() {
-            Some(snapshot) => {
-                let modified = if snapshot.modified { " [+]" } else { "" };
-                format!("Editor | {}{modified}", snapshot.display_name)
-            }
-            None => "Editor".to_string(),
-        };
-        let border = if self.is_focused {
-            BorderType::Double
-        } else {
-            BorderType::Plain
-        };
-        let block = Block::bordered().border_type(border).title(title);
-        let inner = Self::content_area(area);
-        block.render(area, buf);
+        let [tabs_area, content_area] =
+            Layout::vertical([Constraint::Length(1), Constraint::Fill(1)])
+                .flex(Flex::Start)
+                .areas(area);
 
         match self.snapshot {
-            Some(snapshot) => EditorBuffer::new(&snapshot).render(inner, buf),
-            None => Paragraph::new("No file open").render(inner, buf),
+            Some(snapshot) => {
+                BufferTabs::new(&snapshot).render(tabs_area, buf);
+                EditorBuffer::new(&snapshot).render(content_area, buf);
+            }
+            None => Paragraph::new("No file open").render(area, buf),
         }
     }
 }

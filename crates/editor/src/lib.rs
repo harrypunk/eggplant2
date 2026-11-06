@@ -8,7 +8,7 @@ mod snapshot;
 pub use document::DocumentFactory;
 pub use save::{SaveCompletion, SaveError, SaveRequest};
 pub use session::{BufferId, CursorMovement, EditMode, EditorError, EditorSession};
-pub use snapshot::{CursorPosition, EditorSnapshot};
+pub use snapshot::{BufferInfo, CursorPosition, EditorSnapshot};
 
 #[cfg(test)]
 mod spike_tests {
