@@ -6,19 +6,17 @@ use ratatui::{
 };
 
 use super::buffer_tabs::BufferTabs;
+use crate::data_object::FocusState;
 
 #[derive(Debug)]
 pub struct Editor {
     snapshot: Option<EditorSnapshot>,
-    is_focused: bool,
+    focus: FocusState,
 }
 
 impl Editor {
-    pub fn new(snapshot: Option<EditorSnapshot>, is_focused: bool) -> Self {
-        Self {
-            snapshot,
-            is_focused,
-        }
+    pub fn new(snapshot: Option<EditorSnapshot>, focus: FocusState) -> Self {
+        Self { snapshot, focus }
     }
 
     pub fn content_area(area: Rect) -> Rect {
@@ -30,8 +28,9 @@ impl Editor {
 
     /// Calculate the terminal cursor without requiring access to a Frame.
     pub fn cursor_position(&self, area: Rect) -> Option<Position> {
-        if !self.is_focused {
-            return None;
+        match self.focus {
+            FocusState::Unfocused => return None,
+            FocusState::Focused => {}
         }
 
         let cursor = self.snapshot.as_ref()?.cursor?;
@@ -135,7 +134,9 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
 
         terminal
-            .draw(|frame| frame.render_widget(Editor::new(None, false), frame.area()))
+            .draw(|frame| {
+                frame.render_widget(Editor::new(None, FocusState::Unfocused), frame.area())
+            })
             .unwrap();
 
         let content = terminal
@@ -158,7 +159,10 @@ mod tests {
 
         terminal
             .draw(|frame| {
-                frame.render_widget(Editor::new(session.active_snapshot(), true), frame.area());
+                frame.render_widget(
+                    Editor::new(session.active_snapshot(), FocusState::Focused),
+                    frame.area(),
+                );
             })
             .unwrap();
 

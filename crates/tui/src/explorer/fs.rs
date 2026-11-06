@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use super::state::{ExplorerEntry, ExplorerEntryKind};
+use super::state::{ExpansionState, ExplorerEntry, ExplorerEntryKind};
 
 pub(super) fn read_visible_entries(
     root: &Path,
@@ -36,7 +36,7 @@ fn read_entry(entry: io::Result<DirEntry>) -> io::Result<ExplorerEntry> {
         kind: entry_kind(&entry)?,
         path,
         depth: 0,
-        expanded: false,
+        expansion: ExpansionState::Collapsed,
     })
 }
 
@@ -64,10 +64,14 @@ fn read_directory(
         .into_iter()
         .try_fold(Vec::new(), |mut visible, mut entry| {
             entry.depth = depth;
-            entry.expanded = entry.kind == ExplorerEntryKind::Directory
-                && expanded_directories.contains(&entry.path);
+            entry.expansion = match entry.kind {
+                ExplorerEntryKind::Directory if expanded_directories.contains(&entry.path) => {
+                    ExpansionState::Expanded
+                }
+                _ => ExpansionState::Collapsed,
+            };
             let path = entry.path.clone();
-            let expanded = entry.expanded;
+            let expanded = entry.expansion == ExpansionState::Expanded;
             visible.push(entry);
 
             if expanded {

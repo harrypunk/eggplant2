@@ -5,9 +5,10 @@ use ratatui::layout::Rect;
 
 use crate::{
     data_object::{
-        Context, DeferredAction, FocusTarget, Message, Model, RunningState, StatusMessage,
+        BufferMovement, Context, DeferredAction, FocusTarget, Message, Model, RunningState,
+        StatusMessage, Visibility,
     },
-    explorer::ExplorerEntryKind,
+    explorer::{ExpansionState, ExplorerEntryKind},
     leader::{LeaderAction, LeaderOutcome},
     manager::effect::Effect,
     page::editor::editor_content_area,
@@ -37,8 +38,12 @@ impl MessageManager {
             }
             Message::Quit => return Self::request_quit(model),
             Message::CloseActive => return Self::request_close(model),
-            Message::NextBuffer => return Self::change_buffer(model, false),
-            Message::PreviousBuffer => return Self::change_buffer(model, true),
+            Message::NextBuffer => {
+                return Self::change_buffer(model, BufferMovement::Next);
+            }
+            Message::PreviousBuffer => {
+                return Self::change_buffer(model, BufferMovement::Previous);
+            }
             Message::EnterInsertMode => {
                 if model.editor.active_buffer().is_some() {
                     model.context_stack.push(Context::EditorInput);
@@ -86,16 +91,19 @@ impl MessageManager {
             Message::ExplorerNext => model.explorer.select_next(),
             Message::ExplorerPrevious => model.explorer.select_previous(),
             Message::OpenSelected => self.open_selected(model),
-            Message::ExplorerFold => Self::change_expansion(model, false),
-            Message::ExplorerUnfold => Self::change_expansion(model, true),
+            Message::ExplorerFold => Self::change_expansion(model, ExpansionState::Collapsed),
+            Message::ExplorerUnfold => Self::change_expansion(model, ExpansionState::Expanded),
             Message::RefreshExplorer => Self::refresh_explorer(model),
             Message::ToggleFileExplorer => {
                 Self::toggle_file_explorer(model);
             }
             Message::FocusLost => return Self::save_active(model),
             Message::Resize(width, height) => {
-                let area =
-                    editor_content_area(Rect::new(0, 0, width, height), !model.explorer_hidden);
+                let area = editor_content_area(
+                    Rect::new(0, 0, width, height),
+                    model.explorer_visibility,
+                    model.tools_visibility,
+                );
                 model.editor.resize_active_view(area.width, area.height);
             }
             _ => {}
@@ -144,12 +152,15 @@ impl MessageManager {
         None
     }
 
-    fn change_buffer(model: &mut Model, previous: bool) -> Option<Effect> {
+    fn change_buffer(model: &mut Model, movement: BufferMovement) -> Option<Effect> {
         let effect = Self::auto_save_active(model);
-        if previous {
-            let _ = model.editor.activate_previous_buffer();
-        } else {
-            let _ = model.editor.activate_next_buffer();
+        match movement {
+            BufferMovement::Next => {
+                let _ = model.editor.activate_next_buffer();
+            }
+            BufferMovement::Previous => {
+                let _ = model.editor.activate_previous_buffer();
+            }
         }
         effect
     }
@@ -251,12 +262,12 @@ impl MessageManager {
                 }
                 Err(error) => Self::report_error(model, "failed to open file", &path, error),
             },
-            ExplorerEntryKind::Directory => Self::change_expansion(model, true),
+            ExplorerEntryKind::Directory => Self::change_expansion(model, ExpansionState::Expanded),
             ExplorerEntryKind::Other => {}
         }
     }
 
-    fn change_expansion(model: &mut Model, unfold: bool) {
+    fn change_expansion(model: &mut Model, target: ExpansionState) {
         let Some(workspace) = &model.workspace else {
             return;
         };
@@ -264,10 +275,9 @@ impl MessageManager {
             return;
         };
         let path = entry.path.clone();
-        let result = if unfold {
-            model.explorer.unfold_selected(workspace.root())
-        } else {
-            model.explorer.fold_selected(workspace.root())
+        let result = match target {
+            ExpansionState::Expanded => model.explorer.unfold_selected(workspace.root()),
+            ExpansionState::Collapsed => model.explorer.fold_selected(workspace.root()),
         };
         match result {
             Ok(true) => model.status = None,
@@ -297,21 +307,29 @@ impl MessageManager {
         )));
     }
 
+    // Only explorer focus needs to move when the panel is hidden. Other current
+    // and future focus targets intentionally remain unchanged.
+    #[allow(clippy::single_match)]
     fn toggle_file_explorer(model: &mut Model) {
-        if model.explorer_hidden {
-            if model.workspace.is_none() {
-                model.status = Some(StatusMessage::info("No folder open"));
-                return;
-            }
-            model.explorer_hidden = false;
-            Self::focus_explorer(model);
-        } else {
-            model.explorer_hidden = true;
-            if model.current_focus == FocusTarget::FileExplorer {
-                model
-                    .context_stack
-                    .pop_if(|context| context == &Context::Explorer);
-                model.current_focus = FocusTarget::Editor;
+        match model.explorer_visibility {
+            Visibility::Hidden => match model.workspace {
+                None => model.status = Some(StatusMessage::info("No folder open")),
+                Some(_) => {
+                    model.explorer_visibility = Visibility::Displayed;
+                    Self::focus_explorer(model);
+                }
+            },
+            Visibility::Displayed => {
+                model.explorer_visibility = Visibility::Hidden;
+                match model.current_focus {
+                    FocusTarget::FileExplorer => {
+                        model
+                            .context_stack
+                            .pop_if(|context| context == &Context::Explorer);
+                        model.current_focus = FocusTarget::Editor;
+                    }
+                    _ => {}
+                }
             }
         }
     }
@@ -581,9 +599,9 @@ mod tests {
         );
 
         manager.update(&mut model, Message::ToggleFileExplorer);
-        assert!(model.explorer_hidden);
+        assert_eq!(model.explorer_visibility, Visibility::Hidden);
         manager.update(&mut model, Message::ToggleFileExplorer);
-        assert!(!model.explorer_hidden);
+        assert_eq!(model.explorer_visibility, Visibility::Displayed);
         assert_eq!(model.current_focus, FocusTarget::FileExplorer);
         assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
         manager.update(&mut model, Message::OpenSelected);
@@ -657,12 +675,12 @@ mod tests {
         let manager = MessageManager::default();
 
         manager.update(&mut model, Message::ToggleFileExplorer);
-        assert!(model.explorer_hidden);
+        assert_eq!(model.explorer_visibility, Visibility::Hidden);
         assert_eq!(model.current_focus, FocusTarget::Editor);
         assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
 
         manager.update(&mut model, Message::ToggleFileExplorer);
-        assert!(!model.explorer_hidden);
+        assert_eq!(model.explorer_visibility, Visibility::Displayed);
         assert_eq!(model.current_focus, FocusTarget::FileExplorer);
         assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
     }

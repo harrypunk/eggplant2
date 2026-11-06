@@ -3,4 +3,4 @@
 mod fs;
 mod state;
 
-pub use state::{ExplorerEntry, ExplorerEntryKind, ExplorerState};
+pub use state::{ExpansionState, ExplorerEntry, ExplorerEntryKind, ExplorerState};

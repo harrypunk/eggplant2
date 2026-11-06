@@ -7,27 +7,27 @@ use ratatui::{
 };
 
 use crate::{
-    data_object::Workspace,
-    explorer::{ExplorerEntry, ExplorerEntryKind, ExplorerState},
+    data_object::{FocusState, Workspace},
+    explorer::{ExpansionState, ExplorerEntry, ExplorerEntryKind, ExplorerState},
 };
 
 #[derive(Debug)]
 pub struct FileExplorer<'a> {
     workspace: Option<&'a Workspace>,
     explorer: &'a ExplorerState,
-    is_focused: bool,
+    focus: FocusState,
 }
 
 impl<'a> FileExplorer<'a> {
     pub fn new(
         workspace: Option<&'a Workspace>,
         explorer: &'a ExplorerState,
-        is_focused: bool,
+        focus: FocusState,
     ) -> Self {
         Self {
             workspace,
             explorer,
-            is_focused,
+            focus,
         }
     }
 }
@@ -41,10 +41,9 @@ impl FileExplorer<'_> {
     }
 
     fn border_type(&self) -> BorderType {
-        if self.is_focused {
-            BorderType::Double
-        } else {
-            BorderType::Plain
+        match self.focus {
+            FocusState::Focused => BorderType::Double,
+            FocusState::Unfocused => BorderType::Plain,
         }
     }
 
@@ -67,7 +66,9 @@ impl FileExplorer<'_> {
     fn entry_line(selected: bool, entry: &ExplorerEntry) -> Line<'static> {
         let marker = if selected { ">" } else { " " };
         let (directory_marker, suffix) = match entry.kind {
-            ExplorerEntryKind::Directory if entry.expanded => ("▾ ", "/"),
+            ExplorerEntryKind::Directory if entry.expansion == ExpansionState::Expanded => {
+                ("▾ ", "/")
+            }
             ExplorerEntryKind::Directory => ("▸ ", "/"),
             _ => ("", ""),
         };
@@ -116,7 +117,7 @@ mod tests {
         terminal
             .draw(|frame| {
                 frame.render_widget(
-                    FileExplorer::new(Some(&workspace), &explorer, true),
+                    FileExplorer::new(Some(&workspace), &explorer, FocusState::Focused),
                     frame.area(),
                 );
             })
@@ -137,7 +138,7 @@ mod tests {
         terminal
             .draw(|frame| {
                 frame.render_widget(
-                    FileExplorer::new(Some(&workspace), &explorer, true),
+                    FileExplorer::new(Some(&workspace), &explorer, FocusState::Focused),
                     frame.area(),
                 );
             })

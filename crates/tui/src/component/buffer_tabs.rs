@@ -26,7 +26,10 @@ impl Widget for BufferTabs<'_> {
             .iter()
             .position(|buffer| buffer.id == self.snapshot.buffer_id);
         let titles = self.snapshot.buffers.iter().map(|buffer| {
-            let modified = if buffer.modified { " *" } else { "" };
+            let modified = match buffer.modified {
+                editor::DirtyState::Dirty => " *",
+                editor::DirtyState::Clean => "",
+            };
             format!("{}{modified}", buffer.name)
         });
 

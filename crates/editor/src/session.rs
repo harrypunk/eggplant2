@@ -21,7 +21,7 @@ use thiserror::Error;
 
 use crate::{
     save::{SaveCompletion, SaveError, SaveRequest},
-    snapshot::{BufferInfo, CursorPosition, EditorSnapshot},
+    snapshot::{BufferInfo, CursorPosition, DirtyState, EditorSnapshot},
 };
 
 type MoveFn = fn(
@@ -281,7 +281,7 @@ impl EditorSession {
             display_name: document.display_name().into_owned(),
             buffers: self.buffer_infos(),
             mode: self.mode,
-            modified: document.is_modified(),
+            modified: DirtyState::from(document.is_modified()),
             lines,
             horizontal_offset: offset.horizontal_offset,
             cursor,
@@ -479,7 +479,7 @@ impl EditorSession {
                 BufferInfo {
                     id,
                     name,
-                    modified: document.is_modified(),
+                    modified: DirtyState::from(document.is_modified()),
                 }
             })
             .collect()
@@ -832,7 +832,7 @@ mod tests {
         assert_eq!(snapshot.cursor, Some(CursorPosition { row: 0, column: 0 }));
         assert_eq!(snapshot.horizontal_offset, 0);
         assert_eq!(snapshot.mode, EditMode::Normal);
-        assert!(!snapshot.modified);
+        assert_eq!(snapshot.modified, DirtyState::Clean);
     }
 
     #[test]

@@ -24,13 +24,19 @@ impl ExplorerEntryKind {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExpansionState {
+    Expanded,
+    Collapsed,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExplorerEntry {
     pub name: OsString,
     pub path: PathBuf,
     pub kind: ExplorerEntryKind,
     pub depth: usize,
-    pub expanded: bool,
+    pub expansion: ExpansionState,
 }
 
 /// A flattened, visible tree under a fixed workspace root.
@@ -169,13 +175,13 @@ mod tests {
 
         assert!(explorer.unfold_selected(directory.path()).unwrap());
         assert_eq!(explorer.entries.len(), 2);
-        assert!(explorer.entries[0].expanded);
+        assert_eq!(explorer.entries[0].expansion, ExpansionState::Expanded);
         assert_eq!(explorer.entries[1].depth, 1);
         assert_eq!(explorer.selected, Some(0));
 
         assert!(explorer.fold_selected(directory.path()).unwrap());
         assert_eq!(explorer.entries.len(), 1);
-        assert!(!explorer.entries[0].expanded);
+        assert_eq!(explorer.entries[0].expansion, ExpansionState::Collapsed);
         assert_eq!(explorer.selected, Some(0));
         assert!(!explorer.fold_selected(directory.path()).unwrap());
     }

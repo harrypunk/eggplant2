@@ -16,18 +16,55 @@ pub mod data_object {
 
     use editor::{CursorMovement, SaveCompletion};
 
-    #[derive(Debug, Default)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum Visibility {
+        Displayed,
+        Hidden,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum FocusState {
+        Focused,
+        Unfocused,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum BufferMovement {
+        Next,
+        Previous,
+    }
+
+    #[derive(Debug)]
     pub struct Model {
         pub running_state: RunningState,
         pub editor: editor::EditorSession,
         pub workspace: Option<Workspace>,
         pub explorer: crate::explorer::ExplorerState,
-        pub explorer_hidden: bool,
+        pub explorer_visibility: Visibility,
+        pub tools_visibility: Visibility,
         pub current_focus: FocusTarget,
         pub context_stack: Vec<Context>,
         pub status: Option<StatusMessage>,
         pub deferred_action: Option<DeferredAction>,
         pub leader: crate::leader::LeaderState,
+    }
+
+    impl Default for Model {
+        fn default() -> Self {
+            Self {
+                running_state: RunningState::Running,
+                editor: editor::EditorSession::default(),
+                workspace: None,
+                explorer: crate::explorer::ExplorerState::default(),
+                explorer_visibility: Visibility::Displayed,
+                tools_visibility: Visibility::Hidden,
+                current_focus: FocusTarget::Editor,
+                context_stack: Vec::new(),
+                status: None,
+                deferred_action: None,
+                leader: crate::leader::LeaderState::default(),
+            }
+        }
     }
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,7 +124,7 @@ pub mod data_object {
         Done,
     }
 
-    #[derive(Debug, Default, PartialEq, Eq)]
+    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
     pub enum FocusTarget {
         #[default]
         Editor,

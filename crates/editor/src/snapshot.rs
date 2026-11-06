@@ -7,12 +7,27 @@ pub struct CursorPosition {
     pub column: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DirtyState {
+    Clean,
+    Dirty,
+}
+
+impl From<bool> for DirtyState {
+    fn from(modified: bool) -> Self {
+        match modified {
+            true => Self::Dirty,
+            false => Self::Clean,
+        }
+    }
+}
+
 /// Filename-only buffer summary used by tabs and other buffer lists.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BufferInfo {
     pub id: BufferId,
     pub name: String,
-    pub modified: bool,
+    pub modified: DirtyState,
 }
 
 /// Owned, read-only data needed to render one active editor view.
@@ -25,7 +40,7 @@ pub struct EditorSnapshot {
     pub display_name: String,
     pub buffers: Vec<BufferInfo>,
     pub mode: EditMode,
-    pub modified: bool,
+    pub modified: DirtyState,
     pub lines: Vec<String>,
     pub horizontal_offset: usize,
     pub cursor: Option<CursorPosition>,
