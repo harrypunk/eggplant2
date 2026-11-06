@@ -7,25 +7,33 @@ Use ASCII trees in Markdown for layout documentation. They are readable without 
 ```text
 Root: vertical Flex
 ├── main: horizontal Flex
-│   ├── file explorer
-│   │   └── fixed-root filesystem tree
-│   ├── editor: vertical Flex, borderless
+│   ├── file explorer: displayed/hidden
+│   ├── editor: vertical Flex
 │   │   ├── buffer tabs
-│   │   │   └── filename · active highlight · dirty marker
 │   │   └── editing area
-│   └── tools: optional, currently hidden
-│       └── future agent / search / file-info panel
+│   └── tools: displayed/hidden
 └── status bar
-    ├── mode: NORMAL / INSERT
-    └── status or error message
+
+Overlay layer:
+└── which-key panel: displayed/hidden; bottom of main, above status bar
 ```
+
+## Region constraints
+
+| Region | Layout constraints |
+| --- | --- |
+| Root | `main = Fill(1)`, `status = Length(1)` |
+| Main | `file explorer = Length(28)` when displayed, `editor = Fill(1)`, `tools = Length(32)` when displayed |
+| Editor | `buffer tabs = Length(1)`, `editing area = Fill(1)` |
+| Which-key overlay | Bottom of `main`, height `Length(3)` |
+
+All layout groups use `Flex::Start`. Hidden nodes remain in the layout tree and use zero width, so they do not reduce the editor's fill area.
 
 ## Ownership and layout rules
 
-- The page owns the root/main regions and component composition.
+- The page owns root/main regions and component composition.
 - The editor component owns its vertical tabs/content split.
-- `Editor::content_area` is the shared text-area calculation for Helix viewport sizing and terminal cursor placement.
-- Tools have an optional layout region but are not rendered while hidden.
+- `Editor::content_area` is the shared text-area calculation for viewport sizing and cursor coordinates.
 - Add future panels as explicit layout regions rather than embedding them inside unrelated components.
-- Keep layout calculations in shared Flex layouts so style changes do not require hard-coded offsets.
-- Update this file and the layout/cursor tests whenever the hierarchy changes.
+- Keep layout calculations in shared Flex layouts so changes do not require hard-coded offsets.
+- Update this file and layout tests whenever the hierarchy or constraints change.

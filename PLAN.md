@@ -51,13 +51,14 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 - [x] `Ctrl-N`/`Ctrl-P` buffer cycling with outgoing-buffer auto-save.
 - [x] Editor-top buffer tabs with active/dirty styling and a borderless editor.
 - [x] Focus-loss auto-save without changing editor mode or focus.
+- [x] Built-in Space leader/which-key menu for quit, buffer switching, and file visibility.
 - [x] Workspace tests and Clippy with warnings denied.
 
 ### Current default commands
 
 | Context | Command | Binding |
 | --- | --- | --- |
-| Normal | Quit | `q` |
+| Common | Quit | `Space q q` |
 | Normal | Enter Insert | `i` |
 | Normal | Move | `h`, `j`, `k`, `l` |
 | Normal | Undo / redo | `u` / `Ctrl-R` |
@@ -65,8 +66,8 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 | Insert | Backspace / newline | `Backspace` / `Enter` |
 | Insert | Move | Arrow keys |
 | Normal | Close active buffer (saves first when dirty) | `Ctrl-W` |
-| Normal | Next / previous buffer | `Ctrl-N` / `Ctrl-P` |
-| Normal / Explorer | Toggle explorer/editor focus | `Ctrl-E` |
+| Common | Next / previous buffer | `Space b n` / `Space b p` |
+| Common | Show/hide files (focus when shown) | `Space e` |
 | Explorer | Move selection | `j`, `k` |
 | Explorer | Open file / unfold folder | `Enter` |
 | Explorer | Fold / unfold folder | `h` / `l` |

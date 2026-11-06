@@ -4,18 +4,14 @@ event_poll_timeout = 300
 # Keymaps map action names to key bindings.
 # Supported modifiers: ctrl, alt, and shift (for example, "ctrl-q").
 [keymap.normal]
-quit = "q"
 enter_insert_mode = "i"
 close_buffer = "ctrl-w"
-next_buffer = "ctrl-n"
-previous_buffer = "ctrl-p"
 move_left = "h"
 move_right = "l"
 move_up = "k"
 move_down = "j"
 undo = "u"
 redo = "ctrl-r"
-toggle_explorer_focus = "ctrl-e"
 
 [keymap.editor_input]
 exit_insert_mode = "esc"
@@ -27,11 +23,9 @@ move_up = "up"
 move_down = "down"
 
 [keymap.explorer]
-quit = "q"
 explorer_next = "j"
 explorer_previous = "k"
 open_selected = "enter"
 explorer_fold = "h"
 explorer_unfold = "l"
 refresh_explorer = "r"
-toggle_explorer_focus = "ctrl-e"

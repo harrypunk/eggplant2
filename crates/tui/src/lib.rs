@@ -1,6 +1,7 @@
 pub mod component;
 pub mod config;
 pub mod explorer;
+pub mod leader;
 pub mod manager;
 pub mod page;
 pub mod startup;
@@ -21,10 +22,12 @@ pub mod data_object {
         pub editor: editor::EditorSession,
         pub workspace: Option<Workspace>,
         pub explorer: crate::explorer::ExplorerState,
+        pub explorer_hidden: bool,
         pub current_focus: FocusTarget,
         pub context_stack: Vec<Context>,
         pub status: Option<StatusMessage>,
         pub deferred_action: Option<DeferredAction>,
+        pub leader: crate::leader::LeaderState,
     }
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -95,6 +98,7 @@ pub mod data_object {
 
     #[derive(Debug, Clone)]
     pub enum Message {
+        LeaderKey(crossterm::event::KeyCode),
         Quit,
         EnterInsertMode,
         ExitInsertMode,
@@ -116,7 +120,7 @@ pub mod data_object {
         ExplorerFold,
         ExplorerUnfold,
         RefreshExplorer,
-        ToggleExplorerFocus,
+        ToggleFileExplorer,
         GotoBuffer(usize),
     }
 

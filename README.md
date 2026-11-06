@@ -199,6 +199,8 @@ Input precedence should be explicit:
 4. Apply global bindings only as a fallback.
 5. When the editor is focused, dispatch according to its Normal/Insert mode; forward unbound insert-mode character input as text.
 
+Common commands use a built-in Space leader and which-key menu rather than the config file: `Space q q` quits, `Space b n/p` switches buffers, and `Space e` shows/hides the explorer (focusing it when shown). The configurable keymap is reserved for frequent direct keys.
+
 The prototype's `HashMap<KeyCode, Message>` can remain until real commands require more. Extend it for modifiers and short sequences when needed rather than importing Helix's complete keymap/modal machinery.
 
 ## Rendering

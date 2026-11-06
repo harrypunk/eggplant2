@@ -29,18 +29,14 @@ impl Default for Config {
                 (
                     "normal".to_string(),
                     HashMap::from([
-                        ("quit".to_string(), "q".to_string()),
                         ("enter_insert_mode".to_string(), "i".to_string()),
                         ("close_buffer".to_string(), "ctrl-w".to_string()),
-                        ("next_buffer".to_string(), "ctrl-n".to_string()),
-                        ("previous_buffer".to_string(), "ctrl-p".to_string()),
                         ("move_left".to_string(), "h".to_string()),
                         ("move_right".to_string(), "l".to_string()),
                         ("move_up".to_string(), "k".to_string()),
                         ("move_down".to_string(), "j".to_string()),
                         ("undo".to_string(), "u".to_string()),
                         ("redo".to_string(), "ctrl-r".to_string()),
-                        ("toggle_explorer_focus".to_string(), "ctrl-e".to_string()),
                     ]),
                 ),
                 (
@@ -58,14 +54,12 @@ impl Default for Config {
                 (
                     "explorer".to_string(),
                     HashMap::from([
-                        ("quit".to_string(), "q".to_string()),
                         ("explorer_next".to_string(), "j".to_string()),
                         ("explorer_previous".to_string(), "k".to_string()),
                         ("open_selected".to_string(), "enter".to_string()),
                         ("explorer_fold".to_string(), "h".to_string()),
                         ("explorer_unfold".to_string(), "l".to_string()),
                         ("refresh_explorer".to_string(), "r".to_string()),
-                        ("toggle_explorer_focus".to_string(), "ctrl-e".to_string()),
                     ]),
                 ),
             ]),
@@ -115,7 +109,7 @@ mod tests {
         )))
         .unwrap();
 
-        assert_eq!(config.keymap["normal"]["quit"], "q");
+        assert_eq!(config.keymap["normal"]["close_buffer"], "ctrl-w");
         assert_eq!(config.keymap["editor_input"]["exit_insert_mode"], "esc");
     }
 }

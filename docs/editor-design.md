@@ -178,11 +178,13 @@ The exact return type can remain small: a single `Option<Effect>` is sufficient 
 
 Normal-mode bindings resolve to semantic commands. In Insert mode, unbound printable input becomes an editor insert command; individual characters should not be configured as keymap actions.
 
+Built-in common commands use a Space leader and which-key menu, not the configurable direct-key map. Leader actions feed back into the normal message/update path; they do not have separate command implementations.
+
 All mutations go through the editor command API so undo, dirty tracking, viewport updates, and future AI-generated transactions share the same path.
 
 ### Update and rendering responsibilities
 
-Movement, editing, activation, and resize handling update viewport state. Rendering only reads the result and draws visible content. Buffer tabs use filename-only `BufferInfo` summaries with active/dirty styling and occupy the editor's top row. The layout tree is root vertical main/status, main horizontal explorer/editor/optional-tools, and editor vertical tabs/content. The editor is borderless, and shared Flex layouts allow future panels without component-specific box offsets.
+Movement, editing, activation, and resize handling update viewport state. Rendering only reads the result and draws visible content. Buffer tabs use filename-only `BufferInfo` summaries with active/dirty styling and occupy the editor's top row. The layout tree is root vertical main/status, main horizontal explorer/editor/tools with display/hidden states, and editor vertical tabs/content. The editor is borderless, and shared Flex layouts allow future panels without component-specific box offsets.
 
 Use a shared pure layout calculation when cursor-following needs the editor area before rendering: update derives the area from terminal size and layout state, while Ratatui rendering uses the same calculation. Avoid mutating `View.area` or scroll offsets as a hidden side effect of `Widget::render`.
 

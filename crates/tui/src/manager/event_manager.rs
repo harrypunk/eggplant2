@@ -41,6 +41,9 @@ impl EventManager {
         match event {
             Event::Key(key) if key.kind == KeyEventKind::Press => {
                 let ctx = model.context_stack.last()?;
+                if model.leader.is_active() || Self::is_leader_start(ctx, key) {
+                    return Some(Message::LeaderKey(key.code));
+                }
                 self.keymap
                     .get_binding(ctx)
                     .and_then(|bindings| bindings.resolve(KeyChord::new(key.code, key.modifiers)))
@@ -51,6 +54,12 @@ impl EventManager {
             // Event::Mouse(mouse) => MouseManager.translate(mouse, model),
             _ => None,
         }
+    }
+
+    fn is_leader_start(context: &Context, key: KeyEvent) -> bool {
+        matches!(context, Context::AppNormal | Context::Explorer)
+            && key.code == KeyCode::Char(' ')
+            && key.modifiers.is_empty()
     }
 
     fn unbound_key_message(context: &Context, key: KeyEvent) -> Option<Message> {
@@ -95,6 +104,12 @@ mod tests {
 
         let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
         assert!(manager.translate(event, &model).is_none());
+
+        let event = Event::Key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::InsertChar(' '))
+        ));
     }
 
     #[test]
@@ -128,10 +143,10 @@ mod tests {
             manager.translate(event, &model),
             Some(Message::OpenSelected)
         ));
-        let event = Event::Key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::CONTROL));
+        let event = Event::Key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::ToggleExplorerFocus)
+            Some(Message::LeaderKey(KeyCode::Char(' ')))
         ));
     }
 

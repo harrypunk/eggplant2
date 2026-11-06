@@ -93,15 +93,12 @@ fn parse_message(value: &str) -> Option<Message> {
         "undo" => Some(Message::Undo),
         "redo" => Some(Message::Redo),
         "close_buffer" => Some(Message::CloseActive),
-        "next_buffer" => Some(Message::NextBuffer),
-        "previous_buffer" => Some(Message::PreviousBuffer),
         "explorer_next" => Some(Message::ExplorerNext),
         "explorer_previous" => Some(Message::ExplorerPrevious),
         "open_selected" => Some(Message::OpenSelected),
         "explorer_fold" => Some(Message::ExplorerFold),
         "explorer_unfold" => Some(Message::ExplorerUnfold),
         "refresh_explorer" => Some(Message::RefreshExplorer),
-        "toggle_explorer_focus" => Some(Message::ToggleExplorerFocus),
         _ => None,
     }
 }
@@ -117,13 +114,13 @@ mod tests {
     fn loads_default_bindings() {
         let registry = Registry::from_config(&Config::default().keymap).unwrap();
 
-        assert!(matches!(
+        assert!(
             registry
                 .get_binding(&Context::AppNormal)
                 .unwrap()
-                .resolve(KeyChord::new(KeyCode::Char('q'), KeyModifiers::NONE)),
-            Some(Message::Quit)
-        ));
+                .resolve(KeyChord::new(KeyCode::Char('q'), KeyModifiers::NONE))
+                .is_none()
+        );
         assert!(matches!(
             registry
                 .get_binding(&Context::EditorInput)

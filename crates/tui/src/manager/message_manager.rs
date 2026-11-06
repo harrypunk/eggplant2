@@ -8,6 +8,7 @@ use crate::{
         Context, DeferredAction, FocusTarget, Message, Model, RunningState, StatusMessage,
     },
     explorer::ExplorerEntryKind,
+    leader::{LeaderAction, LeaderOutcome},
     manager::effect::Effect,
     page::editor::editor_content_area,
 };
@@ -20,6 +21,20 @@ pub struct MessageManager {
 impl MessageManager {
     pub fn update(&self, model: &mut Model, msg: Message) -> Option<Effect> {
         match msg {
+            Message::LeaderKey(key) => {
+                return match model.leader.handle_key(key) {
+                    LeaderOutcome::Pending | LeaderOutcome::Cancelled => None,
+                    LeaderOutcome::Action(action) => {
+                        let message = match action {
+                            LeaderAction::Quit => Message::Quit,
+                            LeaderAction::NextBuffer => Message::NextBuffer,
+                            LeaderAction::PreviousBuffer => Message::PreviousBuffer,
+                            LeaderAction::ToggleFileExplorer => Message::ToggleFileExplorer,
+                        };
+                        self.update(model, message)
+                    }
+                };
+            }
             Message::Quit => return Self::request_quit(model),
             Message::CloseActive => return Self::request_close(model),
             Message::NextBuffer => return Self::change_buffer(model, false),
@@ -74,13 +89,13 @@ impl MessageManager {
             Message::ExplorerFold => Self::change_expansion(model, false),
             Message::ExplorerUnfold => Self::change_expansion(model, true),
             Message::RefreshExplorer => Self::refresh_explorer(model),
-            Message::ToggleExplorerFocus => match model.current_focus {
-                FocusTarget::FileExplorer => Self::focus_editor(model),
-                _ => Self::focus_explorer(model),
-            },
+            Message::ToggleFileExplorer => {
+                Self::toggle_file_explorer(model);
+            }
             Message::FocusLost => return Self::save_active(model),
             Message::Resize(width, height) => {
-                let area = editor_content_area(Rect::new(0, 0, width, height));
+                let area =
+                    editor_content_area(Rect::new(0, 0, width, height), !model.explorer_hidden);
                 model.editor.resize_active_view(area.width, area.height);
             }
             _ => {}
@@ -280,6 +295,25 @@ impl MessageManager {
             "{action} `{}`: {error}",
             path.display()
         )));
+    }
+
+    fn toggle_file_explorer(model: &mut Model) {
+        if model.explorer_hidden {
+            if model.workspace.is_none() {
+                model.status = Some(StatusMessage::info("No folder open"));
+                return;
+            }
+            model.explorer_hidden = false;
+            Self::focus_explorer(model);
+        } else {
+            model.explorer_hidden = true;
+            if model.current_focus == FocusTarget::FileExplorer {
+                model
+                    .context_stack
+                    .pop_if(|context| context == &Context::Explorer);
+                model.current_focus = FocusTarget::Editor;
+            }
+        }
     }
 
     fn focus_explorer(model: &mut Model) {
@@ -546,7 +580,10 @@ mod tests {
             "b.txt"
         );
 
-        manager.update(&mut model, Message::ToggleExplorerFocus);
+        manager.update(&mut model, Message::ToggleFileExplorer);
+        assert!(model.explorer_hidden);
+        manager.update(&mut model, Message::ToggleFileExplorer);
+        assert!(!model.explorer_hidden);
         assert_eq!(model.current_focus, FocusTarget::FileExplorer);
         assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
         manager.update(&mut model, Message::OpenSelected);
@@ -613,15 +650,58 @@ mod tests {
     }
 
     #[test]
-    fn explorer_cannot_focus_an_empty_editor() {
+    fn hiding_and_showing_explorer_updates_focus() {
         let directory = tempfile::tempdir().unwrap();
         let mut model =
             crate::startup::initial_model(Some(directory.path().to_path_buf())).unwrap();
         let manager = MessageManager::default();
 
-        manager.update(&mut model, Message::ToggleExplorerFocus);
+        manager.update(&mut model, Message::ToggleFileExplorer);
+        assert!(model.explorer_hidden);
+        assert_eq!(model.current_focus, FocusTarget::Editor);
+        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
 
+        manager.update(&mut model, Message::ToggleFileExplorer);
+        assert!(!model.explorer_hidden);
         assert_eq!(model.current_focus, FocusTarget::FileExplorer);
         assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
+    }
+
+    #[test]
+    fn leader_buffer_sequence_switches_buffer() {
+        let manager = MessageManager::default();
+        let mut model = Model::default();
+        let first = crate::test_utils::create_buffer(&mut model, "first");
+        crate::test_utils::create_buffer(&mut model, "second");
+
+        manager.update(
+            &mut model,
+            Message::LeaderKey(crossterm::event::KeyCode::Char(' ')),
+        );
+        manager.update(
+            &mut model,
+            Message::LeaderKey(crossterm::event::KeyCode::Char('b')),
+        );
+        manager.update(
+            &mut model,
+            Message::LeaderKey(crossterm::event::KeyCode::Char('n')),
+        );
+
+        assert_eq!(model.editor.active_buffer(), Some(first));
+        assert!(!model.leader.is_active());
+    }
+
+    #[test]
+    fn leader_q_q_quits() {
+        let manager = MessageManager::default();
+        let mut model = Model::default();
+        for key in [' ', 'q', 'q'] {
+            manager.update(
+                &mut model,
+                Message::LeaderKey(crossterm::event::KeyCode::Char(key)),
+            );
+        }
+
+        assert_eq!(model.running_state, RunningState::Done);
     }
 }
