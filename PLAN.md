@@ -48,6 +48,8 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 - [x] Revision-aware `EditorSession` save requests/completion with in-flight edit and untitled-buffer tests.
 - [x] Automatic save after edits/Insert exit through spawned effects and completion messages with status feedback.
 - [x] Save-before-close/quit with deferred actions, serial dirty-buffer saves, and in-flight lifecycle tracking.
+- [x] `Ctrl-N`/`Ctrl-P` buffer cycling with outgoing-buffer auto-save.
+- [x] Focus-loss auto-save without changing editor mode or focus.
 - [x] Workspace tests and Clippy with warnings denied.
 
 ### Current default commands
@@ -62,6 +64,7 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 | Insert | Backspace / newline | `Backspace` / `Enter` |
 | Insert | Move | Arrow keys |
 | Normal | Close active buffer (saves first when dirty) | `Ctrl-W` |
+| Normal | Next / previous buffer | `Ctrl-N` / `Ctrl-P` |
 | Normal / Explorer | Toggle explorer/editor focus | `Ctrl-E` |
 | Explorer | Move selection | `j`, `k` |
 | Explorer | Open file / unfold folder | `Enter` |
@@ -73,7 +76,7 @@ See `config.example.toml` for the configurable action names.
 ### Known gaps and limitations
 
 - Tools panel is hidden and remains a placeholder for future agent/search/file-info panels.
-- No buffer-switch UI, new-file, or Save As workflow.
+- No new-file or Save As workflow.
 - The status bar handles explorer errors; save/quit and other editor errors are not wired yet.
 - No soft-wrap rendering, syntax highlighting, LSP, or split views.
 - Existing keymap configuration replaces the configured keymap section rather than offering sophisticated default merging/unbinding.
@@ -135,11 +138,13 @@ Each milestone should remain small enough to review independently. Update this f
 **Goal:** implement the documented modern persistence behavior and make existing multi-buffer support reachable.
 
 - [x] Auto-save dirty file-backed buffers after edits; never auto-write untitled buffers.
-- [ ] Save on buffer switch, terminal focus loss, and clean exit.
+- [x] Save on buffer switch and clean exit.
+- [x] Save on terminal focus loss without changing mode or focus.
 - [x] Allow at most one in-flight save per buffer and start a follow-up for newer edits.
-- [ ] Expose buffer switching and safe closing through commands/UI.
-- [ ] Preserve cursor/scroll state and surface save failures across switches.
-- [ ] Test untitled behavior, in-flight edits, focus transitions, and exit flushing.
+- [x] Expose buffer switching and safe closing through commands/UI.
+- [x] Preserve cursor/scroll state and surface save failures across switches.
+- [x] Test untitled behavior, in-flight edits, buffer switching, and exit flushing.
+- [x] Test terminal focus-loss saving.
 
 **Exit criteria:** normal editing persists automatically, and switching/closing buffers never silently discards changes.
 

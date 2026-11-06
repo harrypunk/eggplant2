@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, HashSet},
     fmt,
+    ops::Bound,
     path::Path,
 };
 
@@ -135,6 +136,37 @@ impl EditorSession {
 
         self.retarget_active_view(id);
         Ok(())
+    }
+
+    pub fn activate_next_buffer(&mut self) -> Result<(), EditorError> {
+        self.activate_adjacent_buffer(false)
+    }
+
+    pub fn activate_previous_buffer(&mut self) -> Result<(), EditorError> {
+        self.activate_adjacent_buffer(true)
+    }
+
+    fn activate_adjacent_buffer(&mut self, previous: bool) -> Result<(), EditorError> {
+        let active = self.active_buffer().ok_or(EditorError::NoActiveBuffer)?;
+        if self.buffers.len() < 2 {
+            return Ok(());
+        }
+
+        let target = if previous {
+            self.buffers
+                .range(..active)
+                .next_back()
+                .or_else(|| self.buffers.last_key_value())
+        } else {
+            self.buffers
+                .range((Bound::Excluded(active), Bound::Unbounded))
+                .next()
+                .or_else(|| self.buffers.first_key_value())
+        }
+        .map(|(&id, _)| id)
+        .ok_or(EditorError::NoActiveBuffer)?;
+
+        self.activate_buffer(target)
     }
 
     /// Close an unmodified buffer that is not being saved.
@@ -558,6 +590,24 @@ mod tests {
 
         session.activate_buffer(first).unwrap();
         assert_eq!(session.active_buffer(), Some(first));
+    }
+
+    #[test]
+    fn cycles_buffers_in_both_directions() {
+        let mut session = EditorSession::new();
+        let first = create_buffer(&mut session, "first");
+        let second = create_buffer(&mut session, "second");
+        let third = create_buffer(&mut session, "third");
+        assert_eq!(session.active_buffer(), Some(third));
+
+        session.activate_next_buffer().unwrap();
+        assert_eq!(session.active_buffer(), Some(first));
+        session.activate_next_buffer().unwrap();
+        assert_eq!(session.active_buffer(), Some(second));
+        session.activate_previous_buffer().unwrap();
+        assert_eq!(session.active_buffer(), Some(first));
+        session.activate_previous_buffer().unwrap();
+        assert_eq!(session.active_buffer(), Some(third));
     }
 
     #[test]

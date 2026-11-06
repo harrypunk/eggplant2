@@ -22,6 +22,8 @@ impl MessageManager {
         match msg {
             Message::Quit => return Self::request_quit(model),
             Message::CloseActive => return Self::request_close(model),
+            Message::NextBuffer => return Self::change_buffer(model, false),
+            Message::PreviousBuffer => return Self::change_buffer(model, true),
             Message::EnterInsertMode => {
                 if model.editor.active_buffer().is_some() {
                     model.context_stack.push(Context::EditorInput);
@@ -76,6 +78,7 @@ impl MessageManager {
                 FocusTarget::FileExplorer => Self::focus_editor(model),
                 _ => Self::focus_explorer(model),
             },
+            Message::FocusLost => return Self::save_active(model),
             Message::Resize(width, height) => {
                 let area = editor_content_area(Rect::new(0, 0, width, height));
                 model.editor.resize_active_view(area.width, area.height);
@@ -126,10 +129,24 @@ impl MessageManager {
         None
     }
 
+    fn change_buffer(model: &mut Model, previous: bool) -> Option<Effect> {
+        let effect = Self::auto_save_active(model);
+        if previous {
+            let _ = model.editor.activate_previous_buffer();
+        } else {
+            let _ = model.editor.activate_next_buffer();
+        }
+        effect
+    }
+
     fn auto_save_active(model: &mut Model) -> Option<Effect> {
         if model.editor.mode() == editor::EditMode::Insert {
             return None;
         }
+        Self::save_active(model)
+    }
+
+    fn save_active(model: &mut Model) -> Option<Effect> {
         let id = model.editor.active_buffer()?;
         if model.editor.is_saving(id) {
             return None;
@@ -192,7 +209,8 @@ impl MessageManager {
                     }
                 }
             }
-            None if model.editor.is_modified(buffer_id) == Some(true)
+            None if model.editor.mode() != editor::EditMode::Insert
+                && model.editor.is_modified(buffer_id) == Some(true)
                 && !model.editor.is_saving(buffer_id) =>
             {
                 Self::start_save(model, buffer_id)
@@ -455,6 +473,51 @@ mod tests {
             model.status.unwrap().kind,
             crate::data_object::StatusKind::Info
         );
+    }
+
+    #[tokio::test]
+    async fn focus_loss_saves_without_leaving_insert_mode() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("note.txt");
+        std::fs::write(&path, "hello").unwrap();
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+        crate::test_utils::open_file(&mut model, &path);
+        let manager = MessageManager::default();
+        manager.update(&mut model, Message::EnterInsertMode);
+        manager.update(&mut model, Message::InsertChar('!'));
+
+        let Effect::Save(request) = manager.update(&mut model, Message::FocusLost).unwrap();
+        let completion = request.perform().await;
+        manager.update(&mut model, Message::SaveFinished(completion));
+
+        assert_eq!(model.editor.mode(), editor::EditMode::Insert);
+        assert_eq!(std::fs::read_to_string(path).unwrap(), "!hello");
+    }
+
+    #[tokio::test]
+    async fn switching_buffers_saves_the_outgoing_dirty_buffer() {
+        let directory = tempfile::tempdir().unwrap();
+        let first_path = directory.path().join("first.txt");
+        let second_path = directory.path().join("second.txt");
+        std::fs::write(&first_path, "first").unwrap();
+        std::fs::write(&second_path, "second").unwrap();
+        let mut model = Model::default();
+        let first = crate::test_utils::open_file(&mut model, &first_path);
+        model.editor.enter_insert_mode();
+        model.editor.insert_text("!").unwrap();
+        model.editor.enter_normal_mode();
+        let second = crate::test_utils::open_file(&mut model, &second_path);
+        model.editor.activate_buffer(first).unwrap();
+        let manager = MessageManager::default();
+
+        let Effect::Save(request) = manager.update(&mut model, Message::NextBuffer).unwrap();
+        assert_eq!(model.editor.active_buffer(), Some(second));
+        let completion = request.perform().await;
+        manager.update(&mut model, Message::SaveFinished(completion));
+
+        assert_eq!(std::fs::read_to_string(first_path).unwrap(), "!first");
+        assert!(!model.editor.is_modified(first).unwrap());
     }
 
     #[test]

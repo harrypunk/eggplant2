@@ -46,6 +46,7 @@ impl EventManager {
                     .and_then(|bindings| bindings.resolve(KeyChord::new(key.code, key.modifiers)))
                     .or_else(|| Self::unbound_key_message(ctx, key))
             }
+            Event::FocusLost => Some(Message::FocusLost),
             Event::Resize(width, height) => Some(Message::Resize(width, height)),
             // Event::Mouse(mouse) => MouseManager.translate(mouse, model),
             _ => None,
@@ -142,6 +143,10 @@ mod tests {
         assert!(matches!(
             manager.translate(Event::Resize(100, 40), &model),
             Some(Message::Resize(100, 40))
+        ));
+        assert!(matches!(
+            manager.translate(Event::FocusLost, &model),
+            Some(Message::FocusLost)
         ));
     }
 }

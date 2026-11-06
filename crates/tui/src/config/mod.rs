@@ -32,6 +32,8 @@ impl Default for Config {
                         ("quit".to_string(), "q".to_string()),
                         ("enter_insert_mode".to_string(), "i".to_string()),
                         ("close_buffer".to_string(), "ctrl-w".to_string()),
+                        ("next_buffer".to_string(), "ctrl-n".to_string()),
+                        ("previous_buffer".to_string(), "ctrl-p".to_string()),
                         ("move_left".to_string(), "h".to_string()),
                         ("move_right".to_string(), "l".to_string()),
                         ("move_up".to_string(), "k".to_string()),

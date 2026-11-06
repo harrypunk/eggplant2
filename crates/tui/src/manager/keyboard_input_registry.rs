@@ -93,6 +93,8 @@ fn parse_message(value: &str) -> Option<Message> {
         "undo" => Some(Message::Undo),
         "redo" => Some(Message::Redo),
         "close_buffer" => Some(Message::CloseActive),
+        "next_buffer" => Some(Message::NextBuffer),
+        "previous_buffer" => Some(Message::PreviousBuffer),
         "explorer_next" => Some(Message::ExplorerNext),
         "explorer_previous" => Some(Message::ExplorerPrevious),
         "open_selected" => Some(Message::OpenSelected),
