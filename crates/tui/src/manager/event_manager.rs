@@ -83,6 +83,7 @@ mod tests {
     use editor::CursorMovement;
 
     use super::*;
+    use crate::data_object::FocusDirection;
 
     fn event_manager() -> EventManager {
         let config = Config::default();
@@ -148,6 +149,41 @@ mod tests {
             manager.translate(event, &model),
             Some(Message::LeaderKey(KeyCode::Char(' ')))
         ));
+    }
+
+    #[test]
+    fn routes_directional_focus_in_normal_contexts() {
+        let manager = event_manager();
+        let directions = [
+            ('h', FocusDirection::Left),
+            ('j', FocusDirection::Down),
+            ('k', FocusDirection::Up),
+            ('l', FocusDirection::Right),
+        ];
+
+        for context in [Context::AppNormal, Context::Explorer] {
+            let mut model = Model::default();
+            model.context_stack.push(context);
+            for (key, direction) in directions {
+                let event = Event::Key(KeyEvent::new(KeyCode::Char(key), KeyModifiers::CONTROL));
+                assert!(matches!(
+                    manager.translate(event, &model),
+                    Some(Message::MoveFocus(actual)) if actual == direction
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn insert_context_has_no_directional_focus_bindings() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::EditorInput);
+
+        for key in ['h', 'j', 'k', 'l'] {
+            let event = Event::Key(KeyEvent::new(KeyCode::Char(key), KeyModifiers::CONTROL));
+            assert!(manager.translate(event, &model).is_none());
+        }
     }
 
     #[test]

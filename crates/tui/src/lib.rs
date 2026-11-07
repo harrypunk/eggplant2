@@ -34,6 +34,14 @@ pub mod data_object {
         Previous,
     }
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub enum FocusDirection {
+        Left,
+        Down,
+        Up,
+        Right,
+    }
+
     #[derive(Debug)]
     pub struct Model {
         pub running_state: RunningState,
@@ -140,6 +148,7 @@ pub mod data_object {
         EnterInsertMode,
         ExitInsertMode,
         MoveCursor(CursorMovement),
+        MoveFocus(FocusDirection),
         InsertChar(char),
         InsertNewline,
         Backspace,

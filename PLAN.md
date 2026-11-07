@@ -1,7 +1,7 @@
 # Eggplant first-edition plan
 
-Last updated: 2026-11-05  
-Current baseline: `main` at `8da49bc`
+Last updated: 2026-11-07
+Current baseline: `main` at `28120ce`
 
 ## Purpose
 
@@ -11,7 +11,7 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 
 ## Current state
 
-**The running application now accepts an optional file or folder path.** File and missing-file startup open an editable buffer; folder startup initializes a workspace and focuses the explorer without creating a buffer. `EditorSession` now supports owned asynchronous save requests and revision-aware completion, including stale-save and untitled-buffer handling. Accepted edits automatically execute non-blocking save effects and apply completion messages through the application loop. Close/quit saves dirty buffers and waits for in-flight writes, completing only after successful persistence; failures keep the current state open. Auto-save runs after Normal-mode edits and when leaving Insert, with no manual Save command or timer configuration. The workspace root is fixed after startup. The explorer renders a flattened filesystem tree with selection, file opening, `h`/`l` fold/unfold, Enter to unfold folders, refresh, and `Ctrl-E` focus toggling. Expansion changes only visible tree entries, never the workspace root. Explorer failures appear in a shared bottom status bar, and focused panels use a double border.
+**The running application now accepts an optional file or folder path.** File and missing-file startup open an editable buffer; folder startup initializes a workspace and focuses the explorer without creating a buffer. `EditorSession` now supports owned asynchronous save requests and revision-aware completion, including stale-save and untitled-buffer handling. Accepted edits automatically execute non-blocking save effects and apply completion messages through the application loop. Close/quit saves dirty buffers and waits for in-flight writes, completing only after successful persistence; failures keep the current state open. Auto-save runs after Normal-mode edits and when leaving Insert, with no manual Save command or timer configuration. The workspace root is fixed after startup. The explorer renders a flattened filesystem tree with selection, file opening, `h`/`l` fold/unfold, Enter to unfold folders, refresh, and `Space e` visibility toggling. Normal and Explorer contexts support logical editor/explorer focus movement with `Ctrl-H`/`Ctrl-L`; `Ctrl-J`/`Ctrl-K` are reserved for future vertical panes. Expansion changes only visible tree entries, never the workspace root. Explorer failures appear in a shared bottom status bar, and focused panels use a double border.
 
 ### Completed
 
@@ -66,6 +66,8 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 | Insert | Backspace / newline | `Backspace` / `Enter` |
 | Insert | Move | Arrow keys |
 | Normal | Close active buffer (saves first when dirty) | `Ctrl-W` |
+| Normal / Explorer | Move focus left / right | `Ctrl-H` / `Ctrl-L` |
+| Normal / Explorer | Move focus up / down (reserved for future panes) | `Ctrl-K` / `Ctrl-J` |
 | Common | Next / previous buffer | `Space b n` / `Space b p` |
 | Common | Show/hide files (focus when shown) | `Space e` |
 | Explorer | Move selection | `j`, `k` |

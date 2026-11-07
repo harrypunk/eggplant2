@@ -178,6 +178,8 @@ The exact return type can remain small: a single `Option<Effect>` is sufficient 
 
 Normal-mode bindings resolve to semantic commands. In Insert mode, unbound printable input becomes an editor insert command; individual characters should not be configured as keymap actions.
 
+`Ctrl-H/J/K/L` emits directional focus messages in Normal and Explorer contexts. Focus navigation uses logical component relationships and panel visibility, not document cursor coordinates or rendered rectangles. The single-view layout only moves between the editor and explorer horizontally; vertical directions remain no-ops until vertical panes exist. Focus helpers own target availability and input-context transitions.
+
 Built-in common commands use a Space leader and which-key menu, not the configurable direct-key map. Leader actions feed back into the normal message/update path; they do not have separate command implementations.
 
 All mutations go through the editor command API so undo, dirty tracking, viewport updates, and future AI-generated transactions share the same path.

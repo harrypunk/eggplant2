@@ -5,7 +5,7 @@ use editor::CursorMovement;
 
 use crate::{
     config::KeymapConfig,
-    data_object::{Context, Message},
+    data_object::{Context, FocusDirection, Message},
     manager::context::{ContextBindings, KeyChord},
 };
 
@@ -88,6 +88,10 @@ fn parse_message(value: &str) -> Option<Message> {
         "move_right" => Some(Message::MoveCursor(CursorMovement::Right)),
         "move_up" => Some(Message::MoveCursor(CursorMovement::Up)),
         "move_down" => Some(Message::MoveCursor(CursorMovement::Down)),
+        "focus_left" => Some(Message::MoveFocus(FocusDirection::Left)),
+        "focus_down" => Some(Message::MoveFocus(FocusDirection::Down)),
+        "focus_up" => Some(Message::MoveFocus(FocusDirection::Up)),
+        "focus_right" => Some(Message::MoveFocus(FocusDirection::Right)),
         "backspace" => Some(Message::Backspace),
         "insert_newline" => Some(Message::InsertNewline),
         "undo" => Some(Message::Undo),

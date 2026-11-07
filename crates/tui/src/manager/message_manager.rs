@@ -5,8 +5,8 @@ use ratatui::layout::Rect;
 
 use crate::{
     data_object::{
-        BufferMovement, Context, DeferredAction, FocusTarget, Message, Model, RunningState,
-        StatusMessage, Visibility,
+        BufferMovement, Context, DeferredAction, FocusDirection, FocusTarget, Message, Model,
+        RunningState, StatusMessage, Visibility,
     },
     explorer::{ExpansionState, ExplorerEntryKind},
     leader::{LeaderAction, LeaderOutcome},
@@ -60,6 +60,7 @@ impl MessageManager {
             Message::MoveCursor(movement) => {
                 let _ = model.editor.move_cursor(movement);
             }
+            Message::MoveFocus(direction) => Self::move_focus(model, direction),
             Message::InsertChar(character) => {
                 if model.editor.insert_text(&character.to_string()).is_ok() {
                     return Self::auto_save_active(model);
@@ -331,6 +332,23 @@ impl MessageManager {
                     _ => {}
                 }
             }
+        }
+    }
+
+    // The single-view layout only needs this explicit horizontal relationship.
+    // When splits arrive, query the logical layout tree instead: start at the
+    // focused pane's stable ID, walk toward `direction` through visible
+    // siblings, and select the nearest focusable leaf. Keep terminal cursor
+    // coordinates and Ratatui rectangles out of this application-state policy.
+    fn move_focus(model: &mut Model, direction: FocusDirection) {
+        match (model.current_focus, direction, model.explorer_visibility) {
+            (FocusTarget::Editor, FocusDirection::Left, Visibility::Displayed) => {
+                Self::focus_explorer(model);
+            }
+            (FocusTarget::FileExplorer, FocusDirection::Right, _) => {
+                Self::focus_editor(model);
+            }
+            _ => {}
         }
     }
 
@@ -683,6 +701,61 @@ mod tests {
         assert_eq!(model.explorer_visibility, Visibility::Displayed);
         assert_eq!(model.current_focus, FocusTarget::FileExplorer);
         assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
+    }
+
+    #[test]
+    fn directional_focus_moves_between_editor_and_explorer() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut model =
+            crate::startup::initial_model(Some(directory.path().to_path_buf())).unwrap();
+        crate::test_utils::create_buffer(&mut model, "buffer");
+        let manager = MessageManager::default();
+
+        manager.update(&mut model, Message::MoveFocus(FocusDirection::Right));
+        assert_eq!(model.current_focus, FocusTarget::Editor);
+        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+
+        manager.update(&mut model, Message::MoveFocus(FocusDirection::Left));
+        assert_eq!(model.current_focus, FocusTarget::FileExplorer);
+        assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
+
+        for direction in [FocusDirection::Up, FocusDirection::Down] {
+            manager.update(&mut model, Message::MoveFocus(direction));
+            assert_eq!(model.current_focus, FocusTarget::FileExplorer);
+            assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
+        }
+    }
+
+    #[test]
+    fn directional_focus_ignores_unavailable_targets() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut model =
+            crate::startup::initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let manager = MessageManager::default();
+
+        manager.update(&mut model, Message::MoveFocus(FocusDirection::Right));
+        assert_eq!(model.current_focus, FocusTarget::FileExplorer);
+        assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
+
+        crate::test_utils::create_buffer(&mut model, "buffer");
+        manager.update(&mut model, Message::MoveFocus(FocusDirection::Right));
+        manager.update(&mut model, Message::ToggleFileExplorer);
+        manager.update(&mut model, Message::MoveFocus(FocusDirection::Left));
+        assert_eq!(model.current_focus, FocusTarget::Editor);
+        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+
+        let mut without_workspace = Model::default();
+        without_workspace.context_stack.push(Context::AppNormal);
+        crate::test_utils::create_buffer(&mut without_workspace, "buffer");
+        manager.update(
+            &mut without_workspace,
+            Message::MoveFocus(FocusDirection::Left),
+        );
+        assert_eq!(without_workspace.current_focus, FocusTarget::Editor);
+        assert_eq!(
+            without_workspace.context_stack.last(),
+            Some(&Context::AppNormal)
+        );
     }
 
     #[test]
