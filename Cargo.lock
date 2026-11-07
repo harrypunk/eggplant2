@@ -820,7 +820,7 @@ checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
 [[package]]
 name = "helix-core"
 version = "25.7.1"
-source = "git+http://git.z.lan/fork/helix#079a789e8cb08ead67f19e1971a1b7438b37354b"
+source = "git+http://git.z.lan/fork/helix?rev=079a789e8cb08ead67f19e1971a1b7438b37354b#079a789e8cb08ead67f19e1971a1b7438b37354b"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -856,7 +856,7 @@ dependencies = [
 [[package]]
 name = "helix-dap"
 version = "25.7.1"
-source = "git+http://git.z.lan/fork/helix#079a789e8cb08ead67f19e1971a1b7438b37354b"
+source = "git+http://git.z.lan/fork/helix?rev=079a789e8cb08ead67f19e1971a1b7438b37354b#079a789e8cb08ead67f19e1971a1b7438b37354b"
 dependencies = [
  "anyhow",
  "futures-executor",
@@ -877,7 +877,7 @@ dependencies = [
 [[package]]
 name = "helix-dap-types"
 version = "25.7.1"
-source = "git+http://git.z.lan/fork/helix#079a789e8cb08ead67f19e1971a1b7438b37354b"
+source = "git+http://git.z.lan/fork/helix?rev=079a789e8cb08ead67f19e1971a1b7438b37354b#079a789e8cb08ead67f19e1971a1b7438b37354b"
 dependencies = [
  "serde",
  "serde_json",
@@ -886,7 +886,7 @@ dependencies = [
 [[package]]
 name = "helix-event"
 version = "25.7.1"
-source = "git+http://git.z.lan/fork/helix#079a789e8cb08ead67f19e1971a1b7438b37354b"
+source = "git+http://git.z.lan/fork/helix?rev=079a789e8cb08ead67f19e1971a1b7438b37354b#079a789e8cb08ead67f19e1971a1b7438b37354b"
 dependencies = [
  "anyhow",
  "foldhash 0.2.0",
@@ -901,7 +901,7 @@ dependencies = [
 [[package]]
 name = "helix-loader"
 version = "25.7.1"
-source = "git+http://git.z.lan/fork/helix#079a789e8cb08ead67f19e1971a1b7438b37354b"
+source = "git+http://git.z.lan/fork/helix?rev=079a789e8cb08ead67f19e1971a1b7438b37354b#079a789e8cb08ead67f19e1971a1b7438b37354b"
 dependencies = [
  "anyhow",
  "cc",
@@ -922,7 +922,7 @@ dependencies = [
 [[package]]
 name = "helix-lsp"
 version = "25.7.1"
-source = "git+http://git.z.lan/fork/helix#079a789e8cb08ead67f19e1971a1b7438b37354b"
+source = "git+http://git.z.lan/fork/helix?rev=079a789e8cb08ead67f19e1971a1b7438b37354b#079a789e8cb08ead67f19e1971a1b7438b37354b"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -947,7 +947,7 @@ dependencies = [
 [[package]]
 name = "helix-lsp-types"
 version = "0.95.1"
-source = "git+http://git.z.lan/fork/helix#079a789e8cb08ead67f19e1971a1b7438b37354b"
+source = "git+http://git.z.lan/fork/helix?rev=079a789e8cb08ead67f19e1971a1b7438b37354b#079a789e8cb08ead67f19e1971a1b7438b37354b"
 dependencies = [
  "bitflags 2.13.2",
  "helix-stdx",
@@ -958,12 +958,12 @@ dependencies = [
 [[package]]
 name = "helix-parsec"
 version = "25.7.1"
-source = "git+http://git.z.lan/fork/helix#079a789e8cb08ead67f19e1971a1b7438b37354b"
+source = "git+http://git.z.lan/fork/helix?rev=079a789e8cb08ead67f19e1971a1b7438b37354b#079a789e8cb08ead67f19e1971a1b7438b37354b"
 
 [[package]]
 name = "helix-stdx"
 version = "25.7.1"
-source = "git+http://git.z.lan/fork/helix#079a789e8cb08ead67f19e1971a1b7438b37354b"
+source = "git+http://git.z.lan/fork/helix?rev=079a789e8cb08ead67f19e1971a1b7438b37354b#079a789e8cb08ead67f19e1971a1b7438b37354b"
 dependencies = [
  "bitflags 2.13.2",
  "dunce",
@@ -983,7 +983,7 @@ dependencies = [
 [[package]]
 name = "helix-vcs"
 version = "25.7.1"
-source = "git+http://git.z.lan/fork/helix#079a789e8cb08ead67f19e1971a1b7438b37354b"
+source = "git+http://git.z.lan/fork/helix?rev=079a789e8cb08ead67f19e1971a1b7438b37354b#079a789e8cb08ead67f19e1971a1b7438b37354b"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -998,7 +998,7 @@ dependencies = [
 [[package]]
 name = "helix-view"
 version = "25.7.1"
-source = "git+http://git.z.lan/fork/helix#079a789e8cb08ead67f19e1971a1b7438b37354b"
+source = "git+http://git.z.lan/fork/helix?rev=079a789e8cb08ead67f19e1971a1b7438b37354b#079a789e8cb08ead67f19e1971a1b7438b37354b"
 dependencies = [
  "anyhow",
  "arc-swap",
