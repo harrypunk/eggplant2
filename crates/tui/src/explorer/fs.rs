@@ -1,22 +1,49 @@
 use std::{
     collections::HashSet,
-    fs::DirEntry,
+    ffi::OsStr,
     io,
     path::{Path, PathBuf},
 };
 
-use super::state::{ExpansionState, ExplorerEntry, ExplorerEntryKind};
+use ignore::WalkBuilder;
+
+use super::state::{ExpansionState, ExplorerEntry, ExplorerEntryKind, IgnoreMode};
+
+const BUILT_IN_IGNORED_NAMES: &[&str] = &[".git", "node_modules", "__pycache__"];
 
 pub(super) fn read_visible_entries(
     root: &Path,
     expanded_directories: &HashSet<PathBuf>,
+    ignore_mode: IgnoreMode,
 ) -> io::Result<Vec<ExplorerEntry>> {
-    read_directory(root, 0, expanded_directories)
+    read_directory(root, 0, expanded_directories, ignore_mode)
 }
 
 /// Read and sort one directory level without recursively expanding children.
-fn read_entries(directory: &Path) -> io::Result<Vec<ExplorerEntry>> {
-    let mut entries = std::fs::read_dir(directory)?
+fn read_entries(directory: &Path, ignore_mode: IgnoreMode) -> io::Result<Vec<ExplorerEntry>> {
+    let mut builder = WalkBuilder::new(directory);
+    builder
+        .max_depth(Some(1))
+        // Git-ignore filtering should not implicitly hide unrelated dotfiles.
+        .hidden(false)
+        .parents(true)
+        .ignore(false)
+        .git_ignore(ignore_mode == IgnoreMode::HideIgnored)
+        .git_global(false)
+        .git_exclude(false)
+        .require_git(false);
+
+    let mut entries = builder
+        .build()
+        .filter_map(|entry| match entry {
+            // Keep the root in the walk so its ignore files are loaded, but do
+            // not display the workspace itself as one of its children.
+            Ok(entry) if entry.depth() == 0 => None,
+            Ok(entry) if ignore_mode == IgnoreMode::HideIgnored && is_built_in_ignored(&entry) => {
+                None
+            }
+            entry => Some(entry),
+        })
         .map(read_entry)
         .collect::<io::Result<Vec<_>>>()?;
     entries.sort_by(|left, right| {
@@ -28,30 +55,36 @@ fn read_entries(directory: &Path) -> io::Result<Vec<ExplorerEntry>> {
     Ok(entries)
 }
 
-fn read_entry(entry: io::Result<DirEntry>) -> io::Result<ExplorerEntry> {
-    let entry = entry?;
-    let path = entry.path();
+fn is_built_in_ignored(entry: &ignore::DirEntry) -> bool {
+    BUILT_IN_IGNORED_NAMES
+        .iter()
+        .any(|name| entry.file_name() == OsStr::new(name))
+}
+
+fn read_entry(entry: Result<ignore::DirEntry, ignore::Error>) -> io::Result<ExplorerEntry> {
+    let entry = entry.map_err(io::Error::other)?;
     Ok(ExplorerEntry {
-        name: entry.file_name(),
-        kind: entry_kind(&entry)?,
-        path,
+        name: entry.file_name().to_os_string(),
+        kind: entry_kind(&entry),
+        path: entry.path().to_path_buf(),
         depth: 0,
         expansion: ExpansionState::Collapsed,
     })
 }
 
-fn entry_kind(entry: &DirEntry) -> io::Result<ExplorerEntryKind> {
-    let file_type = entry.file_type()?;
+fn entry_kind(entry: &ignore::DirEntry) -> ExplorerEntryKind {
+    let Some(file_type) = entry.file_type() else {
+        return ExplorerEntryKind::Other;
+    };
     // Follow symlinks to files, but not directories: expanding a symlinked
     // directory could introduce a filesystem cycle.
-    let kind = if file_type.is_dir() {
+    if file_type.is_dir() {
         ExplorerEntryKind::Directory
     } else if file_type.is_file() || entry.path().is_file() {
         ExplorerEntryKind::File
     } else {
         ExplorerEntryKind::Other
-    };
-    Ok(kind)
+    }
 }
 
 /// Flatten one directory level and recurse only into expanded directories.
@@ -59,10 +92,11 @@ fn read_directory(
     directory: &Path,
     depth: usize,
     expanded_directories: &HashSet<PathBuf>,
+    ignore_mode: IgnoreMode,
 ) -> io::Result<Vec<ExplorerEntry>> {
-    read_entries(directory)?
-        .into_iter()
-        .try_fold(Vec::new(), |mut visible, mut entry| {
+    read_entries(directory, ignore_mode)?.into_iter().try_fold(
+        Vec::new(),
+        |mut visible, mut entry| {
             entry.depth = depth;
             entry.expansion = match entry.kind {
                 ExplorerEntryKind::Directory if expanded_directories.contains(&entry.path) => {
@@ -75,8 +109,14 @@ fn read_directory(
             visible.push(entry);
 
             if expanded {
-                visible.extend(read_directory(&path, depth + 1, expanded_directories)?);
+                visible.extend(read_directory(
+                    &path,
+                    depth + 1,
+                    expanded_directories,
+                    ignore_mode,
+                )?);
             }
             Ok(visible)
-        })
+        },
+    )
 }

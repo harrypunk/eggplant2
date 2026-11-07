@@ -30,6 +30,13 @@ pub enum ExpansionState {
     Collapsed,
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum IgnoreMode {
+    #[default]
+    HideIgnored,
+    ShowIgnored,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExplorerEntry {
     pub name: OsString,
@@ -45,13 +52,15 @@ pub struct ExplorerState {
     pub entries: Vec<ExplorerEntry>,
     pub selected: Option<usize>,
     expanded_directories: HashSet<PathBuf>,
+    ignore_mode: IgnoreMode,
 }
 
 impl ExplorerState {
     /// Load the root's immediate children and select the first entry.
     pub fn load(root: &Path) -> io::Result<Self> {
         let state = Self::default();
-        let entries = fs::read_visible_entries(root, &state.expanded_directories)?;
+        let entries =
+            fs::read_visible_entries(root, &state.expanded_directories, state.ignore_mode)?;
         let selected = (!entries.is_empty()).then_some(0);
         Ok(Self {
             entries,
@@ -63,6 +72,20 @@ impl ExplorerState {
     /// Reload visible entries while preserving expansion and selected path.
     pub fn reload(&mut self, root: &Path) -> io::Result<()> {
         self.rebuild(root)
+    }
+
+    /// Toggle Git-ignore filtering without losing expansion or selection state.
+    pub fn toggle_ignore_mode(&mut self, root: &Path) -> io::Result<IgnoreMode> {
+        let previous = self.ignore_mode;
+        self.ignore_mode = match previous {
+            IgnoreMode::HideIgnored => IgnoreMode::ShowIgnored,
+            IgnoreMode::ShowIgnored => IgnoreMode::HideIgnored,
+        };
+        if let Err(error) = self.rebuild(root) {
+            self.ignore_mode = previous;
+            return Err(error);
+        }
+        Ok(self.ignore_mode)
     }
 
     /// Unfold the selected directory. Returns false for files or expanded directories.
@@ -129,7 +152,7 @@ impl ExplorerState {
     fn rebuild(&mut self, root: &Path) -> io::Result<()> {
         let selected_path = self.selected_entry().map(|entry| entry.path.clone());
         // Build first so read failures leave the current visible tree untouched.
-        let entries = fs::read_visible_entries(root, &self.expanded_directories)?;
+        let entries = fs::read_visible_entries(root, &self.expanded_directories, self.ignore_mode)?;
         self.selected = selected_path
             .and_then(|path| entries.iter().position(|entry| entry.path == path))
             .or_else(|| (!entries.is_empty()).then_some(0));
@@ -163,6 +186,63 @@ mod tests {
             ExplorerEntryKind::Directory
         );
         assert!(explorer.entries.iter().all(|entry| entry.depth == 0));
+    }
+
+    #[test]
+    fn filters_gitignore_and_built_in_entries_and_toggles_them() {
+        let directory = tempfile::tempdir().unwrap();
+        let folder = directory.path().join("folder");
+        std::fs::create_dir(&folder).unwrap();
+        std::fs::write(directory.path().join(".gitignore"), "ignored.txt\n").unwrap();
+        std::fs::write(directory.path().join("ignored.txt"), "ignored").unwrap();
+        std::fs::write(directory.path().join("visible.txt"), "visible").unwrap();
+        std::fs::write(folder.join(".gitignore"), "child-ignored.txt\n").unwrap();
+        std::fs::write(folder.join("child-ignored.txt"), "ignored").unwrap();
+        std::fs::write(folder.join("child-visible.txt"), "visible").unwrap();
+        for name in [".git", "node_modules", "__pycache__"] {
+            std::fs::create_dir(directory.path().join(name)).unwrap();
+        }
+        let names = |explorer: &ExplorerState| {
+            explorer
+                .entries
+                .iter()
+                .map(|entry| entry.name.to_string_lossy().into_owned())
+                .collect::<Vec<_>>()
+        };
+        let mut explorer = ExplorerState::load(directory.path()).unwrap();
+
+        assert_eq!(explorer.ignore_mode, IgnoreMode::HideIgnored);
+        assert_eq!(names(&explorer), ["folder", ".gitignore", "visible.txt"]);
+
+        explorer.unfold_selected(directory.path()).unwrap();
+        assert!(!names(&explorer).contains(&"child-ignored.txt".to_string()));
+        assert!(names(&explorer).contains(&"child-visible.txt".to_string()));
+
+        assert_eq!(
+            explorer.toggle_ignore_mode(directory.path()).unwrap(),
+            IgnoreMode::ShowIgnored
+        );
+        let shown = names(&explorer);
+        assert!(shown.contains(&"ignored.txt".to_string()));
+        assert!(shown.contains(&"child-ignored.txt".to_string()));
+        for name in [".git", "node_modules", "__pycache__"] {
+            assert!(shown.contains(&name.to_string()));
+        }
+        assert_eq!(
+            explorer.selected_entry().map(|entry| entry.path.as_path()),
+            Some(folder.as_path())
+        );
+
+        assert_eq!(
+            explorer.toggle_ignore_mode(directory.path()).unwrap(),
+            IgnoreMode::HideIgnored
+        );
+        let hidden = names(&explorer);
+        assert!(!hidden.contains(&"ignored.txt".to_string()));
+        assert!(!hidden.contains(&"child-ignored.txt".to_string()));
+        for name in [".git", "node_modules", "__pycache__"] {
+            assert!(!hidden.contains(&name.to_string()));
+        }
     }
 
     #[test]

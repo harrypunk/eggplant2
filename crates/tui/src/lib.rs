@@ -166,6 +166,7 @@ pub mod data_object {
         ExplorerFold,
         ExplorerUnfold,
         RefreshExplorer,
+        ToggleIgnoredFiles,
         ToggleFileExplorer,
         GotoBuffer(usize),
     }

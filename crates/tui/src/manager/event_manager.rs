@@ -152,6 +152,29 @@ mod tests {
     }
 
     #[test]
+    fn shift_i_toggles_ignored_files_only_in_explorer_context() {
+        let manager = event_manager();
+        let event = || Event::Key(KeyEvent::new(KeyCode::Char('I'), KeyModifiers::SHIFT));
+        let mut model = Model::default();
+        model.context_stack.push(Context::Explorer);
+        assert!(matches!(
+            manager.translate(event(), &model),
+            Some(Message::ToggleIgnoredFiles)
+        ));
+
+        model.context_stack.pop();
+        model.context_stack.push(Context::AppNormal);
+        assert!(manager.translate(event(), &model).is_none());
+
+        model.context_stack.pop();
+        model.context_stack.push(Context::EditorInput);
+        assert!(matches!(
+            manager.translate(event(), &model),
+            Some(Message::InsertChar('I'))
+        ));
+    }
+
+    #[test]
     fn routes_directional_focus_in_normal_contexts() {
         let manager = event_manager();
         let directions = [

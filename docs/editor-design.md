@@ -99,7 +99,7 @@ Do not duplicate both mechanisms. The spike should establish which adapter owns 
 
 ## 4. Folder-open and empty-editor behavior
 
-Workspace and editor state are independent. The workspace root is fixed after startup. The explorer presents a visible filesystem tree beneath that root; folding or unfolding directories changes only the tree's expansion state, never the workspace root.
+Workspace and editor state are independent. The workspace root is fixed after startup. The explorer presents a visible filesystem tree beneath that root; folding or unfolding directories changes only the tree's expansion state, never the workspace root. Root and nested `.gitignore` rules plus built-in `.git`, `node_modules`, and `__pycache__` entries are filtered by default. Explorer-context `Shift-I` toggles between hiding and showing all ignored entries. Ignore filtering happens before producing the flattened tree; unrelated dotfiles remain visible.
 
 ```rust
 struct Model {

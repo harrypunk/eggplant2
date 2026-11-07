@@ -41,7 +41,17 @@ impl FromStr for KeyChord {
             };
         }
 
-        Ok(Self::new(parse_key_code(key_name)?, modifiers))
+        let code = normalize_shifted_character(parse_key_code(key_name)?, modifiers);
+        Ok(Self::new(code, modifiers))
+    }
+}
+
+fn normalize_shifted_character(code: KeyCode, modifiers: KeyModifiers) -> KeyCode {
+    match code {
+        KeyCode::Char(character) if modifiers.contains(KeyModifiers::SHIFT) => {
+            KeyCode::Char(character.to_ascii_uppercase())
+        }
+        _ => code,
     }
 }
 
@@ -140,6 +150,14 @@ mod tests {
                 KeyCode::Char('i'),
                 KeyModifiers::CONTROL | KeyModifiers::ALT
             )
+        );
+    }
+
+    #[test]
+    fn shifted_ascii_characters_match_terminal_key_events() {
+        assert_eq!(
+            "shift-i".parse::<KeyChord>().unwrap(),
+            KeyChord::new(KeyCode::Char('I'), KeyModifiers::SHIFT)
         );
     }
 

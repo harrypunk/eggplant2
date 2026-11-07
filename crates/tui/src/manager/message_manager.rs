@@ -8,7 +8,7 @@ use crate::{
         BufferMovement, Context, DeferredAction, FocusDirection, FocusTarget, Message, Model,
         RunningState, StatusMessage, Visibility,
     },
-    explorer::{ExpansionState, ExplorerEntryKind},
+    explorer::{ExpansionState, ExplorerEntryKind, IgnoreMode},
     leader::{LeaderAction, LeaderOutcome},
     manager::effect::Effect,
     page::editor::editor_content_area,
@@ -95,6 +95,7 @@ impl MessageManager {
             Message::ExplorerFold => Self::change_expansion(model, ExpansionState::Collapsed),
             Message::ExplorerUnfold => Self::change_expansion(model, ExpansionState::Expanded),
             Message::RefreshExplorer => Self::refresh_explorer(model),
+            Message::ToggleIgnoredFiles => Self::toggle_ignored_files(model),
             Message::ToggleFileExplorer => {
                 Self::toggle_file_explorer(model);
             }
@@ -298,6 +299,24 @@ impl MessageManager {
         match model.explorer.reload(&root) {
             Ok(()) => model.status = None,
             Err(error) => Self::report_error(model, "failed to refresh", &root, error),
+        }
+    }
+
+    fn toggle_ignored_files(model: &mut Model) {
+        let Some(workspace) = &model.workspace else {
+            return;
+        };
+        let root = workspace.root().to_path_buf();
+
+        match model.explorer.toggle_ignore_mode(&root) {
+            Ok(mode) => {
+                let text = match mode {
+                    IgnoreMode::HideIgnored => "Hiding ignored files",
+                    IgnoreMode::ShowIgnored => "Showing ignored files",
+                };
+                model.status = Some(StatusMessage::info(text));
+            }
+            Err(error) => Self::report_error(model, "failed to toggle ignored files", &root, error),
         }
     }
 
@@ -663,6 +682,43 @@ mod tests {
 
         assert_eq!(model.explorer.entries.len(), 1);
         assert_eq!(model.explorer.selected, Some(0));
+    }
+
+    #[test]
+    fn explorer_toggles_git_ignored_entries() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(directory.path().join(".gitignore"), "ignored.txt\n").unwrap();
+        std::fs::write(directory.path().join("ignored.txt"), "ignored").unwrap();
+        std::fs::write(directory.path().join("visible.txt"), "visible").unwrap();
+        let mut model =
+            crate::startup::initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let manager = MessageManager::default();
+
+        manager.update(&mut model, Message::ToggleIgnoredFiles);
+        assert!(
+            model
+                .explorer
+                .entries
+                .iter()
+                .any(|entry| entry.name == "ignored.txt")
+        );
+        assert_eq!(
+            model.status.as_ref().map(|status| status.text.as_str()),
+            Some("Showing ignored files")
+        );
+
+        manager.update(&mut model, Message::ToggleIgnoredFiles);
+        assert!(
+            model
+                .explorer
+                .entries
+                .iter()
+                .all(|entry| entry.name != "ignored.txt")
+        );
+        assert_eq!(
+            model.status.as_ref().map(|status| status.text.as_str()),
+            Some("Hiding ignored files")
+        );
     }
 
     #[test]

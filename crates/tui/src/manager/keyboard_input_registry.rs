@@ -103,6 +103,7 @@ fn parse_message(value: &str) -> Option<Message> {
         "explorer_fold" => Some(Message::ExplorerFold),
         "explorer_unfold" => Some(Message::ExplorerUnfold),
         "refresh_explorer" => Some(Message::RefreshExplorer),
+        "toggle_ignored_files" => Some(Message::ToggleIgnoredFiles),
         _ => None,
     }
 }

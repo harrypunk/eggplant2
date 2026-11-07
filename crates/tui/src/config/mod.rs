@@ -68,6 +68,7 @@ impl Default for Config {
                         ("focus_up".to_string(), "ctrl-k".to_string()),
                         ("focus_right".to_string(), "ctrl-l".to_string()),
                         ("refresh_explorer".to_string(), "r".to_string()),
+                        ("toggle_ignored_files".to_string(), "shift-i".to_string()),
                     ]),
                 ),
             ]),
