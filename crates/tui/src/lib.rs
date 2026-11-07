@@ -42,16 +42,43 @@ pub mod data_object {
         Right,
     }
 
+    /// Central application state used by the Elm-style message/update/view loop.
+    ///
+    /// `Model` composes state from each domain rather than duplicating its data:
+    ///
+    /// ```text
+    /// Model
+    /// ├── EditorSession          buffers, cursor, edit mode, viewport, saves
+    /// ├── Workspace + Explorer   fixed root, visible tree, selection, expansion
+    /// ├── UI state               panel visibility, focus, input contexts
+    /// └── Transient workflows    status, deferred actions, leader sequences
+    /// ```
+    ///
+    /// `MessageManager` applies messages to this state and returns effects. Pages
+    /// and components only read it (or an editor snapshot) to render the UI.
     #[derive(Debug)]
     pub struct Model {
+        // Application lifecycle.
         pub running_state: RunningState,
+
+        // Editor-owned document and editing state.
         pub editor: editor::EditorSession,
+
+        // Fixed workspace and its derived, visible filesystem tree.
         pub workspace: Option<Workspace>,
         pub explorer: crate::explorer::ExplorerState,
+
+        // Layout visibility and focus/input routing. Visibility is UI state,
+        // while ExplorerState owns filesystem-tree behavior; hiding a panel
+        // must not discard its tree. If panel state grows, consider cohesive
+        // ExplorerPanelState/ToolsPanelState wrappers around visibility and
+        // their respective domain state rather than mixing layout into trees.
         pub explorer_visibility: Visibility,
         pub tools_visibility: Visibility,
         pub current_focus: FocusTarget,
         pub context_stack: Vec<Context>,
+
+        // Transient feedback and save-dependent workflows.
         pub status: Option<StatusMessage>,
         pub deferred_action: Option<DeferredAction>,
         pub leader: crate::leader::LeaderState,
