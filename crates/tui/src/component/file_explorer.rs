@@ -36,7 +36,13 @@ impl FileExplorer<'_> {
     fn title(&self) -> String {
         self.workspace.map_or_else(
             || "File Explorer".to_string(),
-            |workspace| format!("File Explorer | {}", workspace.root().display()),
+            |workspace| {
+                let root = workspace.root();
+                root.file_name()
+                    .unwrap_or(root.as_os_str())
+                    .to_string_lossy()
+                    .into_owned()
+            },
         )
     }
 
@@ -99,9 +105,23 @@ impl Widget for FileExplorer<'_> {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use ratatui::{Terminal, backend::TestBackend};
 
     use super::*;
+
+    #[test]
+    fn title_uses_only_the_workspace_folder_name() {
+        let workspace = Workspace::new(PathBuf::from("/tmp/project"));
+        let explorer = ExplorerState::default();
+        let component = FileExplorer::new(Some(&workspace), &explorer, FocusState::Unfocused);
+        assert_eq!(component.title(), "project");
+
+        let root = Workspace::new(PathBuf::from("/"));
+        let component = FileExplorer::new(Some(&root), &explorer, FocusState::Unfocused);
+        assert_eq!(component.title(), "/");
+    }
 
     #[test]
     fn renders_sorted_entries_with_selection() {
