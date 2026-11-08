@@ -133,13 +133,14 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend};
 
     use super::*;
+    use crate::test_utils::create_buffer;
 
     #[test]
     fn places_and_hides_cursor_based_on_editor_focus() {
         let backend = TestBackend::new(100, 10);
         let mut terminal = Terminal::new(backend).unwrap();
         let mut model = Model::default();
-        crate::test_utils::create_buffer(&mut model, "hello");
+        create_buffer(&mut model, "hello");
         let content = editor_content_area(
             Rect::new(0, 0, 100, 10),
             Visibility::Displayed,
@@ -164,7 +165,7 @@ mod tests {
         let backend = TestBackend::new(100, 10);
         let mut terminal = Terminal::new(backend).unwrap();
         let mut model = Model::default();
-        crate::test_utils::create_buffer(&mut model, "hello");
+        create_buffer(&mut model, "hello");
         let page = Editor;
 
         terminal.draw(|frame| page.view(&model, frame)).unwrap();
@@ -202,7 +203,7 @@ mod tests {
         let backend = TestBackend::new(100, 10);
         let mut terminal = Terminal::new(backend).unwrap();
         let mut model = Model::default();
-        crate::test_utils::create_buffer(&mut model, "hello");
+        create_buffer(&mut model, "hello");
         model
             .leader
             .handle_key(crossterm::event::KeyCode::Char(' '));

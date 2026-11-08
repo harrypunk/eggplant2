@@ -4,7 +4,6 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
-api.workspace = true
 color-eyre = "0.6.5"
 crossterm = "0.29.0"
 editor.workspace = true

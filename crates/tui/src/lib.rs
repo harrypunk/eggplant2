@@ -15,7 +15,9 @@ pub mod data_object {
 
     use std::path::{Path, PathBuf};
 
-    use editor::{CursorMovement, SaveCompletion};
+    use editor::{BufferId, CursorMovement, EditorSession, SaveCompletion};
+
+    use crate::{explorer::ExplorerState, leader::LeaderState, tools::ToolsPanelState};
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum Visibility {
@@ -64,14 +66,14 @@ pub mod data_object {
         pub running_state: RunningState,
 
         // Editor-owned document and editing state.
-        pub editor: editor::EditorSession,
+        pub editor: EditorSession,
 
         // Fixed workspace and its derived, visible filesystem tree.
         pub workspace: Option<Workspace>,
-        pub explorer: crate::explorer::ExplorerState,
+        pub explorer: ExplorerState,
 
         // Shared shell for independent search, agent, and info tools.
-        pub tools: crate::tools::ToolsPanelState,
+        pub tools: ToolsPanelState,
 
         // Layout visibility and focus/input routing. Explorer visibility stays
         // separate from filesystem-tree behavior so hiding it retains the tree.
@@ -83,23 +85,23 @@ pub mod data_object {
         // Transient feedback and save-dependent workflows.
         pub status: Option<StatusMessage>,
         pub deferred_action: Option<DeferredAction>,
-        pub leader: crate::leader::LeaderState,
+        pub leader: LeaderState,
     }
 
     impl Default for Model {
         fn default() -> Self {
             Self {
                 running_state: RunningState::Running,
-                editor: editor::EditorSession::default(),
+                editor: EditorSession::default(),
                 workspace: None,
-                explorer: crate::explorer::ExplorerState::default(),
-                tools: crate::tools::ToolsPanelState::default(),
+                explorer: ExplorerState::default(),
+                tools: ToolsPanelState::default(),
                 explorer_visibility: Visibility::Displayed,
                 current_focus: FocusTarget::Editor,
                 context_stack: Vec::new(),
                 status: None,
                 deferred_action: None,
-                leader: crate::leader::LeaderState::default(),
+                leader: LeaderState::default(),
             }
         }
     }
@@ -107,7 +109,7 @@ pub mod data_object {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum DeferredAction {
         Quit,
-        CloseBuffer(editor::BufferId),
+        CloseBuffer(BufferId),
     }
 
     /// A workspace whose root is fixed after startup.

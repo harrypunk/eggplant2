@@ -1,4 +1,4 @@
-use editor::EditorSnapshot;
+use editor::{DirtyState, EditorSnapshot};
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -27,8 +27,8 @@ impl Widget for BufferTabs<'_> {
             .position(|buffer| buffer.id == self.snapshot.buffer_id);
         let titles = self.snapshot.buffers.iter().map(|buffer| {
             let modified = match buffer.modified {
-                editor::DirtyState::Dirty => " *",
-                editor::DirtyState::Clean => "",
+                DirtyState::Dirty => " *",
+                DirtyState::Clean => "",
             };
             format!("{}{modified}", buffer.name)
         });

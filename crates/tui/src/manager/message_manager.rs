@@ -1,6 +1,6 @@
 use std::{fmt::Display, path::Path};
 
-use editor::DocumentFactory;
+use editor::{BufferId, DocumentFactory, EditMode, SaveCompletion};
 use ratatui::layout::Rect;
 
 use crate::{
@@ -168,7 +168,7 @@ impl MessageManager {
     }
 
     fn auto_save_active(model: &mut Model) -> Option<Effect> {
-        if model.editor.mode() == editor::EditMode::Insert {
+        if model.editor.mode() == EditMode::Insert {
             return None;
         }
         Self::save_active(model)
@@ -182,7 +182,7 @@ impl MessageManager {
         Self::start_save(model, id)
     }
 
-    fn start_save(model: &mut Model, id: editor::BufferId) -> Option<Effect> {
+    fn start_save(model: &mut Model, id: BufferId) -> Option<Effect> {
         match model.editor.save_buffer(id) {
             Ok(request) => Some(Effect::Save(request)),
             Err(error) => {
@@ -193,7 +193,7 @@ impl MessageManager {
         }
     }
 
-    fn finish_save(model: &mut Model, completion: editor::SaveCompletion) -> Option<Effect> {
+    fn finish_save(model: &mut Model, completion: SaveCompletion) -> Option<Effect> {
         let buffer_id = completion.buffer_id();
         if let Err(error) = model.editor.complete_save(completion) {
             model.deferred_action = None;
@@ -237,7 +237,7 @@ impl MessageManager {
                     }
                 }
             }
-            None if model.editor.mode() != editor::EditMode::Insert
+            None if model.editor.mode() != EditMode::Insert
                 && model.editor.is_modified(buffer_id) == Some(true)
                 && !model.editor.is_saving(buffer_id) =>
             {
@@ -396,16 +396,21 @@ impl MessageManager {
 
 #[cfg(test)]
 mod tests {
-    use editor::EditMode;
+    use editor::{CursorMovement, EditMode};
 
     use super::*;
+    use crate::{
+        data_object::StatusKind,
+        startup::initial_model,
+        test_utils::{create_buffer, open_file},
+    };
 
     #[test]
     fn mode_messages_update_editor_session_and_context() {
         let manager = MessageManager::default();
         let mut model = Model::default();
         model.context_stack.push(Context::AppNormal);
-        crate::test_utils::create_buffer(&mut model, "");
+        create_buffer(&mut model, "");
 
         manager.update(&mut model, Message::EnterInsertMode);
         assert_eq!(model.editor.mode(), EditMode::Insert);
@@ -433,13 +438,10 @@ mod tests {
         let manager = MessageManager::default();
         let mut model = Model::default();
         model.context_stack.push(Context::AppNormal);
-        crate::test_utils::create_buffer(&mut model, "a");
+        create_buffer(&mut model, "a");
         manager.update(&mut model, Message::Resize(120, 20));
 
-        manager.update(
-            &mut model,
-            Message::MoveCursor(editor::CursorMovement::Right),
-        );
+        manager.update(&mut model, Message::MoveCursor(CursorMovement::Right));
         manager.update(&mut model, Message::EnterInsertMode);
         manager.update(&mut model, Message::InsertChar('b'));
         assert_eq!(model.editor.active_snapshot().unwrap().lines[0], "ab");
@@ -463,7 +465,7 @@ mod tests {
         std::fs::write(&path, "a").unwrap();
         let manager = MessageManager::default();
         let mut model = Model::default();
-        crate::test_utils::open_file(&mut model, &path);
+        open_file(&mut model, &path);
         model.editor.enter_insert_mode();
         model.editor.insert_text("b").unwrap();
         model.editor.enter_normal_mode();
@@ -483,7 +485,7 @@ mod tests {
         std::fs::write(&path, "a").unwrap();
         let manager = MessageManager::default();
         let mut model = Model::default();
-        crate::test_utils::open_file(&mut model, &path);
+        open_file(&mut model, &path);
         model.editor.enter_insert_mode();
         model.editor.insert_text("b").unwrap();
         model.editor.enter_normal_mode();
@@ -499,7 +501,7 @@ mod tests {
     fn failed_save_keeps_buffer_dirty() {
         let manager = MessageManager::default();
         let mut model = Model::default();
-        crate::test_utils::create_buffer(&mut model, "scratch");
+        create_buffer(&mut model, "scratch");
         model.context_stack.push(Context::AppNormal);
         manager.update(&mut model, Message::EnterInsertMode);
 
@@ -507,10 +509,7 @@ mod tests {
         let effect = manager.update(&mut model, Message::ExitInsertMode);
         assert!(effect.is_none());
         assert!(model.editor.active_is_modified());
-        assert_eq!(
-            model.status.unwrap().kind,
-            crate::data_object::StatusKind::Error
-        );
+        assert_eq!(model.status.unwrap().kind, StatusKind::Error);
     }
 
     #[tokio::test]
@@ -519,7 +518,7 @@ mod tests {
         let path = directory.path().join("note.txt");
         std::fs::write(&path, "hello").unwrap();
         let mut model = Model::default();
-        crate::test_utils::open_file(&mut model, &path);
+        open_file(&mut model, &path);
         model.context_stack.push(Context::AppNormal);
         let manager = MessageManager::default();
         manager.update(&mut model, Message::EnterInsertMode);
@@ -541,12 +540,9 @@ mod tests {
         std::fs::write(&path, "hello").unwrap();
         let mut model = Model::default();
         model.context_stack.push(Context::AppNormal);
-        crate::test_utils::open_file(&mut model, &path);
+        open_file(&mut model, &path);
         for _ in 0..5 {
-            model
-                .editor
-                .move_cursor(editor::CursorMovement::Right)
-                .unwrap();
+            model.editor.move_cursor(CursorMovement::Right).unwrap();
         }
         let manager = MessageManager::default();
         manager.update(&mut model, Message::EnterInsertMode);
@@ -558,10 +554,7 @@ mod tests {
 
         assert_eq!(std::fs::read_to_string(path).unwrap(), "hello!");
         assert!(!model.editor.active_is_modified());
-        assert_eq!(
-            model.status.unwrap().kind,
-            crate::data_object::StatusKind::Info
-        );
+        assert_eq!(model.status.unwrap().kind, StatusKind::Info);
     }
 
     #[tokio::test]
@@ -571,7 +564,7 @@ mod tests {
         std::fs::write(&path, "hello").unwrap();
         let mut model = Model::default();
         model.context_stack.push(Context::AppNormal);
-        crate::test_utils::open_file(&mut model, &path);
+        open_file(&mut model, &path);
         let manager = MessageManager::default();
         manager.update(&mut model, Message::EnterInsertMode);
         manager.update(&mut model, Message::InsertChar('!'));
@@ -580,7 +573,7 @@ mod tests {
         let completion = request.perform().await;
         manager.update(&mut model, Message::SaveFinished(completion));
 
-        assert_eq!(model.editor.mode(), editor::EditMode::Insert);
+        assert_eq!(model.editor.mode(), EditMode::Insert);
         assert_eq!(std::fs::read_to_string(path).unwrap(), "!hello");
     }
 
@@ -592,11 +585,11 @@ mod tests {
         std::fs::write(&first_path, "first").unwrap();
         std::fs::write(&second_path, "second").unwrap();
         let mut model = Model::default();
-        let first = crate::test_utils::open_file(&mut model, &first_path);
+        let first = open_file(&mut model, &first_path);
         model.editor.enter_insert_mode();
         model.editor.insert_text("!").unwrap();
         model.editor.enter_normal_mode();
-        let second = crate::test_utils::open_file(&mut model, &second_path);
+        let second = open_file(&mut model, &second_path);
         model.editor.activate_buffer(first).unwrap();
         let manager = MessageManager::default();
 
@@ -614,8 +607,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         std::fs::write(directory.path().join("a.txt"), "a").unwrap();
         std::fs::write(directory.path().join("b.txt"), "b").unwrap();
-        let mut model =
-            crate::startup::initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(120, 20));
 
@@ -652,8 +644,7 @@ mod tests {
         let child = directory.path().join("folder");
         std::fs::create_dir(&child).unwrap();
         std::fs::write(child.join("note.txt"), "hello").unwrap();
-        let mut model =
-            crate::startup::initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
         let manager = MessageManager::default();
         let workspace_root = model.workspace.as_ref().unwrap().root().to_path_buf();
 
@@ -672,8 +663,7 @@ mod tests {
     #[test]
     fn explorer_refresh_reloads_workspace_tree() {
         let directory = tempfile::tempdir().unwrap();
-        let mut model =
-            crate::startup::initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
         let manager = MessageManager::default();
         assert!(model.explorer.entries.is_empty());
 
@@ -690,8 +680,7 @@ mod tests {
         std::fs::write(directory.path().join(".gitignore"), "ignored.txt\n").unwrap();
         std::fs::write(directory.path().join("ignored.txt"), "ignored").unwrap();
         std::fs::write(directory.path().join("visible.txt"), "visible").unwrap();
-        let mut model =
-            crate::startup::initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
         let manager = MessageManager::default();
 
         manager.update(&mut model, Message::ToggleIgnoredFiles);
@@ -726,8 +715,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let child = directory.path().join("folder");
         std::fs::create_dir(&child).unwrap();
-        let mut model =
-            crate::startup::initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
         let manager = MessageManager::default();
         let original_entries = model.explorer.entries.clone();
         std::fs::remove_dir(&child).unwrap();
@@ -736,7 +724,7 @@ mod tests {
         manager.update(&mut model, Message::OpenSelected);
 
         let status = model.status.as_ref().unwrap();
-        assert_eq!(status.kind, crate::data_object::StatusKind::Error);
+        assert_eq!(status.kind, StatusKind::Error);
         assert!(status.text.contains("failed to update directory tree"));
         assert_eq!(model.explorer.entries, original_entries);
     }
@@ -744,8 +732,7 @@ mod tests {
     #[test]
     fn hiding_and_showing_explorer_updates_focus() {
         let directory = tempfile::tempdir().unwrap();
-        let mut model =
-            crate::startup::initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
         let manager = MessageManager::default();
 
         manager.update(&mut model, Message::ToggleFileExplorer);
@@ -762,9 +749,8 @@ mod tests {
     #[test]
     fn directional_focus_moves_between_editor_and_explorer() {
         let directory = tempfile::tempdir().unwrap();
-        let mut model =
-            crate::startup::initial_model(Some(directory.path().to_path_buf())).unwrap();
-        crate::test_utils::create_buffer(&mut model, "buffer");
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        create_buffer(&mut model, "buffer");
         let manager = MessageManager::default();
 
         manager.update(&mut model, Message::MoveFocus(FocusDirection::Right));
@@ -785,15 +771,14 @@ mod tests {
     #[test]
     fn directional_focus_ignores_unavailable_targets() {
         let directory = tempfile::tempdir().unwrap();
-        let mut model =
-            crate::startup::initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
         let manager = MessageManager::default();
 
         manager.update(&mut model, Message::MoveFocus(FocusDirection::Right));
         assert_eq!(model.current_focus, FocusTarget::FileExplorer);
         assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
 
-        crate::test_utils::create_buffer(&mut model, "buffer");
+        create_buffer(&mut model, "buffer");
         manager.update(&mut model, Message::MoveFocus(FocusDirection::Right));
         manager.update(&mut model, Message::ToggleFileExplorer);
         manager.update(&mut model, Message::MoveFocus(FocusDirection::Left));
@@ -802,7 +787,7 @@ mod tests {
 
         let mut without_workspace = Model::default();
         without_workspace.context_stack.push(Context::AppNormal);
-        crate::test_utils::create_buffer(&mut without_workspace, "buffer");
+        create_buffer(&mut without_workspace, "buffer");
         manager.update(
             &mut without_workspace,
             Message::MoveFocus(FocusDirection::Left),
@@ -818,8 +803,8 @@ mod tests {
     fn leader_buffer_sequence_switches_buffer() {
         let manager = MessageManager::default();
         let mut model = Model::default();
-        let first = crate::test_utils::create_buffer(&mut model, "first");
-        crate::test_utils::create_buffer(&mut model, "second");
+        let first = create_buffer(&mut model, "first");
+        create_buffer(&mut model, "second");
 
         manager.update(
             &mut model,

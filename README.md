@@ -74,7 +74,7 @@ crates/
 └── tui/       # Binary, terminal runtime, Ratatui pages, and widgets
 ```
 
-The existing placeholder `api` crate can become `app`, or it can later hold a stable automation/API contract if external AI processes need one. Avoid adding more crates until a real dependency or testing boundary requires them.
+Application state currently lives in `tui`. Avoid adding more crates until a real dependency or testing boundary requires them.
 
 ### `app`
 
