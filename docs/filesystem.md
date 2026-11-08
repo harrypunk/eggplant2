@@ -50,6 +50,12 @@ Typing filters the retained `Arc<Vec<FileEntry>>`; it does not rescan the reposi
 
 Filter and preview revisions are independent. A late filter completion cannot overwrite a newer query, and a late preview cannot replace the preview for a newer selection. Closing the picker invalidates both revisions.
 
+## Open acceptance and explorer synchronization
+
+Every application document open uses `DocumentFactory::open`. Existing targets must be regular, NUL-free UTF-8 text files. Directories, links, binary data, invalid UTF-8, and other file types return `not a text file` without changing buffers, picker state, or explorer state. A missing path remains valid for deliberate new-file startup behavior.
+
+`MessageManager::open_file` is the single application open path for explorer, picker, and future open commands. After Helix document construction succeeds, `EditorSession` supplies the canonical buffer path. The same update then asks `ExplorerState::reveal` to expand visible ancestors and select that exact file, even if the explorer is hidden. Reveal is transactional: outside-workspace, ignored, missing, and read-failure paths do not partially change expansion or selection. Only after reconciliation does the picker close and the editor receive focus.
+
 ## Fuzzy matching and ranking
 
 Use `nucleo-matcher` rather than implementing a fuzzy algorithm in Eggplant. It is maintained for and used by the Helix ecosystem, supports Unicode normalization and path-oriented matching, and reuses matcher scratch allocations.

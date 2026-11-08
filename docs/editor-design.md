@@ -70,7 +70,7 @@ This is deliberately smaller than a general window tree. A future split implemen
 
 - If `active_view` exists, its `BufferId` exists in `BufferStore`.
 - Every open buffer has a stable ID independent of display order.
-- Opening an already-open canonical path activates the existing buffer rather than duplicating it.
+- Opening an already-open canonical path activates the existing buffer rather than duplicating it. All open commands use the same text-only `DocumentFactory` acceptance path, then reveal the canonical opened path in the explorer by expanding its visible ancestors and selecting it.
 - Only the document adapter owns text, transactions, and history.
 - Only one component owns viewport offsets for the active view.
 - Editor commands never create a buffer implicitly when no document is active.

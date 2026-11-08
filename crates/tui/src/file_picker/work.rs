@@ -111,6 +111,16 @@ fn filter_files(files: &[FileEntry], query: &str) -> Vec<FileEntry> {
 }
 
 fn read_preview(path: &Path) -> PreviewState {
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) if !metadata.file_type().is_file() => {
+            return PreviewState::Unavailable("Not a text file".to_string());
+        }
+        Ok(_) => {}
+        Err(error) => {
+            return PreviewState::Unavailable(format!("Preview unavailable: {error}"));
+        }
+    }
+
     let mut bytes = Vec::new();
     let result =
         File::open(path).and_then(|file| file.take(PREVIEW_BYTE_LIMIT).read_to_end(&mut bytes));
@@ -180,8 +190,10 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let text = directory.path().join("note.txt");
         let binary = directory.path().join("image.bin");
+        let link = directory.path().join("link.txt");
         std::fs::write(&text, "first\nsecond").unwrap();
         std::fs::write(&binary, [0_u8, 1, 2]).unwrap();
+        std::os::unix::fs::symlink(&text, &link).unwrap();
 
         assert_eq!(
             read_preview(&text),
@@ -190,6 +202,10 @@ mod tests {
         assert_eq!(
             read_preview(&binary),
             PreviewState::Unavailable("Binary file".to_string())
+        );
+        assert_eq!(
+            read_preview(&link),
+            PreviewState::Unavailable("Not a text file".to_string())
         );
     }
 }

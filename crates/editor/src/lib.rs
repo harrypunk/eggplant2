@@ -5,7 +5,7 @@ mod save;
 mod session;
 mod snapshot;
 
-pub use document::DocumentFactory;
+pub use document::{DocumentFactory, OpenDocumentError};
 pub use save::{SaveCompletion, SaveError, SaveRequest};
 pub use session::{BufferId, CursorMovement, EditMode, EditorError, EditorSession};
 pub use snapshot::{BufferInfo, CursorPosition, DirtyState, EditorSnapshot};

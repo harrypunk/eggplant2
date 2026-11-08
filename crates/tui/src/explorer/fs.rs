@@ -71,11 +71,13 @@ fn entry_kind(entry: &ignore::DirEntry) -> ExplorerEntryKind {
     let Some(file_type) = entry.file_type() else {
         return ExplorerEntryKind::Other;
     };
-    // Follow symlinks to files, but not directories: expanding a symlinked
-    // directory could introduce a filesystem cycle.
-    if file_type.is_dir() {
+    // Never follow directory links during tree expansion; links are shown but
+    // are not valid document-open targets.
+    if file_type.is_symlink() {
+        ExplorerEntryKind::Link
+    } else if file_type.is_dir() {
         ExplorerEntryKind::Directory
-    } else if file_type.is_file() || entry.path().is_file() {
+    } else if file_type.is_file() {
         ExplorerEntryKind::File
     } else {
         ExplorerEntryKind::Other

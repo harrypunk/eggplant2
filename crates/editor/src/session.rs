@@ -199,6 +199,11 @@ impl EditorSession {
         self.active_view.as_ref().map(|view| view.buffer)
     }
 
+    /// Canonical path of an open file-backed buffer, if it has one.
+    pub fn buffer_path(&self, id: BufferId) -> Option<&Path> {
+        self.buffers.get(&id)?.document.path()
+    }
+
     pub fn active_is_modified(&self) -> bool {
         self.active_view
             .as_ref()
@@ -555,7 +560,7 @@ mod tests {
     use helix_view::graphics::Rect;
 
     use super::*;
-    use crate::DocumentFactory;
+    use crate::{DocumentFactory, OpenDocumentError};
 
     fn create_buffer(session: &mut EditorSession, text: &str) -> BufferId {
         session.insert_document(DocumentFactory::new().create(text))
@@ -953,10 +958,7 @@ mod tests {
         let session = EditorSession::new();
 
         let error = DocumentFactory::new().open(directory.path());
-        assert!(matches!(
-            error,
-            Err(helix_view::document::DocumentOpenError::IrregularFile)
-        ));
+        assert!(matches!(error, Err(OpenDocumentError::NotTextFile)));
         assert!(session.is_empty());
         assert_eq!(session.active_buffer(), None);
     }

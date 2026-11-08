@@ -284,19 +284,10 @@ impl MessageManager {
         };
         let path = entry.path.clone();
         match entry.kind {
-            ExplorerEntryKind::File => match self
-                .documents
-                .open(&path)
-                .map(|document| model.editor.insert_document(document))
-            {
-                Ok(_) => {
-                    model.status = None;
-                    Self::focus_editor(model);
-                }
-                Err(error) => Self::report_error(model, "failed to open file", &path, error),
-            },
+            ExplorerEntryKind::File | ExplorerEntryKind::Link | ExplorerEntryKind::Other => {
+                self.open_file(model, &path);
+            }
             ExplorerEntryKind::Directory => Self::change_expansion(model, ExpansionState::Expanded),
-            ExplorerEntryKind::Other => {}
         }
     }
 
@@ -329,18 +320,33 @@ impl MessageManager {
             return;
         };
         let path = entry.path.clone();
-        match self
-            .documents
-            .open(&path)
-            .map(|document| model.editor.insert_document(document))
-        {
-            Ok(_) => {
-                model.status = None;
-                Self::close_file_picker(model);
-                Self::focus_editor(model);
+        self.open_file(model, &path);
+    }
+
+    /// Single document-open path shared by explorer, picker, and future commands.
+    fn open_file(&self, model: &mut Model, path: &Path) {
+        let document = match self.documents.open(path) {
+            Ok(document) => document,
+            Err(error) => {
+                Self::report_error(model, "failed to open file", path, error);
+                return;
             }
-            Err(error) => Self::report_error(model, "failed to open file", &path, error),
+        };
+        let id = model.editor.insert_document(document);
+        let opened_path = model.editor.buffer_path(id).map(Path::to_path_buf);
+        model.status = None;
+
+        if let (Some(workspace), Some(path)) = (&model.workspace, opened_path) {
+            let root = workspace.root().to_path_buf();
+            if let Err(error) = model.explorer.reveal(&root, &path) {
+                Self::report_error(model, "failed to update file explorer", &path, error);
+            }
         }
+        match model.file_picker.visibility {
+            Visibility::Displayed => Self::close_file_picker(model),
+            Visibility::Hidden => {}
+        }
+        Self::focus_editor(model);
     }
 
     fn change_expansion(model: &mut Model, target: ExpansionState) {
@@ -687,7 +693,10 @@ mod tests {
     #[test]
     fn file_picker_scans_previews_and_opens_selected_file() {
         let directory = tempfile::tempdir().unwrap();
-        std::fs::write(directory.path().join("main.rs"), "fn main() {}").unwrap();
+        let nested = directory.path().join("nested");
+        let file = nested.join("main.rs");
+        std::fs::create_dir(&nested).unwrap();
+        std::fs::write(&file, "fn main() {}").unwrap();
         let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(120, 20));
@@ -724,9 +733,45 @@ mod tests {
         assert_eq!(model.current_focus, FocusTarget::Editor);
         assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
         assert_eq!(
+            model.explorer.selected_entry().unwrap().path,
+            std::fs::canonicalize(file).unwrap()
+        );
+        assert_eq!(
+            model.explorer.entries[0].expansion,
+            ExpansionState::Expanded
+        );
+        assert_eq!(
             model.editor.active_snapshot().unwrap().lines[0],
             "fn main() {}"
         );
+    }
+
+    #[test]
+    fn non_text_open_reports_error_without_changing_state() {
+        let directory = tempfile::tempdir().unwrap();
+        let text = directory.path().join("text.txt");
+        let binary = directory.path().join("binary.bin");
+        let link = directory.path().join("link.txt");
+        std::fs::write(&text, "text").unwrap();
+        std::fs::write(&binary, [0xff, 0x00]).unwrap();
+        std::os::unix::fs::symlink(&text, &link).unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let manager = MessageManager::default();
+        let original_entries = model.explorer.entries.clone();
+
+        for path in [binary, link] {
+            manager.open_file(&mut model, &path);
+            assert!(model.editor.is_empty());
+            assert_eq!(model.explorer.entries, original_entries);
+            assert!(
+                model
+                    .status
+                    .as_ref()
+                    .unwrap()
+                    .text
+                    .contains("not a text file")
+            );
+        }
     }
 
     #[test]

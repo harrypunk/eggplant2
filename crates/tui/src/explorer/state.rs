@@ -11,6 +11,7 @@ use super::fs;
 pub enum ExplorerEntryKind {
     Directory,
     File,
+    Link,
     Other,
 }
 
@@ -19,7 +20,8 @@ impl ExplorerEntryKind {
         match self {
             Self::Directory => 0,
             Self::File => 1,
-            Self::Other => 2,
+            Self::Link => 2,
+            Self::Other => 3,
         }
     }
 }
@@ -118,6 +120,33 @@ impl ExplorerState {
             return Err(error);
         }
         Ok(true)
+    }
+
+    /// Expand ancestors and select an opened file when it is visible.
+    ///
+    /// Paths outside the workspace or hidden by ignore rules leave the current
+    /// tree unchanged. Read failures are transactional as well.
+    pub fn reveal(&mut self, root: &Path, path: &Path) -> io::Result<()> {
+        let Ok(relative) = path.strip_prefix(root) else {
+            return Ok(());
+        };
+        let mut expanded_directories = self.expanded_directories.clone();
+        if let Some(parent) = relative.parent() {
+            for ancestor in parent.ancestors() {
+                if !ancestor.as_os_str().is_empty() {
+                    expanded_directories.insert(root.join(ancestor));
+                }
+            }
+        }
+
+        let entries = fs::read_visible_entries(root, &expanded_directories, self.ignore_mode)?;
+        let Some(selected) = entries.iter().position(|entry| entry.path == path) else {
+            return Ok(());
+        };
+        self.expanded_directories = expanded_directories;
+        self.entries = entries;
+        self.selected = Some(selected);
+        Ok(())
     }
 
     pub fn select_next(&mut self) {
@@ -264,6 +293,27 @@ mod tests {
         assert_eq!(explorer.entries[0].expansion, ExpansionState::Collapsed);
         assert_eq!(explorer.selected, Some(0));
         assert!(!explorer.fold_selected(directory.path()).unwrap());
+    }
+
+    #[test]
+    fn reveal_expands_ancestors_and_selects_the_opened_file() {
+        let directory = tempfile::tempdir().unwrap();
+        let nested = directory.path().join("folder/nested");
+        let file = nested.join("note.txt");
+        std::fs::create_dir_all(&nested).unwrap();
+        std::fs::write(&file, "hello").unwrap();
+        let mut explorer = ExplorerState::load(directory.path()).unwrap();
+
+        explorer.reveal(directory.path(), &file).unwrap();
+
+        assert_eq!(explorer.selected_entry().unwrap().path, file);
+        assert!(
+            explorer
+                .entries
+                .iter()
+                .filter(|entry| entry.kind == ExplorerEntryKind::Directory)
+                .all(|entry| entry.expansion == ExpansionState::Expanded)
+        );
     }
 
     #[test]

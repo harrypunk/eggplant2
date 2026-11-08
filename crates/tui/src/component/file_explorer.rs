@@ -76,6 +76,7 @@ impl FileExplorer<'_> {
                 ("▾ ", "/")
             }
             ExplorerEntryKind::Directory => ("▸ ", "/"),
+            ExplorerEntryKind::Link => ("", " (link)"),
             _ => ("", ""),
         };
         let indentation = "  ".repeat(entry.depth);
@@ -129,6 +130,11 @@ mod tests {
         std::fs::create_dir(directory.path().join("folder")).unwrap();
         std::fs::write(directory.path().join("folder/child.txt"), "child").unwrap();
         std::fs::write(directory.path().join("note.txt"), "hello").unwrap();
+        std::os::unix::fs::symlink(
+            directory.path().join("note.txt"),
+            directory.path().join("link.txt"),
+        )
+        .unwrap();
         let mut explorer = ExplorerState::load(directory.path()).unwrap();
         let workspace = Workspace::new(directory.path().to_path_buf());
         let backend = TestBackend::new(30, 5);
@@ -152,6 +158,7 @@ mod tests {
             .collect::<String>();
         assert!(content.contains("> ▸ folder/"));
         assert!(content.contains("  note.txt"));
+        assert!(content.contains("  link.txt (link)"));
         assert!(content.contains("║"));
 
         explorer.unfold_selected(directory.path()).unwrap();
