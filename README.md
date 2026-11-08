@@ -199,7 +199,20 @@ Input precedence should be explicit:
 4. Apply global bindings only as a fallback.
 5. When the editor is focused, dispatch according to its Normal/Insert mode; forward unbound insert-mode character input as text.
 
-Common commands use a built-in Space leader and bottom-right key-hints popup rather than the config file: `Space q q` quits, `Space b n/p` switches buffers, and `Space e` shows/hides the explorer (focusing it when shown), and `Space f f` opens a fuzzy file picker with a text preview. Only regular UTF-8 text files can be opened; links, binary files, and invalid UTF-8 report an error without changing state. In the picker, printable input filters results, arrow keys select, Enter opens, and Escape closes. The configurable keymap is reserved for frequent direct keys. In Normal and Explorer contexts, `Ctrl-H/J/K/L` requests directional focus movement; the first edition supports editor/explorer movement left and right, while vertical movement is reserved for future splits. The explorer respects root and nested `.gitignore` files and hides built-in `.git`, `node_modules`, and `__pycache__` entries by default; `Shift-I` in Explorer context toggles all ignored entries without hiding unrelated dotfiles.
+Common commands use a built-in Space leader with bottom-right key hints:
+
+- `Space q q`: quit.
+- `Space b n` / `Space b p`: next/previous buffer.
+- `Space e`: show/hide and focus the explorer.
+- `Space f f`: open the fuzzy file picker with text preview.
+
+Direct keys remain configurable:
+
+- `Ctrl-H/J/K/L`: move focus in Normal/Explorer contexts; only left/right currently have targets.
+- `Shift-I` in Explorer: toggle Git-ignored and built-in ignored entries.
+- Picker: type to filter, arrows to select, Enter to open, Escape to close.
+
+Only regular UTF-8 text files open successfully. The explorer honors root/nested `.gitignore` files and also hides `.git`, `node_modules`, and `__pycache__` by default.
 
 The prototype's `HashMap<KeyCode, Message>` can remain until real commands require more. Extend it for modifiers and short sequences when needed rather than importing Helix's complete keymap/modal machinery.
 
