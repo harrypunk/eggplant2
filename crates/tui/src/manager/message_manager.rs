@@ -104,7 +104,7 @@ impl MessageManager {
                 let area = editor_content_area(
                     Rect::new(0, 0, width, height),
                     model.explorer_visibility,
-                    model.tools_visibility,
+                    model.tools.visibility,
                 );
                 model.editor.resize_active_view(area.width, area.height);
             }

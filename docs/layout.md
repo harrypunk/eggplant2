@@ -33,6 +33,8 @@ All layout groups use `Flex::Start`. Hidden nodes remain in the layout tree and 
 
 - The page owns root/main regions and component composition.
 - The editor component owns its vertical tabs/content split.
+- `ToolsPanelState` owns only shell visibility and active-tool selection. Future search, agent, and info tools keep their state and behavior in separate modules; hiding the shell does not stop their work or discard their state.
+- The tools panel component receives resolved shell props and delegates tool-specific rendering rather than implementing every tool itself.
 - `Editor::content_area` is the shared text-area calculation for viewport sizing and cursor coordinates.
 - Add future panels as explicit layout regions rather than embedding them inside unrelated components.
 - Keep layout calculations in shared Flex layouts so changes do not require hard-coded offsets.

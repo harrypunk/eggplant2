@@ -6,6 +6,7 @@ pub mod manager;
 pub mod page;
 pub mod startup;
 pub mod terminal;
+pub mod tools;
 
 #[cfg(test)]
 mod test_utils;
@@ -50,6 +51,7 @@ pub mod data_object {
     /// Model
     /// ├── EditorSession          buffers, cursor, edit mode, viewport, saves
     /// ├── Workspace + Explorer   fixed root, visible tree, selection, expansion
+    /// ├── ToolsPanelState        side-panel visibility and active tool
     /// ├── UI state               panel visibility, focus, input contexts
     /// └── Transient workflows    status, deferred actions, leader sequences
     /// ```
@@ -68,13 +70,13 @@ pub mod data_object {
         pub workspace: Option<Workspace>,
         pub explorer: crate::explorer::ExplorerState,
 
-        // Layout visibility and focus/input routing. Visibility is UI state,
-        // while ExplorerState owns filesystem-tree behavior; hiding a panel
-        // must not discard its tree. If panel state grows, consider cohesive
-        // ExplorerPanelState/ToolsPanelState wrappers around visibility and
-        // their respective domain state rather than mixing layout into trees.
+        // Shared shell for independent search, agent, and info tools.
+        pub tools: crate::tools::ToolsPanelState,
+
+        // Layout visibility and focus/input routing. Explorer visibility stays
+        // separate from filesystem-tree behavior so hiding it retains the tree.
+        // A future ExplorerPanelState wrapper can group these if useful.
         pub explorer_visibility: Visibility,
-        pub tools_visibility: Visibility,
         pub current_focus: FocusTarget,
         pub context_stack: Vec<Context>,
 
@@ -91,8 +93,8 @@ pub mod data_object {
                 editor: editor::EditorSession::default(),
                 workspace: None,
                 explorer: crate::explorer::ExplorerState::default(),
+                tools: crate::tools::ToolsPanelState::default(),
                 explorer_visibility: Visibility::Displayed,
-                tools_visibility: Visibility::Hidden,
                 current_focus: FocusTarget::Editor,
                 context_stack: Vec::new(),
                 status: None,

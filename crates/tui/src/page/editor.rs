@@ -17,7 +17,7 @@ impl Editor {
         let areas = layout_areas(
             frame.area(),
             model.explorer_visibility,
-            model.tools_visibility,
+            model.tools.visibility,
         );
         let snapshot = model.editor.active_snapshot();
         let editor = EditorComponent::new(
@@ -38,7 +38,13 @@ impl Editor {
         });
         frame.render_widget(editor, areas.editor);
         areas.tools.into_iter().for_each(|area| {
-            frame.render_widget(ToolsPanel, area);
+            frame.render_widget(
+                ToolsPanel::new(
+                    model.tools.active_tool,
+                    focus_for(model.current_focus, FocusTarget::ToolsPanel),
+                ),
+                area,
+            );
         });
         frame.render_widget(
             StatusBar::new(model.editor.mode(), model.status.as_ref()),
