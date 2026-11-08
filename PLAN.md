@@ -52,7 +52,7 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 - [x] `Ctrl-N`/`Ctrl-P` buffer cycling with outgoing-buffer auto-save.
 - [x] Editor-top buffer tabs with active/dirty styling and a borderless editor.
 - [x] Focus-loss auto-save without changing editor mode or focus.
-- [x] Built-in Space leader/which-key menu for quit, buffer switching, and file visibility.
+- [x] Built-in Space leader with bottom-right key hints for quit, buffer switching, and file visibility.
 - [x] Workspace tests and Clippy with warnings denied.
 
 ### Current default commands

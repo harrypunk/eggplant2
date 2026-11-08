@@ -1,11 +1,11 @@
 use ratatui::{
     Frame,
-    layout::{Constraint, Flex, Layout, Rect},
+    layout::{Constraint, Flex, Layout, Rect, Size},
 };
 
 use crate::component::{
-    editor::Editor as EditorComponent, file_explorer::FileExplorer, status_bar::StatusBar,
-    tools_panel::ToolsPanel, which_key::WhichKey,
+    editor::Editor as EditorComponent, file_explorer::FileExplorer, key_hints::KeyHints,
+    status_bar::StatusBar, tools_panel::ToolsPanel,
 };
 use crate::data_object::{FocusState, FocusTarget, Model, Visibility};
 
@@ -53,7 +53,9 @@ impl Editor {
         match model.leader.items() {
             [] => {}
             _ => {
-                frame.render_widget(WhichKey::new(&model.leader), which_key_area(frame.area()));
+                let hints = KeyHints::new(&model.leader);
+                let area = key_hints_area(frame.area(), hints.size());
+                frame.render_widget(hints, area);
             }
         }
 
@@ -112,14 +114,19 @@ fn focus_for(current: FocusTarget, component: FocusTarget) -> FocusState {
     }
 }
 
-fn which_key_area(area: Rect) -> Rect {
-    let [_, popup, _] = Layout::vertical([
+fn key_hints_area(area: Rect, size: Size) -> Rect {
+    let width = size.width.min(area.width);
+    let height = size.height.min(area.height.saturating_sub(1));
+    let [_, popup_band, _] = Layout::vertical([
         Constraint::Fill(1),
-        Constraint::Length(3),
+        Constraint::Length(height),
         Constraint::Length(1),
     ])
     .flex(Flex::Start)
     .areas(area);
+    let [_, popup] = Layout::horizontal([Constraint::Fill(1), Constraint::Length(width)])
+        .flex(Flex::Start)
+        .areas(popup_band);
     popup
 }
 
@@ -199,7 +206,23 @@ mod tests {
     }
 
     #[test]
-    fn shows_which_key_menu_and_hides_cursor() {
+    fn clamps_key_hints_to_the_available_area() {
+        let area = key_hints_area(
+            Rect::new(0, 0, 8, 3),
+            Size {
+                width: 16,
+                height: 5,
+            },
+        );
+
+        assert_eq!(area.width, 8);
+        assert_eq!(area.height, 2);
+        assert_eq!(area.x + area.width, 8);
+        assert_eq!(area.y + area.height, 2);
+    }
+
+    #[test]
+    fn shows_bottom_right_key_hints_and_hides_cursor() {
         let backend = TestBackend::new(100, 10);
         let mut terminal = Terminal::new(backend).unwrap();
         let mut model = Model::default();
@@ -219,7 +242,14 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
         assert!(content.contains("Leader"));
-        assert!(content.contains("q q quit"));
+        assert!(content.contains("q quit"));
         assert!(!terminal.backend().cursor_visible());
+
+        let hints = KeyHints::new(&model.leader);
+        let area = key_hints_area(Rect::new(0, 0, 100, 10), hints.size());
+        assert_eq!(area.x + area.width, 100);
+        assert_eq!(area.y + area.height, 9);
+        assert_eq!(area.height, 5);
+        assert!(area.width < 100);
     }
 }

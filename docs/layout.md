@@ -15,7 +15,7 @@ Root: vertical Flex
 └── status bar
 
 Overlay layer:
-└── which-key panel: displayed/hidden; bottom of main, above status bar
+└── key-hints popup: displayed/hidden; bottom-right of main, above status bar
 ```
 
 ## Region constraints
@@ -25,7 +25,7 @@ Overlay layer:
 | Root | `main = Fill(1)`, `status = Length(1)` |
 | Main | `file explorer = Length(28)` when displayed, `editor = Fill(1)`, `tools = Length(32)` when displayed |
 | Editor | `buffer tabs = Length(1)`, `editing area = Fill(1)` |
-| Which-key overlay | Bottom of `main`, height `Length(3)` |
+| Key-hints overlay | Bottom-right of `main`; content-sized vertical list with borders, above the status bar |
 
 All layout groups use `Flex::Start`. Hidden nodes remain in the layout tree and use zero width, so they do not reduce the editor's fill area.
 
@@ -35,6 +35,7 @@ All layout groups use `Flex::Start`. Hidden nodes remain in the layout tree and 
 - The editor component owns its vertical tabs/content split.
 - `ToolsPanelState` owns only shell visibility and active-tool selection. Future search, agent, and info tools keep their state and behavior in separate modules; hiding the shell does not stop their work or discard their state.
 - The tools panel component receives resolved shell props and delegates tool-specific rendering rather than implementing every tool itself.
+- `KeyHints` owns list presentation and intrinsic size; the page owns bottom-right popup placement.
 - `Editor::content_area` is the shared text-area calculation for viewport sizing and cursor coordinates.
 - Add future panels as explicit layout regions rather than embedding them inside unrelated components.
 - Keep layout calculations in shared Flex layouts so changes do not require hard-coded offsets.
