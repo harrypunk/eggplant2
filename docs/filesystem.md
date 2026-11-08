@@ -26,9 +26,9 @@ CommandAction::OpenFilePicker → Message::OpenFilePicker
    │
    ▼
 update: open picker state
-   │ returns Effect::FilePicker(Scan { root, revision })
+   │ returns Effect::FilePicker(Scan { root, depth, revision })
    ▼
-spawn_blocking: Git-aware recursive file scan
+spawn_blocking: Git-aware top-level scan (recursive on first search)
    │ sends FileScanFinished { revision, result }
    ▼
 update: retain Arc<Vec<FileEntry>>
@@ -46,7 +46,7 @@ spawn_blocking: capped text read
 update → render
 ```
 
-Typing filters the retained `Arc<Vec<FileEntry>>`; it does not rescan the repository on each key. Typing while the initial scan is still running does not invalidate that scan. Its completion starts filtering with the latest query.
+The first open scans only top-level files. A ready entry cache is retained when the picker closes, so reopening renders cached results immediately without another scan. The first non-empty query upgrades a ready top-level cache with one recursive background scan; subsequent typing filters the retained `Arc<Vec<FileEntry>>` without further traversal. Typing while either scan is running does not invalidate it, and completion filters with the latest query.
 
 Filter and preview revisions are independent. A late filter completion cannot overwrite a newer query, and a late preview cannot replace the preview for a newer selection. Closing the picker invalidates both revisions.
 
@@ -70,11 +70,12 @@ The first implementation uses established crates and explicit effects instead of
 
 - `ignore` prunes Git-ignored and built-in ignored directories during traversal.
 - Scanning, matching, and preview reads run on Tokio's blocking pool, not the terminal thread.
-- The scanned file set is shared with filter jobs through `Arc`.
+- Top-level entries provide a fast initial response; recursive traversal is deferred until the first search.
+- Ready file entries persist across picker closes and are shared with filter jobs through `Arc`.
 - Preview reads are capped at 64 KiB and accept UTF-8 text without NUL bytes; binary and non-UTF-8 files show an unavailable message.
 - Only selection changes trigger preview reads.
 
-Revision checks guarantee stale results are harmless, but they do not stop obsolete CPU or I/O work. If profiling on large repositories shows excessive queued work, introduce a dedicated picker worker that coalesces queued queries and supports cancellation. Do not add a complex scheduler before that need is measured. A future watcher or explicit refresh can keep the file cache current; reopening currently performs a fresh scan.
+Revision checks guarantee stale results are harmless, but they do not stop obsolete CPU or I/O work. If profiling on large repositories shows excessive queued work, introduce a dedicated picker worker that coalesces queued queries and supports cancellation. Do not add a complex scheduler before that need is measured. A future watcher or explicit refresh can keep the file cache current. A future recent-files command such as `Space f r` can reuse the same entries with recency metadata and ordering instead of introducing another scanner.
 
 ## Future filesystem mutations
 

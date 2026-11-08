@@ -11,7 +11,7 @@ use nucleo_matcher::{
     pattern::{CaseMatching, Normalization, Pattern},
 };
 
-use super::{FileEntry, PreviewState};
+use super::{FileEntry, PreviewState, ScanDepth};
 use crate::{data_object::Message, filesystem::is_built_in_ignored};
 
 const PREVIEW_BYTE_LIMIT: u64 = 64 * 1024;
@@ -20,6 +20,7 @@ const PREVIEW_BYTE_LIMIT: u64 = 64 * 1024;
 pub enum FilePickerRequest {
     Scan {
         root: PathBuf,
+        depth: ScanDepth,
         revision: u64,
     },
     Filter {
@@ -36,9 +37,13 @@ pub enum FilePickerRequest {
 impl FilePickerRequest {
     pub fn perform(self) -> Message {
         match self {
-            Self::Scan { root, revision } => Message::FileScanFinished {
+            Self::Scan {
+                root,
+                depth,
                 revision,
-                result: scan_files(&root),
+            } => Message::FileScanFinished {
+                revision,
+                result: scan_files(&root, depth),
             },
             Self::Filter {
                 files,
@@ -56,8 +61,12 @@ impl FilePickerRequest {
     }
 }
 
-fn scan_files(root: &Path) -> Result<Vec<FileEntry>, String> {
+fn scan_files(root: &Path, depth: ScanDepth) -> Result<Vec<FileEntry>, String> {
     let mut builder = WalkBuilder::new(root);
+    builder.max_depth(match depth {
+        ScanDepth::TopLevel => Some(1),
+        ScanDepth::Recursive => None,
+    });
     builder
         .hidden(false)
         .parents(true)
@@ -176,13 +185,31 @@ mod tests {
         std::fs::create_dir(directory.path().join("node_modules")).unwrap();
         std::fs::write(directory.path().join("node_modules/package.js"), "ignored").unwrap();
 
-        let files = scan_files(directory.path()).unwrap();
+        let files = scan_files(directory.path(), ScanDepth::Recursive).unwrap();
         let names = files
             .iter()
             .map(|entry| entry.display.as_str())
             .collect::<Vec<_>>();
 
         assert_eq!(names, [".gitignore", "visible.txt"]);
+    }
+
+    #[test]
+    fn top_level_scan_defers_nested_files_until_recursive_scan() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::create_dir(directory.path().join("nested")).unwrap();
+        std::fs::write(directory.path().join("top.txt"), "top").unwrap();
+        std::fs::write(directory.path().join("nested/child.txt"), "child").unwrap();
+
+        let top = scan_files(directory.path(), ScanDepth::TopLevel).unwrap();
+        assert_eq!(top[0].display, "top.txt");
+        assert_eq!(top.len(), 1);
+        let recursive = scan_files(directory.path(), ScanDepth::Recursive).unwrap();
+        let names = recursive
+            .iter()
+            .map(|entry| entry.display.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(names, ["nested/child.txt", "top.txt"]);
     }
 
     #[test]

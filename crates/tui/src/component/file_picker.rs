@@ -56,6 +56,7 @@ fn result_lines(state: &FilePickerState) -> Vec<Line<'static>> {
     if state.results.is_empty() {
         let text = match state.collection {
             FileCollectionState::Loading => "Loading files…",
+            FileCollectionState::Filtering => "Filtering files…",
             FileCollectionState::Ready => "No matches",
             FileCollectionState::Failed => "File scan failed",
         };
@@ -93,6 +94,15 @@ mod tests {
 
     use super::*;
     use crate::file_picker::FileEntry;
+
+    #[test]
+    fn empty_results_show_filtering_instead_of_a_no_match_flash() {
+        let mut state = FilePickerState::default();
+        state.collection = FileCollectionState::Filtering;
+
+        let lines = result_lines(&state);
+        assert_eq!(lines[0].spans[0].content.as_ref(), "Filtering files…");
+    }
 
     #[test]
     fn renders_query_results_and_text_preview() {

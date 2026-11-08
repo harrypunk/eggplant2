@@ -102,10 +102,22 @@ impl MessageManager {
             }
             Message::OpenFilePicker => return Self::open_file_picker(model),
             Message::FilePickerInsert(character) => {
-                return model.file_picker.insert(character).map(Effect::FilePicker);
+                let Some(workspace) = &model.workspace else {
+                    return None;
+                };
+                return model
+                    .file_picker
+                    .insert(workspace.root(), character)
+                    .map(Effect::FilePicker);
             }
             Message::FilePickerBackspace => {
-                return model.file_picker.backspace().map(Effect::FilePicker);
+                let Some(workspace) = &model.workspace else {
+                    return None;
+                };
+                return model
+                    .file_picker
+                    .backspace(workspace.root())
+                    .map(Effect::FilePicker);
             }
             Message::CloseFilePicker => Self::close_file_picker(model),
             Message::FilePickerNext => {
@@ -116,9 +128,12 @@ impl MessageManager {
             }
             Message::OpenPickerFile => self.open_picker_file(model),
             Message::FileScanFinished { revision, result } => {
+                let Some(workspace) = &model.workspace else {
+                    return None;
+                };
                 return model
                     .file_picker
-                    .complete_scan(revision, result)
+                    .complete_scan(workspace.root(), revision, result)
                     .map(Effect::FilePicker);
             }
             Message::FileFilterFinished { revision, results } => {
@@ -301,7 +316,7 @@ impl MessageManager {
             model.context_stack.push(Context::FilePicker);
         }
         model.current_focus = FocusTarget::FilePicker;
-        Some(Effect::FilePicker(model.file_picker.open(&root)))
+        model.file_picker.open(&root).map(Effect::FilePicker)
     }
 
     fn close_file_picker(model: &mut Model) {
@@ -715,7 +730,17 @@ mod tests {
 
         let Some(Effect::FilePicker(request)) = manager.update(&mut model, request.perform())
         else {
-            panic!("scan completion should start filtering");
+            panic!("top-level scan completion should start filtering");
+        };
+        assert!(manager.update(&mut model, request.perform()).is_none());
+        let Some(Effect::FilePicker(request)) =
+            manager.update(&mut model, Message::FilePickerInsert('m'))
+        else {
+            panic!("a query should start one recursive scan");
+        };
+        let Some(Effect::FilePicker(request)) = manager.update(&mut model, request.perform())
+        else {
+            panic!("recursive scan completion should start filtering");
         };
         let Some(Effect::FilePicker(request)) = manager.update(&mut model, request.perform())
         else {

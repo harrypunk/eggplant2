@@ -1,4 +1,7 @@
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use super::FilePickerRequest;
 use crate::data_object::Visibility;
@@ -10,8 +13,15 @@ pub struct FileEntry {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ScanDepth {
+    TopLevel,
+    Recursive,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileCollectionState {
     Loading,
+    Filtering,
     Ready,
     Failed,
 }
@@ -24,7 +34,7 @@ pub enum PreviewState {
     Unavailable(String),
 }
 
-/// Picker state retained in the central model while background work runs.
+/// Picker state and its persistent file-entry cache.
 #[derive(Debug)]
 pub struct FilePickerState {
     pub visibility: Visibility,
@@ -34,6 +44,7 @@ pub struct FilePickerState {
     pub collection: FileCollectionState,
     pub preview: PreviewState,
     files: Arc<Vec<FileEntry>>,
+    depth: ScanDepth,
     filter_revision: u64,
     preview_revision: u64,
 }
@@ -48,6 +59,7 @@ impl Default for FilePickerState {
             collection: FileCollectionState::Loading,
             preview: PreviewState::Empty,
             files: Arc::new(Vec::new()),
+            depth: ScanDepth::TopLevel,
             filter_revision: 0,
             preview_revision: 0,
         }
@@ -55,40 +67,50 @@ impl Default for FilePickerState {
 }
 
 impl FilePickerState {
-    pub fn open(&mut self, root: &std::path::Path) -> FilePickerRequest {
+    /// Reuse ready entries on reopen; otherwise start with a top-level scan.
+    pub fn open(&mut self, root: &Path) -> Option<FilePickerRequest> {
         self.visibility = Visibility::Displayed;
         self.query.clear();
-        self.results.clear();
-        self.selected = None;
-        self.collection = FileCollectionState::Loading;
-        self.preview = PreviewState::Loading;
-        self.files = Arc::new(Vec::new());
         self.filter_revision = self.filter_revision.wrapping_add(1);
         self.preview_revision = self.preview_revision.wrapping_add(1);
-        FilePickerRequest::Scan {
-            root: root.to_path_buf(),
-            revision: self.filter_revision,
+
+        match self.collection {
+            FileCollectionState::Ready | FileCollectionState::Filtering => {
+                self.collection = FileCollectionState::Ready;
+                self.results = self.files.as_ref().clone();
+                self.selected = (!self.results.is_empty()).then_some(0);
+                self.start_preview()
+            }
+            FileCollectionState::Loading | FileCollectionState::Failed => {
+                self.results.clear();
+                self.selected = None;
+                self.preview = PreviewState::Loading;
+                self.files = Arc::new(Vec::new());
+                self.start_scan(root, ScanDepth::TopLevel)
+            }
         }
     }
 
+    /// Hide the picker without discarding its ready file-entry cache.
     pub fn close(&mut self) {
         self.visibility = Visibility::Hidden;
         self.filter_revision = self.filter_revision.wrapping_add(1);
         self.preview_revision = self.preview_revision.wrapping_add(1);
     }
 
-    pub fn insert(&mut self, character: char) -> Option<FilePickerRequest> {
+    pub fn insert(&mut self, root: &Path, character: char) -> Option<FilePickerRequest> {
         self.query.push(character);
-        self.start_filter()
+        self.update_results(root)
     }
 
-    pub fn backspace(&mut self) -> Option<FilePickerRequest> {
+    pub fn backspace(&mut self, root: &Path) -> Option<FilePickerRequest> {
         self.query.pop()?;
-        self.start_filter()
+        self.update_results(root)
     }
 
     pub fn complete_scan(
         &mut self,
+        root: &Path,
         revision: u64,
         result: Result<Vec<FileEntry>, String>,
     ) -> Option<FilePickerRequest> {
@@ -100,7 +122,7 @@ impl FilePickerState {
             Ok(files) => {
                 self.files = Arc::new(files);
                 self.collection = FileCollectionState::Ready;
-                self.start_filter()
+                self.update_results(root)
             }
             Err(error) => {
                 self.collection = FileCollectionState::Failed;
@@ -121,6 +143,7 @@ impl FilePickerState {
             return None;
         }
 
+        self.collection = FileCollectionState::Ready;
         self.results = results;
         self.selected = (!self.results.is_empty()).then_some(0);
         self.start_preview()
@@ -153,18 +176,37 @@ impl FilePickerState {
         self.results.get(self.selected?)
     }
 
-    fn start_filter(&mut self) -> Option<FilePickerRequest> {
-        match self.collection {
-            FileCollectionState::Ready => {
-                self.filter_revision = self.filter_revision.wrapping_add(1);
-                Some(FilePickerRequest::Filter {
-                    files: self.files.clone(),
-                    query: self.query.clone(),
-                    revision: self.filter_revision,
-                })
+    fn update_results(&mut self, root: &Path) -> Option<FilePickerRequest> {
+        match (self.collection, self.depth) {
+            (FileCollectionState::Ready | FileCollectionState::Filtering, ScanDepth::TopLevel)
+                if !self.query.is_empty() =>
+            {
+                self.start_scan(root, ScanDepth::Recursive)
             }
-            FileCollectionState::Loading | FileCollectionState::Failed => None,
+            (FileCollectionState::Ready | FileCollectionState::Filtering, _) => self.start_filter(),
+            (FileCollectionState::Loading | FileCollectionState::Failed, _) => None,
         }
+    }
+
+    fn start_scan(&mut self, root: &Path, depth: ScanDepth) -> Option<FilePickerRequest> {
+        self.collection = FileCollectionState::Loading;
+        self.depth = depth;
+        self.filter_revision = self.filter_revision.wrapping_add(1);
+        Some(FilePickerRequest::Scan {
+            root: root.to_path_buf(),
+            depth,
+            revision: self.filter_revision,
+        })
+    }
+
+    fn start_filter(&mut self) -> Option<FilePickerRequest> {
+        self.collection = FileCollectionState::Filtering;
+        self.filter_revision = self.filter_revision.wrapping_add(1);
+        Some(FilePickerRequest::Filter {
+            files: self.files.clone(),
+            query: self.query.clone(),
+            revision: self.filter_revision,
+        })
     }
 
     fn start_preview(&mut self) -> Option<FilePickerRequest> {
@@ -188,8 +230,6 @@ impl FilePickerState {
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
-
     use super::*;
 
     fn entry(name: &str) -> FileEntry {
@@ -200,20 +240,41 @@ mod tests {
     }
 
     #[test]
-    fn typing_during_scan_filters_with_the_latest_query() {
+    fn typing_during_top_level_scan_upgrades_to_one_recursive_scan() {
         let mut state = FilePickerState::default();
-        let FilePickerRequest::Scan { revision, .. } = state.open(Path::new("/workspace")) else {
-            panic!("opening should scan files");
+        let Some(FilePickerRequest::Scan {
+            depth: ScanDepth::TopLevel,
+            revision,
+            ..
+        }) = state.open(Path::new("/workspace"))
+        else {
+            panic!("opening should start with a top-level scan");
         };
 
-        assert!(state.insert('m').is_none());
+        assert!(state.insert(Path::new("/workspace"), 'm').is_none());
+        let Some(FilePickerRequest::Scan {
+            depth: ScanDepth::Recursive,
+            revision,
+            ..
+        }) = state.complete_scan(
+            Path::new("/workspace"),
+            revision,
+            Ok(vec![entry("main.rs"), entry("other.txt")]),
+        )
+        else {
+            panic!("a non-empty query should upgrade to a recursive scan");
+        };
         let Some(FilePickerRequest::Filter {
             revision: filter_revision,
             query,
             ..
-        }) = state.complete_scan(revision, Ok(vec![entry("main.rs"), entry("other.txt")]))
+        }) = state.complete_scan(
+            Path::new("/workspace"),
+            revision,
+            Ok(vec![entry("main.rs"), entry("other.txt")]),
+        )
         else {
-            panic!("scan completion should filter files");
+            panic!("recursive scan completion should filter files");
         };
         assert_eq!(query, "m");
 
@@ -249,16 +310,52 @@ mod tests {
     }
 
     #[test]
+    fn reopen_reuses_ready_cache_without_scanning() {
+        let mut state = FilePickerState::default();
+        let Some(FilePickerRequest::Scan { revision, .. }) = state.open(Path::new("/workspace"))
+        else {
+            panic!("opening should scan files");
+        };
+        let Some(FilePickerRequest::Filter {
+            revision: filter_revision,
+            ..
+        }) = state.complete_scan(
+            Path::new("/workspace"),
+            revision,
+            Ok(vec![entry("main.rs")]),
+        )
+        else {
+            panic!("scan completion should filter files");
+        };
+        assert!(
+            state
+                .complete_filter(filter_revision, vec![entry("main.rs")])
+                .is_some()
+        );
+        state.close();
+
+        let request = state.open(Path::new("/workspace"));
+        assert!(matches!(request, Some(FilePickerRequest::Preview { .. })));
+        assert_eq!(state.results, vec![entry("main.rs")]);
+        assert_eq!(state.collection, FileCollectionState::Ready);
+    }
+
+    #[test]
     fn closing_invalidates_pending_completions() {
         let mut state = FilePickerState::default();
-        let FilePickerRequest::Scan { revision, .. } = state.open(Path::new("/workspace")) else {
+        let Some(FilePickerRequest::Scan { revision, .. }) = state.open(Path::new("/workspace"))
+        else {
             panic!("opening should scan files");
         };
         state.close();
 
         assert!(
             state
-                .complete_scan(revision, Ok(vec![entry("main.rs")]))
+                .complete_scan(
+                    Path::new("/workspace"),
+                    revision,
+                    Ok(vec![entry("main.rs")])
+                )
                 .is_none()
         );
         assert_eq!(state.visibility, Visibility::Hidden);
