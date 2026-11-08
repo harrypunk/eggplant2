@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Block, Clear, Paragraph, Widget},
 };
 
-use crate::leader::LeaderState;
+use crate::command_menu::CommandMenuState;
 
 /// Contextual hints for the pending leader sequence.
 ///
@@ -19,8 +19,8 @@ pub struct KeyHints {
 }
 
 impl KeyHints {
-    pub fn new(leader: &LeaderState) -> Self {
-        let lines = leader
+    pub fn new(menu: &CommandMenuState) -> Self {
+        let lines = menu
             .items()
             .iter()
             .map(|item| {
@@ -35,7 +35,7 @@ impl KeyHints {
             })
             .collect();
         Self {
-            title: leader.context_title(),
+            title: menu.context_title(),
             lines,
         }
     }
@@ -75,9 +75,9 @@ mod tests {
 
     #[test]
     fn sizes_a_vertical_list_to_its_content_and_borders() {
-        let mut leader = LeaderState::default();
-        leader.handle_key(KeyCode::Char(' '));
-        let hints = KeyHints::new(&leader);
+        let mut menu = CommandMenuState::default();
+        menu.handle_key(KeyCode::Char(' '));
+        let hints = KeyHints::new(&menu);
 
         assert_eq!(hints.lines.len(), 3);
         assert_eq!(hints.size().height, 5);
@@ -86,18 +86,18 @@ mod tests {
 
     #[test]
     fn title_and_size_follow_the_active_context_stack() {
-        let mut leader = LeaderState::default();
-        leader.handle_key(KeyCode::Char(' '));
-        leader.handle_key(KeyCode::Char('b'));
-        let hints = KeyHints::new(&leader);
+        let mut menu = CommandMenuState::default();
+        menu.handle_key(KeyCode::Char(' '));
+        menu.handle_key(KeyCode::Char('b'));
+        let hints = KeyHints::new(&menu);
 
         assert_eq!(hints.title, "Leader > buffer");
         assert_eq!(hints.size().width, 19);
 
-        let mut leader = LeaderState::default();
-        leader.handle_key(KeyCode::Char(' '));
-        leader.handle_key(KeyCode::Char('q'));
-        let hints = KeyHints::new(&leader);
+        let mut menu = CommandMenuState::default();
+        menu.handle_key(KeyCode::Char(' '));
+        menu.handle_key(KeyCode::Char('q'));
+        let hints = KeyHints::new(&menu);
 
         assert_eq!(hints.title, "Leader > quit");
         assert_eq!(hints.size().width, 15);

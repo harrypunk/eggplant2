@@ -29,7 +29,7 @@ normalize KeyCode + modifiers → KeyChord
 active input Context + Registry
         │
         ├── direct binding ──────────────► semantic Message
-        ├── leader start/continuation ───► Message::LeaderKey
+        ├── leader start/continuation ───► Message::CommandMenuKey
         └── unbound Insert character ────► Message::InsertChar
                                                 │
                                                 ▼
@@ -45,7 +45,7 @@ active input Context + Registry
 
 Input translation is pure. It does not change the model, execute commands, sleep, or perform I/O. Only `MessageManager::update` changes application state. Rendering reads the resulting model and never resolves commands itself.
 
-The built-in Space leader is already a small data-driven sequence state machine. Each `LeaderContext` owns its semantic title and items, and each item targets either a submenu or a semantic action. `LeaderState` stores the active context stack, returns `Pending`, `Cancelled`, or a semantic `LeaderAction`, and the update layer translates completed actions into ordinary messages. `KeyHints` renders the current context's candidates and composes its title by joining active context titles, such as `Leader > buffer`. Titles therefore grow with the menu definitions rather than requiring a separate menu-specific title match.
+The built-in Space leader is already a small data-driven sequence state machine. Each `CommandMenuContext` owns its semantic title and items, and each item targets either a submenu or a semantic action. `CommandMenuState` stores the active context stack, returns `Pending`, `Cancelled`, or a semantic `CommandAction`, and the update layer translates completed actions into ordinary messages. `KeyHints` renders the current context's candidates and composes its title by joining active context titles, such as `Leader > buffer`. Titles therefore grow with the menu definitions rather than requiring a separate menu-specific title match.
 
 ## Design rules
 

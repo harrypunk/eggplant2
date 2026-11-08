@@ -41,8 +41,8 @@ impl EventManager {
         match event {
             Event::Key(key) if key.kind == KeyEventKind::Press => {
                 let ctx = model.context_stack.last()?;
-                if model.leader.is_active() || Self::is_leader_start(ctx, key) {
-                    return Some(Message::LeaderKey(key.code));
+                if model.command_menu.is_active() || Self::is_leader_start(ctx, key) {
+                    return Some(Message::CommandMenuKey(key.code));
                 }
                 self.keymap
                     .get_binding(ctx)
@@ -147,7 +147,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::LeaderKey(KeyCode::Char(' ')))
+            Some(Message::CommandMenuKey(KeyCode::Char(' ')))
         ));
     }
 

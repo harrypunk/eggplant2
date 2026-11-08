@@ -50,10 +50,10 @@ impl Editor {
             StatusBar::new(model.editor.mode(), model.status.as_ref()),
             areas.status,
         );
-        match model.leader.items() {
+        match model.command_menu.items() {
             [] => {}
             _ => {
-                let hints = KeyHints::new(&model.leader);
+                let hints = KeyHints::new(&model.command_menu);
                 let area = key_hints_area(frame.area(), hints.size());
                 frame.render_widget(hints, area);
             }
@@ -61,7 +61,7 @@ impl Editor {
 
         cursor
             .into_iter()
-            .filter(|_| model.leader.items().is_empty())
+            .filter(|_| model.command_menu.items().is_empty())
             .for_each(|cursor| frame.set_cursor_position(cursor));
     }
 }
@@ -228,7 +228,7 @@ mod tests {
         let mut model = Model::default();
         create_buffer(&mut model, "hello");
         model
-            .leader
+            .command_menu
             .handle_key(crossterm::event::KeyCode::Char(' '));
         let page = Editor;
 
@@ -245,7 +245,7 @@ mod tests {
         assert!(content.contains("q quit"));
         assert!(!terminal.backend().cursor_visible());
 
-        let hints = KeyHints::new(&model.leader);
+        let hints = KeyHints::new(&model.command_menu);
         let area = key_hints_area(Rect::new(0, 0, 100, 10), hints.size());
         assert_eq!(area.x + area.width, 100);
         assert_eq!(area.y + area.height, 9);

@@ -4,12 +4,12 @@ use editor::{BufferId, DocumentFactory, EditMode, SaveCompletion};
 use ratatui::layout::Rect;
 
 use crate::{
+    command_menu::{CommandAction, CommandMenuOutcome},
     data_object::{
         BufferMovement, Context, DeferredAction, FocusDirection, FocusTarget, Message, Model,
         RunningState, StatusMessage, Visibility,
     },
     explorer::{ExpansionState, ExplorerEntryKind, IgnoreMode},
-    leader::{LeaderAction, LeaderOutcome},
     manager::effect::Effect,
     page::editor::editor_content_area,
 };
@@ -22,15 +22,15 @@ pub struct MessageManager {
 impl MessageManager {
     pub fn update(&self, model: &mut Model, msg: Message) -> Option<Effect> {
         match msg {
-            Message::LeaderKey(key) => {
-                return match model.leader.handle_key(key) {
-                    LeaderOutcome::Pending | LeaderOutcome::Cancelled => None,
-                    LeaderOutcome::Action(action) => {
+            Message::CommandMenuKey(key) => {
+                return match model.command_menu.handle_key(key) {
+                    CommandMenuOutcome::Pending | CommandMenuOutcome::Cancelled => None,
+                    CommandMenuOutcome::Action(action) => {
                         let message = match action {
-                            LeaderAction::Quit => Message::Quit,
-                            LeaderAction::NextBuffer => Message::NextBuffer,
-                            LeaderAction::PreviousBuffer => Message::PreviousBuffer,
-                            LeaderAction::ToggleFileExplorer => Message::ToggleFileExplorer,
+                            CommandAction::Quit => Message::Quit,
+                            CommandAction::NextBuffer => Message::NextBuffer,
+                            CommandAction::PreviousBuffer => Message::PreviousBuffer,
+                            CommandAction::ToggleFileExplorer => Message::ToggleFileExplorer,
                         };
                         self.update(model, message)
                     }
@@ -808,19 +808,19 @@ mod tests {
 
         manager.update(
             &mut model,
-            Message::LeaderKey(crossterm::event::KeyCode::Char(' ')),
+            Message::CommandMenuKey(crossterm::event::KeyCode::Char(' ')),
         );
         manager.update(
             &mut model,
-            Message::LeaderKey(crossterm::event::KeyCode::Char('b')),
+            Message::CommandMenuKey(crossterm::event::KeyCode::Char('b')),
         );
         manager.update(
             &mut model,
-            Message::LeaderKey(crossterm::event::KeyCode::Char('n')),
+            Message::CommandMenuKey(crossterm::event::KeyCode::Char('n')),
         );
 
         assert_eq!(model.editor.active_buffer(), Some(first));
-        assert!(!model.leader.is_active());
+        assert!(!model.command_menu.is_active());
     }
 
     #[test]
@@ -830,7 +830,7 @@ mod tests {
         for key in [' ', 'q', 'q'] {
             manager.update(
                 &mut model,
-                Message::LeaderKey(crossterm::event::KeyCode::Char(key)),
+                Message::CommandMenuKey(crossterm::event::KeyCode::Char(key)),
             );
         }
 

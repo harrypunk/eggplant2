@@ -1,7 +1,7 @@
+pub mod command_menu;
 pub mod component;
 pub mod config;
 pub mod explorer;
-pub mod leader;
 pub mod manager;
 pub mod page;
 pub mod startup;
@@ -17,7 +17,7 @@ pub mod data_object {
 
     use editor::{BufferId, CursorMovement, EditorSession, SaveCompletion};
 
-    use crate::{explorer::ExplorerState, leader::LeaderState, tools::ToolsPanelState};
+    use crate::{command_menu::CommandMenuState, explorer::ExplorerState, tools::ToolsPanelState};
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum Visibility {
@@ -55,7 +55,7 @@ pub mod data_object {
     /// ├── Workspace + Explorer   fixed root, visible tree, selection, expansion
     /// ├── ToolsPanelState        side-panel visibility and active tool
     /// ├── UI state               panel visibility, focus, input contexts
-    /// └── Transient workflows    status, deferred actions, leader sequences
+    /// └── Transient workflows    status, deferred actions, command menu
     /// ```
     ///
     /// `MessageManager` applies messages to this state and returns effects. Pages
@@ -85,7 +85,7 @@ pub mod data_object {
         // Transient feedback and save-dependent workflows.
         pub status: Option<StatusMessage>,
         pub deferred_action: Option<DeferredAction>,
-        pub leader: LeaderState,
+        pub command_menu: CommandMenuState,
     }
 
     impl Default for Model {
@@ -101,7 +101,7 @@ pub mod data_object {
                 context_stack: Vec::new(),
                 status: None,
                 deferred_action: None,
-                leader: LeaderState::default(),
+                command_menu: CommandMenuState::default(),
             }
         }
     }
@@ -174,7 +174,7 @@ pub mod data_object {
 
     #[derive(Debug, Clone)]
     pub enum Message {
-        LeaderKey(crossterm::event::KeyCode),
+        CommandMenuKey(crossterm::event::KeyCode),
         Quit,
         EnterInsertMode,
         ExitInsertMode,
