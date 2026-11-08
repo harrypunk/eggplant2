@@ -3,10 +3,10 @@ use ratatui::{
     layout::{Rect, Size},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, Clear, Paragraph, Widget},
+    widgets::{Paragraph, Widget},
 };
 
-use crate::command_menu::CommandMenuState;
+use crate::{command_menu::CommandMenuState, component::popup::Popup};
 
 /// Contextual hints for the pending leader sequence.
 ///
@@ -60,10 +60,7 @@ impl KeyHints {
 
 impl Widget for KeyHints {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        Clear.render(area, buf);
-        Paragraph::new(self.lines)
-            .block(Block::bordered().title(self.title))
-            .render(area, buf);
+        Popup::new(self.title, Paragraph::new(self.lines)).render(area, buf);
     }
 }
 

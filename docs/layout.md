@@ -15,7 +15,8 @@ Root: vertical Flex
 └── status bar
 
 Overlay layer:
-└── key-hints popup: displayed/hidden; bottom-right of main, above status bar
+└── popup container: cleared, bordered, titled
+    └── key hints: displayed/hidden; bottom-right of main, above status bar
 ```
 
 ## Region constraints
@@ -35,6 +36,7 @@ All layout groups use `Flex::Start`. Hidden nodes remain in the layout tree and 
 - The editor component owns its vertical tabs/content split.
 - `ToolsPanelState` owns only shell visibility and active-tool selection. Future search, agent, and info tools keep their state and behavior in separate modules; hiding the shell does not stop their work or discard their state.
 - The tools panel component receives resolved shell props and delegates tool-specific rendering rather than implementing every tool itself.
+- `Popup` is a reusable visual container: it clears the background, draws the border/title, and renders any `Widget` in the inner area. Pages own placement; input contexts own modality.
 - `KeyHints` owns list presentation and intrinsic size; the page owns bottom-right popup placement.
 - `Editor::content_area` is the shared text-area calculation for viewport sizing and cursor coordinates.
 - Add future panels as explicit layout regions rather than embedding them inside unrelated components.
