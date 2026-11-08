@@ -2793,6 +2793,7 @@ dependencies = [
  "crossterm",
  "editor",
  "ignore",
+ "nucleo-matcher",
  "ratatui",
  "serde",
  "tempfile",

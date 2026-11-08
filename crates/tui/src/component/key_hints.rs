@@ -76,8 +76,8 @@ mod tests {
         menu.handle_key(KeyCode::Char(' '));
         let hints = KeyHints::new(&menu);
 
-        assert_eq!(hints.lines.len(), 3);
-        assert_eq!(hints.size().height, 5);
+        assert_eq!(hints.lines.len(), 4);
+        assert_eq!(hints.size().height, 6);
         assert_eq!(hints.size().width, 16);
     }
 

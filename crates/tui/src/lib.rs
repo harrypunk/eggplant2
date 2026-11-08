@@ -2,6 +2,8 @@ pub mod command_menu;
 pub mod component;
 pub mod config;
 pub mod explorer;
+pub mod file_picker;
+mod filesystem;
 pub mod manager;
 pub mod page;
 pub mod startup;
@@ -17,7 +19,12 @@ pub mod data_object {
 
     use editor::{BufferId, CursorMovement, EditorSession, SaveCompletion};
 
-    use crate::{command_menu::CommandMenuState, explorer::ExplorerState, tools::ToolsPanelState};
+    use crate::{
+        command_menu::CommandMenuState,
+        explorer::ExplorerState,
+        file_picker::{FileEntry, FilePickerState, PreviewState},
+        tools::ToolsPanelState,
+    };
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum Visibility {
@@ -54,6 +61,7 @@ pub mod data_object {
     /// ├── EditorSession          buffers, cursor, edit mode, viewport, saves
     /// ├── Workspace + Explorer   fixed root, visible tree, selection, expansion
     /// ├── ToolsPanelState        side-panel visibility and active tool
+    /// ├── FilePickerState        query, ranked files, selection, text preview
     /// ├── UI state               panel visibility, focus, input contexts
     /// └── Transient workflows    status, deferred actions, command menu
     /// ```
@@ -82,10 +90,11 @@ pub mod data_object {
         pub current_focus: FocusTarget,
         pub context_stack: Vec<Context>,
 
-        // Transient feedback and save-dependent workflows.
+        // Transient feedback, popup, and save-dependent workflows.
         pub status: Option<StatusMessage>,
         pub deferred_action: Option<DeferredAction>,
         pub command_menu: CommandMenuState,
+        pub file_picker: FilePickerState,
     }
 
     impl Default for Model {
@@ -102,6 +111,7 @@ pub mod data_object {
                 status: None,
                 deferred_action: None,
                 command_menu: CommandMenuState::default(),
+                file_picker: FilePickerState::default(),
             }
         }
     }
@@ -169,6 +179,7 @@ pub mod data_object {
         Editor,
         FileExplorer,
         ToolsPanel,
+        FilePicker,
         AgentChatDialog,
     }
 
@@ -199,6 +210,25 @@ pub mod data_object {
         RefreshExplorer,
         ToggleIgnoredFiles,
         ToggleFileExplorer,
+        OpenFilePicker,
+        FilePickerInsert(char),
+        FilePickerBackspace,
+        CloseFilePicker,
+        FilePickerNext,
+        FilePickerPrevious,
+        OpenPickerFile,
+        FileScanFinished {
+            revision: u64,
+            result: Result<Vec<FileEntry>, String>,
+        },
+        FileFilterFinished {
+            revision: u64,
+            results: Vec<FileEntry>,
+        },
+        FilePreviewFinished {
+            revision: u64,
+            preview: PreviewState,
+        },
         GotoBuffer(usize),
     }
 
@@ -212,5 +242,6 @@ pub mod data_object {
         VCS,
         EditorInput,
         Explorer,
+        FilePicker,
     }
 }

@@ -6,6 +6,7 @@ pub enum CommandAction {
     NextBuffer,
     PreviousBuffer,
     ToggleFileExplorer,
+    OpenFilePicker,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -59,6 +60,15 @@ const BUFFER_CONTEXT: CommandMenuContext = CommandMenuContext {
     ],
 };
 
+const FILES_CONTEXT: CommandMenuContext = CommandMenuContext {
+    title: "files",
+    items: &[CommandMenuItem {
+        key: 'f',
+        description: "find file",
+        target: CommandMenuTarget::Action(CommandAction::OpenFilePicker),
+    }],
+};
+
 const ROOT_CONTEXT: CommandMenuContext = CommandMenuContext {
     title: "Leader",
     items: &[
@@ -76,6 +86,11 @@ const ROOT_CONTEXT: CommandMenuContext = CommandMenuContext {
             key: 'e',
             description: "toggle files",
             target: CommandMenuTarget::Action(CommandAction::ToggleFileExplorer),
+        },
+        CommandMenuItem {
+            key: 'f',
+            description: "files",
+            target: CommandMenuTarget::Submenu(&FILES_CONTEXT),
         },
     ],
 };
@@ -184,6 +199,14 @@ mod tests {
         assert_eq!(
             menu.handle_key(KeyCode::Char('e')),
             CommandMenuOutcome::Action(CommandAction::ToggleFileExplorer)
+        );
+
+        menu.handle_key(KeyCode::Char(' '));
+        menu.handle_key(KeyCode::Char('f'));
+        assert_eq!(menu.context_title(), "Leader > files");
+        assert_eq!(
+            menu.handle_key(KeyCode::Char('f')),
+            CommandMenuOutcome::Action(CommandAction::OpenFilePicker)
         );
     }
 

@@ -1,6 +1,7 @@
 pub mod buffer_tabs;
 pub mod editor;
 pub mod file_explorer;
+pub mod file_picker;
 pub mod key_hints;
 pub mod popup;
 pub mod status_bar;

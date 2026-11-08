@@ -64,11 +64,22 @@ fn apply_message(
     message: Message,
     sender: &tokio::sync::mpsc::UnboundedSender<Message>,
 ) {
-    if let Some(Effect::Save(request)) = manager.update(model, message) {
-        let sender = sender.clone();
-        tokio::spawn(async move {
-            let completion = request.perform().await;
-            let _ = sender.send(Message::SaveFinished(completion));
-        });
+    let Some(effect) = manager.update(model, message) else {
+        return;
+    };
+    match effect {
+        Effect::Save(request) => {
+            let sender = sender.clone();
+            tokio::spawn(async move {
+                let completion = request.perform().await;
+                let _ = sender.send(Message::SaveFinished(completion));
+            });
+        }
+        Effect::FilePicker(request) => {
+            let sender = sender.clone();
+            tokio::task::spawn_blocking(move || {
+                let _ = sender.send(request.perform());
+            });
+        }
     }
 }

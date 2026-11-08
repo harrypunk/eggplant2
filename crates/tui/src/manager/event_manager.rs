@@ -63,15 +63,15 @@ impl EventManager {
     }
 
     fn unbound_key_message(context: &Context, key: KeyEvent) -> Option<Message> {
-        if context != &Context::EditorInput {
-            return None;
-        }
-
         match key.code {
             KeyCode::Char(character)
                 if key.modifiers.is_empty() || key.modifiers == KeyModifiers::SHIFT =>
             {
-                Some(Message::InsertChar(character))
+                match context {
+                    Context::EditorInput => Some(Message::InsertChar(character)),
+                    Context::FilePicker => Some(Message::FilePickerInsert(character)),
+                    _ => None,
+                }
             }
             _ => None,
         }
@@ -110,6 +110,29 @@ mod tests {
         assert!(matches!(
             manager.translate(event, &model),
             Some(Message::InsertChar(' '))
+        ));
+    }
+
+    #[test]
+    fn routes_picker_input_without_starting_the_leader() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::FilePicker);
+
+        let event = Event::Key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::FilePickerInsert(' '))
+        ));
+        let event = Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::CloseFilePicker)
+        ));
+        let event = Event::Key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::FilePickerNext)
         ));
     }
 

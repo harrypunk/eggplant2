@@ -71,6 +71,16 @@ impl Default for Config {
                         ("toggle_ignored_files".to_string(), "shift-i".to_string()),
                     ]),
                 ),
+                (
+                    "file_picker".to_string(),
+                    HashMap::from([
+                        ("close_file_picker".to_string(), "esc".to_string()),
+                        ("file_picker_backspace".to_string(), "backspace".to_string()),
+                        ("open_picker_file".to_string(), "enter".to_string()),
+                        ("file_picker_next".to_string(), "down".to_string()),
+                        ("file_picker_previous".to_string(), "up".to_string()),
+                    ]),
+                ),
             ]),
         }
     }

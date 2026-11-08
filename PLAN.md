@@ -11,7 +11,7 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 
 ## Current state
 
-**The running application now accepts an optional file or folder path.** File and missing-file startup open an editable buffer; folder startup initializes a workspace and focuses the explorer without creating a buffer. `EditorSession` now supports owned asynchronous save requests and revision-aware completion, including stale-save and untitled-buffer handling. Accepted edits automatically execute non-blocking save effects and apply completion messages through the application loop. Close/quit saves dirty buffers and waits for in-flight writes, completing only after successful persistence; failures keep the current state open. Auto-save runs after Normal-mode edits and when leaving Insert, with no manual Save command or timer configuration. The workspace root is fixed after startup. The explorer renders a flattened filesystem tree with selection, file opening, `h`/`l` fold/unfold, Enter to unfold folders, refresh, and `Space e` visibility toggling. Normal and Explorer contexts support logical editor/explorer focus movement with `Ctrl-H`/`Ctrl-L`; `Ctrl-J`/`Ctrl-K` are reserved for future vertical panes. Expansion changes only visible tree entries, never the workspace root. Root and nested `.gitignore` files plus built-in `.git`, `node_modules`, and `__pycache__` entries are ignored by default, and Explorer-context `Shift-I` toggles all ignored entries. Explorer failures appear in a shared bottom status bar, and focused panels use a double border.
+**The running application now accepts an optional file or folder path.** File and missing-file startup open an editable buffer; folder startup initializes a workspace and focuses the explorer without creating a buffer. `EditorSession` now supports owned asynchronous save requests and revision-aware completion, including stale-save and untitled-buffer handling. Accepted edits automatically execute non-blocking save effects and apply completion messages through the application loop. Close/quit saves dirty buffers and waits for in-flight writes, completing only after successful persistence; failures keep the current state open. Auto-save runs after Normal-mode edits and when leaving Insert, with no manual Save command or timer configuration. The workspace root is fixed after startup. The explorer renders a flattened filesystem tree with selection, file opening, `h`/`l` fold/unfold, Enter to unfold folders, refresh, and `Space e` visibility toggling. Normal and Explorer contexts support logical editor/explorer focus movement with `Ctrl-H`/`Ctrl-L`; `Ctrl-J`/`Ctrl-K` are reserved for future vertical panes. Expansion changes only visible tree entries, never the workspace root. Root and nested `.gitignore` files plus built-in `.git`, `node_modules`, and `__pycache__` entries are ignored by default, and Explorer-context `Shift-I` toggles all ignored entries. `Space f f` opens a background-scanned fuzzy file picker with query/results, ranked matching, and capped UTF-8 text previews. Explorer failures appear in a shared bottom status bar, and focused panels use a double border.
 
 ### Completed
 
@@ -45,6 +45,7 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 - [x] Explorer navigation, file opening, path deduplication, and editor/explorer focus switching.
 - [x] Fixed-root filesystem tree with fold/unfold, nested visible entries, and explicit refresh.
 - [x] Root/nested `.gitignore` and common built-in ignore filtering with an Explorer-context `Shift-I` visibility toggle.
+- [x] `Space f f` file picker with background scanning/filtering, Nucleo ranking, selection, and capped text previews.
 - [x] Shared status/error bar and focus-aware panel borders.
 - [x] Revision-aware `EditorSession` save requests/completion with in-flight edit and untitled-buffer tests.
 - [x] Automatic save after edits/Insert exit through spawned effects and completion messages with status feedback.
@@ -71,6 +72,8 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 | Normal / Explorer | Move focus up / down (reserved for future panes) | `Ctrl-K` / `Ctrl-J` |
 | Common | Next / previous buffer | `Space b n` / `Space b p` |
 | Common | Show/hide files (focus when shown) | `Space e` |
+| Common | Find/open a file with fuzzy ranking and preview | `Space f f` |
+| File picker | Filter / select / open / close | Printable input / arrows / `Enter` / `Esc` |
 | Explorer | Move selection | `j`, `k` |
 | Explorer | Open file / unfold folder | `Enter` |
 | Explorer | Fold / unfold folder | `h` / `l` |

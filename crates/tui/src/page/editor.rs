@@ -4,8 +4,8 @@ use ratatui::{
 };
 
 use crate::component::{
-    editor::Editor as EditorComponent, file_explorer::FileExplorer, key_hints::KeyHints,
-    status_bar::StatusBar, tools_panel::ToolsPanel,
+    editor::Editor as EditorComponent, file_explorer::FileExplorer, file_picker::FilePicker,
+    key_hints::KeyHints, status_bar::StatusBar, tools_panel::ToolsPanel,
 };
 use crate::data_object::{FocusState, FocusTarget, Model, Visibility};
 
@@ -58,15 +58,26 @@ impl Editor {
                 frame.render_widget(hints, area);
             }
         }
+        match model.file_picker.visibility {
+            Visibility::Displayed => {
+                let area = file_picker_area(areas.main);
+                frame.render_widget(FilePicker::new(&model.file_picker), area);
+            }
+            Visibility::Hidden => {}
+        }
 
         cursor
             .into_iter()
-            .filter(|_| model.command_menu.items().is_empty())
+            .filter(|_| {
+                model.command_menu.items().is_empty()
+                    && model.file_picker.visibility == Visibility::Hidden
+            })
             .for_each(|cursor| frame.set_cursor_position(cursor));
     }
 }
 
 struct PageLayout {
+    main: Rect,
     explorer: Option<Rect>,
     editor: Rect,
     tools: Option<Rect>,
@@ -86,6 +97,7 @@ fn layout_areas(area: Rect, explorer: Visibility, tools: Visibility) -> PageLayo
     .areas(main);
 
     PageLayout {
+        main,
         explorer: panel_region(explorer, explorer_area),
         editor,
         tools: panel_region(tools, tools_area),
@@ -127,6 +139,26 @@ fn key_hints_area(area: Rect, size: Size) -> Rect {
     let [_, popup] = Layout::horizontal([Constraint::Fill(1), Constraint::Length(width)])
         .flex(Flex::Start)
         .areas(popup_band);
+    popup
+}
+
+fn file_picker_area(area: Rect) -> Rect {
+    let width = area.width.saturating_sub(2).min(120);
+    let height = area.height.saturating_sub(2).min(24);
+    let [_, popup_band, _] = Layout::vertical([
+        Constraint::Fill(1),
+        Constraint::Length(height),
+        Constraint::Fill(1),
+    ])
+    .flex(Flex::Start)
+    .areas(area);
+    let [_, popup, _] = Layout::horizontal([
+        Constraint::Fill(1),
+        Constraint::Length(width),
+        Constraint::Fill(1),
+    ])
+    .flex(Flex::Start)
+    .areas(popup_band);
     popup
 }
 
@@ -206,6 +238,35 @@ mod tests {
     }
 
     #[test]
+    fn shows_centered_file_picker_and_hides_editor_cursor() {
+        let backend = TestBackend::new(100, 10);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut model = Model::default();
+        create_buffer(&mut model, "hello");
+        model.file_picker.visibility = Visibility::Displayed;
+        let page = Editor;
+
+        terminal.draw(|frame| page.view(&model, frame)).unwrap();
+
+        let content = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(content.contains("Files"));
+        assert!(content.contains("Search"));
+        assert!(content.contains("Preview"));
+        assert!(!terminal.backend().cursor_visible());
+        let area = file_picker_area(Rect::new(0, 0, 100, 9));
+        assert_eq!(area.width, 98);
+        assert_eq!(area.height, 7);
+        assert_eq!(area.x, 1);
+        assert_eq!(area.y, 1);
+    }
+
+    #[test]
     fn clamps_key_hints_to_the_available_area() {
         let area = key_hints_area(
             Rect::new(0, 0, 8, 3),
@@ -249,7 +310,7 @@ mod tests {
         let area = key_hints_area(Rect::new(0, 0, 100, 10), hints.size());
         assert_eq!(area.x + area.width, 100);
         assert_eq!(area.y + area.height, 9);
-        assert_eq!(area.height, 5);
+        assert_eq!(area.height, 6);
         assert!(area.width < 100);
     }
 }

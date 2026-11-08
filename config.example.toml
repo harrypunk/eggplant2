@@ -38,3 +38,10 @@ focus_up = "ctrl-k"
 focus_right = "ctrl-l"
 refresh_explorer = "r"
 toggle_ignored_files = "shift-i"
+
+[keymap.file_picker]
+close_file_picker = "esc"
+file_picker_backspace = "backspace"
+open_picker_file = "enter"
+file_picker_next = "down"
+file_picker_previous = "up"

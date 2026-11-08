@@ -41,7 +41,7 @@ fn parse_context_bindings(
 ) -> color_eyre::Result<ContextBindings> {
     let context = parse_context(context_name).ok_or_else(|| {
         eyre!(
-            "unknown keymap context `{context_name}`; expected normal, editor_input, explorer, agent_chat, agent_chat_dialog, or vcs"
+            "unknown keymap context `{context_name}`; expected normal, editor_input, explorer, file_picker, agent_chat, agent_chat_dialog, or vcs"
         )
     })?;
 
@@ -75,6 +75,7 @@ fn parse_context(value: &str) -> Option<Context> {
         "vcs" => Some(Context::VCS),
         "editor_input" => Some(Context::EditorInput),
         "explorer" => Some(Context::Explorer),
+        "file_picker" => Some(Context::FilePicker),
         _ => None,
     }
 }
@@ -104,6 +105,11 @@ fn parse_message(value: &str) -> Option<Message> {
         "explorer_unfold" => Some(Message::ExplorerUnfold),
         "refresh_explorer" => Some(Message::RefreshExplorer),
         "toggle_ignored_files" => Some(Message::ToggleIgnoredFiles),
+        "close_file_picker" => Some(Message::CloseFilePicker),
+        "file_picker_backspace" => Some(Message::FilePickerBackspace),
+        "open_picker_file" => Some(Message::OpenPickerFile),
+        "file_picker_next" => Some(Message::FilePickerNext),
+        "file_picker_previous" => Some(Message::FilePickerPrevious),
         _ => None,
     }
 }

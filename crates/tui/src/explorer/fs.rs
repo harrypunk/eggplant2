@@ -1,6 +1,5 @@
 use std::{
     collections::HashSet,
-    ffi::OsStr,
     io,
     path::{Path, PathBuf},
 };
@@ -8,8 +7,7 @@ use std::{
 use ignore::WalkBuilder;
 
 use super::state::{ExpansionState, ExplorerEntry, ExplorerEntryKind, IgnoreMode};
-
-const BUILT_IN_IGNORED_NAMES: &[&str] = &[".git", "node_modules", "__pycache__"];
+use crate::filesystem::is_built_in_ignored;
 
 pub(super) fn read_visible_entries(
     root: &Path,
@@ -39,7 +37,10 @@ fn read_entries(directory: &Path, ignore_mode: IgnoreMode) -> io::Result<Vec<Exp
             // Keep the root in the walk so its ignore files are loaded, but do
             // not display the workspace itself as one of its children.
             Ok(entry) if entry.depth() == 0 => None,
-            Ok(entry) if ignore_mode == IgnoreMode::HideIgnored && is_built_in_ignored(&entry) => {
+            Ok(entry)
+                if ignore_mode == IgnoreMode::HideIgnored
+                    && is_built_in_ignored(entry.file_name()) =>
+            {
                 None
             }
             entry => Some(entry),
@@ -53,12 +54,6 @@ fn read_entries(directory: &Path, ignore_mode: IgnoreMode) -> io::Result<Vec<Exp
             .then_with(|| left.name.cmp(&right.name))
     });
     Ok(entries)
-}
-
-fn is_built_in_ignored(entry: &ignore::DirEntry) -> bool {
-    BUILT_IN_IGNORED_NAMES
-        .iter()
-        .any(|name| entry.file_name() == OsStr::new(name))
 }
 
 fn read_entry(entry: Result<ignore::DirEntry, ignore::Error>) -> io::Result<ExplorerEntry> {

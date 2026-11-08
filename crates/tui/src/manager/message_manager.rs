@@ -31,6 +31,7 @@ impl MessageManager {
                             CommandAction::NextBuffer => Message::NextBuffer,
                             CommandAction::PreviousBuffer => Message::PreviousBuffer,
                             CommandAction::ToggleFileExplorer => Message::ToggleFileExplorer,
+                            CommandAction::OpenFilePicker => Message::OpenFilePicker,
                         };
                         self.update(model, message)
                     }
@@ -98,6 +99,36 @@ impl MessageManager {
             Message::ToggleIgnoredFiles => Self::toggle_ignored_files(model),
             Message::ToggleFileExplorer => {
                 Self::toggle_file_explorer(model);
+            }
+            Message::OpenFilePicker => return Self::open_file_picker(model),
+            Message::FilePickerInsert(character) => {
+                return model.file_picker.insert(character).map(Effect::FilePicker);
+            }
+            Message::FilePickerBackspace => {
+                return model.file_picker.backspace().map(Effect::FilePicker);
+            }
+            Message::CloseFilePicker => Self::close_file_picker(model),
+            Message::FilePickerNext => {
+                return model.file_picker.select_next().map(Effect::FilePicker);
+            }
+            Message::FilePickerPrevious => {
+                return model.file_picker.select_previous().map(Effect::FilePicker);
+            }
+            Message::OpenPickerFile => self.open_picker_file(model),
+            Message::FileScanFinished { revision, result } => {
+                return model
+                    .file_picker
+                    .complete_scan(revision, result)
+                    .map(Effect::FilePicker);
+            }
+            Message::FileFilterFinished { revision, results } => {
+                return model
+                    .file_picker
+                    .complete_filter(revision, results)
+                    .map(Effect::FilePicker);
+            }
+            Message::FilePreviewFinished { revision, preview } => {
+                model.file_picker.complete_preview(revision, preview);
             }
             Message::FocusLost => return Self::save_active(model),
             Message::Resize(width, height) => {
@@ -269,6 +300,49 @@ impl MessageManager {
         }
     }
 
+    fn open_file_picker(model: &mut Model) -> Option<Effect> {
+        let Some(workspace) = &model.workspace else {
+            model.status = Some(StatusMessage::info("No folder open"));
+            return None;
+        };
+        let root = workspace.root().to_path_buf();
+        if model.context_stack.last() != Some(&Context::FilePicker) {
+            model.context_stack.push(Context::FilePicker);
+        }
+        model.current_focus = FocusTarget::FilePicker;
+        Some(Effect::FilePicker(model.file_picker.open(&root)))
+    }
+
+    fn close_file_picker(model: &mut Model) {
+        model.file_picker.close();
+        model
+            .context_stack
+            .pop_if(|context| context == &Context::FilePicker);
+        model.current_focus = match model.context_stack.last() {
+            Some(Context::Explorer) => FocusTarget::FileExplorer,
+            _ => FocusTarget::Editor,
+        };
+    }
+
+    fn open_picker_file(&self, model: &mut Model) {
+        let Some(entry) = model.file_picker.selected_entry() else {
+            return;
+        };
+        let path = entry.path.clone();
+        match self
+            .documents
+            .open(&path)
+            .map(|document| model.editor.insert_document(document))
+        {
+            Ok(_) => {
+                model.status = None;
+                Self::close_file_picker(model);
+                Self::focus_editor(model);
+            }
+            Err(error) => Self::report_error(model, "failed to open file", &path, error),
+        }
+    }
+
     fn change_expansion(model: &mut Model, target: ExpansionState) {
         let Some(workspace) = &model.workspace else {
             return;
@@ -396,14 +470,22 @@ impl MessageManager {
 
 #[cfg(test)]
 mod tests {
-    use editor::{CursorMovement, EditMode};
+    use editor::{CursorMovement, EditMode, SaveRequest};
 
     use super::*;
     use crate::{
         data_object::StatusKind,
+        file_picker::PreviewState,
         startup::initial_model,
         test_utils::{create_buffer, open_file},
     };
+
+    fn expect_save(effect: Option<Effect>) -> SaveRequest {
+        let Some(Effect::Save(request)) = effect else {
+            panic!("expected a save effect");
+        };
+        request
+    }
 
     #[test]
     fn mode_messages_update_editor_session_and_context() {
@@ -470,7 +552,7 @@ mod tests {
         model.editor.insert_text("b").unwrap();
         model.editor.enter_normal_mode();
 
-        let Effect::Save(request) = manager.update(&mut model, Message::Quit).unwrap();
+        let request = expect_save(manager.update(&mut model, Message::Quit));
         assert_eq!(model.deferred_action, Some(DeferredAction::Quit));
         assert_eq!(model.running_state, RunningState::Running);
         let completion = request.perform().await;
@@ -490,7 +572,7 @@ mod tests {
         model.editor.insert_text("b").unwrap();
         model.editor.enter_normal_mode();
 
-        let Effect::Save(request) = manager.update(&mut model, Message::CloseActive).unwrap();
+        let request = expect_save(manager.update(&mut model, Message::CloseActive));
         assert_eq!(model.editor.buffer_count(), 1);
         let completion = request.perform().await;
         manager.update(&mut model, Message::SaveFinished(completion));
@@ -523,7 +605,7 @@ mod tests {
         let manager = MessageManager::default();
         manager.update(&mut model, Message::EnterInsertMode);
         manager.update(&mut model, Message::InsertChar('x'));
-        let Effect::Save(request) = manager.update(&mut model, Message::ExitInsertMode).unwrap();
+        let request = expect_save(manager.update(&mut model, Message::ExitInsertMode));
 
         manager.update(&mut model, Message::Quit);
         assert_eq!(model.running_state, RunningState::Running);
@@ -548,7 +630,7 @@ mod tests {
         manager.update(&mut model, Message::EnterInsertMode);
         manager.update(&mut model, Message::InsertChar('!'));
         let effect = manager.update(&mut model, Message::ExitInsertMode).unwrap();
-        let Effect::Save(request) = effect;
+        let request = expect_save(Some(effect));
         let completion = request.perform().await;
         manager.update(&mut model, Message::SaveFinished(completion));
 
@@ -569,7 +651,7 @@ mod tests {
         manager.update(&mut model, Message::EnterInsertMode);
         manager.update(&mut model, Message::InsertChar('!'));
 
-        let Effect::Save(request) = manager.update(&mut model, Message::FocusLost).unwrap();
+        let request = expect_save(manager.update(&mut model, Message::FocusLost));
         let completion = request.perform().await;
         manager.update(&mut model, Message::SaveFinished(completion));
 
@@ -593,13 +675,58 @@ mod tests {
         model.editor.activate_buffer(first).unwrap();
         let manager = MessageManager::default();
 
-        let Effect::Save(request) = manager.update(&mut model, Message::NextBuffer).unwrap();
+        let request = expect_save(manager.update(&mut model, Message::NextBuffer));
         assert_eq!(model.editor.active_buffer(), Some(second));
         let completion = request.perform().await;
         manager.update(&mut model, Message::SaveFinished(completion));
 
         assert_eq!(std::fs::read_to_string(first_path).unwrap(), "!first");
         assert!(!model.editor.is_modified(first).unwrap());
+    }
+
+    #[test]
+    fn file_picker_scans_previews_and_opens_selected_file() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(directory.path().join("main.rs"), "fn main() {}").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let manager = MessageManager::default();
+        manager.update(&mut model, Message::Resize(120, 20));
+        let mut effect = None;
+        for key in [' ', 'f', 'f'] {
+            effect = manager.update(
+                &mut model,
+                Message::CommandMenuKey(crossterm::event::KeyCode::Char(key)),
+            );
+        }
+        let Some(Effect::FilePicker(request)) = effect else {
+            panic!("Space f f should start a file scan");
+        };
+        assert_eq!(model.current_focus, FocusTarget::FilePicker);
+        assert_eq!(model.context_stack.last(), Some(&Context::FilePicker));
+
+        let Some(Effect::FilePicker(request)) = manager.update(&mut model, request.perform())
+        else {
+            panic!("scan completion should start filtering");
+        };
+        let Some(Effect::FilePicker(request)) = manager.update(&mut model, request.perform())
+        else {
+            panic!("filter completion should start a preview");
+        };
+        manager.update(&mut model, request.perform());
+        assert_eq!(model.file_picker.results.len(), 1);
+        assert_eq!(
+            model.file_picker.preview,
+            PreviewState::Text(vec!["fn main() {}".to_string()])
+        );
+
+        manager.update(&mut model, Message::OpenPickerFile);
+        assert_eq!(model.file_picker.visibility, Visibility::Hidden);
+        assert_eq!(model.current_focus, FocusTarget::Editor);
+        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert_eq!(
+            model.editor.active_snapshot().unwrap().lines[0],
+            "fn main() {}"
+        );
     }
 
     #[test]
