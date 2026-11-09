@@ -46,33 +46,28 @@ pub enum HighlightKind {
     Macro,
 }
 
+const SCOPE_KINDS: &[(&str, HighlightKind)] = &[
+    ("comment", HighlightKind::Comment),
+    ("string", HighlightKind::String),
+    ("constant.numeric", HighlightKind::Number),
+    ("number", HighlightKind::Number),
+    ("boolean", HighlightKind::Boolean),
+    ("constant", HighlightKind::Constant),
+    ("function.macro", HighlightKind::Macro),
+    ("macro", HighlightKind::Macro),
+    ("function", HighlightKind::Function),
+    ("type", HighlightKind::Type),
+    ("keyword", HighlightKind::Keyword),
+    ("variable", HighlightKind::Variable),
+    ("operator", HighlightKind::Operator),
+];
+
 impl HighlightKind {
     fn from_scope(scope: &str) -> Option<Self> {
-        if scope.starts_with("comment") {
-            Some(Self::Comment)
-        } else if scope.starts_with("string") {
-            Some(Self::String)
-        } else if scope.starts_with("constant.numeric") || scope.starts_with("number") {
-            Some(Self::Number)
-        } else if scope.starts_with("boolean") {
-            Some(Self::Boolean)
-        } else if scope.starts_with("constant") {
-            Some(Self::Constant)
-        } else if scope.starts_with("function.macro") || scope.starts_with("macro") {
-            Some(Self::Macro)
-        } else if scope.starts_with("function") {
-            Some(Self::Function)
-        } else if scope.starts_with("type") {
-            Some(Self::Type)
-        } else if scope.starts_with("keyword") {
-            Some(Self::Keyword)
-        } else if scope.starts_with("variable") {
-            Some(Self::Variable)
-        } else if scope.starts_with("operator") {
-            Some(Self::Operator)
-        } else {
-            None
-        }
+        // Ordered from specific to general prefixes.
+        SCOPE_KINDS
+            .iter()
+            .find_map(|(prefix, kind)| scope.starts_with(prefix).then_some(*kind))
     }
 }
 
@@ -281,4 +276,26 @@ fn clip_highlight(
         end_byte: end - line_start,
         kind,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn maps_specific_scope_prefixes_before_general_ones() {
+        assert_eq!(
+            HighlightKind::from_scope("function.macro"),
+            Some(HighlightKind::Macro)
+        );
+        assert_eq!(
+            HighlightKind::from_scope("constant.numeric"),
+            Some(HighlightKind::Number)
+        );
+        assert_eq!(
+            HighlightKind::from_scope("keyword.control"),
+            Some(HighlightKind::Keyword)
+        );
+        assert_eq!(HighlightKind::from_scope("punctuation"), None);
+    }
 }
