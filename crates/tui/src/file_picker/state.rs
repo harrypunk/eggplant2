@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -47,6 +48,8 @@ pub struct FilePickerState {
     pub preview: PreviewState,
     files: Arc<Vec<FileEntry>>,
     depth: ScanDepth,
+    preview_cache: HashMap<PathBuf, TextViewSnapshot>,
+    pending_preview_path: Option<PathBuf>,
     filter_revision: u64,
     preview_revision: u64,
 }
@@ -62,6 +65,8 @@ impl Default for FilePickerState {
             preview: PreviewState::Empty,
             files: Arc::new(Vec::new()),
             depth: ScanDepth::TopLevel,
+            preview_cache: HashMap::new(),
+            pending_preview_path: None,
             filter_revision: 0,
             preview_revision: 0,
         }
@@ -69,6 +74,14 @@ impl Default for FilePickerState {
 }
 
 impl FilePickerState {
+    /// Seed an immediate top-level cache from data already loaded at startup.
+    pub fn seed_top_level(&mut self, mut files: Vec<FileEntry>) {
+        files.sort_by(|left, right| left.display.cmp(&right.display));
+        self.files = Arc::new(files);
+        self.depth = ScanDepth::TopLevel;
+        self.collection = FileCollectionState::Ready;
+    }
+
     /// Reuse ready entries on reopen; otherwise start with a top-level scan.
     pub fn open(&mut self, root: &Path, documents: &DocumentFactory) -> Option<FilePickerRequest> {
         self.visibility = Visibility::Displayed;
@@ -96,6 +109,7 @@ impl FilePickerState {
     /// Hide the picker without discarding its ready file-entry cache.
     pub fn close(&mut self) {
         self.visibility = Visibility::Hidden;
+        self.pending_preview_path = None;
         self.filter_revision = self.filter_revision.wrapping_add(1);
         self.preview_revision = self.preview_revision.wrapping_add(1);
     }
@@ -170,9 +184,14 @@ impl FilePickerState {
     }
 
     pub fn complete_preview(&mut self, revision: u64, preview: PreviewState) {
-        if self.visibility == Visibility::Displayed && self.preview_revision == revision {
-            self.preview = preview;
+        if self.visibility != Visibility::Displayed || self.preview_revision != revision {
+            return;
         }
+        if let (Some(path), PreviewState::Text(snapshot)) = (&self.pending_preview_path, &preview) {
+            self.preview_cache.insert(path.clone(), snapshot.clone());
+        }
+        self.pending_preview_path = None;
+        self.preview = preview;
     }
 
     pub fn selected_entry(&self) -> Option<&FileEntry> {
@@ -216,10 +235,21 @@ impl FilePickerState {
         self.preview_revision = self.preview_revision.wrapping_add(1);
         let Some(entry) = self.selected_entry() else {
             self.preview = PreviewState::Empty;
+            self.pending_preview_path = None;
             return None;
         };
         let path = entry.path.clone();
-        self.preview = PreviewState::Loading;
+        self.pending_preview_path = None;
+        if let Some(snapshot) = self.preview_cache.get(&path) {
+            self.preview = PreviewState::Text(snapshot.clone());
+            return None;
+        }
+
+        match self.preview {
+            PreviewState::Text(_) => {}
+            _ => self.preview = PreviewState::Loading,
+        }
+        self.pending_preview_path = Some(path.clone());
         Some(FilePickerRequest::Preview {
             documents: documents.clone(),
             path,
@@ -358,6 +388,40 @@ mod tests {
         assert!(matches!(request, Some(FilePickerRequest::Preview { .. })));
         assert_eq!(state.results, vec![entry("main.rs")]);
         assert_eq!(state.collection, FileCollectionState::Ready);
+    }
+
+    #[test]
+    fn preview_cache_returns_instantly_and_uncached_loads_keep_previous_text() {
+        let documents = DocumentFactory::new();
+        let mut state = FilePickerState {
+            visibility: Visibility::Displayed,
+            results: vec![entry("first.txt"), entry("second.txt")],
+            selected: Some(0),
+            ..FilePickerState::default()
+        };
+        let first_snapshot = text_snapshot(&["first"]);
+        let second_snapshot = text_snapshot(&["second"]);
+
+        let Some(FilePickerRequest::Preview {
+            revision: first_revision,
+            ..
+        }) = state.start_preview(&documents)
+        else {
+            panic!("the first preview should load");
+        };
+        state.complete_preview(first_revision, PreviewState::Text(first_snapshot.clone()));
+        let Some(FilePickerRequest::Preview {
+            revision: second_revision,
+            ..
+        }) = state.select_next(&documents)
+        else {
+            panic!("the second preview should load");
+        };
+        assert_eq!(state.preview, PreviewState::Text(first_snapshot.clone()));
+        state.complete_preview(second_revision, PreviewState::Text(second_snapshot));
+
+        assert!(state.select_previous(&documents).is_none());
+        assert_eq!(state.preview, PreviewState::Text(first_snapshot));
     }
 
     #[test]

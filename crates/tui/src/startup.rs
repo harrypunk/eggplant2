@@ -5,7 +5,8 @@ use editor::DocumentFactory;
 
 use crate::{
     data_object::{Context, FocusTarget, Model, Workspace},
-    explorer::ExplorerState,
+    explorer::{ExplorerEntryKind, ExplorerState},
+    file_picker::FileEntry,
 };
 
 /// Parse the optional file or folder argument without adding a CLI framework.
@@ -31,6 +32,17 @@ pub fn initial_model(path: Option<PathBuf>) -> color_eyre::Result<Model> {
                 .wrap_err_with(|| format!("failed to open folder `{}`", path.display()))?;
             model.explorer = ExplorerState::load(&root)
                 .wrap_err_with(|| format!("failed to read folder `{}`", root.display()))?;
+            let picker_files = model
+                .explorer
+                .entries
+                .iter()
+                .filter(|entry| entry.kind != ExplorerEntryKind::Directory && entry.path.is_file())
+                .map(|entry| FileEntry {
+                    path: entry.path.clone(),
+                    display: entry.name.to_string_lossy().into_owned(),
+                })
+                .collect();
+            model.file_picker.seed_top_level(picker_files);
             model.workspace = Some(Workspace::new(root));
             model.current_focus = FocusTarget::FileExplorer;
             model.context_stack.push(Context::Explorer);
@@ -50,6 +62,7 @@ pub fn initial_model(path: Option<PathBuf>) -> color_eyre::Result<Model> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::file_picker::FileCollectionState;
 
     #[test]
     fn no_path_starts_with_empty_editor() {
@@ -90,6 +103,7 @@ mod tests {
         assert_eq!(model.explorer.selected, Some(0));
         assert_eq!(model.current_focus, FocusTarget::FileExplorer);
         assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
+        assert_eq!(model.file_picker.collection, FileCollectionState::Ready);
     }
 
     #[test]

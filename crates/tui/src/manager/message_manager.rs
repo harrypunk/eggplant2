@@ -732,17 +732,10 @@ mod tests {
                 Message::CommandMenuKey(crossterm::event::KeyCode::Char(key)),
             );
         }
-        let Some(Effect::FilePicker(request)) = effect else {
-            panic!("Space f f should start a file scan");
-        };
+        assert!(effect.is_none());
         assert_eq!(model.current_focus, FocusTarget::FilePicker);
         assert_eq!(model.context_stack.last(), Some(&Context::FilePicker));
 
-        let Some(Effect::FilePicker(request)) = manager.update(&mut model, request.perform())
-        else {
-            panic!("top-level scan completion should start filtering");
-        };
-        assert!(manager.update(&mut model, request.perform()).is_none());
         let Some(Effect::FilePicker(request)) =
             manager.update(&mut model, Message::FilePickerInsert('m'))
         else {

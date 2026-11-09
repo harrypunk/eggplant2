@@ -46,7 +46,7 @@ spawn_blocking: independent Document + View snapshot
 update → render
 ```
 
-The first open scans only top-level files. A ready entry cache is retained when the picker closes, so reopening renders cached results immediately without another scan. The first non-empty query upgrades a ready top-level cache with one recursive background scan; subsequent typing filters the retained `Arc<Vec<FileEntry>>` without further traversal. Typing while either scan is running does not invalidate it, and completion filters with the latest query.
+Startup seeds the top-level picker cache from the already-loaded explorer listing, so the first open renders immediately without another read. A ready entry cache is retained when the picker closes, so reopening also renders cached results immediately. If no ready cache exists, the picker falls back to a top-level scan. The first non-empty query upgrades a ready top-level cache with one recursive background scan; subsequent typing filters the retained `Arc<Vec<FileEntry>>` without further traversal. Typing while either scan is running does not invalidate it, and completion filters with the latest query.
 
 Filter and preview revisions are independent. A late filter completion cannot overwrite a newer query, and a late preview cannot replace the preview for a newer selection. Closing the picker invalidates both revisions.
 
@@ -79,9 +79,10 @@ The first implementation uses established crates and explicit effects instead of
 - Top-level entries provide a fast initial response; recursive traversal is deferred until the first search.
 - Ready file entries persist across picker closes and are shared with filter jobs through `Arc`.
 - Preview documents are opened on the blocking pool through the shared `DocumentFactory`; their Helix views project only visible rows. Binary and non-UTF-8 files show an unavailable message.
+- Successful preview snapshots are cached by path. Cache hits render synchronously, and uncached loads retain the previous successful preview instead of flashing a loading message.
 - Only selection changes trigger preview reads.
 
-Revision checks guarantee stale results are harmless, but they do not stop obsolete CPU or I/O work. If profiling on large repositories shows excessive queued work, introduce a dedicated picker worker that coalesces queued queries and supports cancellation. Do not add a complex scheduler before that need is measured. A future watcher or explicit refresh can keep the file cache current. A future recent-files command such as `Space f r` can reuse the same entries with recency metadata and ordering instead of introducing another scanner.
+Revision checks guarantee stale results are harmless, but they do not stop obsolete CPU or I/O work. If profiling on large repositories shows excessive queued work, introduce a dedicated picker worker that coalesces queued queries and supports cancellation. Do not add a complex scheduler before that need is measured. A future watcher or explicit refresh can keep the file-entry and preview caches current. A future recent-files command such as `Space f r` can reuse the same entries with recency metadata and ordering instead of introducing another scanner.
 
 ## Future filesystem mutations
 
