@@ -226,7 +226,7 @@ Ratatui rendering is a projection of state, not a source of editing behavior:
 - Explorer rendering uses the application snapshot and does not read the filesystem during drawing.
 - Scrolling and document mutations happen during updates, not as hidden rendering side effects.
 
-Basic editing does not require Helix grammars, queries, themes, or language servers. If a selected Helix document API requires runtime initialization, isolate and report that setup in `editor`; do not silently make syntax tooling a first-edition dependency.
+Syntax highlighting uses Helix grammars and queries through the shared `DocumentFactory`. The TUI maps editor-owned semantic highlight kinds to one built-in theme (`theme = "default"`). A Helix-compatible grammar runtime enables language highlighting; files still open as plain text when it is unavailable.
 
 ## AI-first extension points
 

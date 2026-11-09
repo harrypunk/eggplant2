@@ -7,28 +7,40 @@ use ratatui::{
 };
 
 use super::{popup::Popup, text_view::TextView};
-use crate::file_picker::{FileCollectionState, FilePickerState, PreviewState};
+use crate::{
+    file_picker::{FileCollectionState, FilePickerState, PreviewState},
+    theme::Theme,
+};
 
 /// Two-pane file picker: query/results on the left and text preview on the right.
 #[derive(Debug, Clone, Copy)]
 pub struct FilePicker<'a> {
     state: &'a FilePickerState,
+    theme: Theme,
 }
 
 impl<'a> FilePicker<'a> {
-    pub fn new(state: &'a FilePickerState) -> Self {
-        Self { state }
+    pub fn new(state: &'a FilePickerState, theme: Theme) -> Self {
+        Self { state, theme }
     }
 }
 
 impl Widget for FilePicker<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        Popup::new("Files", FilePickerContent { state: self.state }).render(area, buf);
+        Popup::new(
+            "Files",
+            FilePickerContent {
+                state: self.state,
+                theme: self.theme,
+            },
+        )
+        .render(area, buf);
     }
 }
 
 struct FilePickerContent<'a> {
     state: &'a FilePickerState,
+    theme: Theme,
 }
 
 impl Widget for FilePickerContent<'_> {
@@ -50,7 +62,9 @@ impl Widget for FilePickerContent<'_> {
         let preview_inner = preview_block.inner(preview_area);
         preview_block.render(preview_area, buf);
         match &self.state.preview {
-            PreviewState::Text(snapshot) => TextView::new(snapshot).render(preview_inner, buf),
+            PreviewState::Text(snapshot) => {
+                TextView::new(snapshot, self.theme).render(preview_inner, buf)
+            }
             preview => Paragraph::new(preview_lines(preview)).render(preview_inner, buf),
         }
     }
@@ -119,17 +133,13 @@ mod tests {
             display: "src/main.rs".to_string(),
         }];
         state.selected = Some(0);
-        state.preview = PreviewState::Text(TextViewSnapshot {
-            first_line: 0,
-            line_count: 1,
-            lines: vec!["fn main() {}".to_string()],
-            horizontal_offset: 0,
-        });
+        state.preview =
+            PreviewState::Text(TextViewSnapshot::plain(vec!["fn main() {}".to_string()]));
         let backend = TestBackend::new(60, 12);
         let mut terminal = Terminal::new(backend).unwrap();
 
         terminal
-            .draw(|frame| frame.render_widget(FilePicker::new(&state), frame.area()))
+            .draw(|frame| frame.render_widget(FilePicker::new(&state, Theme), frame.area()))
             .unwrap();
 
         let content = terminal

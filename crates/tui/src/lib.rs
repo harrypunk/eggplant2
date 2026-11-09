@@ -8,6 +8,7 @@ pub mod manager;
 pub mod page;
 pub mod startup;
 pub mod terminal;
+pub mod theme;
 pub mod tools;
 
 #[cfg(test)]
@@ -23,6 +24,7 @@ pub mod data_object {
         command_menu::CommandMenuState,
         explorer::ExplorerState,
         file_picker::{FileEntry, FilePickerState, PreviewState},
+        theme::Theme,
         tools::ToolsPanelState,
     };
 
@@ -89,6 +91,7 @@ pub mod data_object {
         pub explorer_visibility: Visibility,
         pub current_focus: FocusTarget,
         pub context_stack: Vec<Context>,
+        pub theme: Theme,
 
         // Transient feedback, popup, and save-dependent workflows.
         pub status: Option<StatusMessage>,
@@ -108,6 +111,7 @@ pub mod data_object {
                 explorer_visibility: Visibility::Displayed,
                 current_focus: FocusTarget::Editor,
                 context_stack: Vec::new(),
+                theme: Theme,
                 status: None,
                 deferred_action: None,
                 command_menu: CommandMenuState::default(),

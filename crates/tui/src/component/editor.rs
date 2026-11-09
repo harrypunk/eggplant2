@@ -6,17 +6,22 @@ use ratatui::{
 };
 
 use super::{buffer_tabs::BufferTabs, text_view::TextView};
-use crate::data_object::FocusState;
+use crate::{data_object::FocusState, theme::Theme};
 
 #[derive(Debug)]
 pub struct Editor {
     snapshot: Option<EditorSnapshot>,
     focus: FocusState,
+    theme: Theme,
 }
 
 impl Editor {
-    pub fn new(snapshot: Option<EditorSnapshot>, focus: FocusState) -> Self {
-        Self { snapshot, focus }
+    pub fn new(snapshot: Option<EditorSnapshot>, focus: FocusState, theme: Theme) -> Self {
+        Self {
+            snapshot,
+            focus,
+            theme,
+        }
     }
 
     pub fn content_area(area: Rect) -> Rect {
@@ -55,7 +60,7 @@ impl Widget for Editor {
         match self.snapshot {
             Some(snapshot) => {
                 BufferTabs::new(&snapshot).render(tabs_area, buf);
-                EditorBuffer::new(&snapshot).render(content_area, buf);
+                EditorBuffer::new(&snapshot, self.theme).render(content_area, buf);
             }
             None => Paragraph::new("No file open").render(area, buf),
         }
@@ -66,11 +71,12 @@ impl Widget for Editor {
 #[derive(Debug, Clone, Copy)]
 pub struct EditorBuffer<'a> {
     snapshot: &'a EditorSnapshot,
+    theme: Theme,
 }
 
 impl<'a> EditorBuffer<'a> {
-    pub fn new(snapshot: &'a EditorSnapshot) -> Self {
-        Self { snapshot }
+    pub fn new(snapshot: &'a EditorSnapshot, theme: Theme) -> Self {
+        Self { snapshot, theme }
     }
 
     /// Text region shared by rendering, viewport sizing, and cursor placement.
@@ -81,13 +87,13 @@ impl<'a> EditorBuffer<'a> {
 
 impl Widget for EditorBuffer<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        TextView::new(&self.snapshot.text).render(area, buf);
+        TextView::new(&self.snapshot.text, self.theme).render(area, buf);
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use editor::{DocumentFactory, EditorSession};
+    use editor::{DocumentFactory, EditorSession, TextViewSnapshot};
     use ratatui::{Terminal, backend::TestBackend};
 
     use super::*;
@@ -106,7 +112,7 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
 
         terminal
-            .draw(|frame| frame.render_widget(EditorBuffer::new(&snapshot), frame.area()))
+            .draw(|frame| frame.render_widget(EditorBuffer::new(&snapshot, Theme), frame.area()))
             .unwrap();
 
         terminal
@@ -126,7 +132,7 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
 
         terminal
-            .draw(|frame| frame.render_widget(EditorBuffer::new(&snapshot), frame.area()))
+            .draw(|frame| frame.render_widget(EditorBuffer::new(&snapshot, Theme), frame.area()))
             .unwrap();
 
         terminal
@@ -139,13 +145,13 @@ mod tests {
         let mut session = EditorSession::new();
         create_buffer(&mut session, "abcdef");
         let mut snapshot = session.active_snapshot().unwrap();
-        snapshot.text.lines = vec!["abcdef".to_string()];
+        snapshot.text = TextViewSnapshot::plain(vec!["abcdef".to_string()]);
         snapshot.text.horizontal_offset = 2;
         let backend = TestBackend::new(4, 1);
         let mut terminal = Terminal::new(backend).unwrap();
 
         terminal
-            .draw(|frame| frame.render_widget(EditorBuffer::new(&snapshot), frame.area()))
+            .draw(|frame| frame.render_widget(EditorBuffer::new(&snapshot, Theme), frame.area()))
             .unwrap();
 
         terminal.backend().assert_buffer_lines(["1 cd"]);
@@ -158,7 +164,10 @@ mod tests {
 
         terminal
             .draw(|frame| {
-                frame.render_widget(Editor::new(None, FocusState::Unfocused), frame.area())
+                frame.render_widget(
+                    Editor::new(None, FocusState::Unfocused, Theme),
+                    frame.area(),
+                )
             })
             .unwrap();
 
@@ -183,7 +192,7 @@ mod tests {
         terminal
             .draw(|frame| {
                 frame.render_widget(
-                    Editor::new(session.active_snapshot(), FocusState::Focused),
+                    Editor::new(session.active_snapshot(), FocusState::Focused, Theme),
                     frame.area(),
                 );
             })

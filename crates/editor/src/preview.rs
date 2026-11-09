@@ -38,7 +38,8 @@ mod tests {
 
         assert_eq!(snapshot.first_line, 0);
         assert_eq!(snapshot.line_count, 4);
-        assert_eq!(snapshot.lines, ["zero", "one"]);
+        assert_eq!(snapshot.lines[0].text, "zero");
+        assert_eq!(snapshot.lines[1].text, "one");
         assert_eq!(snapshot.horizontal_offset, 0);
     }
 }

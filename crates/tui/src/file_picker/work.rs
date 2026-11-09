@@ -221,7 +221,8 @@ mod tests {
         };
         assert_eq!(snapshot.first_line, 0);
         assert_eq!(snapshot.line_count, 2);
-        assert_eq!(snapshot.lines, ["first", "second"]);
+        assert_eq!(snapshot.lines[0].text, "first");
+        assert_eq!(snapshot.lines[1].text, "second");
         assert_eq!(
             read_preview(&documents, &binary),
             PreviewState::Unavailable("Not a text file".to_string())

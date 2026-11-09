@@ -28,6 +28,7 @@ impl Editor {
         let editor = EditorComponent::new(
             snapshot,
             focus_for(model.current_focus, FocusTarget::Editor),
+            model.theme,
         );
         let cursor = editor.cursor_position(areas.editor);
 
@@ -66,7 +67,7 @@ impl Editor {
         match model.file_picker.visibility {
             Visibility::Displayed => {
                 let area = file_picker_area(areas.main);
-                frame.render_widget(FilePicker::new(&model.file_picker), area);
+                frame.render_widget(FilePicker::new(&model.file_picker, model.theme), area);
             }
             Visibility::Hidden => {}
         }

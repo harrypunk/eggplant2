@@ -1,4 +1,4 @@
-theme = "tokyo-night"
+theme = "default"
 event_poll_timeout = 300
 
 # Keymaps map action names to key bindings.

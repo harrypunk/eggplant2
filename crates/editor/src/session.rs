@@ -806,7 +806,7 @@ mod tests {
         create_buffer(&mut session, "visible");
 
         let snapshot = session.active_snapshot().unwrap();
-        assert_eq!(snapshot.text.lines, ["visible"]);
+        assert_eq!(snapshot.text.lines[0].text, "visible");
         assert!(snapshot.cursor.is_some());
     }
 
@@ -820,7 +820,8 @@ mod tests {
         assert_eq!(snapshot.buffer_id, id);
         assert_eq!(snapshot.text.first_line, 0);
         assert_eq!(snapshot.text.line_count, 3);
-        assert_eq!(snapshot.text.lines, ["zero", "one"]);
+        assert_eq!(snapshot.text.lines[0].text, "zero");
+        assert_eq!(snapshot.text.lines[1].text, "one");
         assert_eq!(snapshot.cursor, Some(CursorPosition { row: 0, column: 0 }));
         assert_eq!(snapshot.text.horizontal_offset, 0);
         assert_eq!(snapshot.mode, EditMode::Normal);
@@ -844,7 +845,7 @@ mod tests {
         let snapshot = session.active_snapshot().unwrap();
         let cursor = snapshot.cursor.unwrap();
         assert_eq!(snapshot.text.lines.len(), 3);
-        assert!(snapshot.text.lines.contains(&"6".to_string()));
+        assert!(snapshot.text.lines.iter().any(|line| line.text == "6"));
         assert!(cursor.row < snapshot.text.lines.len());
     }
 

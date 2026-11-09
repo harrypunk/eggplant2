@@ -501,7 +501,7 @@ impl MessageManager {
 
 #[cfg(test)]
 mod tests {
-    use editor::{CursorMovement, EditMode, SaveRequest, TextViewSnapshot};
+    use editor::{CursorMovement, EditMode, HighlightKind, SaveRequest};
 
     use super::*;
     use crate::{
@@ -557,18 +557,33 @@ mod tests {
         manager.update(&mut model, Message::MoveCursor(CursorMovement::Right));
         manager.update(&mut model, Message::EnterInsertMode);
         manager.update(&mut model, Message::InsertChar('b'));
-        assert_eq!(model.editor.active_snapshot().unwrap().text.lines[0], "ab");
+        assert_eq!(
+            model.editor.active_snapshot().unwrap().text.lines[0].text,
+            "ab"
+        );
 
         manager.update(&mut model, Message::Backspace);
-        assert_eq!(model.editor.active_snapshot().unwrap().text.lines[0], "a");
+        assert_eq!(
+            model.editor.active_snapshot().unwrap().text.lines[0].text,
+            "a"
+        );
         manager.update(&mut model, Message::InsertChar('c'));
         manager.update(&mut model, Message::ExitInsertMode);
-        assert_eq!(model.editor.active_snapshot().unwrap().text.lines[0], "ac");
+        assert_eq!(
+            model.editor.active_snapshot().unwrap().text.lines[0].text,
+            "ac"
+        );
 
         manager.update(&mut model, Message::Undo);
-        assert_eq!(model.editor.active_snapshot().unwrap().text.lines[0], "a");
+        assert_eq!(
+            model.editor.active_snapshot().unwrap().text.lines[0].text,
+            "a"
+        );
         manager.update(&mut model, Message::Redo);
-        assert_eq!(model.editor.active_snapshot().unwrap().text.lines[0], "ac");
+        assert_eq!(
+            model.editor.active_snapshot().unwrap().text.lines[0].text,
+            "ac"
+        );
     }
 
     #[tokio::test]
@@ -751,15 +766,16 @@ mod tests {
         };
         manager.update(&mut model, request.perform());
         assert_eq!(model.file_picker.results.len(), 1);
-        assert_eq!(
-            model.file_picker.preview,
-            PreviewState::Text(TextViewSnapshot {
-                first_line: 0,
-                line_count: 1,
-                lines: vec!["fn main() {}".to_string()],
-                horizontal_offset: 0,
-            })
-        );
+        let PreviewState::Text(snapshot) = &model.file_picker.preview else {
+            panic!("text file should have a preview snapshot");
+        };
+        assert_eq!(snapshot.lines[0].text, "fn main() {}");
+        assert!(snapshot.lines[0].highlights.iter().any(|span| {
+            span.kind == HighlightKind::Keyword && span.start_byte == 0 && span.end_byte == 2
+        }));
+        assert!(snapshot.lines[0].highlights.iter().any(|span| {
+            span.kind == HighlightKind::Function && span.start_byte == 3 && span.end_byte == 7
+        }));
 
         manager.update(&mut model, Message::OpenPickerFile);
         assert_eq!(model.file_picker.visibility, Visibility::Hidden);
@@ -774,7 +790,7 @@ mod tests {
             ExpansionState::Expanded
         );
         assert_eq!(
-            model.editor.active_snapshot().unwrap().text.lines[0],
+            model.editor.active_snapshot().unwrap().text.lines[0].text,
             "fn main() {}"
         );
     }
@@ -824,7 +840,7 @@ mod tests {
         assert_eq!(model.current_focus, FocusTarget::Editor);
         assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
         let snapshot = model.editor.active_snapshot().unwrap();
-        assert_eq!(snapshot.text.lines[0], "b");
+        assert_eq!(snapshot.text.lines[0].text, "b");
         assert_eq!(
             std::path::Path::new(&snapshot.display_name)
                 .file_name()

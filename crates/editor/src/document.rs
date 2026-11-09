@@ -1,8 +1,14 @@
-use std::{fmt, path::Path, sync::Arc};
+use std::{
+    fmt,
+    path::Path,
+    sync::{Arc, OnceLock},
+};
 
 use arc_swap::ArcSwap;
-use helix_core::{Rope, syntax};
-use helix_view::{Document, document::DocumentOpenError, editor::Config};
+use helix_core::{Rope, config::default_lang_loader, syntax};
+use helix_view::{
+    Document, document::DocumentOpenError, editor::Config, theme::Loader as ThemeLoader,
+};
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -16,7 +22,20 @@ pub enum OpenDocumentError {
 }
 
 type SharedConfig = Arc<ArcSwap<Config>>;
-type SharedSyntaxLoader = Arc<ArcSwap<syntax::Loader>>;
+pub(crate) type SharedSyntaxLoader = Arc<ArcSwap<syntax::Loader>>;
+
+static DEFAULT_SYNTAX_LOADER: OnceLock<SharedSyntaxLoader> = OnceLock::new();
+
+pub(crate) fn default_syntax_loader() -> SharedSyntaxLoader {
+    DEFAULT_SYNTAX_LOADER
+        .get_or_init(|| {
+            let loader = default_lang_loader();
+            let theme = ThemeLoader::new(&[]).default();
+            loader.set_scopes(theme.scopes().to_vec());
+            Arc::new(ArcSwap::from_pointee(loader))
+        })
+        .clone()
+}
 
 /// Owns Helix runtime resources needed to construct documents.
 #[derive(Clone)]
@@ -31,9 +50,7 @@ impl DocumentFactory {
             // ArcSwap stores an Arc<Config> snapshot. The outer Arc shares the
             // swap cell, allowing later config reloads without lock-based mutation.
             config: Arc::new(ArcSwap::new(Arc::new(Config::default()))),
-            // Basic editing does not load grammars; this default loader only
-            // satisfies Document's constructor and is shared by new documents.
-            syntax_loader: Arc::new(ArcSwap::from_pointee(syntax::Loader::default())),
+            syntax_loader: default_syntax_loader(),
         }
     }
 
@@ -69,7 +86,7 @@ impl DocumentFactory {
         Document::open(
             &helix_stdx::path::canonicalize(path),
             None,
-            false,
+            true,
             self.config.clone(),
             self.syntax_loader.clone(),
         )

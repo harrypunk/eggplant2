@@ -38,6 +38,7 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 - [x] Read-only `EditorSnapshot` for rendering without exposing Helix internals.
 - [x] Ratatui buffer rendering, visible-line limits, horizontal scrolling, and empty state.
 - [x] Absolute line numbers with document-width gutters and aligned viewport/cursor calculations.
+- [x] Helix-backed semantic syntax highlighting with a shared built-in theme in editor and picker previews.
 - [x] TUI model integration and input-driven editing messages.
 - [x] Initial/terminal resize propagation and focus-aware cursor placement.
 - [x] Optional startup file/folder path with pre-terminal initialization and startup tests.
@@ -89,7 +90,7 @@ See `config.example.toml` for the configurable action names.
 - Tools panel is hidden and remains a placeholder for future agent/search/file-info panels.
 - No new-file or Save As workflow.
 - The status bar handles explorer errors; save/quit and other editor errors are not wired yet.
-- No soft-wrap rendering, syntax highlighting, LSP, or split views.
+- No soft-wrap rendering, LSP, or split views.
 - Existing keymap configuration replaces the configured keymap section rather than offering sophisticated default merging/unbinding.
 - Horizontal rendering and Unicode behavior need broader edge-case testing.
 
@@ -189,7 +190,7 @@ The first edition is complete when a user can, on Linux:
 ## Deferred beyond the first edition
 
 - AI agent execution/chat and automated editing.
-- LSP, DAP, syntax highlighting, formatting, and code actions.
+- LSP, DAP, formatting, and code actions.
 - Full Vim or Helix command compatibility, Visual mode, macros, and registers.
 - Split views and multiple cursors as user-facing features.
 - Soft-wrap visual rendering and advanced annotations.

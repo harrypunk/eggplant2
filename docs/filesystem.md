@@ -60,7 +60,7 @@ Every application document open uses `DocumentFactory::open`. Existing targets m
 
 `TextViewSnapshot` is the editor crate's common projection of a Helix `Document + View`: visible lines, first-line offset, total line count, and horizontal offset. `EditorSnapshot` wraps it with buffer/mode/dirty/cursor metadata for the real editor; previews use the smaller projection directly and do not fabricate editor metadata.
 
-`preview_document` constructs an independent document/view through the same `DocumentFactory`, then drops those Helix values after snapshotting. Preview documents never join `EditorSession`, buffer tabs, auto-save, or close/quit workflows and expose no editing API. The picker renders successful previews with the same TUI `TextView` used by `EditorBuffer`, so line numbers, scrolling, and future syntax/theme annotations have one presentation path. Grep and find-replace previews can reuse this path with match annotations and a different initial viewport offset.
+`preview_document` constructs an independent document/view through the same `DocumentFactory`, then drops those Helix values after snapshotting. Preview documents never join `EditorSession`, buffer tabs, auto-save, or close/quit workflows and expose no editing API. The picker renders successful previews with the same TUI `TextView` used by `EditorBuffer`, so line numbers, scrolling, and syntax highlighting, themes, and match annotations have one presentation path. Grep and find-replace previews can reuse this path with match annotations and a different initial viewport offset.
 
 ## Fuzzy matching and ranking
 

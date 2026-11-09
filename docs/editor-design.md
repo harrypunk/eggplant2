@@ -14,7 +14,7 @@ The first editing implementation should support:
 - A small Vim-inspired Normal/Insert command set.
 - Ratatui rendering without adopting Helix's terminal application.
 
-The design should optimize for correctness and incremental growth, not for future feature count. Split windows, LSP, syntax highlighting, and agent-driven edits are not part of this iteration.
+The design should optimize for correctness and incremental growth, not for future feature count. Split windows, LSP, and agent-driven edits are not part of this iteration.
 
 ### Design principles
 

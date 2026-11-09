@@ -274,12 +274,7 @@ mod tests {
     }
 
     fn text_snapshot(lines: &[&str]) -> TextViewSnapshot {
-        TextViewSnapshot {
-            first_line: 0,
-            line_count: lines.len(),
-            lines: lines.iter().map(|line| (*line).to_string()).collect(),
-            horizontal_offset: 0,
-        }
+        TextViewSnapshot::plain(lines.iter().map(|line| (*line).to_string()).collect())
     }
 
     #[test]

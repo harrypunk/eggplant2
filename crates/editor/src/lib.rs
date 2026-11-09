@@ -10,7 +10,10 @@ pub use document::{DocumentFactory, OpenDocumentError};
 pub use preview::preview_document;
 pub use save::{SaveCompletion, SaveError, SaveRequest};
 pub use session::{BufferId, CursorMovement, EditMode, EditorError, EditorSession};
-pub use snapshot::{BufferInfo, CursorPosition, DirtyState, EditorSnapshot, TextViewSnapshot};
+pub use snapshot::{
+    BufferInfo, CursorPosition, DirtyState, EditorSnapshot, HighlightKind, HighlightSpan,
+    LineSnapshot, TextViewSnapshot,
+};
 
 #[cfg(test)]
 mod spike_tests {
