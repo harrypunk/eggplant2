@@ -1,6 +1,9 @@
 use std::{fmt::Display, path::Path};
 
-use editor::{BufferId, DocumentFactory, EditMode, SaveCompletion};
+use editor::{
+    BufferId, DocumentFactory, DocumentOpenCompletion, DocumentOpenRequest, EditMode,
+    SaveCompletion,
+};
 use ratatui::layout::Rect;
 
 use crate::{
@@ -92,7 +95,7 @@ impl MessageManager {
             }
             Message::ExplorerNext => model.explorer.select_next(),
             Message::ExplorerPrevious => model.explorer.select_previous(),
-            Message::OpenSelected => self.open_selected(model),
+            Message::OpenSelected => return self.open_selected(model),
             Message::ExplorerFold => Self::change_expansion(model, ExpansionState::Collapsed),
             Message::ExplorerUnfold => Self::change_expansion(model, ExpansionState::Expanded),
             Message::RefreshExplorer => Self::refresh_explorer(model),
@@ -132,7 +135,8 @@ impl MessageManager {
                     .select_previous(&self.documents)
                     .map(Effect::FilePicker);
             }
-            Message::OpenPickerFile => self.open_picker_file(model),
+            Message::OpenPickerFile => return self.open_picker_file(model),
+            Message::FileOpened(completion) => Self::finish_open_file(model, completion),
             Message::FileScanFinished { revision, result } => {
                 let Some(workspace) = &model.workspace else {
                     return None;
@@ -300,16 +304,17 @@ impl MessageManager {
         }
     }
 
-    fn open_selected(&self, model: &mut Model) {
-        let Some(entry) = model.explorer.selected_entry() else {
-            return;
-        };
+    fn open_selected(&self, model: &mut Model) -> Option<Effect> {
+        let entry = model.explorer.selected_entry()?;
         let path = entry.path.clone();
         match entry.kind {
             ExplorerEntryKind::File | ExplorerEntryKind::Link | ExplorerEntryKind::Other => {
-                self.open_file(model, &path);
+                self.open_file(model, &path)
             }
-            ExplorerEntryKind::Directory => Self::change_expansion(model, ExpansionState::Expanded),
+            ExplorerEntryKind::Directory => {
+                Self::change_expansion(model, ExpansionState::Expanded);
+                None
+            }
         }
     }
 
@@ -340,24 +345,41 @@ impl MessageManager {
         };
     }
 
-    fn open_picker_file(&self, model: &mut Model) {
-        let Some(entry) = model.file_picker.selected_entry() else {
-            return;
-        };
+    fn open_picker_file(&self, model: &mut Model) -> Option<Effect> {
+        let entry = model.file_picker.selected_entry()?;
         let path = entry.path.clone();
-        self.open_file(model, &path);
+        self.open_file(model, &path)
     }
 
     /// Single document-open path shared by explorer, picker, and future commands.
-    fn open_file(&self, model: &mut Model, path: &Path) {
-        let document = match self.documents.open(path) {
-            Ok(document) => document,
+    fn open_file(&self, model: &mut Model, path: &Path) -> Option<Effect> {
+        model.opening_file = Some(path.to_path_buf());
+        Some(Effect::OpenDocument(DocumentOpenRequest::new(
+            self.documents.clone(),
+            path,
+        )))
+    }
+
+    fn finish_open_file(model: &mut Model, completion: DocumentOpenCompletion) {
+        if model.opening_file.as_deref() != Some(completion.path()) {
+            return;
+        }
+        let path = completion.path().to_path_buf();
+        model.opening_file = None;
+        let opened = match completion.into_result() {
+            Ok(opened) => opened,
             Err(error) => {
-                Self::report_error(model, "failed to open file", path, error);
+                Self::report_error(model, "failed to open file", &path, error);
                 return;
             }
         };
-        let id = model.editor.insert_document(document);
+        let id = match model.editor.insert_opened_document(opened) {
+            Ok(id) => id,
+            Err(error) => {
+                Self::report_error(model, "failed to open file", &path, error);
+                return;
+            }
+        };
         let opened_path = model.editor.buffer_path(id).map(Path::to_path_buf);
         model.status = None;
 
@@ -516,6 +538,13 @@ mod tests {
             panic!("expected a save effect");
         };
         request
+    }
+
+    fn complete_open(model: &mut Model, manager: &MessageManager, effect: Option<Effect>) {
+        let Some(Effect::OpenDocument(request)) = effect else {
+            panic!("expected an open-document effect");
+        };
+        manager.update(model, Message::FileOpened(request.perform()));
     }
 
     #[test]
@@ -777,7 +806,8 @@ mod tests {
             span.kind == HighlightKind::Function && span.start_byte == 3 && span.end_byte == 7
         }));
 
-        manager.update(&mut model, Message::OpenPickerFile);
+        let effect = manager.update(&mut model, Message::OpenPickerFile);
+        complete_open(&mut model, &manager, effect);
         assert_eq!(model.file_picker.visibility, Visibility::Hidden);
         assert_eq!(model.current_focus, FocusTarget::Editor);
         assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
@@ -809,7 +839,8 @@ mod tests {
         let original_entries = model.explorer.entries.clone();
 
         for path in [binary, link] {
-            manager.open_file(&mut model, &path);
+            let effect = manager.open_file(&mut model, &path);
+            complete_open(&mut model, &manager, effect);
             assert!(model.editor.is_empty());
             assert_eq!(model.explorer.entries, original_entries);
             assert!(
@@ -824,6 +855,38 @@ mod tests {
     }
 
     #[test]
+    fn stale_open_completion_does_not_replace_the_latest_request() {
+        let directory = tempfile::tempdir().unwrap();
+        let first = directory.path().join("first.txt");
+        let second = directory.path().join("second.txt");
+        std::fs::write(&first, "first").unwrap();
+        std::fs::write(&second, "second").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let manager = MessageManager::default();
+        let first_completion = match manager.open_file(&mut model, &first) {
+            Some(Effect::OpenDocument(request)) => request.perform(),
+            _ => panic!("expected an open-document effect"),
+        };
+        let second_completion = match manager.open_file(&mut model, &second) {
+            Some(Effect::OpenDocument(request)) => request.perform(),
+            _ => panic!("expected an open-document effect"),
+        };
+
+        manager.update(&mut model, Message::FileOpened(first_completion));
+        assert!(model.editor.is_empty());
+        assert_eq!(model.opening_file, Some(second.clone()));
+        manager.update(&mut model, Message::FileOpened(second_completion));
+
+        assert_eq!(model.editor.buffer_count(), 1);
+        assert_eq!(
+            model
+                .editor
+                .buffer_path(model.editor.active_buffer().unwrap()),
+            Some(std::fs::canonicalize(second).unwrap().as_path())
+        );
+    }
+
+    #[test]
     fn explorer_navigation_opens_files_and_toggles_focus() {
         let directory = tempfile::tempdir().unwrap();
         std::fs::write(directory.path().join("a.txt"), "a").unwrap();
@@ -834,7 +897,8 @@ mod tests {
 
         manager.update(&mut model, Message::ExplorerNext);
         assert_eq!(model.explorer.selected, Some(1));
-        manager.update(&mut model, Message::OpenSelected);
+        let effect = manager.update(&mut model, Message::OpenSelected);
+        complete_open(&mut model, &manager, effect);
 
         assert_eq!(model.editor.buffer_count(), 1);
         assert_eq!(model.current_focus, FocusTarget::Editor);
@@ -854,7 +918,8 @@ mod tests {
         assert_eq!(model.explorer_visibility, Visibility::Displayed);
         assert_eq!(model.current_focus, FocusTarget::FileExplorer);
         assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
-        manager.update(&mut model, Message::OpenSelected);
+        let effect = manager.update(&mut model, Message::OpenSelected);
+        complete_open(&mut model, &manager, effect);
         assert_eq!(model.editor.buffer_count(), 1);
         assert_eq!(model.current_focus, FocusTarget::Editor);
     }

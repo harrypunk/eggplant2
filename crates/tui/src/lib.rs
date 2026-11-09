@@ -18,7 +18,7 @@ pub mod data_object {
 
     use std::path::{Path, PathBuf};
 
-    use editor::{BufferId, CursorMovement, EditorSession, SaveCompletion};
+    use editor::{BufferId, CursorMovement, DocumentOpenCompletion, EditorSession, SaveCompletion};
 
     use crate::{
         command_menu::CommandMenuState,
@@ -95,6 +95,7 @@ pub mod data_object {
 
         // Transient feedback, popup, and save-dependent workflows.
         pub status: Option<StatusMessage>,
+        pub opening_file: Option<PathBuf>,
         pub deferred_action: Option<DeferredAction>,
         pub command_menu: CommandMenuState,
         pub file_picker: FilePickerState,
@@ -113,6 +114,7 @@ pub mod data_object {
                 context_stack: Vec::new(),
                 theme: Theme,
                 status: None,
+                opening_file: None,
                 deferred_action: None,
                 command_menu: CommandMenuState::default(),
                 file_picker: FilePickerState::default(),
@@ -204,6 +206,7 @@ pub mod data_object {
         NextBuffer,
         PreviousBuffer,
         SaveFinished(SaveCompletion),
+        FileOpened(DocumentOpenCompletion),
         FocusLost,
         Resize(u16, u16),
         ExplorerNext,

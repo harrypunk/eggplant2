@@ -49,6 +49,7 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 - [x] Root/nested `.gitignore` and common built-in ignore filtering with an Explorer-context `Shift-I` visibility toggle.
 - [x] `Space f f` file picker with fast top-level startup, on-demand recursive search, persistent entry cache, Nucleo ranking, and shared read-only viewport previews.
 - [x] Unified text-only document opening with canonical-path explorer reveal, ancestor expansion, and selection.
+- [x] Background document opening with single-read syntax preparation and stale-completion protection.
 - [x] Shared status/error bar and focus-aware panel borders.
 - [x] Revision-aware `EditorSession` save requests/completion with in-flight edit and untitled-buffer tests.
 - [x] Automatic save after edits/Insert exit through spawned effects and completion messages with status feedback.

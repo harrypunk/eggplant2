@@ -83,5 +83,11 @@ fn apply_message(
                 let _ = sender.send(request.perform());
             });
         }
+        Effect::OpenDocument(request) => {
+            let sender = sender.clone();
+            tokio::task::spawn_blocking(move || {
+                let _ = sender.send(Message::FileOpened(request.perform()));
+            });
+        }
     }
 }

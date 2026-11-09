@@ -1,6 +1,6 @@
 use std::{
     fmt,
-    path::Path,
+    path::{Path, PathBuf},
     sync::{Arc, OnceLock},
 };
 
@@ -19,6 +19,13 @@ pub enum OpenDocumentError {
     Io(#[from] std::io::Error),
     #[error(transparent)]
     Helix(#[from] DocumentOpenError),
+}
+
+pub(crate) struct PreparedDocument {
+    path: PathBuf,
+    text: Rope,
+    language: Option<Arc<syntax::config::LanguageConfiguration>>,
+    syntax: Option<syntax::Syntax>,
 }
 
 type SharedConfig = Arc<ArcSwap<Config>>;
@@ -64,33 +71,63 @@ impl DocumentFactory {
     }
 
     /// Open a regular UTF-8 text file, or create a document for a missing path.
-    ///
-    /// Links, directories, binary content, and invalid UTF-8 are rejected before
-    /// Helix constructs a document. Every application open path uses this rule.
     pub fn open(&self, path: impl AsRef<Path>) -> Result<Document, OpenDocumentError> {
-        let path = path.as_ref();
-        match std::fs::symlink_metadata(path) {
+        let prepared = self.prepare_open(path.as_ref())?;
+        Ok(self.build_document(prepared))
+    }
+
+    /// Read and parse on any thread; construct the non-Send Document on the caller's thread.
+    pub(crate) fn prepare_open(&self, path: &Path) -> Result<PreparedDocument, OpenDocumentError> {
+        let text = match std::fs::symlink_metadata(path) {
             Ok(metadata) => {
                 if !metadata.file_type().is_file() {
                     return Err(OpenDocumentError::NotTextFile);
                 }
                 let bytes = std::fs::read(path)?;
-                if bytes.contains(&0) || String::from_utf8(bytes).is_err() {
+                let text = String::from_utf8(bytes).map_err(|_| OpenDocumentError::NotTextFile)?;
+                if text.contains('\0') {
                     return Err(OpenDocumentError::NotTextFile);
                 }
+                Rope::from(text)
             }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                let line_ending: helix_core::LineEnding =
+                    self.config.load().default_line_ending.into();
+                Rope::from(line_ending.as_str())
+            }
             Err(error) => return Err(error.into()),
-        }
+        };
+        let path = helix_stdx::path::canonicalize(path);
+        let loader = self.syntax_loader.load();
+        let source = text.slice(..);
+        let language = loader
+            .language_for_filename(&path)
+            .or_else(|| loader.language_for_shebang(source))
+            .map(|language| loader.language(language).config().clone());
+        let syntax = language
+            .as_ref()
+            .and_then(|config| syntax::Syntax::new(source, config.language(), &loader).ok());
 
-        Document::open(
-            &helix_stdx::path::canonicalize(path),
-            None,
-            true,
+        Ok(PreparedDocument {
+            path,
+            text,
+            language,
+            syntax,
+        })
+    }
+
+    pub(crate) fn build_document(&self, prepared: PreparedDocument) -> Document {
+        let mut document = Document::from(
+            prepared.text,
+            Some((helix_core::encoding::UTF_8, false)),
             self.config.clone(),
             self.syntax_loader.clone(),
-        )
-        .map_err(Into::into)
+        );
+        document.set_path(Some(&prepared.path));
+        document.language = prepared.language;
+        document.syntax = prepared.syntax;
+        document.detect_indent_and_line_ending();
+        document
     }
 }
 
