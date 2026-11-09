@@ -1,14 +1,16 @@
 //! Eggplant's editor core and Helix adapter.
 
 mod document;
+mod preview;
 mod save;
 mod session;
 mod snapshot;
 
 pub use document::{DocumentFactory, OpenDocumentError};
+pub use preview::preview_document;
 pub use save::{SaveCompletion, SaveError, SaveRequest};
 pub use session::{BufferId, CursorMovement, EditMode, EditorError, EditorSession};
-pub use snapshot::{BufferInfo, CursorPosition, DirtyState, EditorSnapshot};
+pub use snapshot::{BufferInfo, CursorPosition, DirtyState, EditorSnapshot, TextViewSnapshot};
 
 #[cfg(test)]
 mod spike_tests {

@@ -190,7 +190,7 @@ Movement, editing, activation, and resize handling update viewport state. Render
 
 Use a shared pure layout calculation when cursor-following needs the editor area before rendering: update derives the area from terminal size and layout state, while Ratatui rendering uses the same calculation. Avoid mutating `View.area` or scroll offsets as a hidden side effect of `Widget::render`.
 
-Effects may execute synchronously when sufficient; saves use owned asynchronous tasks. File-picker scans, fuzzy filtering, and capped previews use revisioned blocking requests on Tokio's blocking pool. The completion-message boundary keeps I/O out of state transition logic and keeps terminal input responsive. See [Filesystem work and the file picker](filesystem.md) for the data flow and future mutation rules.
+Effects may execute synchronously when sufficient; saves use owned asynchronous tasks. File-picker scans, fuzzy filtering, and read-only document/view previews use revisioned blocking requests on Tokio's blocking pool. The completion-message boundary keeps I/O out of state transition logic and keeps terminal input responsive. See [Filesystem work and the file picker](filesystem.md) for the data flow and future mutation rules.
 
 ## 6. Auto-save policy
 

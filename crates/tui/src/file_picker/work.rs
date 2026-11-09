@@ -1,9 +1,9 @@
 use std::{
-    fs::File,
-    io::Read,
     path::{Path, PathBuf},
     sync::Arc,
 };
+
+use editor::{DocumentFactory, OpenDocumentError, preview_document};
 
 use ignore::WalkBuilder;
 use nucleo_matcher::{
@@ -14,7 +14,8 @@ use nucleo_matcher::{
 use super::{FileEntry, PreviewState, ScanDepth};
 use crate::{data_object::Message, filesystem::is_built_in_ignored};
 
-const PREVIEW_BYTE_LIMIT: u64 = 64 * 1024;
+const PREVIEW_VIEWPORT_WIDTH: u16 = 80;
+const PREVIEW_VIEWPORT_HEIGHT: u16 = 22;
 
 /// Blocking filesystem/matching work executed outside the terminal event loop.
 pub enum FilePickerRequest {
@@ -29,6 +30,7 @@ pub enum FilePickerRequest {
         revision: u64,
     },
     Preview {
+        documents: DocumentFactory,
         path: PathBuf,
         revision: u64,
     },
@@ -53,9 +55,13 @@ impl FilePickerRequest {
                 revision,
                 results: filter_files(&files, &query),
             },
-            Self::Preview { path, revision } => Message::FilePreviewFinished {
+            Self::Preview {
+                documents,
+                path,
                 revision,
-                preview: read_preview(&path),
+            } => Message::FilePreviewFinished {
+                revision,
+                preview: read_preview(&documents, &path),
             },
         }
     }
@@ -119,31 +125,18 @@ fn filter_files(files: &[FileEntry], query: &str) -> Vec<FileEntry> {
         .collect::<Vec<_>>()
 }
 
-fn read_preview(path: &Path) -> PreviewState {
-    match std::fs::symlink_metadata(path) {
-        Ok(metadata) if !metadata.file_type().is_file() => {
-            return PreviewState::Unavailable("Not a text file".to_string());
+fn read_preview(documents: &DocumentFactory, path: &Path) -> PreviewState {
+    match preview_document(
+        documents,
+        path,
+        PREVIEW_VIEWPORT_WIDTH,
+        PREVIEW_VIEWPORT_HEIGHT,
+    ) {
+        Ok(snapshot) => PreviewState::Text(snapshot),
+        Err(OpenDocumentError::NotTextFile) => {
+            PreviewState::Unavailable("Not a text file".to_string())
         }
-        Ok(_) => {}
-        Err(error) => {
-            return PreviewState::Unavailable(format!("Preview unavailable: {error}"));
-        }
-    }
-
-    let mut bytes = Vec::new();
-    let result =
-        File::open(path).and_then(|file| file.take(PREVIEW_BYTE_LIMIT).read_to_end(&mut bytes));
-    if let Err(error) = result {
-        return PreviewState::Unavailable(format!("Preview unavailable: {error}"));
-    }
-    if bytes.contains(&0) {
-        return PreviewState::Unavailable("Binary file".to_string());
-    }
-    match String::from_utf8(bytes) {
-        Ok(text) => {
-            PreviewState::Text(text.lines().map(ToOwned::to_owned).collect::<Vec<String>>())
-        }
-        Err(_) => PreviewState::Unavailable("Preview requires UTF-8 text".to_string()),
+        Err(error) => PreviewState::Unavailable(format!("Preview unavailable: {error}")),
     }
 }
 
@@ -221,17 +214,20 @@ mod tests {
         std::fs::write(&text, "first\nsecond").unwrap();
         std::fs::write(&binary, [0_u8, 1, 2]).unwrap();
         std::os::unix::fs::symlink(&text, &link).unwrap();
+        let documents = DocumentFactory::new();
 
+        let PreviewState::Text(snapshot) = read_preview(&documents, &text) else {
+            panic!("text file should produce a view snapshot");
+        };
+        assert_eq!(snapshot.first_line, 0);
+        assert_eq!(snapshot.line_count, 2);
+        assert_eq!(snapshot.lines, ["first", "second"]);
         assert_eq!(
-            read_preview(&text),
-            PreviewState::Text(vec!["first".to_string(), "second".to_string()])
+            read_preview(&documents, &binary),
+            PreviewState::Unavailable("Not a text file".to_string())
         );
         assert_eq!(
-            read_preview(&binary),
-            PreviewState::Unavailable("Binary file".to_string())
-        );
-        assert_eq!(
-            read_preview(&link),
+            read_preview(&documents, &link),
             PreviewState::Unavailable("Not a text file".to_string())
         );
     }

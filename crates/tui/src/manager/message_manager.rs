@@ -100,7 +100,7 @@ impl MessageManager {
             Message::ToggleFileExplorer => {
                 Self::toggle_file_explorer(model);
             }
-            Message::OpenFilePicker => return Self::open_file_picker(model),
+            Message::OpenFilePicker => return self.open_file_picker(model),
             Message::FilePickerInsert(character) => {
                 let Some(workspace) = &model.workspace else {
                     return None;
@@ -121,10 +121,16 @@ impl MessageManager {
             }
             Message::CloseFilePicker => Self::close_file_picker(model),
             Message::FilePickerNext => {
-                return model.file_picker.select_next().map(Effect::FilePicker);
+                return model
+                    .file_picker
+                    .select_next(&self.documents)
+                    .map(Effect::FilePicker);
             }
             Message::FilePickerPrevious => {
-                return model.file_picker.select_previous().map(Effect::FilePicker);
+                return model
+                    .file_picker
+                    .select_previous(&self.documents)
+                    .map(Effect::FilePicker);
             }
             Message::OpenPickerFile => self.open_picker_file(model),
             Message::FileScanFinished { revision, result } => {
@@ -139,7 +145,7 @@ impl MessageManager {
             Message::FileFilterFinished { revision, results } => {
                 return model
                     .file_picker
-                    .complete_filter(revision, results)
+                    .complete_filter(&self.documents, revision, results)
                     .map(Effect::FilePicker);
             }
             Message::FilePreviewFinished { revision, preview } => {
@@ -307,7 +313,7 @@ impl MessageManager {
         }
     }
 
-    fn open_file_picker(model: &mut Model) -> Option<Effect> {
+    fn open_file_picker(&self, model: &mut Model) -> Option<Effect> {
         let Some(workspace) = &model.workspace else {
             model.status = Some(StatusMessage::info("No folder open"));
             return None;
@@ -317,7 +323,10 @@ impl MessageManager {
             model.context_stack.push(Context::FilePicker);
         }
         model.current_focus = FocusTarget::FilePicker;
-        model.file_picker.open(&root).map(Effect::FilePicker)
+        model
+            .file_picker
+            .open(&root, &self.documents)
+            .map(Effect::FilePicker)
     }
 
     fn close_file_picker(model: &mut Model) {
@@ -492,7 +501,7 @@ impl MessageManager {
 
 #[cfg(test)]
 mod tests {
-    use editor::{CursorMovement, EditMode, SaveRequest};
+    use editor::{CursorMovement, EditMode, SaveRequest, TextViewSnapshot};
 
     use super::*;
     use crate::{
@@ -548,18 +557,18 @@ mod tests {
         manager.update(&mut model, Message::MoveCursor(CursorMovement::Right));
         manager.update(&mut model, Message::EnterInsertMode);
         manager.update(&mut model, Message::InsertChar('b'));
-        assert_eq!(model.editor.active_snapshot().unwrap().lines[0], "ab");
+        assert_eq!(model.editor.active_snapshot().unwrap().text.lines[0], "ab");
 
         manager.update(&mut model, Message::Backspace);
-        assert_eq!(model.editor.active_snapshot().unwrap().lines[0], "a");
+        assert_eq!(model.editor.active_snapshot().unwrap().text.lines[0], "a");
         manager.update(&mut model, Message::InsertChar('c'));
         manager.update(&mut model, Message::ExitInsertMode);
-        assert_eq!(model.editor.active_snapshot().unwrap().lines[0], "ac");
+        assert_eq!(model.editor.active_snapshot().unwrap().text.lines[0], "ac");
 
         manager.update(&mut model, Message::Undo);
-        assert_eq!(model.editor.active_snapshot().unwrap().lines[0], "a");
+        assert_eq!(model.editor.active_snapshot().unwrap().text.lines[0], "a");
         manager.update(&mut model, Message::Redo);
-        assert_eq!(model.editor.active_snapshot().unwrap().lines[0], "ac");
+        assert_eq!(model.editor.active_snapshot().unwrap().text.lines[0], "ac");
     }
 
     #[tokio::test]
@@ -751,7 +760,12 @@ mod tests {
         assert_eq!(model.file_picker.results.len(), 1);
         assert_eq!(
             model.file_picker.preview,
-            PreviewState::Text(vec!["fn main() {}".to_string()])
+            PreviewState::Text(TextViewSnapshot {
+                first_line: 0,
+                line_count: 1,
+                lines: vec!["fn main() {}".to_string()],
+                horizontal_offset: 0,
+            })
         );
 
         manager.update(&mut model, Message::OpenPickerFile);
@@ -767,7 +781,7 @@ mod tests {
             ExpansionState::Expanded
         );
         assert_eq!(
-            model.editor.active_snapshot().unwrap().lines[0],
+            model.editor.active_snapshot().unwrap().text.lines[0],
             "fn main() {}"
         );
     }
@@ -817,7 +831,7 @@ mod tests {
         assert_eq!(model.current_focus, FocusTarget::Editor);
         assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
         let snapshot = model.editor.active_snapshot().unwrap();
-        assert_eq!(snapshot.lines[0], "b");
+        assert_eq!(snapshot.text.lines[0], "b");
         assert_eq!(
             std::path::Path::new(&snapshot.display_name)
                 .file_name()

@@ -21,7 +21,7 @@ use thiserror::Error;
 
 use crate::{
     save::{SaveCompletion, SaveError, SaveRequest},
-    snapshot::{BufferInfo, CursorPosition, DirtyState, EditorSnapshot},
+    snapshot::{BufferInfo, CursorPosition, DirtyState, EditorSnapshot, text_view_snapshot},
 };
 
 type MoveFn = fn(
@@ -255,21 +255,7 @@ impl EditorSession {
         let active = self.active_view.as_ref()?;
         let document = &self.buffers.get(&active.buffer)?.document;
         let view = &active.view;
-        let offset = document.view_offset(view.id);
-        let first_line = document
-            .text()
-            .char_to_line(offset.anchor.min(document.text().len_chars()));
-        let end_line = (first_line + view.inner_height()).min(document.text().len_lines());
-        let lines = (first_line..end_line)
-            .map(|line| {
-                document
-                    .text()
-                    .line(line)
-                    .to_string()
-                    .trim_end_matches(['\r', '\n'])
-                    .to_owned()
-            })
-            .collect();
+        let text = text_view_snapshot(document, view);
         let cursor = document
             .selection(view.id)
             .primary()
@@ -287,10 +273,7 @@ impl EditorSession {
             buffers: self.buffer_infos(),
             mode: self.mode,
             modified: DirtyState::from(document.is_modified()),
-            first_line,
-            line_count: document.text().len_lines(),
-            lines,
-            horizontal_offset: offset.horizontal_offset,
+            text,
             cursor,
         })
     }
@@ -823,7 +806,7 @@ mod tests {
         create_buffer(&mut session, "visible");
 
         let snapshot = session.active_snapshot().unwrap();
-        assert_eq!(snapshot.lines, ["visible"]);
+        assert_eq!(snapshot.text.lines, ["visible"]);
         assert!(snapshot.cursor.is_some());
     }
 
@@ -835,11 +818,11 @@ mod tests {
 
         let snapshot = session.active_snapshot().unwrap();
         assert_eq!(snapshot.buffer_id, id);
-        assert_eq!(snapshot.first_line, 0);
-        assert_eq!(snapshot.line_count, 3);
-        assert_eq!(snapshot.lines, ["zero", "one"]);
+        assert_eq!(snapshot.text.first_line, 0);
+        assert_eq!(snapshot.text.line_count, 3);
+        assert_eq!(snapshot.text.lines, ["zero", "one"]);
         assert_eq!(snapshot.cursor, Some(CursorPosition { row: 0, column: 0 }));
-        assert_eq!(snapshot.horizontal_offset, 0);
+        assert_eq!(snapshot.text.horizontal_offset, 0);
         assert_eq!(snapshot.mode, EditMode::Normal);
         assert_eq!(snapshot.modified, DirtyState::Clean);
     }
@@ -860,9 +843,9 @@ mod tests {
 
         let snapshot = session.active_snapshot().unwrap();
         let cursor = snapshot.cursor.unwrap();
-        assert_eq!(snapshot.lines.len(), 3);
-        assert!(snapshot.lines.contains(&"6".to_string()));
-        assert!(cursor.row < snapshot.lines.len());
+        assert_eq!(snapshot.text.lines.len(), 3);
+        assert!(snapshot.text.lines.contains(&"6".to_string()));
+        assert!(cursor.row < snapshot.text.lines.len());
     }
 
     #[tokio::test]

@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Block, Paragraph, Widget},
 };
 
-use super::popup::Popup;
+use super::{popup::Popup, text_view::TextView};
 use crate::file_picker::{FileCollectionState, FilePickerState, PreviewState};
 
 /// Two-pane file picker: query/results on the left and text preview on the right.
@@ -46,9 +46,13 @@ impl Widget for FilePickerContent<'_> {
             .block(Block::bordered().title("Search"))
             .render(input_area, buf);
         Paragraph::new(result_lines(self.state)).render(results_area, buf);
-        Paragraph::new(preview_lines(&self.state.preview))
-            .block(Block::bordered().title("Preview"))
-            .render(preview_area, buf);
+        let preview_block = Block::bordered().title("Preview");
+        let preview_inner = preview_block.inner(preview_area);
+        preview_block.render(preview_area, buf);
+        match &self.state.preview {
+            PreviewState::Text(snapshot) => TextView::new(snapshot).render(preview_inner, buf),
+            preview => Paragraph::new(preview_lines(preview)).render(preview_inner, buf),
+        }
     }
 }
 
@@ -81,7 +85,7 @@ fn preview_lines(preview: &PreviewState) -> Vec<Line<'static>> {
     match preview {
         PreviewState::Empty => vec![Line::from("No file selected")],
         PreviewState::Loading => vec![Line::from("Loading preview…")],
-        PreviewState::Text(lines) => lines.iter().cloned().map(Line::from).collect(),
+        PreviewState::Text(_) => Vec::new(),
         PreviewState::Unavailable(error) => vec![Line::from(error.clone())],
     }
 }
@@ -90,6 +94,7 @@ fn preview_lines(preview: &PreviewState) -> Vec<Line<'static>> {
 mod tests {
     use std::path::PathBuf;
 
+    use editor::TextViewSnapshot;
     use ratatui::{Terminal, backend::TestBackend};
 
     use super::*;
@@ -114,7 +119,12 @@ mod tests {
             display: "src/main.rs".to_string(),
         }];
         state.selected = Some(0);
-        state.preview = PreviewState::Text(vec!["fn main() {}".to_string()]);
+        state.preview = PreviewState::Text(TextViewSnapshot {
+            first_line: 0,
+            line_count: 1,
+            lines: vec!["fn main() {}".to_string()],
+            horizontal_offset: 0,
+        });
         let backend = TestBackend::new(60, 12);
         let mut terminal = Terminal::new(backend).unwrap();
 

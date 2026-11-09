@@ -40,7 +40,7 @@ spawn_blocking: Nucleo fuzzy matching and ranking
 update: select first result
    │ returns Preview { selected path, preview revision }
    ▼
-spawn_blocking: capped text read
+spawn_blocking: independent Document + View snapshot
    │ sends FilePreviewFinished { revision, preview }
    ▼
 update → render
@@ -55,6 +55,12 @@ Filter and preview revisions are independent. A late filter completion cannot ov
 Every application document open uses `DocumentFactory::open`. Existing targets must be regular, NUL-free UTF-8 text files. Directories, links, binary data, invalid UTF-8, and other file types return `not a text file` without changing buffers, picker state, or explorer state. A missing path remains valid for deliberate new-file startup behavior.
 
 `MessageManager::open_file` is the single application open path for explorer, picker, and future open commands. After Helix document construction succeeds, `EditorSession` supplies the canonical buffer path. The same update then asks `ExplorerState::reveal` to expand visible ancestors and select that exact file, even if the explorer is hidden. Reveal is transactional: outside-workspace, ignored, missing, and read-failure paths do not partially change expansion or selection. Only after reconciliation does the picker close and the editor receive focus.
+
+## Shared read-only view rendering
+
+`TextViewSnapshot` is the editor crate's common projection of a Helix `Document + View`: visible lines, first-line offset, total line count, and horizontal offset. `EditorSnapshot` wraps it with buffer/mode/dirty/cursor metadata for the real editor; previews use the smaller projection directly and do not fabricate editor metadata.
+
+`preview_document` constructs an independent document/view through the same `DocumentFactory`, then drops those Helix values after snapshotting. Preview documents never join `EditorSession`, buffer tabs, auto-save, or close/quit workflows and expose no editing API. The picker renders successful previews with the same TUI `TextView` used by `EditorBuffer`, so line numbers, scrolling, and future syntax/theme annotations have one presentation path. Grep and find-replace previews can reuse this path with match annotations and a different initial viewport offset.
 
 ## Fuzzy matching and ranking
 
@@ -72,7 +78,7 @@ The first implementation uses established crates and explicit effects instead of
 - Scanning, matching, and preview reads run on Tokio's blocking pool, not the terminal thread.
 - Top-level entries provide a fast initial response; recursive traversal is deferred until the first search.
 - Ready file entries persist across picker closes and are shared with filter jobs through `Arc`.
-- Preview reads are capped at 64 KiB and accept UTF-8 text without NUL bytes; binary and non-UTF-8 files show an unavailable message.
+- Preview documents are opened on the blocking pool through the shared `DocumentFactory`; their Helix views project only visible rows. Binary and non-UTF-8 files show an unavailable message.
 - Only selection changes trigger preview reads.
 
 Revision checks guarantee stale results are harmless, but they do not stop obsolete CPU or I/O work. If profiling on large repositories shows excessive queued work, introduce a dedicated picker worker that coalesces queued queries and supports cancellation. Do not add a complex scheduler before that need is measured. A future watcher or explicit refresh can keep the file cache current. A future recent-files command such as `Space f r` can reuse the same entries with recency metadata and ordering instead of introducing another scanner.

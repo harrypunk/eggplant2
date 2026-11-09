@@ -5,7 +5,7 @@ use ratatui::{
     widgets::{Paragraph, Widget},
 };
 
-use super::buffer_tabs::BufferTabs;
+use super::{buffer_tabs::BufferTabs, text_view::TextView};
 use crate::data_object::FocusState;
 
 #[derive(Debug)]
@@ -75,44 +75,13 @@ impl<'a> EditorBuffer<'a> {
 
     /// Text region shared by rendering, viewport sizing, and cursor placement.
     pub fn text_area(area: Rect, snapshot: &EditorSnapshot) -> Rect {
-        let [_, text] = Layout::horizontal([
-            Constraint::Length(Self::gutter_width(snapshot)),
-            Constraint::Fill(1),
-        ])
-        .flex(Flex::Start)
-        .areas(area);
-        text
-    }
-
-    fn gutter_width(snapshot: &EditorSnapshot) -> u16 {
-        let digits = snapshot.line_count.max(1).to_string().len();
-        u16::try_from(digits + 1).unwrap_or(u16::MAX)
+        TextView::text_area(area, &snapshot.text)
     }
 }
 
 impl Widget for EditorBuffer<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let [gutter_area, text_area] = Layout::horizontal([
-            Constraint::Length(Self::gutter_width(self.snapshot)),
-            Constraint::Fill(1),
-        ])
-        .flex(Flex::Start)
-        .areas(area);
-        let horizontal_offset = u16::try_from(self.snapshot.horizontal_offset).unwrap_or(u16::MAX);
-        let number_width = usize::from(Self::gutter_width(self.snapshot)).saturating_sub(1);
-        let line_numbers = self
-            .snapshot
-            .lines
-            .iter()
-            .enumerate()
-            .map(|(index, _)| format!("{:>number_width$} ", self.snapshot.first_line + index + 1))
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        Paragraph::new(line_numbers).render(gutter_area, buf);
-        Paragraph::new(self.snapshot.lines.join("\n"))
-            .scroll((0, horizontal_offset))
-            .render(text_area, buf);
+        TextView::new(&self.snapshot.text).render(area, buf);
     }
 }
 
@@ -151,8 +120,8 @@ mod tests {
         create_buffer(&mut session, "eight\nnine");
         session.resize_active_view(10, 3);
         let mut snapshot = session.active_snapshot().unwrap();
-        snapshot.first_line = 8;
-        snapshot.line_count = 12;
+        snapshot.text.first_line = 8;
+        snapshot.text.line_count = 12;
         let backend = TestBackend::new(10, 2);
         let mut terminal = Terminal::new(backend).unwrap();
 
@@ -170,8 +139,8 @@ mod tests {
         let mut session = EditorSession::new();
         create_buffer(&mut session, "abcdef");
         let mut snapshot = session.active_snapshot().unwrap();
-        snapshot.lines = vec!["abcdef".to_string()];
-        snapshot.horizontal_offset = 2;
+        snapshot.text.lines = vec!["abcdef".to_string()];
+        snapshot.text.horizontal_offset = 2;
         let backend = TestBackend::new(4, 1);
         let mut terminal = Terminal::new(backend).unwrap();
 
