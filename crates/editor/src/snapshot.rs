@@ -1,3 +1,5 @@
+use std::ops::Range;
+
 use helix_core::syntax::{Highlight, HighlightEvent};
 use helix_view::{Document, View};
 
@@ -92,6 +94,15 @@ impl LineSnapshot {
         Self {
             text,
             highlights: Vec::new(),
+        }
+    }
+
+    fn push_highlight(&mut self, span: HighlightSpan) {
+        match self.highlights.last_mut() {
+            Some(last) if last.kind == span.kind && last.end_byte == span.start_byte => {
+                last.end_byte = span.end_byte;
+            }
+            _ => self.highlights.push(span),
         }
     }
 }
@@ -197,26 +208,34 @@ fn highlighted_lines(
     );
     let mut active = active_kinds(highlighter.active_highlights(), &scopes);
     let mut previous = range_start;
-
-    loop {
+    let intervals = std::iter::from_fn(|| {
+        if previous >= range_end {
+            return None;
+        }
         let next = match highlighter.next_event_offset() {
             u32::MAX => range_end,
             offset => (offset as usize).min(range_end).max(previous),
         };
-        if let Some(kind) = active.last().copied() {
-            append_highlight(&mut lines, first_line, text, previous, next, kind);
-        }
-        if next >= range_end {
-            break;
-        }
+        let interval = previous..next;
+        let kind = active.last().copied();
 
-        let (event, highlights) = highlighter.advance();
-        match event {
-            HighlightEvent::Refresh => active = active_kinds(highlights, &scopes),
-            HighlightEvent::Push => active.extend(active_kinds(highlights, &scopes)),
+        if next < range_end {
+            let (event, highlights) = highlighter.advance();
+            match event {
+                HighlightEvent::Refresh => active = active_kinds(highlights, &scopes),
+                HighlightEvent::Push => active.extend(active_kinds(highlights, &scopes)),
+            }
         }
         previous = next;
-    }
+        Some((interval, kind))
+    });
+
+    intervals
+        .filter_map(|(range, kind)| kind.map(|kind| (range, kind)))
+        .filter(|(range, _)| !range.is_empty())
+        .for_each(|(range, kind)| {
+            append_highlight(&mut lines, first_line, text, range, kind);
+        });
     lines
 }
 
@@ -237,32 +256,29 @@ fn append_highlight(
     lines: &mut [LineSnapshot],
     first_line: usize,
     text: &helix_core::Rope,
-    start: usize,
-    end: usize,
+    range: Range<usize>,
     kind: HighlightKind,
 ) {
-    for (index, line) in lines.iter_mut().enumerate() {
+    lines.iter_mut().enumerate().for_each(|(index, line)| {
         let line_start = text.line_to_byte(first_line + index);
         let line_end = line_start + line.text.len();
-        let span_start = start.max(line_start);
-        let span_end = end.min(line_end);
-        if span_start >= span_end {
-            continue;
-        }
+        clip_highlight(range.clone(), line_start, line_end, kind)
+            .into_iter()
+            .for_each(|span| line.push_highlight(span));
+    });
+}
 
-        let start_byte = span_start - line_start;
-        let end_byte = span_end - line_start;
-        if let Some(last) = line.highlights.last_mut()
-            && last.kind == kind
-            && last.end_byte == start_byte
-        {
-            last.end_byte = end_byte;
-            continue;
-        }
-        line.highlights.push(HighlightSpan {
-            start_byte,
-            end_byte,
-            kind,
-        });
-    }
+fn clip_highlight(
+    range: Range<usize>,
+    line_start: usize,
+    line_end: usize,
+    kind: HighlightKind,
+) -> Option<HighlightSpan> {
+    let start = range.start.max(line_start);
+    let end = range.end.min(line_end);
+    (start < end).then_some(HighlightSpan {
+        start_byte: start - line_start,
+        end_byte: end - line_start,
+        kind,
+    })
 }
