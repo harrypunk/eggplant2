@@ -271,7 +271,7 @@ fn clip_highlight(
 ) -> Option<HighlightSpan> {
     let start = range.start.max(line_start);
     let end = range.end.min(line_end);
-    (start < end).then_some(HighlightSpan {
+    (start < end).then(|| HighlightSpan {
         start_byte: start - line_start,
         end_byte: end - line_start,
         kind,
@@ -297,5 +297,19 @@ mod tests {
             Some(HighlightKind::Keyword)
         );
         assert_eq!(HighlightKind::from_scope("punctuation"), None);
+    }
+
+    #[test]
+    fn ignores_spans_outside_a_line_without_subtracting_offsets() {
+        assert_eq!(clip_highlight(0..0, 10, 20, HighlightKind::Keyword), None);
+        assert_eq!(clip_highlight(30..40, 10, 20, HighlightKind::Keyword), None);
+        assert_eq!(
+            clip_highlight(5..15, 10, 20, HighlightKind::Keyword),
+            Some(HighlightSpan {
+                start_byte: 0,
+                end_byte: 5,
+                kind: HighlightKind::Keyword,
+            })
+        );
     }
 }
