@@ -1,11 +1,16 @@
+use editor::EditorSnapshot;
 use ratatui::{
     Frame,
     layout::{Constraint, Flex, Layout, Rect, Size},
 };
 
 use crate::component::{
-    editor::Editor as EditorComponent, file_explorer::FileExplorer, file_picker::FilePicker,
-    key_hints::KeyHints, status_bar::StatusBar, tools_panel::ToolsPanel,
+    editor::{Editor as EditorComponent, EditorBuffer},
+    file_explorer::FileExplorer,
+    file_picker::FilePicker,
+    key_hints::KeyHints,
+    status_bar::StatusBar,
+    tools_panel::ToolsPanel,
 };
 use crate::data_object::{FocusState, FocusTarget, Model, Visibility};
 
@@ -163,8 +168,17 @@ fn file_picker_area(area: Rect) -> Rect {
 }
 
 /// The text area used both for Helix viewport sizing and terminal cursor placement.
-pub fn editor_content_area(area: Rect, explorer: Visibility, tools: Visibility) -> Rect {
-    EditorComponent::content_area(layout_areas(area, explorer, tools).editor)
+pub fn editor_content_area(
+    area: Rect,
+    explorer: Visibility,
+    tools: Visibility,
+    snapshot: Option<&EditorSnapshot>,
+) -> Rect {
+    let content = EditorComponent::content_area(layout_areas(area, explorer, tools).editor);
+    match snapshot {
+        Some(snapshot) => EditorBuffer::text_area(content, snapshot),
+        None => content,
+    }
 }
 
 #[cfg(test)]
@@ -184,6 +198,7 @@ mod tests {
             Rect::new(0, 0, 100, 10),
             Visibility::Displayed,
             Visibility::Hidden,
+            model.editor.active_snapshot().as_ref(),
         );
         model
             .editor
@@ -192,7 +207,7 @@ mod tests {
 
         terminal.draw(|frame| page.view(&model, frame)).unwrap();
         assert!(terminal.backend().cursor_visible());
-        terminal.backend_mut().assert_cursor_position((28, 1));
+        terminal.backend_mut().assert_cursor_position((30, 1));
 
         model.current_focus = FocusTarget::FileExplorer;
         terminal.draw(|frame| page.view(&model, frame)).unwrap();

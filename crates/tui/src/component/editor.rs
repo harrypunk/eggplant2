@@ -33,8 +33,9 @@ impl Editor {
             FocusState::Focused => {}
         }
 
-        let cursor = self.snapshot.as_ref()?.cursor?;
-        let content = Self::content_area(area);
+        let snapshot = self.snapshot.as_ref()?;
+        let cursor = snapshot.cursor?;
+        let content = EditorBuffer::text_area(Self::content_area(area), snapshot);
         let column = u16::try_from(cursor.column).unwrap_or(u16::MAX);
         let row = u16::try_from(cursor.row).unwrap_or(u16::MAX);
         Some(Position::new(
@@ -71,14 +72,47 @@ impl<'a> EditorBuffer<'a> {
     pub fn new(snapshot: &'a EditorSnapshot) -> Self {
         Self { snapshot }
     }
+
+    /// Text region shared by rendering, viewport sizing, and cursor placement.
+    pub fn text_area(area: Rect, snapshot: &EditorSnapshot) -> Rect {
+        let [_, text] = Layout::horizontal([
+            Constraint::Length(Self::gutter_width(snapshot)),
+            Constraint::Fill(1),
+        ])
+        .flex(Flex::Start)
+        .areas(area);
+        text
+    }
+
+    fn gutter_width(snapshot: &EditorSnapshot) -> u16 {
+        let digits = snapshot.line_count.max(1).to_string().len();
+        u16::try_from(digits + 1).unwrap_or(u16::MAX)
+    }
 }
 
 impl Widget for EditorBuffer<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
+        let [gutter_area, text_area] = Layout::horizontal([
+            Constraint::Length(Self::gutter_width(self.snapshot)),
+            Constraint::Fill(1),
+        ])
+        .flex(Flex::Start)
+        .areas(area);
         let horizontal_offset = u16::try_from(self.snapshot.horizontal_offset).unwrap_or(u16::MAX);
+        let number_width = usize::from(Self::gutter_width(self.snapshot)).saturating_sub(1);
+        let line_numbers = self
+            .snapshot
+            .lines
+            .iter()
+            .enumerate()
+            .map(|(index, _)| format!("{:>number_width$} ", self.snapshot.first_line + index + 1))
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        Paragraph::new(line_numbers).render(gutter_area, buf);
         Paragraph::new(self.snapshot.lines.join("\n"))
             .scroll((0, horizontal_offset))
-            .render(area, buf);
+            .render(text_area, buf);
     }
 }
 
@@ -108,7 +142,27 @@ mod tests {
 
         terminal
             .backend()
-            .assert_buffer_lines(["zero      ", "one       "]);
+            .assert_buffer_lines(["1 zero    ", "2 one     "]);
+    }
+
+    #[test]
+    fn numbers_scrolled_lines_and_sizes_the_gutter_from_the_document() {
+        let mut session = EditorSession::new();
+        create_buffer(&mut session, "eight\nnine");
+        session.resize_active_view(10, 3);
+        let mut snapshot = session.active_snapshot().unwrap();
+        snapshot.first_line = 8;
+        snapshot.line_count = 12;
+        let backend = TestBackend::new(10, 2);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal
+            .draw(|frame| frame.render_widget(EditorBuffer::new(&snapshot), frame.area()))
+            .unwrap();
+
+        terminal
+            .backend()
+            .assert_buffer_lines([" 9 eight  ", "10 nine   "]);
     }
 
     #[test]
@@ -125,7 +179,7 @@ mod tests {
             .draw(|frame| frame.render_widget(EditorBuffer::new(&snapshot), frame.area()))
             .unwrap();
 
-        terminal.backend().assert_buffer_lines(["cdef"]);
+        terminal.backend().assert_buffer_lines(["1 cd"]);
     }
 
     #[test]

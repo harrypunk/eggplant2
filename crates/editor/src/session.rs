@@ -287,6 +287,8 @@ impl EditorSession {
             buffers: self.buffer_infos(),
             mode: self.mode,
             modified: DirtyState::from(document.is_modified()),
+            first_line,
+            line_count: document.text().len_lines(),
             lines,
             horizontal_offset: offset.horizontal_offset,
             cursor,
@@ -833,6 +835,8 @@ mod tests {
 
         let snapshot = session.active_snapshot().unwrap();
         assert_eq!(snapshot.buffer_id, id);
+        assert_eq!(snapshot.first_line, 0);
+        assert_eq!(snapshot.line_count, 3);
         assert_eq!(snapshot.lines, ["zero", "one"]);
         assert_eq!(snapshot.cursor, Some(CursorPosition { row: 0, column: 0 }));
         assert_eq!(snapshot.horizontal_offset, 0);

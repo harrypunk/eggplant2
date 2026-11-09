@@ -10,7 +10,9 @@ Root: vertical Flex
 │   ├── file explorer: displayed/hidden
 │   ├── editor: vertical Flex
 │   │   ├── buffer tabs
-│   │   └── editing area
+│   │   └── editing area: horizontal Flex
+│   │       ├── line-number gutter
+│   │       └── document text
 │   └── tools: displayed/hidden
 └── status bar
 
@@ -26,7 +28,7 @@ Overlay layer:
 | --- | --- |
 | Root | `main = Fill(1)`, `status = Length(1)` |
 | Main | `file explorer = Length(28)` when displayed, `editor = Fill(1)`, `tools = Length(32)` when displayed |
-| Editor | `buffer tabs = Length(1)`, `editing area = Fill(1)` |
+| Editor | `buffer tabs = Length(1)`, `editing area = Fill(1)`; line-number gutter = document digits + one space, text = `Fill(1)` |
 | Key-hints overlay | Bottom-right of `main`; content-sized vertical list with borders, above the status bar |
 | File-picker overlay | Centered in `main`, maximum 120×24; left query/results and right preview in equal columns |
 
@@ -41,7 +43,7 @@ All layout groups use `Flex::Start`. Hidden nodes remain in the layout tree and 
 - `Popup` is a reusable visual container: it clears the background, draws the border/title, and renders any `Widget` in the inner area. Pages own placement; input contexts own modality.
 - `KeyHints` owns list presentation and intrinsic size; the page owns bottom-right popup placement.
 - `FilePicker` composes the query, ranked result list, and preview inside `Popup`; it never performs filesystem I/O during rendering.
-- `Editor::content_area` is the shared text-area calculation for viewport sizing and cursor coordinates.
+- `Editor::content_area` excludes tabs, and `EditorBuffer::text_area` excludes the line-number gutter. Together they are the shared text calculation for viewport sizing and cursor coordinates.
 - Add future panels as explicit layout regions rather than embedding them inside unrelated components.
 - Keep layout calculations in shared Flex layouts so changes do not require hard-coded offsets.
 - Update this file and layout tests whenever the hierarchy or constraints change.

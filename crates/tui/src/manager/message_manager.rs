@@ -151,6 +151,7 @@ impl MessageManager {
                     Rect::new(0, 0, width, height),
                     model.explorer_visibility,
                     model.tools.visibility,
+                    model.editor.active_snapshot().as_ref(),
                 );
                 model.editor.resize_active_view(area.width, area.height);
             }

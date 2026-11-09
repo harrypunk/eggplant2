@@ -37,6 +37,7 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
   - Insert-session history grouping, undo, and redo.
 - [x] Read-only `EditorSnapshot` for rendering without exposing Helix internals.
 - [x] Ratatui buffer rendering, visible-line limits, horizontal scrolling, and empty state.
+- [x] Absolute line numbers with document-width gutters and aligned viewport/cursor calculations.
 - [x] TUI model integration and input-driven editing messages.
 - [x] Initial/terminal resize propagation and focus-aware cursor placement.
 - [x] Optional startup file/folder path with pre-terminal initialization and startup tests.

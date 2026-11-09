@@ -41,6 +41,10 @@ pub struct EditorSnapshot {
     pub buffers: Vec<BufferInfo>,
     pub mode: EditMode,
     pub modified: DirtyState,
+    /// Zero-based index of the first visible line in the full document.
+    pub first_line: usize,
+    /// Total logical line count, used for line-number gutter sizing.
+    pub line_count: usize,
     pub lines: Vec<String>,
     pub horizontal_offset: usize,
     pub cursor: Option<CursorPosition>,
