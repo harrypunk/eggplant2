@@ -30,7 +30,7 @@ Overlay layer:
 | Main | `file explorer = Length(28)` when displayed, `editor = Fill(1)`, `tools = Length(32)` when displayed |
 | Editor | `buffer tabs = Length(1)`, `editing area = Fill(1)`; line-number gutter = document digits + one space, text = `Fill(1)` |
 | Key-hints overlay | Bottom-right of `main`; content-sized vertical list with borders, above the status bar |
-| File-picker overlay | Centered in `main`, maximum 120×24; left query/results and right preview in equal columns |
+| File-picker overlay | Centered in `main`, maximum 160×36; left query/results and right preview in equal columns |
 
 All layout groups use `Flex::Start`. Hidden nodes remain in the layout tree and use zero width, so they do not reduce the editor's fill area.
 

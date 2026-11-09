@@ -148,8 +148,8 @@ fn key_hints_area(area: Rect, size: Size) -> Rect {
 }
 
 fn file_picker_area(area: Rect) -> Rect {
-    let width = area.width.saturating_sub(2).min(120);
-    let height = area.height.saturating_sub(2).min(24);
+    let width = area.width.saturating_sub(2).min(160);
+    let height = area.height.saturating_sub(2).min(36);
     let [_, popup_band, _] = Layout::vertical([
         Constraint::Fill(1),
         Constraint::Length(height),
@@ -271,14 +271,17 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
         assert!(content.contains("Files"));
-        assert!(content.contains("Search"));
-        assert!(content.contains("Preview"));
+        assert!(!content.contains("Search"));
+        assert!(!content.contains("Preview"));
         assert!(!terminal.backend().cursor_visible());
         let area = file_picker_area(Rect::new(0, 0, 100, 9));
         assert_eq!(area.width, 98);
         assert_eq!(area.height, 7);
         assert_eq!(area.x, 1);
         assert_eq!(area.y, 1);
+        let large = file_picker_area(Rect::new(0, 0, 200, 50));
+        assert_eq!(large.width, 160);
+        assert_eq!(large.height, 36);
     }
 
     #[test]

@@ -43,10 +43,10 @@ impl Widget for FilePickerContent<'_> {
                 .areas(left);
 
         Paragraph::new(self.state.query.as_str())
-            .block(Block::bordered().title("Search"))
+            .block(Block::bordered())
             .render(input_area, buf);
         Paragraph::new(result_lines(self.state)).render(results_area, buf);
-        let preview_block = Block::bordered().title("Preview");
+        let preview_block = Block::bordered();
         let preview_inner = preview_block.inner(preview_area);
         preview_block.render(preview_area, buf);
         match &self.state.preview {
@@ -140,10 +140,10 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
         assert!(content.contains("Files"));
-        assert!(content.contains("Search"));
+        assert!(!content.contains("Search"));
         assert!(content.contains("main"));
         assert!(content.contains("src/main.rs"));
-        assert!(content.contains("Preview"));
+        assert!(!content.contains("Preview"));
         assert!(content.contains("fn main() {}"));
     }
 }
