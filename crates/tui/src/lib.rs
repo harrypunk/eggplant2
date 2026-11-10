@@ -6,6 +6,7 @@ pub mod file_picker;
 mod filesystem;
 pub mod manager;
 pub mod page;
+pub mod runtime;
 pub mod startup;
 pub mod terminal;
 pub mod theme;
