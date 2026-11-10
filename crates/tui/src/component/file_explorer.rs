@@ -1,7 +1,6 @@
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    style::{Modifier, Style},
     text::Line,
     widgets::{Block, BorderType, Paragraph, Widget},
 };
@@ -9,6 +8,7 @@ use ratatui::{
 use crate::{
     data_object::{FocusState, Workspace},
     explorer::{ExpansionState, ExplorerEntry, ExplorerEntryKind, ExplorerState},
+    theme::UiTheme,
 };
 
 #[derive(Debug)]
@@ -16,6 +16,7 @@ pub struct FileExplorer<'a> {
     workspace: Option<&'a Workspace>,
     explorer: &'a ExplorerState,
     focus: FocusState,
+    styles: &'a UiTheme,
 }
 
 impl<'a> FileExplorer<'a> {
@@ -23,11 +24,13 @@ impl<'a> FileExplorer<'a> {
         workspace: Option<&'a Workspace>,
         explorer: &'a ExplorerState,
         focus: FocusState,
+        styles: &'a UiTheme,
     ) -> Self {
         Self {
             workspace,
             explorer,
             focus,
+            styles,
         }
     }
 }
@@ -65,11 +68,13 @@ impl FileExplorer<'_> {
             .entries
             .iter()
             .enumerate()
-            .map(|(index, entry)| Self::entry_line(self.explorer.selected == Some(index), entry))
+            .map(|(index, entry)| {
+                Self::entry_line(self.explorer.selected == Some(index), entry, self.styles)
+            })
             .collect()
     }
 
-    fn entry_line(selected: bool, entry: &ExplorerEntry) -> Line<'static> {
+    fn entry_line(selected: bool, entry: &ExplorerEntry, styles: &UiTheme) -> Line<'static> {
         let marker = if selected { ">" } else { " " };
         let (directory_marker, suffix) = match entry.kind {
             ExplorerEntryKind::Directory if entry.expansion == ExpansionState::Expanded => {
@@ -84,10 +89,9 @@ impl FileExplorer<'_> {
             "{marker} {indentation}{directory_marker}{}{suffix}",
             entry.name.to_string_lossy()
         );
-        let style = if selected {
-            Style::new().add_modifier(Modifier::REVERSED)
-        } else {
-            Style::new()
+        let style = match selected {
+            true => styles.base.patch(styles.selection),
+            false => styles.base,
         };
         Line::styled(text, style)
     }
@@ -95,10 +99,17 @@ impl FileExplorer<'_> {
 
 impl Widget for FileExplorer<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
+        let border_style = match self.focus {
+            FocusState::Focused => self.styles.focused_border,
+            FocusState::Unfocused => self.styles.border,
+        };
         let block = Block::bordered()
             .border_type(self.border_type())
+            .border_style(self.styles.base.patch(border_style))
+            .style(self.styles.base)
             .title(self.title());
         Paragraph::new(self.content_lines())
+            .style(self.styles.base)
             .block(block)
             .render(area, buf);
     }
@@ -111,16 +122,24 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend};
 
     use super::*;
+    use crate::theme::Theme;
 
     #[test]
     fn title_uses_only_the_workspace_folder_name() {
         let workspace = Workspace::new(PathBuf::from("/tmp/project"));
         let explorer = ExplorerState::default();
-        let component = FileExplorer::new(Some(&workspace), &explorer, FocusState::Unfocused);
+        let theme = Theme::default();
+        let component = FileExplorer::new(
+            Some(&workspace),
+            &explorer,
+            FocusState::Unfocused,
+            theme.ui(),
+        );
         assert_eq!(component.title(), "project");
 
         let root = Workspace::new(PathBuf::from("/"));
-        let component = FileExplorer::new(Some(&root), &explorer, FocusState::Unfocused);
+        let component =
+            FileExplorer::new(Some(&root), &explorer, FocusState::Unfocused, theme.ui());
         assert_eq!(component.title(), "/");
     }
 
@@ -137,13 +156,14 @@ mod tests {
         .unwrap();
         let mut explorer = ExplorerState::load(directory.path()).unwrap();
         let workspace = Workspace::new(directory.path().to_path_buf());
+        let theme = Theme::default();
         let backend = TestBackend::new(30, 5);
         let mut terminal = Terminal::new(backend).unwrap();
 
         terminal
             .draw(|frame| {
                 frame.render_widget(
-                    FileExplorer::new(Some(&workspace), &explorer, FocusState::Focused),
+                    FileExplorer::new(Some(&workspace), &explorer, FocusState::Focused, theme.ui()),
                     frame.area(),
                 );
             })
@@ -165,7 +185,7 @@ mod tests {
         terminal
             .draw(|frame| {
                 frame.render_widget(
-                    FileExplorer::new(Some(&workspace), &explorer, FocusState::Focused),
+                    FileExplorer::new(Some(&workspace), &explorer, FocusState::Focused, theme.ui()),
                     frame.area(),
                 );
             })

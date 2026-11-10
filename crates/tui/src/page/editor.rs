@@ -28,7 +28,7 @@ impl Editor {
         let editor = EditorComponent::new(
             snapshot,
             focus_for(model.current_focus, FocusTarget::Editor),
-            model.theme,
+            &model.theme,
         );
         let cursor = editor.cursor_position(areas.editor);
 
@@ -38,6 +38,7 @@ impl Editor {
                     model.workspace.as_ref(),
                     &model.explorer,
                     focus_for(model.current_focus, FocusTarget::FileExplorer),
+                    model.theme.ui(),
                 ),
                 area,
             );
@@ -48,18 +49,19 @@ impl Editor {
                 ToolsPanel::new(
                     model.tools.active_tool,
                     focus_for(model.current_focus, FocusTarget::ToolsPanel),
+                    model.theme.ui(),
                 ),
                 area,
             );
         });
         frame.render_widget(
-            StatusBar::new(model.editor.mode(), model.status.as_ref()),
+            StatusBar::new(model.editor.mode(), model.status.as_ref(), model.theme.ui()),
             areas.status,
         );
         match model.command_menu.items() {
             [] => {}
             _ => {
-                let hints = KeyHints::new(&model.command_menu);
+                let hints = KeyHints::new(&model.command_menu, model.theme.ui());
                 let area = key_hints_area(frame.area(), hints.size());
                 frame.render_widget(hints, area);
             }
@@ -67,7 +69,7 @@ impl Editor {
         match model.file_picker.visibility {
             Visibility::Displayed => {
                 let area = file_picker_area(areas.main);
-                frame.render_widget(FilePicker::new(&model.file_picker, model.theme), area);
+                frame.render_widget(FilePicker::new(&model.file_picker, &model.theme), area);
             }
             Visibility::Hidden => {}
         }
@@ -325,7 +327,7 @@ mod tests {
         assert!(content.contains("q quit"));
         assert!(!terminal.backend().cursor_visible());
 
-        let hints = KeyHints::new(&model.command_menu);
+        let hints = KeyHints::new(&model.command_menu, model.theme.ui());
         let area = key_hints_area(Rect::new(0, 0, 100, 10), hints.size());
         assert_eq!(area.x + area.width, 100);
         assert_eq!(area.y + area.height, 9);

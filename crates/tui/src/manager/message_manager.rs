@@ -523,7 +523,7 @@ impl MessageManager {
 
 #[cfg(test)]
 mod tests {
-    use editor::{CursorMovement, EditMode, HighlightKind, SaveRequest};
+    use editor::{CursorMovement, EditMode, SaveRequest};
 
     use super::*;
     use crate::{
@@ -800,10 +800,10 @@ mod tests {
         };
         assert_eq!(snapshot.lines[0].text, "fn main() {}");
         assert!(snapshot.lines[0].highlights.iter().any(|span| {
-            span.kind == HighlightKind::Keyword && span.start_byte == 0 && span.end_byte == 2
+            !span.highlights.is_empty() && span.start_byte == 0 && span.end_byte == 2
         }));
         assert!(snapshot.lines[0].highlights.iter().any(|span| {
-            span.kind == HighlightKind::Function && span.start_byte == 3 && span.end_byte == 7
+            !span.highlights.is_empty() && span.start_byte == 3 && span.end_byte == 7
         }));
 
         let effect = manager.update(&mut model, Message::OpenPickerFile);

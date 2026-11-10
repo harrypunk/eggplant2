@@ -113,7 +113,7 @@ pub mod data_object {
                 explorer_visibility: Visibility::Displayed,
                 current_focus: FocusTarget::Editor,
                 context_stack: Vec::new(),
-                theme: Theme,
+                theme: Theme::default(),
                 status: None,
                 opening_file: None,
                 deferred_action: None,

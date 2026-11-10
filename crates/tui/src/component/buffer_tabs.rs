@@ -2,19 +2,21 @@ use editor::{DirtyState, EditorSnapshot};
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    style::{Modifier, Style},
     widgets::{Tabs, Widget},
 };
+
+use crate::theme::UiTheme;
 
 /// Filename-only tabs for the buffers in an editor snapshot.
 #[derive(Debug, Clone, Copy)]
 pub struct BufferTabs<'a> {
     snapshot: &'a EditorSnapshot,
+    styles: &'a UiTheme,
 }
 
 impl<'a> BufferTabs<'a> {
-    pub fn new(snapshot: &'a EditorSnapshot) -> Self {
-        Self { snapshot }
+    pub fn new(snapshot: &'a EditorSnapshot, styles: &'a UiTheme) -> Self {
+        Self { snapshot, styles }
     }
 }
 
@@ -36,7 +38,8 @@ impl Widget for BufferTabs<'_> {
         Tabs::new(titles)
             .select(selected)
             .divider("|")
-            .highlight_style(Style::new().add_modifier(Modifier::REVERSED))
+            .style(self.styles.base)
+            .highlight_style(self.styles.base.patch(self.styles.selection))
             .render(area, buf);
     }
 }
@@ -47,6 +50,7 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend};
 
     use super::*;
+    use crate::theme::Theme;
 
     #[test]
     fn shows_file_names_with_dirty_marker() {
@@ -66,8 +70,9 @@ mod tests {
         let backend = TestBackend::new(50, 1);
         let mut terminal = Terminal::new(backend).unwrap();
 
+        let theme = Theme::default();
         terminal
-            .draw(|frame| frame.render_widget(BufferTabs::new(&snapshot), frame.area()))
+            .draw(|frame| frame.render_widget(BufferTabs::new(&snapshot, theme.ui()), frame.area()))
             .unwrap();
 
         let content = terminal

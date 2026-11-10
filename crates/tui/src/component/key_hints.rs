@@ -1,25 +1,25 @@
 use ratatui::{
     buffer::Buffer,
     layout::{Rect, Size},
-    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Paragraph, Widget},
 };
 
-use crate::{command_menu::CommandMenuState, component::popup::Popup};
+use crate::{command_menu::CommandMenuState, component::popup::Popup, theme::UiTheme};
 
 /// Contextual hints for the pending leader sequence.
 ///
 /// This is not the future complete/searchable keymap reference. The component
 /// owns presentation and intrinsic size; the page owns popup placement.
 #[derive(Debug, Clone)]
-pub struct KeyHints {
+pub struct KeyHints<'a> {
     title: String,
     lines: Vec<Line<'static>>,
+    styles: &'a UiTheme,
 }
 
-impl KeyHints {
-    pub fn new(menu: &CommandMenuState) -> Self {
+impl<'a> KeyHints<'a> {
+    pub fn new(menu: &CommandMenuState, styles: &'a UiTheme) -> Self {
         let lines = menu
             .items()
             .iter()
@@ -27,7 +27,7 @@ impl KeyHints {
                 Line::from(vec![
                     Span::styled(
                         item.key.to_string(),
-                        Style::new().add_modifier(Modifier::BOLD),
+                        styles.popup_surface().patch(styles.key_hint),
                     ),
                     Span::raw(" "),
                     Span::raw(item.description),
@@ -37,6 +37,7 @@ impl KeyHints {
         Self {
             title: menu.context_title(),
             lines,
+            styles,
         }
     }
 
@@ -58,9 +59,9 @@ impl KeyHints {
     }
 }
 
-impl Widget for KeyHints {
+impl Widget for KeyHints<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        Popup::new(self.title, Paragraph::new(self.lines)).render(area, buf);
+        Popup::new(self.title, Paragraph::new(self.lines), self.styles).render(area, buf);
     }
 }
 
@@ -69,12 +70,14 @@ mod tests {
     use crossterm::event::KeyCode;
 
     use super::*;
+    use crate::theme::Theme;
 
     #[test]
     fn sizes_a_vertical_list_to_its_content_and_borders() {
         let mut menu = CommandMenuState::default();
         menu.handle_key(KeyCode::Char(' '));
-        let hints = KeyHints::new(&menu);
+        let theme = Theme::default();
+        let hints = KeyHints::new(&menu, theme.ui());
 
         assert_eq!(hints.lines.len(), 4);
         assert_eq!(hints.size().height, 6);
@@ -86,7 +89,8 @@ mod tests {
         let mut menu = CommandMenuState::default();
         menu.handle_key(KeyCode::Char(' '));
         menu.handle_key(KeyCode::Char('b'));
-        let hints = KeyHints::new(&menu);
+        let theme = Theme::default();
+        let hints = KeyHints::new(&menu, theme.ui());
 
         assert_eq!(hints.title, "Leader > buffer");
         assert_eq!(hints.size().width, 19);
@@ -94,7 +98,7 @@ mod tests {
         let mut menu = CommandMenuState::default();
         menu.handle_key(KeyCode::Char(' '));
         menu.handle_key(KeyCode::Char('q'));
-        let hints = KeyHints::new(&menu);
+        let hints = KeyHints::new(&menu, theme.ui());
 
         assert_eq!(hints.title, "Leader > quit");
         assert_eq!(hints.size().width, 15);

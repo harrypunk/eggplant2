@@ -1,0 +1,26 @@
+# Eggplant's original built-in palette, expressed in Helix theme format.
+
+keyword = { fg = "magenta", modifiers = ["bold"] }
+string = { fg = "green" }
+comment = { fg = "dark-gray", modifiers = ["italic"] }
+"function.macro" = { fg = "light-blue" }
+function = { fg = "blue" }
+macro = { fg = "light-blue" }
+type = { fg = "yellow" }
+"constant.numeric" = { fg = "light-yellow" }
+number = { fg = "light-yellow" }
+boolean = { fg = "light-red" }
+constant = { fg = "cyan" }
+variable = {}
+operator = { fg = "light-magenta" }
+
+error = { fg = "red" }
+"ui.background" = {}
+"ui.text" = {}
+"ui.linenr" = {}
+"ui.menu.selected" = { modifiers = ["reversed"] }
+"ui.popup" = {}
+"ui.statusline.normal" = {}
+"ui.statusline.insert" = {}
+"ui.window" = {}
+"ui.help" = { modifiers = ["bold"] }

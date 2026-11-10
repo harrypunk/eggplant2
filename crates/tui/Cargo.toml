@@ -7,6 +7,8 @@ edition.workspace = true
 color-eyre = "0.6.5"
 crossterm = "0.29.0"
 editor.workspace = true
+helix-core = { git = "http://git.z.lan/fork/helix", rev = "079a789e8cb08ead67f19e1971a1b7438b37354b" }
+helix-view = { git = "http://git.z.lan/fork/helix", rev = "079a789e8cb08ead67f19e1971a1b7438b37354b" }
 ignore = "0.4"
 nucleo-matcher = "0.3.1"
 ratatui = "0.30.2"

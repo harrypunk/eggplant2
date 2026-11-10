@@ -2792,6 +2792,8 @@ dependencies = [
  "color-eyre",
  "crossterm",
  "editor",
+ "helix-core",
+ "helix-view",
  "ignore",
  "nucleo-matcher",
  "ratatui",

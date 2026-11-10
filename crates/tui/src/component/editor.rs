@@ -9,14 +9,14 @@ use super::{buffer_tabs::BufferTabs, text_view::TextView};
 use crate::{data_object::FocusState, theme::Theme};
 
 #[derive(Debug)]
-pub struct Editor {
+pub struct Editor<'a> {
     snapshot: Option<EditorSnapshot>,
     focus: FocusState,
-    theme: Theme,
+    theme: &'a Theme,
 }
 
-impl Editor {
-    pub fn new(snapshot: Option<EditorSnapshot>, focus: FocusState, theme: Theme) -> Self {
+impl<'a> Editor<'a> {
+    pub fn new(snapshot: Option<EditorSnapshot>, focus: FocusState, theme: &'a Theme) -> Self {
         Self {
             snapshot,
             focus,
@@ -50,7 +50,7 @@ impl Editor {
     }
 }
 
-impl Widget for Editor {
+impl Widget for Editor<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let [tabs_area, content_area] =
             Layout::vertical([Constraint::Length(1), Constraint::Fill(1)])
@@ -59,10 +59,12 @@ impl Widget for Editor {
 
         match self.snapshot {
             Some(snapshot) => {
-                BufferTabs::new(&snapshot).render(tabs_area, buf);
+                BufferTabs::new(&snapshot, self.theme.ui()).render(tabs_area, buf);
                 EditorBuffer::new(&snapshot, self.theme).render(content_area, buf);
             }
-            None => Paragraph::new("No file open").render(area, buf),
+            None => Paragraph::new("No file open")
+                .style(self.theme.ui().base)
+                .render(area, buf),
         }
     }
 }
@@ -71,11 +73,11 @@ impl Widget for Editor {
 #[derive(Debug, Clone, Copy)]
 pub struct EditorBuffer<'a> {
     snapshot: &'a EditorSnapshot,
-    theme: Theme,
+    theme: &'a Theme,
 }
 
 impl<'a> EditorBuffer<'a> {
-    pub fn new(snapshot: &'a EditorSnapshot, theme: Theme) -> Self {
+    pub fn new(snapshot: &'a EditorSnapshot, theme: &'a Theme) -> Self {
         Self { snapshot, theme }
     }
 
@@ -112,7 +114,12 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
 
         terminal
-            .draw(|frame| frame.render_widget(EditorBuffer::new(&snapshot, Theme), frame.area()))
+            .draw(|frame| {
+                frame.render_widget(
+                    EditorBuffer::new(&snapshot, &Theme::default()),
+                    frame.area(),
+                )
+            })
             .unwrap();
 
         terminal
@@ -132,7 +139,12 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
 
         terminal
-            .draw(|frame| frame.render_widget(EditorBuffer::new(&snapshot, Theme), frame.area()))
+            .draw(|frame| {
+                frame.render_widget(
+                    EditorBuffer::new(&snapshot, &Theme::default()),
+                    frame.area(),
+                )
+            })
             .unwrap();
 
         terminal
@@ -151,7 +163,12 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
 
         terminal
-            .draw(|frame| frame.render_widget(EditorBuffer::new(&snapshot, Theme), frame.area()))
+            .draw(|frame| {
+                frame.render_widget(
+                    EditorBuffer::new(&snapshot, &Theme::default()),
+                    frame.area(),
+                )
+            })
             .unwrap();
 
         terminal.backend().assert_buffer_lines(["1 cd"]);
@@ -165,7 +182,7 @@ mod tests {
         terminal
             .draw(|frame| {
                 frame.render_widget(
-                    Editor::new(None, FocusState::Unfocused, Theme),
+                    Editor::new(None, FocusState::Unfocused, &Theme::default()),
                     frame.area(),
                 )
             })
@@ -192,7 +209,11 @@ mod tests {
         terminal
             .draw(|frame| {
                 frame.render_widget(
-                    Editor::new(session.active_snapshot(), FocusState::Focused, Theme),
+                    Editor::new(
+                        session.active_snapshot(),
+                        FocusState::Focused,
+                        &Theme::default(),
+                    ),
                     frame.area(),
                 );
             })

@@ -1,7 +1,6 @@
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Flex, Layout, Rect},
-    style::{Modifier, Style},
     text::Line,
     widgets::{Block, Paragraph, Widget},
 };
@@ -9,18 +8,18 @@ use ratatui::{
 use super::{popup::Popup, text_view::TextView};
 use crate::{
     file_picker::{FileCollectionState, FilePickerState, PreviewState},
-    theme::Theme,
+    theme::{Theme, UiTheme},
 };
 
 /// Two-pane file picker: query/results on the left and text preview on the right.
 #[derive(Debug, Clone, Copy)]
 pub struct FilePicker<'a> {
     state: &'a FilePickerState,
-    theme: Theme,
+    theme: &'a Theme,
 }
 
 impl<'a> FilePicker<'a> {
-    pub fn new(state: &'a FilePickerState, theme: Theme) -> Self {
+    pub fn new(state: &'a FilePickerState, theme: &'a Theme) -> Self {
         Self { state, theme }
     }
 }
@@ -33,6 +32,7 @@ impl Widget for FilePicker<'_> {
                 state: self.state,
                 theme: self.theme,
             },
+            self.theme.ui(),
         )
         .render(area, buf);
     }
@@ -40,7 +40,7 @@ impl Widget for FilePicker<'_> {
 
 struct FilePickerContent<'a> {
     state: &'a FilePickerState,
-    theme: Theme,
+    theme: &'a Theme,
 }
 
 impl Widget for FilePickerContent<'_> {
@@ -54,23 +54,30 @@ impl Widget for FilePickerContent<'_> {
                 .flex(Flex::Start)
                 .areas(left);
 
+        let surface = self.theme.ui().popup_surface();
+        let border = surface.patch(self.theme.ui().border);
         Paragraph::new(self.state.query.as_str())
-            .block(Block::bordered())
+            .style(surface)
+            .block(Block::bordered().style(surface).border_style(border))
             .render(input_area, buf);
-        Paragraph::new(result_lines(self.state)).render(results_area, buf);
-        let preview_block = Block::bordered();
+        Paragraph::new(result_lines(self.state, self.theme.ui()))
+            .style(surface)
+            .render(results_area, buf);
+        let preview_block = Block::bordered().style(surface).border_style(border);
         let preview_inner = preview_block.inner(preview_area);
         preview_block.render(preview_area, buf);
         match &self.state.preview {
             PreviewState::Text(snapshot) => {
                 TextView::new(snapshot, self.theme).render(preview_inner, buf)
             }
-            preview => Paragraph::new(preview_lines(preview)).render(preview_inner, buf),
+            preview => Paragraph::new(preview_lines(preview))
+                .style(surface)
+                .render(preview_inner, buf),
         }
     }
 }
 
-fn result_lines(state: &FilePickerState) -> Vec<Line<'static>> {
+fn result_lines(state: &FilePickerState, styles: &UiTheme) -> Vec<Line<'static>> {
     if state.results.is_empty() {
         let text = match state.collection {
             FileCollectionState::Loading => "Loading files…",
@@ -86,9 +93,10 @@ fn result_lines(state: &FilePickerState) -> Vec<Line<'static>> {
         .iter()
         .enumerate()
         .map(|(index, entry)| {
+            let base = styles.popup_surface();
             let style = match state.selected == Some(index) {
-                true => Style::new().add_modifier(Modifier::REVERSED),
-                false => Style::new(),
+                true => base.patch(styles.selection),
+                false => base,
             };
             Line::styled(entry.display.clone(), style)
         })
@@ -119,7 +127,8 @@ mod tests {
         let mut state = FilePickerState::default();
         state.collection = FileCollectionState::Filtering;
 
-        let lines = result_lines(&state);
+        let theme = Theme::default();
+        let lines = result_lines(&state, theme.ui());
         assert_eq!(lines[0].spans[0].content.as_ref(), "Filtering files…");
     }
 
@@ -135,11 +144,12 @@ mod tests {
         state.selected = Some(0);
         state.preview =
             PreviewState::Text(TextViewSnapshot::plain(vec!["fn main() {}".to_string()]));
+        let theme = Theme::default();
         let backend = TestBackend::new(60, 12);
         let mut terminal = Terminal::new(backend).unwrap();
 
         terminal
-            .draw(|frame| frame.render_widget(FilePicker::new(&state, Theme), frame.area()))
+            .draw(|frame| frame.render_widget(FilePicker::new(&state, &theme), frame.area()))
             .unwrap();
 
         let content = terminal

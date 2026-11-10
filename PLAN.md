@@ -38,7 +38,8 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 - [x] Read-only `EditorSnapshot` for rendering without exposing Helix internals.
 - [x] Ratatui buffer rendering, visible-line limits, horizontal scrolling, and empty state.
 - [x] Absolute line numbers with document-width gutters and aligned viewport/cursor calculations.
-- [x] Helix-backed semantic syntax highlighting with a shared built-in theme in editor and picker previews.
+- [x] Helix-backed exact syntax highlighting with layered scopes and shared semantic UI themes in editor and picker previews.
+- [x] Built-in `default`, `tokyonight`, and `catppuccin_mocha` themes using resolved styles and curated Helix-compatible resources.
 - [x] TUI model integration and input-driven editing messages.
 - [x] Initial/terminal resize propagation and focus-aware cursor placement.
 - [x] Optional startup file/folder path with pre-terminal initialization and startup tests.

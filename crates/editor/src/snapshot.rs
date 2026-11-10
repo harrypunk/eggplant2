@@ -30,52 +30,12 @@ impl From<bool> for DirtyState {
     }
 }
 
-/// Theme-independent semantic style for a UTF-8 byte range.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HighlightKind {
-    Keyword,
-    String,
-    Comment,
-    Function,
-    Type,
-    Constant,
-    Number,
-    Boolean,
-    Variable,
-    Operator,
-    Macro,
-}
-
-const SCOPE_KINDS: &[(&str, HighlightKind)] = &[
-    ("comment", HighlightKind::Comment),
-    ("string", HighlightKind::String),
-    ("constant.numeric", HighlightKind::Number),
-    ("number", HighlightKind::Number),
-    ("boolean", HighlightKind::Boolean),
-    ("constant", HighlightKind::Constant),
-    ("function.macro", HighlightKind::Macro),
-    ("macro", HighlightKind::Macro),
-    ("function", HighlightKind::Function),
-    ("type", HighlightKind::Type),
-    ("keyword", HighlightKind::Keyword),
-    ("variable", HighlightKind::Variable),
-    ("operator", HighlightKind::Operator),
-];
-
-impl HighlightKind {
-    fn from_scope(scope: &str) -> Option<Self> {
-        // Ordered from specific to general prefixes.
-        SCOPE_KINDS
-            .iter()
-            .find_map(|(prefix, kind)| scope.starts_with(prefix).then_some(*kind))
-    }
-}
-
+/// Exact Helix syntax highlights for a UTF-8 byte range.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HighlightSpan {
     pub start_byte: usize,
     pub end_byte: usize,
-    pub kind: HighlightKind,
+    pub highlights: Vec<Highlight>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -94,7 +54,9 @@ impl LineSnapshot {
 
     fn push_highlight(&mut self, span: HighlightSpan) {
         match self.highlights.last_mut() {
-            Some(last) if last.kind == span.kind && last.end_byte == span.start_byte => {
+            Some(last)
+                if last.highlights == span.highlights && last.end_byte == span.start_byte =>
+            {
                 last.end_byte = span.end_byte;
             }
             _ => self.highlights.push(span),
@@ -194,14 +156,13 @@ fn highlighted_lines(
     };
     let loader = default_syntax_loader();
     let loader = loader.load();
-    let scopes = loader.scopes();
     let mut highlighter = syntax.highlighter(
         source,
         &loader,
         u32::try_from(range_start).unwrap_or(u32::MAX)
             ..u32::try_from(range_end).unwrap_or(u32::MAX),
     );
-    let mut active = active_kinds(highlighter.active_highlights(), &scopes);
+    let mut active = highlighter.active_highlights().collect::<Vec<_>>();
     let mut previous = range_start;
     let intervals = std::iter::from_fn(|| {
         if previous >= range_end {
@@ -212,39 +173,33 @@ fn highlighted_lines(
             offset => (offset as usize).min(range_end).max(previous),
         };
         let interval = previous..next;
-        let kind = active.last().copied();
+        let highlights = active.clone();
 
         if next < range_end {
             let (event, highlights) = highlighter.advance();
-            match event {
-                HighlightEvent::Refresh => active = active_kinds(highlights, &scopes),
-                HighlightEvent::Push => active.extend(active_kinds(highlights, &scopes)),
-            }
+            update_active_highlights(&mut active, event, highlights);
         }
         previous = next;
-        Some((interval, kind))
+        Some((interval, highlights))
     });
 
     intervals
-        .filter_map(|(range, kind)| kind.map(|kind| (range, kind)))
-        .filter(|(range, _)| !range.is_empty())
-        .for_each(|(range, kind)| {
-            append_highlight(&mut lines, first_line, text, range, kind);
+        .filter(|(range, highlights)| !range.is_empty() && !highlights.is_empty())
+        .for_each(|(range, highlights)| {
+            append_highlight(&mut lines, first_line, text, range, &highlights);
         });
     lines
 }
 
-fn active_kinds(
-    highlights: impl Iterator<Item = Highlight>,
-    scopes: &[String],
-) -> Vec<HighlightKind> {
-    highlights
-        .filter_map(|highlight| {
-            scopes
-                .get(highlight.idx())
-                .and_then(|scope| HighlightKind::from_scope(scope))
-        })
-        .collect()
+fn update_active_highlights(
+    active: &mut Vec<Highlight>,
+    event: HighlightEvent,
+    highlights: impl IntoIterator<Item = Highlight>,
+) {
+    match event {
+        HighlightEvent::Refresh => *active = highlights.into_iter().collect(),
+        HighlightEvent::Push => active.extend(highlights),
+    }
 }
 
 fn append_highlight(
@@ -252,12 +207,12 @@ fn append_highlight(
     first_line: usize,
     text: &helix_core::Rope,
     range: Range<usize>,
-    kind: HighlightKind,
+    highlights: &[Highlight],
 ) {
     lines.iter_mut().enumerate().for_each(|(index, line)| {
         let line_start = text.line_to_byte(first_line + index);
         let line_end = line_start + line.text.len();
-        clip_highlight(range.clone(), line_start, line_end, kind)
+        clip_highlight(range.clone(), line_start, line_end, highlights)
             .into_iter()
             .for_each(|span| line.push_highlight(span));
     });
@@ -267,14 +222,14 @@ fn clip_highlight(
     range: Range<usize>,
     line_start: usize,
     line_end: usize,
-    kind: HighlightKind,
+    highlights: &[Highlight],
 ) -> Option<HighlightSpan> {
     let start = range.start.max(line_start);
     let end = range.end.min(line_end);
     (start < end).then(|| HighlightSpan {
         start_byte: start - line_start,
         end_byte: end - line_start,
-        kind,
+        highlights: highlights.to_vec(),
     })
 }
 
@@ -283,32 +238,69 @@ mod tests {
     use super::*;
 
     #[test]
-    fn maps_specific_scope_prefixes_before_general_ones() {
+    fn refresh_replaces_and_push_extends_exact_active_highlights() {
+        let outer = Highlight::new(3);
+        let middle = Highlight::new(17);
+        let inner = Highlight::new(41);
+        let mut active = vec![outer];
+
+        update_active_highlights(&mut active, HighlightEvent::Push, [middle, inner]);
+        assert_eq!(active, vec![outer, middle, inner]);
+
+        update_active_highlights(&mut active, HighlightEvent::Refresh, [inner]);
+        assert_eq!(active, vec![inner]);
+    }
+
+    #[test]
+    fn retains_layers_and_merges_only_matching_highlight_vectors() {
+        let outer = Highlight::new(3);
+        let inner = Highlight::new(41);
+        let mut line = LineSnapshot::plain("abcdef".to_owned());
+
+        line.push_highlight(HighlightSpan {
+            start_byte: 0,
+            end_byte: 2,
+            highlights: vec![outer],
+        });
+        line.push_highlight(HighlightSpan {
+            start_byte: 2,
+            end_byte: 4,
+            highlights: vec![outer, inner],
+        });
+        line.push_highlight(HighlightSpan {
+            start_byte: 4,
+            end_byte: 6,
+            highlights: vec![outer, inner],
+        });
+
         assert_eq!(
-            HighlightKind::from_scope("function.macro"),
-            Some(HighlightKind::Macro)
+            line.highlights,
+            vec![
+                HighlightSpan {
+                    start_byte: 0,
+                    end_byte: 2,
+                    highlights: vec![outer],
+                },
+                HighlightSpan {
+                    start_byte: 2,
+                    end_byte: 6,
+                    highlights: vec![outer, inner],
+                },
+            ]
         );
-        assert_eq!(
-            HighlightKind::from_scope("constant.numeric"),
-            Some(HighlightKind::Number)
-        );
-        assert_eq!(
-            HighlightKind::from_scope("keyword.control"),
-            Some(HighlightKind::Keyword)
-        );
-        assert_eq!(HighlightKind::from_scope("punctuation"), None);
     }
 
     #[test]
     fn ignores_spans_outside_a_line_without_subtracting_offsets() {
-        assert_eq!(clip_highlight(0..0, 10, 20, HighlightKind::Keyword), None);
-        assert_eq!(clip_highlight(30..40, 10, 20, HighlightKind::Keyword), None);
+        let highlights = [Highlight::new(7), Highlight::new(11)];
+        assert_eq!(clip_highlight(0..0, 10, 20, &highlights), None);
+        assert_eq!(clip_highlight(30..40, 10, 20, &highlights), None);
         assert_eq!(
-            clip_highlight(5..15, 10, 20, HighlightKind::Keyword),
+            clip_highlight(5..15, 10, 20, &highlights),
             Some(HighlightSpan {
                 start_byte: 0,
                 end_byte: 5,
-                kind: HighlightKind::Keyword,
+                highlights: highlights.to_vec(),
             })
         );
     }

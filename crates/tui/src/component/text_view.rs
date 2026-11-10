@@ -12,11 +12,11 @@ use crate::theme::Theme;
 #[derive(Debug, Clone, Copy)]
 pub struct TextView<'a> {
     snapshot: &'a TextViewSnapshot,
-    theme: Theme,
+    theme: &'a Theme,
 }
 
 impl<'a> TextView<'a> {
-    pub fn new(snapshot: &'a TextViewSnapshot, theme: Theme) -> Self {
+    pub fn new(snapshot: &'a TextViewSnapshot, theme: &'a Theme) -> Self {
         Self { snapshot, theme }
     }
 
@@ -37,22 +37,24 @@ impl<'a> TextView<'a> {
     }
 
     fn line(&self, snapshot: &LineSnapshot) -> Line<'static> {
+        let base = self.theme.ui().base;
         let mut spans = Vec::new();
         let mut offset = 0;
         for highlight in &snapshot.highlights {
             if highlight.start_byte > offset {
-                spans.push(Span::raw(
+                spans.push(Span::styled(
                     snapshot.text[offset..highlight.start_byte].to_string(),
+                    base,
                 ));
             }
             spans.push(Span::styled(
                 snapshot.text[highlight.start_byte..highlight.end_byte].to_string(),
-                self.theme.highlight(highlight.kind),
+                base.patch(self.theme.highlight(&highlight.highlights)),
             ));
             offset = highlight.end_byte;
         }
         if offset < snapshot.text.len() {
-            spans.push(Span::raw(snapshot.text[offset..].to_string()));
+            spans.push(Span::styled(snapshot.text[offset..].to_string(), base));
         }
         Line::from(spans)
     }
@@ -83,8 +85,11 @@ impl Widget for TextView<'_> {
             .map(|line| self.line(line))
             .collect::<Vec<_>>();
 
-        Paragraph::new(line_numbers).render(gutter_area, buf);
+        Paragraph::new(line_numbers)
+            .style(self.theme.ui().base.patch(self.theme.ui().muted))
+            .render(gutter_area, buf);
         Paragraph::new(lines)
+            .style(self.theme.ui().base)
             .scroll((0, horizontal_offset))
             .render(text_area, buf);
     }
@@ -92,20 +97,24 @@ impl Widget for TextView<'_> {
 
 #[cfg(test)]
 mod tests {
-    use editor::{HighlightKind, HighlightSpan};
+    use editor::HighlightSpan;
+    use helix_view::theme::Loader as HelixThemeLoader;
     use ratatui::style::{Color, Modifier};
 
     use super::*;
 
     #[test]
-    fn applies_the_shared_theme_to_semantic_spans() {
+    fn applies_the_shared_theme_to_exact_syntax_spans() {
         let mut snapshot = TextViewSnapshot::plain(vec!["fn main".to_string()]);
+        let recognized = HelixThemeLoader::new(&[]).default();
+        let keyword = recognized.find_highlight_exact("keyword").unwrap();
         snapshot.lines[0].highlights.push(HighlightSpan {
             start_byte: 0,
             end_byte: 2,
-            kind: HighlightKind::Keyword,
+            highlights: vec![keyword],
         });
-        let view = TextView::new(&snapshot, Theme);
+        let theme = Theme::default();
+        let view = TextView::new(&snapshot, &theme);
 
         let line = view.line(&snapshot.lines[0]);
         assert_eq!(line.spans[0].content.as_ref(), "fn");

@@ -226,7 +226,7 @@ Ratatui rendering is a projection of state, not a source of editing behavior:
 - Explorer rendering uses the application snapshot and does not read the filesystem during drawing.
 - Scrolling and document mutations happen during updates, not as hidden rendering side effects.
 
-Syntax highlighting uses Helix grammars and queries through the shared `DocumentFactory`. The TUI maps editor-owned semantic highlight kinds to one built-in theme (`theme = "default"`). A Helix-compatible grammar runtime enables language highlighting; files still open as plain text when it is unavailable.
+Syntax highlighting uses Helix grammars and queries through the shared `DocumentFactory`. Snapshots retain exact, layered Helix highlights. The TUI resolves semantic UI and syntax styles through built-in themes: `default`, `tokyonight`, and `catppuccin_mocha`. The latter two use unmodified Helix-compatible TOML resources with retained source notices. A Helix-compatible grammar runtime enables language highlighting; files still open as plain text when it is unavailable.
 
 ## AI-first extension points
 

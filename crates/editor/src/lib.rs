@@ -13,8 +13,8 @@ pub use preview::preview_document;
 pub use save::{SaveCompletion, SaveError, SaveRequest};
 pub use session::{BufferId, CursorMovement, EditMode, EditorError, EditorSession};
 pub use snapshot::{
-    BufferInfo, CursorPosition, DirtyState, EditorSnapshot, HighlightKind, HighlightSpan,
-    LineSnapshot, TextViewSnapshot,
+    BufferInfo, CursorPosition, DirtyState, EditorSnapshot, HighlightSpan, LineSnapshot,
+    TextViewSnapshot,
 };
 
 #[cfg(test)]

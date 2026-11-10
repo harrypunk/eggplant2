@@ -15,7 +15,7 @@ pub type KeymapConfig = HashMap<String, HashMap<String, String>>;
 pub struct Config {
     /// crossterm event poll timeout in milliseconds
     pub event_poll_timeout: u64,
-    // todo theme
+    /// Name of a built-in theme, resolved by the TUI theme module.
     pub theme: String,
     pub keymap: KeymapConfig,
 }

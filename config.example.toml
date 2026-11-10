@@ -1,3 +1,4 @@
+# Built-in themes: default, tokyonight, catppuccin_mocha.
 theme = "default"
 event_poll_timeout = 300
 
