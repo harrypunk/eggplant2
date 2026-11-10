@@ -193,6 +193,7 @@ The first edition is complete when a user can, on Linux:
 
 ## Deferred beyond the first edition
 
+- Dynamic Helix-compatible user themes: discover `~/.eggplant/themes/*.toml`, replace the closed theme catalog used by `Space u t`, resolve inheritance and name collisions, load through effects, and preserve the active theme on failures.
 - AI agent execution/chat and automated editing.
 - LSP, DAP, formatting, and code actions.
 - Full Vim or Helix command compatibility, Visual mode, macros, and registers.
