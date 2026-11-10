@@ -81,6 +81,15 @@ impl Default for Config {
                         ("file_picker_previous".to_string(), "up".to_string()),
                     ]),
                 ),
+                (
+                    "theme_picker".to_string(),
+                    HashMap::from([
+                        ("close_theme_picker".to_string(), "esc".to_string()),
+                        ("apply_theme".to_string(), "enter".to_string()),
+                        ("theme_picker_next".to_string(), "down".to_string()),
+                        ("theme_picker_previous".to_string(), "up".to_string()),
+                    ]),
+                ),
             ]),
         }
     }

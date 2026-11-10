@@ -7,6 +7,7 @@ pub enum CommandAction {
     PreviousBuffer,
     ToggleFileExplorer,
     OpenFilePicker,
+    OpenThemePicker,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -69,6 +70,15 @@ const FILES_CONTEXT: CommandMenuContext = CommandMenuContext {
     }],
 };
 
+const UI_CONTEXT: CommandMenuContext = CommandMenuContext {
+    title: "ui",
+    items: &[CommandMenuItem {
+        key: 't',
+        description: "theme",
+        target: CommandMenuTarget::Action(CommandAction::OpenThemePicker),
+    }],
+};
+
 const ROOT_CONTEXT: CommandMenuContext = CommandMenuContext {
     title: "Leader",
     items: &[
@@ -91,6 +101,11 @@ const ROOT_CONTEXT: CommandMenuContext = CommandMenuContext {
             key: 'f',
             description: "files",
             target: CommandMenuTarget::Submenu(&FILES_CONTEXT),
+        },
+        CommandMenuItem {
+            key: 'u',
+            description: "ui",
+            target: CommandMenuTarget::Submenu(&UI_CONTEXT),
         },
     ],
 };
@@ -207,6 +222,14 @@ mod tests {
         assert_eq!(
             menu.handle_key(KeyCode::Char('f')),
             CommandMenuOutcome::Action(CommandAction::OpenFilePicker)
+        );
+
+        menu.handle_key(KeyCode::Char(' '));
+        menu.handle_key(KeyCode::Char('u'));
+        assert_eq!(menu.context_title(), "Leader > ui");
+        assert_eq!(
+            menu.handle_key(KeyCode::Char('t')),
+            CommandMenuOutcome::Action(CommandAction::OpenThemePicker)
         );
     }
 

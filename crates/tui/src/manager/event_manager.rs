@@ -137,6 +137,36 @@ mod tests {
     }
 
     #[test]
+    fn routes_only_theme_picker_navigation_and_actions() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::ThemePicker);
+
+        let translate =
+            |key| manager.translate(Event::Key(KeyEvent::new(key, KeyModifiers::NONE)), &model);
+        assert!(matches!(
+            translate(KeyCode::Down),
+            Some(Message::ThemePickerNext)
+        ));
+        assert!(matches!(
+            translate(KeyCode::Up),
+            Some(Message::ThemePickerPrevious)
+        ));
+        assert!(matches!(
+            translate(KeyCode::Enter),
+            Some(Message::ApplyTheme)
+        ));
+        assert!(matches!(
+            translate(KeyCode::Esc),
+            Some(Message::CloseThemePicker)
+        ));
+
+        for key in [KeyCode::Char('j'), KeyCode::Char('k'), KeyCode::Char(' ')] {
+            assert!(translate(key).is_none());
+        }
+    }
+
+    #[test]
     fn configured_bindings_still_take_precedence() {
         let manager = event_manager();
         let mut normal_model = Model::default();

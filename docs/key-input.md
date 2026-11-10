@@ -47,6 +47,8 @@ Input translation is pure. It does not change the model, execute commands, sleep
 
 The built-in Space leader is already a small data-driven sequence state machine. Each `CommandMenuContext` owns its semantic title and items, and each item targets either a submenu or a semantic action. `CommandMenuState` stores the active context stack, returns `Pending`, `Cancelled`, or a semantic `CommandAction`, and the update layer translates completed actions into ordinary messages. `KeyHints` renders the current context's candidates and composes its title by joining active context titles, such as `Leader > buffer`. Titles therefore grow with the menu definitions rather than requiring a separate menu-specific title match.
 
+Current sequences include `Space q q` to quit, `Space b n`/`Space b p` to switch buffers, `Space f f` to open files, and `Space u t` to open the theme list. The theme picker uses a dedicated modal context: Down/Up navigate, Enter applies, and Escape cancels without changing the active theme.
+
 ## Design rules
 
 1. **Normalize once.** Convert terminal-specific events into application key chords at the input boundary. Sequence matching should use complete chords, not only `KeyCode`, so `Ctrl-X` and `x` remain distinct.

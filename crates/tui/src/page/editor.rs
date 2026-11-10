@@ -10,6 +10,7 @@ use crate::component::{
     file_picker::FilePicker,
     key_hints::KeyHints,
     status_bar::StatusBar,
+    theme_picker::ThemePicker,
     tools_panel::ToolsPanel,
 };
 use crate::data_object::{FocusState, FocusTarget, Model, Visibility};
@@ -73,12 +74,21 @@ impl Editor {
             }
             Visibility::Hidden => {}
         }
+        match model.theme_picker.visibility {
+            Visibility::Displayed => {
+                let picker = ThemePicker::new(&model.theme_picker, &model.theme);
+                let area = theme_picker_area(areas.main, picker.size());
+                frame.render_widget(picker, area);
+            }
+            Visibility::Hidden => {}
+        }
 
         cursor
             .into_iter()
             .filter(|_| {
                 model.command_menu.items().is_empty()
                     && model.file_picker.visibility == Visibility::Hidden
+                    && model.theme_picker.visibility == Visibility::Hidden
             })
             .for_each(|cursor| frame.set_cursor_position(cursor));
     }
@@ -153,6 +163,26 @@ fn key_hints_area(area: Rect, size: Size) -> Rect {
 fn file_picker_area(area: Rect) -> Rect {
     let width = area.width.saturating_sub(2).min(160);
     let height = area.height.saturating_sub(2).min(36);
+    let [_, popup_band, _] = Layout::vertical([
+        Constraint::Fill(1),
+        Constraint::Length(height),
+        Constraint::Fill(1),
+    ])
+    .flex(Flex::Start)
+    .areas(area);
+    let [_, popup, _] = Layout::horizontal([
+        Constraint::Fill(1),
+        Constraint::Length(width),
+        Constraint::Fill(1),
+    ])
+    .flex(Flex::Start)
+    .areas(popup_band);
+    popup
+}
+
+fn theme_picker_area(area: Rect, size: Size) -> Rect {
+    let width = size.width.min(area.width);
+    let height = size.height.min(area.height);
     let [_, popup_band, _] = Layout::vertical([
         Constraint::Fill(1),
         Constraint::Length(height),
@@ -256,6 +286,30 @@ mod tests {
     }
 
     #[test]
+    fn shows_centered_theme_picker_and_hides_editor_cursor() {
+        let backend = TestBackend::new(60, 10);
+        let mut terminal = Terminal::new(backend).unwrap();
+        let mut model = Model::default();
+        create_buffer(&mut model, "hello");
+        model.theme_picker.open(crate::theme::ThemeName::TokyoNight);
+        let page = Editor;
+
+        terminal.draw(|frame| page.view(&model, frame)).unwrap();
+
+        let content = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(content.contains("Theme"));
+        assert!(content.contains("> tokyonight"));
+        assert!(content.contains("catppuccin_mocha"));
+        assert!(!terminal.backend().cursor_visible());
+    }
+
+    #[test]
     fn shows_centered_file_picker_and_hides_editor_cursor() {
         let backend = TestBackend::new(100, 10);
         let mut terminal = Terminal::new(backend).unwrap();
@@ -331,7 +385,7 @@ mod tests {
         let area = key_hints_area(Rect::new(0, 0, 100, 10), hints.size());
         assert_eq!(area.x + area.width, 100);
         assert_eq!(area.y + area.height, 9);
-        assert_eq!(area.height, 6);
+        assert_eq!(area.height, 7);
         assert!(area.width < 100);
     }
 }

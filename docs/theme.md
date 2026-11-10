@@ -1,6 +1,6 @@
 # Theme architecture
 
-Status: living design. The first slice implements config-selected `default`, `tokyonight`, and `catppuccin_mocha` themes, exact layered syntax highlights, and semantic UI styles. Runtime switching and user-provided theme files remain future increments.
+Status: living design. The application implements `default`, `tokyonight`, and `catppuccin_mocha`, exact layered syntax highlights, semantic UI styles, and interactive built-in selection through `Space u t`. User-provided theme files remain a future increment.
 
 ## Purpose
 
@@ -214,15 +214,16 @@ Theme resolution is initialization work, not something repeated by `main.rs` or 
 Built-in themes are static data, so switching is a pure update and needs no effect:
 
 ```text
-Theme command
-    → Message::SetTheme(validated_name)
-    → MessageManager replaces Model.theme
+Space u t
+    → Message::OpenThemePicker
+    → Model.theme_picker opens with the active ThemeName selected
+    → Down/Up emit ThemePickerNext/ThemePickerPrevious
+    → Enter emits ApplyTheme
+    → MessageManager resolves and installs the complete Model.theme
     → normal redraw uses the new theme
 ```
 
-The update changes no buffer text, cursor, explorer selection, picker contents, or save state. If a requested built-in name is invalid, preserve the active theme and set an error status.
-
-A runtime theme selector is optional. Supporting several built-in themes through `config.toml` is a valid first increment and does not require adding a picker or command-menu workflow.
+`ThemeName::ALL` is the single built-in catalog used by validation and list rendering. Applying a theme changes no buffer text, cursor, explorer selection, file-picker contents, or save state. Escape closes the picker without replacing the active theme. If embedded theme resolution unexpectedly fails, preserve the active theme and set an error status.
 
 ### File-backed themes, if added later
 
@@ -264,7 +265,7 @@ Keep each step reviewable and preserve the default appearance until a step inten
 2. **Route existing hardcoded styles through it.** Migrate status errors, selected rows/tabs, key hints, gutters, borders, and base text/background without changing state or layout logic.
 3. **Pass resolved styles from pages.** Remove component access to raw colors and avoid passing `Config` into the view tree.
 4. **Import an upstream theme.** Add one curated Helix-compatible resource and its license notice, resolve it through the adapter, and extend validated name resolution and `config.example.toml`.
-5. **Optionally add runtime selection.** Add `SetTheme` and a command-menu action only if interactive switching is desired.
+5. **Add runtime selection.** `Space u t` opens the built-in list; `ApplyTheme` replaces the resolved theme and `CloseThemePicker` cancels without changing it.
 6. **Consider external themes separately.** Add load effects, validation, stale-completion handling, and documentation only when that feature is in scope.
 
 Do not combine the second theme with a large component redesign. The purpose of migration is to make appearance interchangeable while behavior remains unchanged.
@@ -277,7 +278,7 @@ Theme tests should verify contracts and behavior rather than snapshot every colo
 - Every theme satisfies the same required semantic fields by construction.
 - A component maps selected/focused/error states to the same semantic roles under different themes.
 - Rendering with `TestBackend` checks representative cell styles as well as unchanged text/layout.
-- `SetTheme` changes only `Model.theme` and relevant status feedback; buffers, editing history, focus, and explorer state remain intact.
+- `ApplyTheme` changes only `Model.theme` and picker/status state; buffers, editing history, focus, and explorer state remain intact. Cancellation preserves the active theme.
 - Editor and picker previews use the same `Theme` mapping for exact Helix highlights, including parent-scope fallback and layered composition.
 - If external loading is added, failed and stale completions preserve the active theme, and view code performs no file I/O.
 

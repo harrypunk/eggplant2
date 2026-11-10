@@ -13,9 +13,35 @@ const DEFAULT: &str = include_str!("../themes/default.toml");
 const TOKYONIGHT: &str = include_str!("../themes/tokyonight.toml");
 const CATPPUCCIN_MOCHA: &str = include_str!("../themes/catppuccin_mocha.toml");
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThemeName {
+    Default,
+    TokyoNight,
+    CatppuccinMocha,
+}
+
+impl ThemeName {
+    pub const ALL: [Self; 3] = [Self::Default, Self::TokyoNight, Self::CatppuccinMocha];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Default => "default",
+            Self::TokyoNight => "tokyonight",
+            Self::CatppuccinMocha => "catppuccin_mocha",
+        }
+    }
+
+    fn from_name(name: &str) -> Option<Self> {
+        Self::ALL
+            .into_iter()
+            .find(|candidate| candidate.as_str() == name)
+    }
+}
+
 /// A fully resolved application theme. Parsing and scope lookup stay out of components.
 #[derive(Debug, Clone)]
 pub struct Theme {
+    name: ThemeName,
     ui: UiTheme,
     // Resolved in the same order as the editor's recognized Helix scopes.
     syntax: Vec<Style>,
@@ -23,19 +49,28 @@ pub struct Theme {
 
 impl Theme {
     pub fn from_name(name: &str) -> color_eyre::Result<Self> {
+        let Some(name) = ThemeName::from_name(name) else {
+            let supported = ThemeName::ALL.map(ThemeName::as_str).join("`, `");
+            bail!("unknown theme `{name}`; expected `{supported}`");
+        };
+        Self::from_builtin(name)
+    }
+
+    pub fn from_builtin(name: ThemeName) -> color_eyre::Result<Self> {
         let source = match name {
-            "default" => DEFAULT,
-            "tokyonight" => TOKYONIGHT,
-            "catppuccin_mocha" => CATPPUCCIN_MOCHA,
-            other => bail!(
-                "unknown theme `{other}`; expected `default`, `tokyonight`, or `catppuccin_mocha`"
-            ),
+            ThemeName::Default => DEFAULT,
+            ThemeName::TokyoNight => TOKYONIGHT,
+            ThemeName::CatppuccinMocha => CATPPUCCIN_MOCHA,
         };
         let value: toml::Value = toml::from_str(source)?;
         let source = HelixTheme::from(value);
         let ui = UiTheme::from_helix(&source);
         let syntax = syntax_styles(&source);
-        Ok(Self { ui, syntax })
+        Ok(Self { name, ui, syntax })
+    }
+
+    pub fn name(&self) -> ThemeName {
+        self.name
     }
 
     pub fn ui(&self) -> &UiTheme {

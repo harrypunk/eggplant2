@@ -10,6 +10,7 @@ pub mod runtime;
 pub mod startup;
 pub mod terminal;
 pub mod theme;
+pub mod theme_picker;
 pub mod tools;
 
 #[cfg(test)]
@@ -26,6 +27,7 @@ pub mod data_object {
         explorer::ExplorerState,
         file_picker::{FileEntry, FilePickerState, PreviewState},
         theme::Theme,
+        theme_picker::ThemePickerState,
         tools::ToolsPanelState,
     };
 
@@ -100,6 +102,7 @@ pub mod data_object {
         pub deferred_action: Option<DeferredAction>,
         pub command_menu: CommandMenuState,
         pub file_picker: FilePickerState,
+        pub theme_picker: ThemePickerState,
     }
 
     impl Default for Model {
@@ -119,6 +122,7 @@ pub mod data_object {
                 deferred_action: None,
                 command_menu: CommandMenuState::default(),
                 file_picker: FilePickerState::default(),
+                theme_picker: ThemePickerState::default(),
             }
         }
     }
@@ -225,6 +229,11 @@ pub mod data_object {
         FilePickerNext,
         FilePickerPrevious,
         OpenPickerFile,
+        OpenThemePicker,
+        CloseThemePicker,
+        ThemePickerNext,
+        ThemePickerPrevious,
+        ApplyTheme,
         FileScanFinished {
             revision: u64,
             result: Result<Vec<FileEntry>, String>,
@@ -251,5 +260,6 @@ pub mod data_object {
         EditorInput,
         Explorer,
         FilePicker,
+        ThemePicker,
     }
 }

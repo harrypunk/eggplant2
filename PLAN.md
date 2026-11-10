@@ -39,7 +39,7 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 - [x] Ratatui buffer rendering, visible-line limits, horizontal scrolling, and empty state.
 - [x] Absolute line numbers with document-width gutters and aligned viewport/cursor calculations.
 - [x] Helix-backed exact syntax highlighting with layered scopes and shared semantic UI themes in editor and picker previews.
-- [x] Built-in `default`, `tokyonight`, and `catppuccin_mocha` themes using resolved styles and curated Helix-compatible resources.
+- [x] Built-in `default`, `tokyonight`, and `catppuccin_mocha` themes using resolved styles and curated Helix-compatible resources, with a `Space u t` selection popup.
 - [x] TUI model integration and input-driven editing messages.
 - [x] Initial/terminal resize propagation and focus-aware cursor placement.
 - [x] Optional startup file/folder path with pre-terminal initialization and startup tests.
@@ -78,7 +78,9 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 | Common | Next / previous buffer | `Space b n` / `Space b p` |
 | Common | Show/hide files (focus when shown) | `Space e` |
 | Common | Find/open a file with fuzzy ranking and preview | `Space f f` |
+| Common | Select a UI theme | `Space u t` |
 | File picker | Filter / select / open / close | Printable input / arrows / `Enter` / `Esc` |
+| Theme picker | Select / apply / close | `Down` / `Up` / `Enter` / `Esc` |
 | Explorer | Move selection | `j`, `k` |
 | Explorer | Open file / unfold folder | `Enter` |
 | Explorer | Fold / unfold folder | `h` / `l` |

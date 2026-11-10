@@ -46,3 +46,9 @@ file_picker_backspace = "backspace"
 open_picker_file = "enter"
 file_picker_next = "down"
 file_picker_previous = "up"
+
+[keymap.theme_picker]
+close_theme_picker = "esc"
+apply_theme = "enter"
+theme_picker_next = "down"
+theme_picker_previous = "up"

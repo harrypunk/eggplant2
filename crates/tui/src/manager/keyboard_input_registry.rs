@@ -41,7 +41,7 @@ fn parse_context_bindings(
 ) -> color_eyre::Result<ContextBindings> {
     let context = parse_context(context_name).ok_or_else(|| {
         eyre!(
-            "unknown keymap context `{context_name}`; expected normal, editor_input, explorer, file_picker, agent_chat, agent_chat_dialog, or vcs"
+            "unknown keymap context `{context_name}`; expected normal, editor_input, explorer, file_picker, theme_picker, agent_chat, agent_chat_dialog, or vcs"
         )
     })?;
 
@@ -76,6 +76,7 @@ fn parse_context(value: &str) -> Option<Context> {
         "editor_input" => Some(Context::EditorInput),
         "explorer" => Some(Context::Explorer),
         "file_picker" => Some(Context::FilePicker),
+        "theme_picker" => Some(Context::ThemePicker),
         _ => None,
     }
 }
@@ -110,6 +111,11 @@ fn parse_message(value: &str) -> Option<Message> {
         "open_picker_file" => Some(Message::OpenPickerFile),
         "file_picker_next" => Some(Message::FilePickerNext),
         "file_picker_previous" => Some(Message::FilePickerPrevious),
+        "open_theme_picker" => Some(Message::OpenThemePicker),
+        "close_theme_picker" => Some(Message::CloseThemePicker),
+        "theme_picker_next" => Some(Message::ThemePickerNext),
+        "theme_picker_previous" => Some(Message::ThemePickerPrevious),
+        "apply_theme" => Some(Message::ApplyTheme),
         _ => None,
     }
 }
