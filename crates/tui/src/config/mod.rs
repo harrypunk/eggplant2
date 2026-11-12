@@ -130,14 +130,16 @@ mod tests {
     }
 
     #[test]
-    fn example_file_is_valid() {
+    fn example_file_matches_all_builtin_defaults() {
         let config: Config = toml::from_str(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../config.example.toml"
         )))
         .unwrap();
+        let defaults = Config::default();
 
-        assert_eq!(config.keymap["normal"]["close_buffer"], "ctrl-w");
-        assert_eq!(config.keymap["editor_input"]["exit_insert_mode"], "esc");
+        assert_eq!(config.theme, defaults.theme);
+        assert_eq!(config.event_poll_timeout, defaults.event_poll_timeout);
+        assert_eq!(config.keymap, defaults.keymap);
     }
 }

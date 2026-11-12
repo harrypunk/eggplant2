@@ -65,7 +65,7 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 
 | Context | Command | Binding |
 | --- | --- | --- |
-| Common | Quit | `Space q q` |
+| Normal / Explorer | Quit | `Space q q` |
 | Normal | Enter Insert | `i` |
 | Normal | Move | `h`, `j`, `k`, `l` |
 | Normal | Undo / redo | `u` / `Ctrl-R` |
@@ -75,19 +75,22 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 | Normal | Close active buffer (saves first when dirty) | `Ctrl-W` |
 | Normal / Explorer | Move focus left / right | `Ctrl-H` / `Ctrl-L` |
 | Normal / Explorer | Move focus up / down (reserved for future panes) | `Ctrl-K` / `Ctrl-J` |
-| Common | Next / previous buffer | `Space b n` / `Space b p` |
-| Common | Show/hide files (focus when shown) | `Space e` |
-| Common | Find/open a file with fuzzy ranking and preview | `Space f f` |
-| Common | Select a UI theme | `Space u t` |
-| File picker | Filter / select / open / close | Printable input / arrows / `Enter` / `Esc` |
-| Theme picker | Select / apply / close | `Down` / `Up` / `Enter` / `Esc` |
+| Normal / Explorer | Next / previous buffer | `Space b n` / `Space b p` |
+| Normal / Explorer | Show/hide files (focus when shown) | `Space e` |
+| Normal / Explorer | Find/open a file with fuzzy ranking and preview | `Space f f` |
+| Normal / Explorer | Select a UI theme | `Space u t` |
+| File picker | Edit query | Printable input / `Backspace` |
+| File picker | Select | `Down` / `Up` |
+| File picker | Open / close | `Enter` / `Esc` |
+| Theme picker | Select | `Down` / `Up` |
+| Theme picker | Apply / close | `Enter` / `Esc` |
 | Explorer | Move selection | `j`, `k` |
 | Explorer | Open file / unfold folder | `Enter` |
 | Explorer | Fold / unfold folder | `h` / `l` |
 | Explorer | Refresh tree | `r` |
 | Explorer | Show/hide Git-ignored entries | `Shift-I` |
 
-See `config.example.toml` for the configurable action names.
+See `config.example.toml` for the configurable action names. Leader sequences are built-in. Supplying a `[keymap]` table replaces the entire built-in keymap table, so custom configurations must include every required context and binding.
 
 ### Known gaps and limitations
 
@@ -168,7 +171,7 @@ Each milestone should remain small enough to review independently. Update this f
 
 **Goal:** make the narrow feature set reliable rather than expanding scope.
 
-- [ ] Finalize the first-edition command table and update `config.example.toml`.
+- [x] Finalize the first-edition command table and update `config.example.toml`.
 - [ ] Test narrow terminals, resize, Unicode/graphemes, wide characters, horizontal scrolling, and empty documents.
 - [ ] Test large files, permissions, missing files, external modification handling, and save failures.
 - [ ] Verify panic-safe terminal restoration and clean shutdown with pending saves.
