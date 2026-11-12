@@ -243,7 +243,7 @@ impl MessageManager {
 
     fn save_active(model: &mut Model) -> Option<Effect> {
         let id = model.editor.active_buffer()?;
-        if model.editor.is_saving(id) {
+        if model.editor.is_modified(id) != Some(true) || model.editor.is_saving(id) {
             return None;
         }
         Self::start_save(model, id)
@@ -663,6 +663,64 @@ mod tests {
             model.editor.active_snapshot().unwrap().text.lines[0].text,
             "ac"
         );
+    }
+
+    #[tokio::test]
+    async fn explorer_edit_switch_close_and_pending_save_quit_work_end_to_end() {
+        let directory = tempfile::tempdir().unwrap();
+        let first_path = directory.path().join("a.txt");
+        let second_path = directory.path().join("b.txt");
+        std::fs::write(&first_path, "first").unwrap();
+        std::fs::write(&second_path, "second").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let manager = MessageManager::default();
+
+        let effect = manager.update(&mut model, Message::OpenSelected);
+        complete_open(&mut model, &manager, effect);
+        let first = model.editor.active_buffer().unwrap();
+        assert_eq!(
+            model.editor.buffer_path(first),
+            Some(std::fs::canonicalize(&first_path).unwrap().as_path())
+        );
+
+        manager.update(&mut model, Message::EnterInsertMode);
+        manager.update(&mut model, Message::InsertChar('A'));
+        let request = expect_save(manager.update(&mut model, Message::ExitInsertMode));
+        let completion = request.perform().await;
+        manager.update(&mut model, Message::SaveFinished(completion));
+        assert_eq!(std::fs::read_to_string(&first_path).unwrap(), "Afirst");
+
+        manager.update(&mut model, Message::MoveFocus(FocusDirection::Left));
+        manager.update(&mut model, Message::ExplorerNext);
+        let effect = manager.update(&mut model, Message::OpenSelected);
+        complete_open(&mut model, &manager, effect);
+        let second = model.editor.active_buffer().unwrap();
+        assert_ne!(first, second);
+
+        assert!(
+            manager
+                .update(&mut model, Message::PreviousBuffer)
+                .is_none()
+        );
+        assert_eq!(model.editor.active_buffer(), Some(first));
+        manager.update(&mut model, Message::CloseActive);
+        assert_eq!(model.editor.buffer_count(), 1);
+        assert_eq!(model.editor.active_buffer(), Some(second));
+
+        manager.update(&mut model, Message::EnterInsertMode);
+        manager.update(&mut model, Message::InsertChar('B'));
+        assert!(model.editor.active_is_modified());
+        let effect = manager.update(&mut model, Message::Quit);
+        assert!(effect.is_some(), "quit did not save: {:?}", model.status);
+        let request = expect_save(effect);
+        assert_eq!(model.running_state, RunningState::Running);
+        assert!(model.editor.has_saving_buffers());
+        let completion = request.perform().await;
+        manager.update(&mut model, Message::SaveFinished(completion));
+
+        assert_eq!(model.running_state, RunningState::Done);
+        assert!(!model.editor.has_saving_buffers());
+        assert_eq!(std::fs::read_to_string(second_path).unwrap(), "Bsecond");
     }
 
     #[tokio::test]

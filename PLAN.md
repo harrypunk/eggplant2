@@ -173,8 +173,9 @@ Each milestone should remain small enough to review independently. Update this f
 - [x] Finalize the first-edition command table and update `config.example.toml`.
 - [x] Test narrow terminals, resize, Unicode/graphemes, wide characters, horizontal scrolling, and empty documents.
 - [x] Test large files, permissions, missing files, external modification handling, and save failures.
-- [ ] Verify panic-safe terminal restoration and clean shutdown with pending saves.
-- [ ] Run an end-to-end explorer → open → edit → automatic save → switch/close test suite.
+- [x] Harden terminal cleanup paths and test clean shutdown with pending saves.
+- [ ] Execute the real-terminal panic/restoration checks in `docs/smoke-test.md`.
+- [x] Run an end-to-end explorer → open → edit → automatic save → switch/close test suite.
 - [ ] Review public editor/application APIs against future AI command use without implementing agents.
 - [ ] Update README, editor design, and this plan to match actual behavior.
 

@@ -202,6 +202,7 @@ Eggplant **always auto-saves** after accepted content changes. There is no manua
 - Insert-mode changes are saved as one session when leaving Insert, avoiding a write per keystroke and preserving a useful undo group.
 - Close and quit save dirty buffers first and finish only after successful persistence.
 - A scratch/untitled buffer is never written without an explicit path. An attempted save reports the missing-path error and leaves the buffer open/dirty.
+- Clean buffers are not rewritten during buffer switches, focus loss, or Insert exit; save effects start only for modified file-backed buffers.
 - Saving does not implicitly run formatters, code actions, or other content-changing hooks.
 
 ### Save flow
