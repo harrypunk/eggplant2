@@ -7,36 +7,49 @@ use editor::{
 use ratatui::layout::Rect;
 
 use crate::{
-    command_menu::{CommandAction, CommandMenuOutcome},
+    command_menu::CommandMenuOutcome,
     data_object::{
         BufferMovement, Context, DeferredAction, FocusDirection, FocusTarget, Message, Model,
         RunningState, StatusMessage, Visibility,
     },
     explorer::{ExpansionState, ExplorerEntryKind, IgnoreMode},
-    manager::effect::Effect,
+    manager::{command_registry::CommandRegistry, effect::Effect},
     page::editor::editor_content_area,
     theme::Theme,
 };
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct MessageManager {
     documents: DocumentFactory,
+    commands: CommandRegistry,
+}
+
+impl Default for MessageManager {
+    fn default() -> Self {
+        Self::new(CommandRegistry::builtin())
+    }
 }
 
 impl MessageManager {
+    pub fn new(commands: CommandRegistry) -> Self {
+        Self {
+            documents: DocumentFactory::new(),
+            commands,
+        }
+    }
+
     pub fn update(&self, model: &mut Model, msg: Message) -> Option<Effect> {
         match msg {
             Message::CommandMenuKey(key) => {
                 return match model.command_menu.handle_key(key) {
                     CommandMenuOutcome::Pending | CommandMenuOutcome::Cancelled => None,
                     CommandMenuOutcome::Action(action) => {
-                        let message = match action {
-                            CommandAction::Quit => Message::Quit,
-                            CommandAction::NextBuffer => Message::NextBuffer,
-                            CommandAction::PreviousBuffer => Message::PreviousBuffer,
-                            CommandAction::ToggleFileExplorer => Message::ToggleFileExplorer,
-                            CommandAction::OpenFilePicker => Message::OpenFilePicker,
-                            CommandAction::OpenThemePicker => Message::OpenThemePicker,
+                        let Some(message) = self.commands.message_for(action.as_str()) else {
+                            model.status = Some(StatusMessage::error(format!(
+                                "unknown command `{}`",
+                                action.as_str()
+                            )));
+                            return None;
                         };
                         self.update(model, message)
                     }

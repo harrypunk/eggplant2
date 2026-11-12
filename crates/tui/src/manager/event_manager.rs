@@ -83,11 +83,11 @@ mod tests {
     use editor::CursorMovement;
 
     use super::*;
-    use crate::data_object::FocusDirection;
+    use crate::{data_object::FocusDirection, manager::command_registry::CommandRegistry};
 
     fn event_manager() -> EventManager {
         let config = Config::default();
-        let keymap = Registry::from_config(&config.keymap).unwrap();
+        let keymap = Registry::from_config(&config.keymap, &CommandRegistry::default()).unwrap();
         EventManager::new(&config, keymap)
     }
 

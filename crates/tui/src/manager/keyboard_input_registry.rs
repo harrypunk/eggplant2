@@ -1,12 +1,14 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, hash_map::Entry};
 
 use color_eyre::eyre::eyre;
-use editor::CursorMovement;
 
 use crate::{
     config::KeymapConfig,
-    data_object::{Context, FocusDirection, Message},
-    manager::context::{ContextBindings, KeyChord},
+    data_object::{Context, Message},
+    manager::{
+        command_registry::CommandRegistry,
+        context::{ContextBindings, KeyChord},
+    },
 };
 
 type ContextBindingMap = HashMap<Context, ContextBindings>;
@@ -19,11 +21,14 @@ pub struct Registry {
 
 impl Registry {
     /// Validate raw configuration and construct the runtime keymap.
-    pub fn from_config(config: &KeymapConfig) -> color_eyre::Result<Self> {
+    pub fn from_config(
+        config: &KeymapConfig,
+        commands: &CommandRegistry,
+    ) -> color_eyre::Result<Self> {
         config
             .iter()
             .map(|(context_name, bindings)| {
-                parse_context_bindings(context_name, bindings)
+                parse_context_bindings(context_name, bindings, commands)
                     .map(|bindings| (bindings.context, bindings))
             })
             .collect::<color_eyre::Result<ContextBindingMap>>()
@@ -38,6 +43,7 @@ impl Registry {
 fn parse_context_bindings(
     context_name: &str,
     bindings: &HashMap<String, String>,
+    commands: &CommandRegistry,
 ) -> color_eyre::Result<ContextBindings> {
     let context = parse_context(context_name).ok_or_else(|| {
         eyre!(
@@ -45,19 +51,36 @@ fn parse_context_bindings(
         )
     })?;
 
-    bindings
-        .iter()
-        .map(|(action_name, key_name)| parse_binding(context_name, action_name, key_name))
-        .collect::<color_eyre::Result<HashMap<KeyChord, Message>>>()
-        .map(|bindings| ContextBindings::from_bindings(context, bindings))
+    let parsed = bindings.iter().try_fold(
+        HashMap::<KeyChord, (&str, Message)>::new(),
+        |mut parsed, (action_name, key_name)| -> color_eyre::Result<_> {
+            let (key, message) = parse_binding(context_name, action_name, key_name, commands)?;
+            match parsed.entry(key) {
+                Entry::Occupied(entry) => Err(eyre!(
+                    "duplicate key binding `{key_name}` in keymap context `{context_name}` for actions `{}` and `{action_name}`",
+                    entry.get().0
+                )),
+                Entry::Vacant(entry) => {
+                    entry.insert((action_name.as_str(), message));
+                    Ok(parsed)
+                }
+            }
+        },
+    )?;
+
+    Ok(ContextBindings::from_bindings(
+        context,
+        parsed.into_iter().map(|(key, (_, message))| (key, message)),
+    ))
 }
 
 fn parse_binding(
     context_name: &str,
     action_name: &str,
     key_name: &str,
+    commands: &CommandRegistry,
 ) -> color_eyre::Result<(KeyChord, Message)> {
-    let message = parse_message(action_name).ok_or_else(|| {
+    let message = commands.message_for(action_name).ok_or_else(|| {
         eyre!("unknown action `{action_name}` in keymap context `{context_name}`")
     })?;
     let key = key_name
@@ -81,45 +104,6 @@ fn parse_context(value: &str) -> Option<Context> {
     }
 }
 
-fn parse_message(value: &str) -> Option<Message> {
-    match value {
-        "quit" => Some(Message::Quit),
-        "enter_insert_mode" => Some(Message::EnterInsertMode),
-        "exit_insert_mode" => Some(Message::ExitInsertMode),
-        "move_left" => Some(Message::MoveCursor(CursorMovement::Left)),
-        "move_right" => Some(Message::MoveCursor(CursorMovement::Right)),
-        "move_up" => Some(Message::MoveCursor(CursorMovement::Up)),
-        "move_down" => Some(Message::MoveCursor(CursorMovement::Down)),
-        "focus_left" => Some(Message::MoveFocus(FocusDirection::Left)),
-        "focus_down" => Some(Message::MoveFocus(FocusDirection::Down)),
-        "focus_up" => Some(Message::MoveFocus(FocusDirection::Up)),
-        "focus_right" => Some(Message::MoveFocus(FocusDirection::Right)),
-        "backspace" => Some(Message::Backspace),
-        "insert_newline" => Some(Message::InsertNewline),
-        "undo" => Some(Message::Undo),
-        "redo" => Some(Message::Redo),
-        "close_buffer" => Some(Message::CloseActive),
-        "explorer_next" => Some(Message::ExplorerNext),
-        "explorer_previous" => Some(Message::ExplorerPrevious),
-        "open_selected" => Some(Message::OpenSelected),
-        "explorer_fold" => Some(Message::ExplorerFold),
-        "explorer_unfold" => Some(Message::ExplorerUnfold),
-        "refresh_explorer" => Some(Message::RefreshExplorer),
-        "toggle_ignored_files" => Some(Message::ToggleIgnoredFiles),
-        "close_file_picker" => Some(Message::CloseFilePicker),
-        "file_picker_backspace" => Some(Message::FilePickerBackspace),
-        "open_picker_file" => Some(Message::OpenPickerFile),
-        "file_picker_next" => Some(Message::FilePickerNext),
-        "file_picker_previous" => Some(Message::FilePickerPrevious),
-        "open_theme_picker" => Some(Message::OpenThemePicker),
-        "close_theme_picker" => Some(Message::CloseThemePicker),
-        "theme_picker_next" => Some(Message::ThemePickerNext),
-        "theme_picker_previous" => Some(Message::ThemePickerPrevious),
-        "apply_theme" => Some(Message::ApplyTheme),
-        _ => None,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crossterm::event::{KeyCode, KeyModifiers};
@@ -129,7 +113,8 @@ mod tests {
 
     #[test]
     fn loads_default_bindings() {
-        let registry = Registry::from_config(&Config::default().keymap).unwrap();
+        let registry =
+            Registry::from_config(&Config::default().keymap, &CommandRegistry::default()).unwrap();
 
         assert!(
             registry
@@ -153,7 +138,7 @@ mod tests {
             "normal".to_string(),
             HashMap::from([("quit".to_string(), "ctrl-q".to_string())]),
         )]);
-        let registry = Registry::from_config(&config).unwrap();
+        let registry = Registry::from_config(&config, &CommandRegistry::default()).unwrap();
 
         assert!(matches!(
             registry
@@ -174,7 +159,7 @@ mod tests {
     #[test]
     fn rejects_unknown_context() {
         let config = HashMap::from([("unknown".to_string(), HashMap::new())]);
-        let error = Registry::from_config(&config).unwrap_err();
+        let error = Registry::from_config(&config, &CommandRegistry::default()).unwrap_err();
 
         assert!(error.to_string().contains("unknown keymap context"));
     }
@@ -185,9 +170,26 @@ mod tests {
             "normal".to_string(),
             HashMap::from([("unknown".to_string(), "q".to_string())]),
         )]);
-        let error = Registry::from_config(&config).unwrap_err();
+        let error = Registry::from_config(&config, &CommandRegistry::default()).unwrap_err();
 
         assert!(error.to_string().contains("unknown action `unknown`"));
+    }
+
+    #[test]
+    fn rejects_duplicate_key_chords_in_one_context() {
+        let config = HashMap::from([(
+            "normal".to_string(),
+            HashMap::from([
+                ("undo".to_string(), "u".to_string()),
+                ("redo".to_string(), "u".to_string()),
+            ]),
+        )]);
+
+        let error = Registry::from_config(&config, &CommandRegistry::default()).unwrap_err();
+        assert!(error.to_string().contains("duplicate key binding `u`"));
+        assert!(error.to_string().contains("normal"));
+        assert!(error.to_string().contains("undo"));
+        assert!(error.to_string().contains("redo"));
     }
 
     #[test]
@@ -196,7 +198,7 @@ mod tests {
             "normal".to_string(),
             HashMap::from([("quit".to_string(), "ctrl-".to_string())]),
         )]);
-        let error = Registry::from_config(&config).unwrap_err();
+        let error = Registry::from_config(&config, &CommandRegistry::default()).unwrap_err();
 
         assert!(error.to_string().contains("normal.quit"));
     }

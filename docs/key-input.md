@@ -45,6 +45,8 @@ active input Context + Registry
 
 Input translation is pure. It does not change the model, execute commands, sleep, or perform I/O. Only `MessageManager::update` changes application state. Rendering reads the resulting model and never resolves commands itself.
 
+Direct bindings and leader targets share `CommandRegistry`: each stable command ID has metadata and a compatibility message handler during M6.1. Duplicate command registrations and duplicate chords in one input context are startup errors. Later feature migrations replace compatibility handlers without changing keybindings.
+
 The built-in Space leader is already a small data-driven sequence state machine. Each `CommandMenuContext` owns its semantic title and items, and each item targets either a submenu or a semantic action. `CommandMenuState` stores the active context stack, returns `Pending`, `Cancelled`, or a semantic `CommandAction`, and the update layer translates completed actions into ordinary messages. `KeyHints` renders the current context's candidates and composes its title by joining active context titles, such as `Leader > buffer`. Titles therefore grow with the menu definitions rather than requiring a separate menu-specific title match.
 
 Current sequences include `Space q q` to quit, `Space b n`/`Space b p` to switch buffers, `Space f f` to open files, and `Space u t` to open the theme list. The theme picker uses a dedicated modal context: Down/Up navigate, Enter applies, and Escape cancels without changing the active theme.

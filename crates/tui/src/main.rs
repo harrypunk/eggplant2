@@ -1,6 +1,6 @@
 use tui::{
     config::Config,
-    manager::keyboard_input_registry::Registry,
+    manager::{command_registry::CommandRegistry, keyboard_input_registry::Registry},
     runtime,
     startup::{initial_model, startup_path_from},
     terminal,
@@ -13,10 +13,11 @@ async fn main() -> color_eyre::Result<()> {
     let mut model = initial_model(initial_path)?;
     let config = Config::load()?;
     model.theme = Theme::from_name(&config.theme)?;
-    let keymap = Registry::from_config(&config.keymap)?;
+    let commands = CommandRegistry::builtin();
+    let keymap = Registry::from_config(&config.keymap, &commands)?;
     terminal::install_panic_hook();
     let mut terminal = terminal::init_terminal()?;
-    let result = runtime::run(&mut terminal, &config, keymap, model);
+    let result = runtime::run(&mut terminal, &config, keymap, commands, model);
     terminal::restore_terminal()?;
     result
 }

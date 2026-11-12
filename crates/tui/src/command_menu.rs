@@ -1,26 +1,18 @@
 use crossterm::event::KeyCode;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CommandAction {
-    Quit,
-    NextBuffer,
-    PreviousBuffer,
-    ToggleFileExplorer,
-    OpenFilePicker,
-    OpenThemePicker,
-}
+use crate::manager::command_registry::CommandId;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CommandMenuOutcome {
     Pending,
     Cancelled,
-    Action(CommandAction),
+    Action(CommandId),
 }
 
 #[derive(Debug, Clone, Copy)]
 enum CommandMenuTarget {
     Submenu(&'static CommandMenuContext),
-    Action(CommandAction),
+    Action(CommandId),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -41,7 +33,7 @@ const QUIT_CONTEXT: CommandMenuContext = CommandMenuContext {
     items: &[CommandMenuItem {
         key: 'q',
         description: "quit",
-        target: CommandMenuTarget::Action(CommandAction::Quit),
+        target: CommandMenuTarget::Action(CommandId("quit")),
     }],
 };
 
@@ -51,12 +43,12 @@ const BUFFER_CONTEXT: CommandMenuContext = CommandMenuContext {
         CommandMenuItem {
             key: 'n',
             description: "next buffer",
-            target: CommandMenuTarget::Action(CommandAction::NextBuffer),
+            target: CommandMenuTarget::Action(CommandId("next_buffer")),
         },
         CommandMenuItem {
             key: 'p',
             description: "previous buffer",
-            target: CommandMenuTarget::Action(CommandAction::PreviousBuffer),
+            target: CommandMenuTarget::Action(CommandId("previous_buffer")),
         },
     ],
 };
@@ -66,7 +58,7 @@ const FILES_CONTEXT: CommandMenuContext = CommandMenuContext {
     items: &[CommandMenuItem {
         key: 'f',
         description: "find file",
-        target: CommandMenuTarget::Action(CommandAction::OpenFilePicker),
+        target: CommandMenuTarget::Action(CommandId("open_file_picker")),
     }],
 };
 
@@ -75,7 +67,7 @@ const UI_CONTEXT: CommandMenuContext = CommandMenuContext {
     items: &[CommandMenuItem {
         key: 't',
         description: "theme",
-        target: CommandMenuTarget::Action(CommandAction::OpenThemePicker),
+        target: CommandMenuTarget::Action(CommandId("open_theme_picker")),
     }],
 };
 
@@ -95,7 +87,7 @@ const ROOT_CONTEXT: CommandMenuContext = CommandMenuContext {
         CommandMenuItem {
             key: 'e',
             description: "toggle files",
-            target: CommandMenuTarget::Action(CommandAction::ToggleFileExplorer),
+            target: CommandMenuTarget::Action(CommandId("toggle_file_explorer")),
         },
         CommandMenuItem {
             key: 'f',
@@ -167,7 +159,7 @@ impl CommandMenuState {
         self.contexts.last().copied()
     }
 
-    fn finish(&mut self, action: CommandAction) -> CommandMenuOutcome {
+    fn finish(&mut self, action: CommandId) -> CommandMenuOutcome {
         self.contexts.clear();
         CommandMenuOutcome::Action(action)
     }
@@ -181,6 +173,25 @@ impl CommandMenuState {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::manager::command_registry::CommandRegistry;
+
+    fn assert_targets_registered(context: &CommandMenuContext, registry: &CommandRegistry) {
+        for item in context.items {
+            match item.target {
+                CommandMenuTarget::Submenu(submenu) => assert_targets_registered(submenu, registry),
+                CommandMenuTarget::Action(id) => assert!(
+                    registry.get(id.as_str()).is_some(),
+                    "leader command `{}` is not registered",
+                    id.as_str()
+                ),
+            }
+        }
+    }
+
+    #[test]
+    fn every_leader_target_is_registered() {
+        assert_targets_registered(&ROOT_CONTEXT, &CommandRegistry::builtin());
+    }
 
     #[test]
     fn menu_sequences_emit_expected_actions() {
@@ -198,7 +209,7 @@ mod tests {
         assert_eq!(menu.context_title(), "Leader > buffer");
         assert_eq!(
             menu.handle_key(KeyCode::Char('n')),
-            CommandMenuOutcome::Action(CommandAction::NextBuffer)
+            CommandMenuOutcome::Action(CommandId("next_buffer"))
         );
         assert!(!menu.is_active());
 
@@ -207,13 +218,13 @@ mod tests {
         assert_eq!(menu.context_title(), "Leader > quit");
         assert_eq!(
             menu.handle_key(KeyCode::Char('q')),
-            CommandMenuOutcome::Action(CommandAction::Quit)
+            CommandMenuOutcome::Action(CommandId("quit"))
         );
 
         menu.handle_key(KeyCode::Char(' '));
         assert_eq!(
             menu.handle_key(KeyCode::Char('e')),
-            CommandMenuOutcome::Action(CommandAction::ToggleFileExplorer)
+            CommandMenuOutcome::Action(CommandId("toggle_file_explorer"))
         );
 
         menu.handle_key(KeyCode::Char(' '));
@@ -221,7 +232,7 @@ mod tests {
         assert_eq!(menu.context_title(), "Leader > files");
         assert_eq!(
             menu.handle_key(KeyCode::Char('f')),
-            CommandMenuOutcome::Action(CommandAction::OpenFilePicker)
+            CommandMenuOutcome::Action(CommandId("open_file_picker"))
         );
 
         menu.handle_key(KeyCode::Char(' '));
@@ -229,7 +240,7 @@ mod tests {
         assert_eq!(menu.context_title(), "Leader > ui");
         assert_eq!(
             menu.handle_key(KeyCode::Char('t')),
-            CommandMenuOutcome::Action(CommandAction::OpenThemePicker)
+            CommandMenuOutcome::Action(CommandId("open_theme_picker"))
         );
     }
 

@@ -222,6 +222,8 @@ Every step must preserve existing behavior unless a new feature is explicitly be
 
 Introduce stable command IDs, registration metadata, duplicate/conflict diagnostics, and shared direct-key/leader resolution. Migrate a small command set first. Keep characterization tests for current bindings and hints.
 
+Implemented in the first slice: `CommandRegistry` owns all current IDs and descriptions, direct keymaps and leader targets resolve through it, and duplicate command IDs or duplicate chords in one context fail at startup. Handlers currently resolve to existing `Message`s as a compatibility boundary; later feature slices replace them with narrower feature-owned handlers without changing bindings again.
+
 ### M6.2 — Theme picker vertical slice
 
 Move theme-picker state/messages/update and its popup contribution behind the new registration path. This proves commands and a pure feature without conflating the work with asynchronous effects.
