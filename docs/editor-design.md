@@ -226,7 +226,8 @@ SaveFinished { id, saved_revision, result }
 - A save completion marks only its saved revision clean. If the document has advanced, the buffer remains dirty and another save starts.
 - Allow at most one in-flight save per buffer. An edit received during saving is saved by completion follow-up rather than overlapping writes.
 - Save errors keep the buffer dirty and remain visible. Close/quit actions are canceled on failure rather than discarding content.
-- Use atomic/replace-safe writes where supported and detect external file changes before overwriting them.
+- A missing file-backed path is created on its first successful save; no manual Save command is required.
+- Use atomic/replace-safe writes where supported and detect external file changes before overwriting them. Readonly permissions and a newer external mtime fail the save without overwriting either local edits or the external version; there is no automatic merge or force-overwrite workflow.
 
 With standalone `helix-view::Document`, `Document::save` returns a future and completion event; the caller applies `set_last_saved_revision`. Helix's auto-save handlers live in `helix-term`, so Eggplant directly triggers its shared save path at the events listed above.
 

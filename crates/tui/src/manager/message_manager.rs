@@ -720,6 +720,40 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn failed_file_save_cancels_close_and_preserves_the_dirty_buffer() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("readonly.txt");
+        std::fs::write(&path, "original").unwrap();
+        let mut model = Model::default();
+        let id = open_file(&mut model, &path);
+        model.context_stack.push(Context::AppNormal);
+        model.editor.enter_insert_mode();
+        model.editor.insert_text("local ").unwrap();
+        model.editor.enter_normal_mode();
+        let mut permissions = std::fs::metadata(&path).unwrap().permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(&path, permissions).unwrap();
+        let manager = MessageManager::default();
+
+        let request = expect_save(manager.update(&mut model, Message::CloseActive));
+        assert_eq!(model.deferred_action, Some(DeferredAction::CloseBuffer(id)));
+        let completion = request.perform().await;
+        assert!(
+            manager
+                .update(&mut model, Message::SaveFinished(completion))
+                .is_none()
+        );
+
+        assert_eq!(model.editor.buffer_count(), 1);
+        assert_eq!(model.editor.active_buffer(), Some(id));
+        assert!(model.editor.is_modified(id).unwrap());
+        assert_eq!(model.deferred_action, None);
+        assert_eq!(model.running_state, RunningState::Running);
+        assert_eq!(model.status.as_ref().unwrap().kind, StatusKind::Error);
+        assert_eq!(std::fs::read_to_string(path).unwrap(), "original");
+    }
+
+    #[tokio::test]
     async fn quit_waits_for_save_completion() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("note.txt");

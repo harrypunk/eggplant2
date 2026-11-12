@@ -910,6 +910,111 @@ mod tests {
         assert_eq!(session.buffers[&id].document.text(), "hello one two");
     }
 
+    #[tokio::test]
+    async fn large_file_viewport_edit_and_save() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("large.txt");
+        let text = (0..10_000)
+            .map(|line| format!("line-{line:05}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(&path, text).unwrap();
+        let mut session = EditorSession::new();
+        let id = open_file(&mut session, &path);
+        session.resize_active_view(40, 8);
+        let (document, view) = active_parts(&mut session);
+        let end = document.text().len_chars();
+        document.set_selection(view.id, Selection::point(end));
+        view.ensure_cursor_in_view(document, 0);
+
+        let snapshot = session.active_snapshot().unwrap();
+        assert_eq!(snapshot.text.line_count, 10_000);
+        assert!(snapshot.text.first_line > 9_000);
+        assert!(snapshot.text.lines.len() <= 8);
+        assert!(
+            snapshot
+                .text
+                .lines
+                .iter()
+                .any(|line| line.text == "line-09999")
+        );
+
+        append_text(&mut session, "\ntail");
+        let completion = session.save_buffer(id).unwrap().perform().await;
+        session.complete_save(completion).unwrap();
+        assert!(!session.active_is_modified());
+        assert!(std::fs::read_to_string(path).unwrap().ends_with("\ntail"));
+    }
+
+    #[tokio::test]
+    async fn missing_file_is_created_by_the_first_save() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("new.txt");
+        let mut session = EditorSession::new();
+        let id = open_file(&mut session, &path);
+        session.enter_insert_mode();
+        session.insert_text("new").unwrap();
+        session.enter_normal_mode();
+
+        let completion = session.save_buffer(id).unwrap().perform().await;
+        session.complete_save(completion).unwrap();
+
+        assert!(!session.active_is_modified());
+        assert_eq!(std::fs::read_to_string(path).unwrap(), "new\n");
+    }
+
+    #[tokio::test]
+    async fn readonly_save_failure_preserves_local_and_on_disk_text() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("readonly.txt");
+        std::fs::write(&path, "original").unwrap();
+        let mut session = EditorSession::new();
+        let id = open_file(&mut session, &path);
+        let mut permissions = std::fs::metadata(&path).unwrap().permissions();
+        permissions.set_readonly(true);
+        std::fs::set_permissions(&path, permissions).unwrap();
+        append_text(&mut session, " local");
+
+        let completion = session.save_buffer(id).unwrap().perform().await;
+        assert!(completion.result.is_err());
+        let error = session.complete_save(completion).unwrap_err();
+        assert!(matches!(
+            error,
+            EditorError::SaveDocument { buffer_id, .. } if buffer_id == id
+        ));
+        assert!(session.active_is_modified());
+        assert!(!session.has_saving_buffers());
+        assert_eq!(session.buffers[&id].document.text(), "original local");
+        assert_eq!(std::fs::read_to_string(path).unwrap(), "original");
+    }
+
+    #[tokio::test]
+    async fn external_modification_save_failure_does_not_overwrite_either_version() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("external.txt");
+        std::fs::write(&path, "original").unwrap();
+        let mut session = EditorSession::new();
+        let id = open_file(&mut session, &path);
+        append_text(&mut session, " local");
+        let request = session.save_buffer(id).unwrap();
+        std::fs::write(&path, "external").unwrap();
+        let external = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+        external
+            .set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(2))
+            .unwrap();
+
+        let completion = request.perform().await;
+        assert!(completion.result.is_err());
+        let error = session.complete_save(completion).unwrap_err();
+        assert!(matches!(
+            error,
+            EditorError::SaveDocument { buffer_id, .. } if buffer_id == id
+        ));
+        assert!(session.active_is_modified());
+        assert_eq!(session.buffers[&id].document.text(), "original local");
+        assert_eq!(std::fs::read_to_string(path).unwrap(), "external");
+    }
+
     #[test]
     fn untitled_buffer_cannot_save_without_a_path() {
         let mut session = EditorSession::new();
