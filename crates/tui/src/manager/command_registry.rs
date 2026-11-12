@@ -52,6 +52,15 @@ impl CommandRegistry {
         }
     }
 
+    pub fn from_commands(commands: impl IntoIterator<Item = Command>) -> color_eyre::Result<Self> {
+        commands
+            .into_iter()
+            .try_fold(Self::empty(), |mut registry, command| {
+                registry.register(command)?;
+                Ok(registry)
+            })
+    }
+
     pub fn register(&mut self, command: Command) -> color_eyre::Result<()> {
         let id = command.id;
         if self.commands.contains_key(&id) {
@@ -70,13 +79,7 @@ impl CommandRegistry {
     }
 
     pub fn builtin() -> Self {
-        let mut registry = Self::empty();
-        for (id, description, message) in builtin_commands() {
-            registry
-                .register(Command::new(CommandId(id), description, message))
-                .expect("built-in command IDs must be unique");
-        }
-        registry
+        Self::from_commands(builtin_commands()).expect("built-in command IDs must be unique")
     }
 }
 
@@ -86,125 +89,169 @@ impl Default for CommandRegistry {
     }
 }
 
-fn builtin_commands() -> Vec<(&'static str, &'static str, Message)> {
-    vec![
-        ("quit", "quit", Message::Quit),
-        (
-            "enter_insert_mode",
+fn builtin_commands() -> impl IntoIterator<Item = Command> {
+    [
+        Command::new(CommandId("quit"), "quit", Message::Quit),
+        Command::new(
+            CommandId("enter_insert_mode"),
             "enter Insert mode",
             Message::EnterInsertMode,
         ),
-        (
-            "exit_insert_mode",
+        Command::new(
+            CommandId("exit_insert_mode"),
             "leave Insert mode",
             Message::ExitInsertMode,
         ),
-        (
-            "move_left",
+        Command::new(
+            CommandId("move_left"),
             "move left",
             Message::MoveCursor(CursorMovement::Left),
         ),
-        (
-            "move_right",
+        Command::new(
+            CommandId("move_right"),
             "move right",
             Message::MoveCursor(CursorMovement::Right),
         ),
-        (
-            "move_up",
+        Command::new(
+            CommandId("move_up"),
             "move up",
             Message::MoveCursor(CursorMovement::Up),
         ),
-        (
-            "move_down",
+        Command::new(
+            CommandId("move_down"),
             "move down",
             Message::MoveCursor(CursorMovement::Down),
         ),
-        (
-            "focus_left",
+        Command::new(
+            CommandId("focus_left"),
             "focus left",
             Message::MoveFocus(FocusDirection::Left),
         ),
-        (
-            "focus_down",
+        Command::new(
+            CommandId("focus_down"),
             "focus down",
             Message::MoveFocus(FocusDirection::Down),
         ),
-        (
-            "focus_up",
+        Command::new(
+            CommandId("focus_up"),
             "focus up",
             Message::MoveFocus(FocusDirection::Up),
         ),
-        (
-            "focus_right",
+        Command::new(
+            CommandId("focus_right"),
             "focus right",
             Message::MoveFocus(FocusDirection::Right),
         ),
-        ("backspace", "backspace", Message::Backspace),
-        ("insert_newline", "insert newline", Message::InsertNewline),
-        ("undo", "undo", Message::Undo),
-        ("redo", "redo", Message::Redo),
-        ("close_buffer", "close buffer", Message::CloseActive),
-        ("next_buffer", "next buffer", Message::NextBuffer),
-        (
-            "previous_buffer",
+        Command::new(CommandId("backspace"), "backspace", Message::Backspace),
+        Command::new(
+            CommandId("insert_newline"),
+            "insert newline",
+            Message::InsertNewline,
+        ),
+        Command::new(CommandId("undo"), "undo", Message::Undo),
+        Command::new(CommandId("redo"), "redo", Message::Redo),
+        Command::new(
+            CommandId("close_buffer"),
+            "close buffer",
+            Message::CloseActive,
+        ),
+        Command::new(CommandId("next_buffer"), "next buffer", Message::NextBuffer),
+        Command::new(
+            CommandId("previous_buffer"),
             "previous buffer",
             Message::PreviousBuffer,
         ),
-        ("explorer_next", "next entry", Message::ExplorerNext),
-        (
-            "explorer_previous",
+        Command::new(
+            CommandId("explorer_next"),
+            "next entry",
+            Message::ExplorerNext,
+        ),
+        Command::new(
+            CommandId("explorer_previous"),
             "previous entry",
             Message::ExplorerPrevious,
         ),
-        ("open_selected", "open selected", Message::OpenSelected),
-        ("explorer_fold", "fold folder", Message::ExplorerFold),
-        ("explorer_unfold", "unfold folder", Message::ExplorerUnfold),
-        (
-            "refresh_explorer",
+        Command::new(
+            CommandId("open_selected"),
+            "open selected",
+            Message::OpenSelected,
+        ),
+        Command::new(
+            CommandId("explorer_fold"),
+            "fold folder",
+            Message::ExplorerFold,
+        ),
+        Command::new(
+            CommandId("explorer_unfold"),
+            "unfold folder",
+            Message::ExplorerUnfold,
+        ),
+        Command::new(
+            CommandId("refresh_explorer"),
             "refresh explorer",
             Message::RefreshExplorer,
         ),
-        (
-            "toggle_ignored_files",
+        Command::new(
+            CommandId("toggle_ignored_files"),
             "toggle ignored files",
             Message::ToggleIgnoredFiles,
         ),
-        (
-            "toggle_file_explorer",
+        Command::new(
+            CommandId("toggle_file_explorer"),
             "toggle files",
             Message::ToggleFileExplorer,
         ),
-        ("open_file_picker", "find file", Message::OpenFilePicker),
-        (
-            "close_file_picker",
+        Command::new(
+            CommandId("open_file_picker"),
+            "find file",
+            Message::OpenFilePicker,
+        ),
+        Command::new(
+            CommandId("close_file_picker"),
             "close file picker",
             Message::CloseFilePicker,
         ),
-        (
-            "file_picker_backspace",
+        Command::new(
+            CommandId("file_picker_backspace"),
             "delete query character",
             Message::FilePickerBackspace,
         ),
-        ("open_picker_file", "open file", Message::OpenPickerFile),
-        ("file_picker_next", "next file", Message::FilePickerNext),
-        (
-            "file_picker_previous",
+        Command::new(
+            CommandId("open_picker_file"),
+            "open file",
+            Message::OpenPickerFile,
+        ),
+        Command::new(
+            CommandId("file_picker_next"),
+            "next file",
+            Message::FilePickerNext,
+        ),
+        Command::new(
+            CommandId("file_picker_previous"),
             "previous file",
             Message::FilePickerPrevious,
         ),
-        ("open_theme_picker", "theme", Message::OpenThemePicker),
-        (
-            "close_theme_picker",
+        Command::new(
+            CommandId("open_theme_picker"),
+            "theme",
+            Message::OpenThemePicker,
+        ),
+        Command::new(
+            CommandId("close_theme_picker"),
             "close theme picker",
             Message::CloseThemePicker,
         ),
-        ("theme_picker_next", "next theme", Message::ThemePickerNext),
-        (
-            "theme_picker_previous",
+        Command::new(
+            CommandId("theme_picker_next"),
+            "next theme",
+            Message::ThemePickerNext,
+        ),
+        Command::new(
+            CommandId("theme_picker_previous"),
             "previous theme",
             Message::ThemePickerPrevious,
         ),
-        ("apply_theme", "apply theme", Message::ApplyTheme),
+        Command::new(CommandId("apply_theme"), "apply theme", Message::ApplyTheme),
     ]
 }
 
@@ -214,22 +261,12 @@ mod tests {
 
     #[test]
     fn rejects_duplicate_command_ids() {
-        let mut registry = CommandRegistry::empty();
-        registry
-            .register(Command::new(
-                CommandId("test.command"),
-                "first",
-                Message::Undo,
-            ))
-            .unwrap();
+        let error = CommandRegistry::from_commands([
+            Command::new(CommandId("test.command"), "first", Message::Undo),
+            Command::new(CommandId("test.command"), "second", Message::Redo),
+        ])
+        .unwrap_err();
 
-        let error = registry
-            .register(Command::new(
-                CommandId("test.command"),
-                "second",
-                Message::Redo,
-            ))
-            .unwrap_err();
         assert!(
             error
                 .to_string()
