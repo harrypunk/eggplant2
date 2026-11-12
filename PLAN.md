@@ -191,15 +191,49 @@ The first edition is complete when a user can, on Linux:
 7. Resize the terminal and work with ordinary Unicode text predictably.
 8. Run the complete workspace test suite and documented smoke tests successfully.
 
-## Deferred beyond the first edition
+## Second edition: sustainable feature growth
 
-- Dynamic Helix-compatible user themes: discover `~/.eggplant/themes/*.toml`, replace the closed theme catalog used by `Space u t`, resolve inheritance and name collisions, load through effects, and preserve the active theme on failures.
+### Milestone 6: Feature architecture and command platform
+
+**Goal:** add application features through registered modules and explicit contribution points instead of growing `MessageManager`, the global message/keymap parser, runtime effect matching, and page conditionals for every feature. Establish the internal extension contract before considering a third-party plugin runtime.
+
+This is not a promise that new code requires zero wiring. A new feature may be registered explicitly at the composition root; domain coordinators and unrelated features must not need modification. Prefer explicit typed state over a global `Any` map, and introduce abstractions only when a migration or new feature demonstrates their need.
+
+#### Architecture rules
+
+- A feature owns its state, semantic commands/messages, update logic, effects, components, and tests.
+- The application shell owns lifecycle, focus/modal precedence, layout slots, command/effect registration, and shared editor/filesystem capabilities.
+- Commands have stable IDs such as `editor.undo`, `file.open`, and `theme.select`. Configured keys and built-in leader sequences both resolve command IDs; adding a command must not require another arm in `parse_message` or the leader update match.
+- Updates remain pure. Feature-owned effect handlers are registered at the runtime boundary rather than adding every request type to one central `Effect` match.
+- Pages continue to own layout and modal precedence. Features contribute panels, popups, or status items through explicit slots; they do not perform rendering-side I/O or take over the terminal.
+- Preserve the existing editor boundary: stable `BufferId`/revision checks, main-thread construction of non-`Send` Helix documents, text-only file acceptance, and always-on auto-save are core invariants, not feature options.
+
+#### Work items
+
+- [ ] Record the current shell/feature responsibilities and command/effect contribution contract in an architecture document before moving code.
+- [ ] Introduce a command registry with stable IDs, metadata, and handlers. Migrate direct key bindings and built-in leader menus so they share command resolution and detect registration/binding conflicts at startup.
+- [ ] Migrate the theme picker end-to-end as the first small feature: owned state/messages/update, command contribution, popup contribution, and colocated tests.
+- [ ] Migrate the file picker as the effect-rich proof: scanning/filtering/preview/open behavior must use registered effect handlers and completion routing without central feature-specific arms.
+- [ ] Split the remaining lifecycle, buffer, editor, explorer, and open/save coordination into focused modules. `MessageManager` should become a small application coordinator rather than a growing feature match.
+- [ ] Replace centralized feature conditionals in pages with explicit panel/popup/status contribution points while keeping focus, cursor hiding, and modal precedence shell-owned.
+- [ ] Implement dynamic Helix-compatible user themes through the new platform: discover `~/.eggplant/themes/*.toml`, support runtime theme IDs/catalog entries, resolve inheritance and name collisions, load through effects, and preserve the active theme on failures.
+- [ ] Add a test-only example feature proving that command, state/update, popup, and effect contributions work through registration without changes to unrelated domain modules or runtime dispatch.
+- [ ] Document a feature-authoring checklist: registration, commands/keymaps, effects/completions, UI slots, errors, capabilities, and required tests.
+
+**Exit criteria:** existing user behavior and regression tests remain intact; central update, keymap parsing, and runtime dispatch contain no growing per-feature command/effect matches; a new example feature works through composition-root registration alone; dynamic themes use the same extension path rather than special-case core logic.
+
+### After Milestone 6: external extensions only if justified
+
+Do not add a native Rust dynamic-library ABI or unrestricted in-process third-party code. If external plugins become a real requirement, evaluate a versioned, capability-based WebAssembly or out-of-process extension host against the now-stable internal command/effect API. Filesystem, editor mutation, terminal, and future AI capabilities must be explicit, and plugins must not bypass save safety, revision checks, or text-file acceptance rules.
+
+## Deferred beyond the second edition
+
 - AI agent execution/chat and automated editing.
 - LSP, DAP, formatting, and code actions.
 - Full Vim or Helix command compatibility, Visual mode, macros, and registers.
 - Split views and multiple cursors as user-facing features.
 - Soft-wrap visual rendering and advanced annotations.
-- Plugins, remote workspaces, and non-Linux support.
+- Remote workspaces and non-Linux support.
 
 ## Working agreement
 
