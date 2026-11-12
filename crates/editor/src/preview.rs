@@ -1,10 +1,11 @@
 use std::path::Path;
 
-use helix_view::{View, editor::GutterConfig, graphics::Rect};
+use helix_view::View;
 
 use crate::{
     document::{DocumentFactory, OpenDocumentError},
     snapshot::{TextViewSnapshot, text_view_snapshot},
+    viewport,
 };
 
 /// Open an independent document/view and return its read-only text projection.
@@ -18,8 +19,8 @@ pub fn preview_document(
     height: u16,
 ) -> Result<TextViewSnapshot, OpenDocumentError> {
     let mut document = factory.open(path)?;
-    let mut view = View::new(document.id(), GutterConfig::default());
-    view.area = Rect::new(0, 0, width, height);
+    let mut view = View::new(document.id(), viewport::gutters());
+    view.area = viewport::area(width, height);
     document.ensure_view_init(view.id);
     Ok(text_view_snapshot(&document, &view))
 }
@@ -38,8 +39,12 @@ mod tests {
 
         assert_eq!(snapshot.first_line, 0);
         assert_eq!(snapshot.line_count, 4);
+        assert_eq!(snapshot.lines.len(), 3);
         assert_eq!(snapshot.lines[0].text, "zero");
         assert_eq!(snapshot.lines[1].text, "one");
         assert_eq!(snapshot.horizontal_offset, 0);
+
+        let empty = preview_document(&DocumentFactory::new(), &path, 0, 0).unwrap();
+        assert!(empty.lines.is_empty());
     }
 }

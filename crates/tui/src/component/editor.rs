@@ -41,8 +41,14 @@ impl<'a> Editor<'a> {
         let snapshot = self.snapshot.as_ref()?;
         let cursor = snapshot.cursor?;
         let content = EditorBuffer::text_area(Self::content_area(area), snapshot);
+        if content.width == 0 || content.height == 0 {
+            return None;
+        }
         let column = u16::try_from(cursor.column).unwrap_or(u16::MAX);
         let row = u16::try_from(cursor.row).unwrap_or(u16::MAX);
+        if column >= content.width || row >= content.height {
+            return None;
+        }
         Some(Position::new(
             content.x.saturating_add(column),
             content.y.saturating_add(row),
@@ -95,7 +101,7 @@ impl Widget for EditorBuffer<'_> {
 
 #[cfg(test)]
 mod tests {
-    use editor::{DocumentFactory, EditorSession, TextViewSnapshot};
+    use editor::{CursorMovement, DocumentFactory, EditorSession, TextViewSnapshot};
     use ratatui::{Terminal, backend::TestBackend};
 
     use super::*;
@@ -172,6 +178,65 @@ mod tests {
             .unwrap();
 
         terminal.backend().assert_buffer_lines(["1 cd"]);
+    }
+
+    #[test]
+    fn wide_character_scrolling_uses_display_columns() {
+        let mut session = EditorSession::new();
+        create_buffer(&mut session, "a界b🙂c");
+        session.resize_active_view(2, 1);
+        for _ in 0..5 {
+            session.move_cursor(CursorMovement::Right).unwrap();
+        }
+        let snapshot = session.active_snapshot().unwrap();
+        let cursor = snapshot.cursor.unwrap();
+        assert!(cursor.column < 2);
+        assert_eq!(snapshot.text.horizontal_offset + cursor.column, 7);
+
+        let mut snapshot = session.active_snapshot().unwrap();
+        snapshot.text = TextViewSnapshot::plain(vec!["a界b🙂c".to_string()]);
+        snapshot.text.horizontal_offset = 3;
+        let backend = TestBackend::new(6, 1);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal
+            .draw(|frame| {
+                frame.render_widget(
+                    EditorBuffer::new(&snapshot, &Theme::default()),
+                    frame.area(),
+                )
+            })
+            .unwrap();
+
+        terminal.backend().assert_buffer_lines(["1 b🙂c"]);
+    }
+
+    #[test]
+    fn renders_empty_documents_and_handles_zero_sized_views() {
+        let mut session = EditorSession::new();
+        create_buffer(&mut session, "");
+        session.resize_active_view(10, 3);
+        let snapshot = session.active_snapshot().unwrap();
+        assert_eq!(snapshot.text.line_count, 1);
+        assert_eq!(snapshot.text.lines.len(), 1);
+        assert_eq!(snapshot.text.lines[0].text, "");
+        let backend = TestBackend::new(4, 1);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal
+            .draw(|frame| {
+                frame.render_widget(
+                    EditorBuffer::new(&snapshot, &Theme::default()),
+                    frame.area(),
+                )
+            })
+            .unwrap();
+        terminal.backend().assert_buffer_lines(["1   "]);
+
+        session.resize_active_view(0, 0);
+        let snapshot = session.active_snapshot().unwrap();
+        assert!(snapshot.text.lines.is_empty());
+        assert!(snapshot.cursor.is_none());
     }
 
     #[test]

@@ -186,7 +186,7 @@ All mutations go through the editor command API so undo, dirty tracking, viewpor
 
 ### Update and rendering responsibilities
 
-Movement, editing, activation, and resize handling update viewport state. Rendering only reads the result and draws visible content. Buffer tabs use filename-only `BufferInfo` summaries with active/dirty styling and occupy the editor's top row. The layout tree is root vertical main/status, main horizontal explorer/editor/tools with display/hidden states, and editor vertical tabs/content. The editor is borderless, and shared Flex layouts allow future panels without component-specific box offsets.
+Movement, editing, activation, and resize handling update viewport state. Rendering only reads the result and draws visible content. Editor buffers and independent previews share one viewport policy: Eggplant owns the gutter and statusline, while Helix receives exactly the resolved text dimensions plus its internally required statusline compensation. Cursor placement is suppressed for empty or out-of-bounds text rectangles. Buffer tabs use filename-only `BufferInfo` summaries with active/dirty styling and occupy the editor's top row. The layout tree is root vertical main/status, main horizontal explorer/editor/tools with display/hidden states, and editor vertical tabs/content. The editor is borderless, and shared Flex layouts allow future panels without component-specific box offsets.
 
 Use a shared pure layout calculation when cursor-following needs the editor area before rendering: update derives the area from terminal size and layout state, while Ratatui rendering uses the same calculation. Avoid mutating `View.area` or scroll offsets as a hidden side effect of `Widget::render`.
 

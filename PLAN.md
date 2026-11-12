@@ -99,7 +99,6 @@ See `config.example.toml` for the configurable action names. Leader sequences ar
 - The status bar handles explorer errors; save/quit and other editor errors are not wired yet.
 - No soft-wrap rendering, LSP, or split views.
 - Existing keymap configuration replaces the configured keymap section rather than offering sophisticated default merging/unbinding.
-- Horizontal rendering and Unicode behavior need broader edge-case testing.
 
 ## Roadmap
 
@@ -172,7 +171,7 @@ Each milestone should remain small enough to review independently. Update this f
 **Goal:** make the narrow feature set reliable rather than expanding scope.
 
 - [x] Finalize the first-edition command table and update `config.example.toml`.
-- [ ] Test narrow terminals, resize, Unicode/graphemes, wide characters, horizontal scrolling, and empty documents.
+- [x] Test narrow terminals, resize, Unicode/graphemes, wide characters, horizontal scrolling, and empty documents.
 - [ ] Test large files, permissions, missing files, external modification handling, and save failures.
 - [ ] Verify panic-safe terminal restoration and clean shutdown with pending saves.
 - [ ] Run an end-to-end explorer → open → edit → automatic save → switch/close test suite.

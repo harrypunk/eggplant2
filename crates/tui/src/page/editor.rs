@@ -219,7 +219,9 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend};
 
     use super::*;
-    use crate::test_utils::create_buffer;
+    use crate::{
+        data_object::Message, manager::message_manager::MessageManager, test_utils::create_buffer,
+    };
 
     #[test]
     fn places_and_hides_cursor_based_on_editor_focus() {
@@ -245,6 +247,50 @@ mod tests {
         model.current_focus = FocusTarget::FileExplorer;
         terminal.draw(|frame| page.view(&model, frame)).unwrap();
         assert!(!terminal.backend().cursor_visible());
+    }
+
+    #[test]
+    fn tiny_layouts_and_resize_never_place_a_cursor_outside_empty_text_areas() {
+        let mut model = Model::default();
+        create_buffer(&mut model, "a界b🙂c");
+        let manager = MessageManager::default();
+        let page = Editor;
+        let sizes = [(0, 0), (1, 1), (2, 1), (3, 2), (6, 3), (10, 4)];
+
+        for (width, height) in sizes {
+            manager.update(&mut model, Message::Resize(width, height));
+            let text_area = editor_content_area(
+                Rect::new(0, 0, width, height),
+                model.explorer_visibility,
+                model.tools.visibility,
+                model.editor.active_snapshot().as_ref(),
+            );
+            let backend = TestBackend::new(width, height);
+            let mut terminal = Terminal::new(backend).unwrap();
+
+            terminal.draw(|frame| page.view(&model, frame)).unwrap();
+
+            if text_area.width == 0 || text_area.height == 0 {
+                assert!(
+                    !terminal.backend().cursor_visible(),
+                    "cursor must be hidden for an empty text area at {width}x{height}"
+                );
+            }
+        }
+
+        model
+            .command_menu
+            .handle_key(crossterm::event::KeyCode::Char(' '));
+        model.file_picker.visibility = Visibility::Displayed;
+        model.theme_picker.open(crate::theme::ThemeName::TokyoNight);
+        for (width, height) in sizes {
+            manager.update(&mut model, Message::Resize(width, height));
+            let backend = TestBackend::new(width, height);
+            let mut terminal = Terminal::new(backend).unwrap();
+
+            terminal.draw(|frame| page.view(&model, frame)).unwrap();
+            assert!(!terminal.backend().cursor_visible());
+        }
     }
 
     #[test]

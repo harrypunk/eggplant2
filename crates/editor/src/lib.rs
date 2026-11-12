@@ -6,6 +6,7 @@ mod preview;
 mod save;
 mod session;
 mod snapshot;
+mod viewport;
 
 pub use document::{DocumentFactory, OpenDocumentError};
 pub use open::{DocumentOpenCompletion, DocumentOpenRequest};

@@ -22,6 +22,7 @@ use thiserror::Error;
 use crate::{
     save::{SaveCompletion, SaveError, SaveRequest},
     snapshot::{BufferInfo, CursorPosition, DirtyState, EditorSnapshot, text_view_snapshot},
+    viewport,
 };
 
 type MoveFn = fn(
@@ -112,7 +113,7 @@ impl EditorSession {
             next_buffer_id: 1,
             mode: EditMode::Normal,
             scrolloff: config.scrolloff,
-            gutters: config.gutters,
+            gutters: viewport::gutters(),
         }
     }
 
@@ -239,7 +240,7 @@ impl EditorSession {
     /// Store the latest view dimensions and keep the active cursor visible.
     /// The size is retained while empty so the first newly opened buffer can use it.
     pub fn resize_active_view(&mut self, width: u16, height: u16) {
-        self.view_area = Rect::new(0, 0, width, height);
+        self.view_area = viewport::area(width, height);
         if let Some(active) = self.active_view.as_mut() {
             active.view.area = self.view_area;
         }
@@ -766,17 +767,19 @@ mod tests {
 
     #[test]
     fn backspace_removes_the_whole_grapheme() {
-        let mut session = EditorSession::new();
-        let id = create_buffer(&mut session, "e\u{301}");
-        let (document, view) = active_parts(&mut session);
-        let end = document.text().len_chars();
-        document.set_selection(view.id, Selection::point(end));
+        for text in ["e\u{301}", "👩\u{200d}💻", "🇫🇮"] {
+            let mut session = EditorSession::new();
+            let id = create_buffer(&mut session, text);
+            let (document, view) = active_parts(&mut session);
+            let end = document.text().len_chars();
+            document.set_selection(view.id, Selection::point(end));
 
-        session.backspace().unwrap();
-        assert_eq!(session.buffers[&id].document.text(), "");
+            session.backspace().unwrap();
+            assert_eq!(session.buffers[&id].document.text(), "");
 
-        session.backspace().unwrap();
-        assert_eq!(session.buffers[&id].document.text(), "");
+            session.backspace().unwrap();
+            assert_eq!(session.buffers[&id].document.text(), "");
+        }
     }
 
     #[test]
@@ -844,7 +847,7 @@ mod tests {
 
         let snapshot = session.active_snapshot().unwrap();
         let cursor = snapshot.cursor.unwrap();
-        assert_eq!(snapshot.text.lines.len(), 3);
+        assert_eq!(snapshot.text.lines.len(), 4);
         assert!(snapshot.text.lines.iter().any(|line| line.text == "6"));
         assert!(cursor.row < snapshot.text.lines.len());
     }
