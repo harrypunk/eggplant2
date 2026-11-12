@@ -56,7 +56,7 @@ Every application document open uses `DocumentFactory::open`. Existing targets m
 
 `MessageManager::open_file` is the single application open path for explorer, picker, and future open commands. It returns an `OpenDocument` effect instead of reading and parsing on the UI thread. The worker performs one UTF-8 file read and prepares `Rope`, language configuration, and optional `Syntax`; the main update then constructs Helix's non-`Send` `Document` through `DocumentFactory::build_document`. Path-based stale-open checks prevent an older completion from replacing a newer request.
 
-After insertion, `EditorSession` supplies the canonical buffer path. The same update asks `ExplorerState::reveal` to expand visible ancestors and select that exact file, even if the explorer is hidden. Reveal is transactional: outside-workspace, ignored, missing, and read-failure paths do not partially change expansion or selection. Only after reconciliation does the picker close and the editor receive focus.
+After insertion, `EditorSession` supplies the canonical buffer path. The same update asks `ExplorerState::reveal` to expand visible ancestors and select that exact file, even if the explorer is hidden. Next/previous buffer commands reuse this reconciliation for the newly active file; untitled buffers leave the explorer unchanged. Reveal is transactional: outside-workspace, ignored, missing, and read-failure paths do not partially change expansion or selection. Only after open reconciliation does the picker close and the editor receive focus.
 
 ## Shared read-only view rendering
 

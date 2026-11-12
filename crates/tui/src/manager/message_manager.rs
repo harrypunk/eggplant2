@@ -228,6 +228,9 @@ impl MessageManager {
                 let _ = model.editor.activate_previous_buffer();
             }
         }
+        if let Some(id) = model.editor.active_buffer() {
+            Self::reveal_buffer(model, id);
+        }
         effect
     }
 
@@ -418,20 +421,27 @@ impl MessageManager {
                 return;
             }
         };
-        let opened_path = model.editor.buffer_path(id).map(Path::to_path_buf);
         model.status = None;
+        Self::reveal_buffer(model, id);
 
-        if let (Some(workspace), Some(path)) = (&model.workspace, opened_path) {
-            let root = workspace.root().to_path_buf();
-            if let Err(error) = model.explorer.reveal(&root, &path) {
-                Self::report_error(model, "failed to update file explorer", &path, error);
-            }
-        }
         match model.file_picker.visibility {
             Visibility::Displayed => Self::close_file_picker(model),
             Visibility::Hidden => {}
         }
         Self::focus_editor(model);
+    }
+
+    fn reveal_buffer(model: &mut Model, id: BufferId) {
+        let Some(path) = model.editor.buffer_path(id).map(Path::to_path_buf) else {
+            return;
+        };
+        let Some(workspace) = &model.workspace else {
+            return;
+        };
+        let root = workspace.root().to_path_buf();
+        if let Err(error) = model.explorer.reveal(&root, &path) {
+            Self::report_error(model, "failed to update file explorer", &path, error);
+        }
     }
 
     fn change_expansion(model: &mut Model, target: ExpansionState) {
@@ -1155,6 +1165,45 @@ mod tests {
         assert_eq!(
             without_workspace.context_stack.last(),
             Some(&Context::AppNormal)
+        );
+    }
+
+    #[test]
+    fn buffer_switch_commands_reveal_the_active_file_in_the_explorer() {
+        let directory = tempfile::tempdir().unwrap();
+        let nested = directory.path().join("nested");
+        std::fs::create_dir(&nested).unwrap();
+        let first_path = directory.path().join("first.txt");
+        let second_path = nested.join("second.txt");
+        std::fs::write(&first_path, "first").unwrap();
+        std::fs::write(&second_path, "second").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let first = open_file(&mut model, &first_path);
+        let second = open_file(&mut model, &second_path);
+        let manager = MessageManager::default();
+
+        for key in [' ', 'b', 'n'] {
+            manager.update(&mut model, Message::CommandMenuKey(KeyCode::Char(key)));
+        }
+        assert_eq!(model.editor.active_buffer(), Some(first));
+        assert_eq!(
+            model
+                .explorer
+                .selected_entry()
+                .map(|entry| entry.path.as_path()),
+            Some(std::fs::canonicalize(&first_path).unwrap().as_path())
+        );
+
+        for key in [' ', 'b', 'p'] {
+            manager.update(&mut model, Message::CommandMenuKey(KeyCode::Char(key)));
+        }
+        assert_eq!(model.editor.active_buffer(), Some(second));
+        assert_eq!(
+            model
+                .explorer
+                .selected_entry()
+                .map(|entry| entry.path.as_path()),
+            Some(std::fs::canonicalize(&second_path).unwrap().as_path())
         );
     }
 
