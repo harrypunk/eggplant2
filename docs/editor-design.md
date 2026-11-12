@@ -350,3 +350,5 @@ Reviewed for future command-driven automation without implementing an agent or a
 4. Batch/review semantics should be designed when an actual agent workflow needs them. No speculative revisioned arbitrary-transaction API is added in the first edition.
 5. Automated edits must use the same undo history, dirty tracking, automatic save, and error-reporting invariants as interactive edits.
 6. Milestone 6 should expose stable command IDs and capability-based effects before any external extension host is considered.
+
+The ownership, contribution, and migration contract for that work is defined in [Second-edition feature architecture](feature-architecture.md).

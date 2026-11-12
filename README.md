@@ -298,6 +298,7 @@ The app reads `~/.eggplant/config.toml` when present. See `config.example.toml` 
 
 - `PLAN.md`: first-edition command table, hardening status, and Milestone 6 feature/command platform.
 - `docs/editor-design.md`: implemented editor, viewport, save, and automation boundaries.
+- `docs/feature-architecture.md`: second-edition feature ownership and command/effect/UI contribution contracts.
 - `docs/key-input.md`: direct chords, leader sequences, and popup contexts.
 - `docs/filesystem.md`: opening, previews, background work, and mutation rules.
 - `docs/theme.md`: resolved themes, Helix-compatible resources, and theme selection.
