@@ -10,7 +10,7 @@ The first edition deliberately stays small:
 - [Ratatui](http://git.z.lan/fork/rataui) for the terminal UI.
 - [Helix](http://git.z.lan/fork/helix) only for low-level text, document, and editing primitives.
 
-The repository is currently an early prototype. The existing `tui` crate demonstrates an Elm-style event/update/view loop and configurable key contexts; it does not yet provide real document editing.
+The running first-edition application supports workspace exploration, multiple file buffers, Normal/Insert editing, revision-safe automatic saving, fuzzy file opening with previews, and built-in UI themes. The `tui` crate contains an Elm-style event/update/view loop, application coordination, and Ratatui components; the `editor` crate owns document and editing state.
 
 ## Product decisions
 
@@ -65,7 +65,7 @@ This boundary means Eggplant intentionally implements its own small command set.
 
 ## Workspace boundaries
 
-The target workspace has three meaningful responsibilities. Crate names can change when implementation starts; there is no need to rename the prototype immediately.
+The workspace has three logical responsibilities provided by two crates: `editor` and `tui`, with application coordination currently inside `tui`.
 
 ```text
 crates/
@@ -141,7 +141,7 @@ Each piece of state has one authoritative owner.
 | List/widget state and render caches | `tui` | Only genuinely presentation-specific state. |
 | Configuration | Loaded at startup, updated explicitly | Keep app and future AI settings separate from editor internals. |
 
-The prototype's application-level `EditMode` should move into the editor session when real editing is introduced. It should not remain as a second, potentially inconsistent mode value.
+`EditorSession` owns the single authoritative `EditMode`. Application focus and input contexts remain separate, so focus loss or panel changes cannot silently create a second mode value.
 
 ## Editing model
 
@@ -154,11 +154,11 @@ The first edition uses a deliberately small, Vim-inspired model:
 - Route all text mutations through editor commands and transactions so undo, dirty tracking, rendering, and future AI edits share one path.
 - Add Visual mode, registers, macros, complex text objects, and generic on-next-key behavior only when a concrete product need justifies them.
 
-Exact keybindings should be specified as a small command table before implementation. Avoid inheriting either Helix's or Vim's complete command surface by default.
+The first-edition command table lives in `PLAN.md`, with configurable direct bindings in `config.example.toml` and built-in leader sequences documented in `docs/key-input.md`. Avoid inheriting either Helix's or Vim's complete command surface by default.
 
 ## Event and update flow
 
-Retain the prototype's Elm-style direction, while separating state transitions from side effects:
+The application uses an Elm-style flow that separates state transitions from side effects:
 
 ```text
 terminal / filesystem / background task
@@ -177,7 +177,7 @@ terminal / filesystem / background task
              │             │
              │             └──► new Message
              ▼
-      render when dirty
+             view(&Model)
 ```
 
 - **Messages** describe input, something that happened, or a semantic user intent.
@@ -185,7 +185,7 @@ terminal / filesystem / background task
 - **Effects** perform work such as reading a directory, opening a file, or saving a document.
 - **Completion messages** return results to the single application loop.
 
-The first edition can use a synchronous runtime where that is sufficient. Do not add a complex async runtime solely for anticipated features. When background work becomes necessary, keep one owner of mutable app/editor state and communicate with workers through channels.
+The runtime uses Tokio for asynchronous saves and blocking document/picker work. Mutable application/editor state remains on the main update loop; workers communicate through completion messages and channels rather than shared mutable state.
 
 Every future asynchronous edit or AI result should carry a document ID and revision so stale results cannot overwrite newer user edits.
 
@@ -215,7 +215,7 @@ Direct keys remain configurable:
 
 Only regular UTF-8 text files open successfully. The explorer honors root/nested `.gitignore` files and also hides `.git`, `node_modules`, and `__pycache__` by default.
 
-The prototype's `HashMap<KeyCode, Message>` can remain until real commands require more. Extend it for modifiers and short sequences when needed rather than importing Helix's complete keymap/modal machinery.
+Direct bindings use validated `KeyChord` values in context-specific registries. The built-in Space leader is a separate sequence state machine with contextual hints. Future command growth should use Milestone 6's registered command platform rather than Helix's complete keymap/modal machinery.
 
 ## Rendering
 
@@ -285,7 +285,7 @@ The current Helix checkout requires Rust 1.90 or newer, so selected Helix depend
 
 ## Development
 
-Run the current prototype and tests with:
+Run the application and tests with:
 
 ```sh
 cargo run -p tui
@@ -294,14 +294,11 @@ cargo test --workspace
 
 The app reads `~/.eggplant/config.toml` when present. See `config.example.toml` for the current options; missing configuration falls back to defaults.
 
-## Next design artifact
+## Current design documents
 
-Before coding the editor integration, write a one-page **first-edition command table** covering:
-
-- Explorer navigation and file opening.
-- Normal-mode movement and basic edits.
-- Entering/leaving Insert mode.
-- Save, quit, and unsaved-change behavior.
-- Focus switching and application-level commands.
-
-That table, together with the document-ownership spike, is enough to begin implementation without accidentally designing a full Vim or Helix clone.
+- `PLAN.md`: first-edition command table, hardening status, and Milestone 6 feature/command platform.
+- `docs/editor-design.md`: implemented editor, viewport, save, and automation boundaries.
+- `docs/key-input.md`: direct chords, leader sequences, and popup contexts.
+- `docs/filesystem.md`: opening, previews, background work, and mutation rules.
+- `docs/theme.md`: resolved themes, Helix-compatible resources, and theme selection.
+- `docs/smoke-test.md`: automated checks and the real-terminal Linux smoke procedure.

@@ -1,6 +1,6 @@
 # Editor design with Helix and Elm
 
-Status: proposed design for basic editing. Concrete storage types and the Helix document/view boundary remain subject to a small implementation spike.
+Status: implemented first-edition design. Later extension and automation work is explicitly marked as future rather than changing these invariants.
 
 ## 1. Goals and constraints
 
@@ -301,8 +301,8 @@ For a core-only first version without soft wrap, a small Eggplant viewport conta
 1. **Open file:** canonicalize the path; activate an existing buffer or load and insert a new one. Create/retarget the view only after successful loading.
 2. **Switch buffer:** retarget the active view, restore the target document's saved view state, and schedule/flush auto-save for the previous dirty buffer.
 3. **Edit:** resolve the active buffer through the view and apply a transaction. Never create a document implicitly when no view is active. Content changes auto-save after Normal-mode edits or when leaving Insert.
-4. **Save:** route manual and automatic requests through one stable buffer-ID/revision-aware path. A late completion must not mark newer edits as saved.
-5. **Close:** a dirty file-backed buffer may be saved and then closed after success. Untitled buffers and save failures require an explicit user decision; never silently discard edits.
+4. **Save:** route automatic requests through one stable buffer-ID/revision-aware path. A late completion must not mark newer edits as saved.
+5. **Close:** a dirty file-backed buffer is saved and then closed only after success. An untitled buffer without a path or any failed save cancels closure with an error; there is no silent-discard workflow.
 6. **Close last buffer:** remove the active view and render the empty-editor state.
 
 ## 10. Implementation sequence
@@ -322,10 +322,31 @@ For a core-only first version without soft wrap, a small Eggplant viewport conta
 - Switching buffers preserves each buffer's cursor and scroll position.
 - Editing changes only the active document and updates dirty state.
 - Save completion for an older revision does not clear newer dirty edits.
-- Manual and automatic saving use the same save/completion path.
+- All automatic saving uses the same save/completion path; clean buffers are not rewritten.
 - Normal-mode edits and leaving Insert trigger auto-save, and an edit during an in-flight save starts one appropriate follow-up.
 - Auto-save skips untitled buffers and leaves dirty state intact after errors.
 - Buffer switching, focus loss, and clean exit trigger the documented save behavior.
 - Closing the last buffer restores a safe empty state.
 - Movement, editing, activation, and resize keep the active cursor visible.
 - Input with no active document neither panics nor creates an accidental buffer.
+
+## 12. First-edition API review and future automation
+
+Reviewed for future command-driven automation without implementing an agent or a new plugin API.
+
+### Existing safe seams
+
+- `MessageManager` exposes semantic user intents rather than terminal widgets or raw Helix commands.
+- `BufferId` is stable across activation order, and `EditorSession` owns buffer/view/editing state.
+- `DocumentFactory` and document-open effects keep file acceptance and non-`Send` Helix construction behind the editor boundary.
+- Save requests and completions use stable buffer IDs and revision-aware persistence, so newer edits are not marked clean by stale completions.
+- Read-only snapshots expose rendering data without allowing components or future tools to mutate documents accidentally.
+
+### Rules for later automated edits
+
+1. Do not synthesize keyboard input, mutate widgets, access Helix documents directly, or write files outside the existing effects path.
+2. Current insert/move/undo commands target the **active UI buffer**. They are appropriate for user commands, not sufficient as a safe unattended-agent API.
+3. A future agent mutation must name an explicit `BufferId` and expected document revision, apply a transaction through the editor boundary, and reject stale revisions without overwriting newer user edits.
+4. Batch/review semantics should be designed when an actual agent workflow needs them. No speculative revisioned arbitrary-transaction API is added in the first edition.
+5. Automated edits must use the same undo history, dirty tracking, automatic save, and error-reporting invariants as interactive edits.
+6. Milestone 6 should expose stable command IDs and capability-based effects before any external extension host is considered.

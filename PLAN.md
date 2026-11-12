@@ -1,7 +1,7 @@
 # Eggplant first-edition plan
 
-Last updated: 2026-11-07
-Current baseline: `main` at `3e63f47`
+Last updated: 2026-11-12
+Current baseline: implemented first-edition feature set in final hardening
 
 ## Purpose
 
@@ -55,7 +55,7 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 - [x] Revision-aware `EditorSession` save requests/completion with in-flight edit and untitled-buffer tests.
 - [x] Automatic save after edits/Insert exit through spawned effects and completion messages with status feedback.
 - [x] Save-before-close/quit with deferred actions, serial dirty-buffer saves, and in-flight lifecycle tracking.
-- [x] `Ctrl-N`/`Ctrl-P` buffer cycling with outgoing-buffer auto-save.
+- [x] `Space b n`/`Space b p` buffer cycling with outgoing dirty-buffer auto-save and explorer synchronization.
 - [x] Editor-top buffer tabs with active/dirty styling and a borderless editor.
 - [x] Focus-loss auto-save without changing editor mode or focus.
 - [x] Built-in Space leader with bottom-right key hints for quit, buffer switching, and file visibility.
@@ -96,7 +96,6 @@ See `config.example.toml` for the configurable action names. Leader sequences ar
 
 - Tools panel is hidden and remains a placeholder for future agent/search/file-info panels.
 - No new-file or Save As workflow.
-- The status bar handles explorer errors; save/quit and other editor errors are not wired yet.
 - No soft-wrap rendering, LSP, or split views.
 - Existing keymap configuration replaces the configured keymap section rather than offering sophisticated default merging/unbinding.
 
@@ -174,10 +173,10 @@ Each milestone should remain small enough to review independently. Update this f
 - [x] Test narrow terminals, resize, Unicode/graphemes, wide characters, horizontal scrolling, and empty documents.
 - [x] Test large files, permissions, missing files, external modification handling, and save failures.
 - [x] Harden terminal cleanup paths and test clean shutdown with pending saves.
-- [ ] Execute the real-terminal panic/restoration checks in `docs/smoke-test.md`.
+- [x] Execute the real-terminal panic/restoration checks in `docs/smoke-test.md`.
 - [x] Run an end-to-end explorer → open → edit → automatic save → switch/close test suite.
-- [ ] Review public editor/application APIs against future AI command use without implementing agents.
-- [ ] Update README, editor design, and this plan to match actual behavior.
+- [x] Review public editor/application APIs against future AI command use without implementing agents.
+- [x] Update README, editor design, and this plan to match actual behavior.
 
 **Exit criteria:** the definition of done below is covered by tests and a documented Linux smoke test.
 
