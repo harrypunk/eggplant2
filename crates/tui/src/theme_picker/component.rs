@@ -5,8 +5,8 @@ use ratatui::{
     widgets::{Paragraph, Widget},
 };
 
-use super::popup::Popup;
 use crate::{
+    component::popup::Popup,
     theme::{Theme, ThemeName},
     theme_picker::ThemePickerState,
 };

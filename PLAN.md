@@ -214,7 +214,7 @@ This is not a promise that new code requires zero wiring. A new feature may be r
 
 - [x] Record the current shell/feature responsibilities and command/effect contribution contract in [Second-edition feature architecture](docs/feature-architecture.md) before moving code.
 - [x] Introduce a command registry with stable IDs, metadata, and compatibility message handlers. Migrate direct key bindings and built-in leader menus to shared resolution and detect registration/binding conflicts at startup.
-- [ ] Migrate the theme picker end-to-end as the first small feature: owned state/messages/update, command contribution, popup contribution, and colocated tests.
+- [x] Migrate the theme picker end-to-end as the first small feature: owned state/update, feature command handler, popup component, and colocated tests.
 - [ ] Migrate the file picker as the effect-rich proof: scanning/filtering/preview/open behavior must use registered effect handlers and completion routing without central feature-specific arms.
 - [ ] Split the remaining lifecycle, buffer, editor, explorer, and open/save coordination into focused modules. `MessageManager` should become a small application coordinator rather than a growing feature match.
 - [ ] Replace centralized feature conditionals in pages with explicit panel/popup/status contribution points while keeping focus, cursor hiding, and modal precedence shell-owned.

@@ -10,10 +10,12 @@ use crate::component::{
     file_picker::FilePicker,
     key_hints::KeyHints,
     status_bar::StatusBar,
-    theme_picker::ThemePicker,
     tools_panel::ToolsPanel,
 };
-use crate::data_object::{FocusState, FocusTarget, Model, Visibility};
+use crate::{
+    data_object::{FocusState, FocusTarget, Model, Visibility},
+    theme_picker::ThemePicker,
+};
 
 #[derive(Debug, Default)]
 pub struct Editor;

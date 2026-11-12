@@ -1,24 +1,20 @@
-use std::{borrow::Borrow, collections::HashMap};
+use std::collections::HashMap;
 
 use color_eyre::eyre::eyre;
 use editor::CursorMovement;
 
-use crate::data_object::{FocusDirection, Message};
+pub use crate::data_object::CommandId;
+use crate::{
+    data_object::{FocusDirection, Message, Model},
+    manager::effect::Effect,
+};
 
-/// Stable semantic command identity shared by keymaps and leader menus.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct CommandId(pub &'static str);
+pub type FeatureHandler = fn(&mut Model, CommandId) -> Option<Effect>;
 
-impl CommandId {
-    pub fn as_str(self) -> &'static str {
-        self.0
-    }
-}
-
-impl Borrow<str> for CommandId {
-    fn borrow(&self) -> &str {
-        self.0
-    }
+#[derive(Debug, Clone)]
+pub enum CommandHandler {
+    Message(Message),
+    Feature(FeatureHandler),
 }
 
 /// A registered command. Message resolution is the M6.1 compatibility boundary;
@@ -27,7 +23,7 @@ impl Borrow<str> for CommandId {
 pub struct Command {
     pub id: CommandId,
     pub description: &'static str,
-    message: Message,
+    pub handler: CommandHandler,
 }
 
 impl Command {
@@ -35,7 +31,15 @@ impl Command {
         Self {
             id,
             description,
-            message,
+            handler: CommandHandler::Message(message),
+        }
+    }
+
+    pub fn feature(id: CommandId, description: &'static str, handler: FeatureHandler) -> Self {
+        Self {
+            id,
+            description,
+            handler: CommandHandler::Feature(handler),
         }
     }
 }
@@ -72,10 +76,6 @@ impl CommandRegistry {
 
     pub fn get(&self, id: &str) -> Option<&Command> {
         self.commands.get(id)
-    }
-
-    pub fn message_for(&self, id: &str) -> Option<Message> {
-        self.get(id).map(|command| command.message.clone())
     }
 
     pub fn builtin() -> Self {
@@ -231,27 +231,31 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
             "previous file",
             Message::FilePickerPrevious,
         ),
-        Command::new(
+        Command::feature(
             CommandId("open_theme_picker"),
             "theme",
-            Message::OpenThemePicker,
+            crate::theme_picker::handle_command,
         ),
-        Command::new(
+        Command::feature(
             CommandId("close_theme_picker"),
             "close theme picker",
-            Message::CloseThemePicker,
+            crate::theme_picker::handle_command,
         ),
-        Command::new(
+        Command::feature(
             CommandId("theme_picker_next"),
             "next theme",
-            Message::ThemePickerNext,
+            crate::theme_picker::handle_command,
         ),
-        Command::new(
+        Command::feature(
             CommandId("theme_picker_previous"),
             "previous theme",
-            Message::ThemePickerPrevious,
+            crate::theme_picker::handle_command,
         ),
-        Command::new(CommandId("apply_theme"), "apply theme", Message::ApplyTheme),
+        Command::feature(
+            CommandId("apply_theme"),
+            "apply theme",
+            crate::theme_picker::handle_command,
+        ),
     ]
 }
 
@@ -279,10 +283,7 @@ mod tests {
         let registry = CommandRegistry::builtin();
         let command = registry.get("open_theme_picker").unwrap();
         assert_eq!(command.description, "theme");
-        assert!(matches!(
-            registry.message_for("open_theme_picker"),
-            Some(Message::OpenThemePicker)
-        ));
-        assert!(registry.message_for("missing.command").is_none());
+        assert!(matches!(command.handler, CommandHandler::Feature(_)));
+        assert!(registry.get("missing.command").is_none());
     }
 }

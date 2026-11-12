@@ -2,7 +2,7 @@ use std::{collections::HashMap, str::FromStr};
 
 use crossterm::event::{KeyCode, KeyModifiers};
 
-use crate::data_object::{Context, Message};
+use crate::data_object::{CommandId, Context};
 
 /// A key press used for binding lookup, independent of terminal event metadata.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -97,7 +97,7 @@ fn parse_key_code(value: &str) -> Result<KeyCode, String> {
     Ok(code)
 }
 
-type KeyCommandMap = HashMap<KeyChord, Message>;
+type KeyCommandMap = HashMap<KeyChord, CommandId>;
 
 /// Keybindings associated with one input context.
 #[derive(Debug, Clone)]
@@ -109,7 +109,7 @@ pub struct ContextBindings {
 impl ContextBindings {
     pub fn from_bindings(
         context: Context,
-        bindings: impl IntoIterator<Item = (KeyChord, Message)>,
+        bindings: impl IntoIterator<Item = (KeyChord, CommandId)>,
     ) -> Self {
         Self {
             key_command_map: bindings.into_iter().collect(),
@@ -117,8 +117,8 @@ impl ContextBindings {
         }
     }
 
-    pub fn resolve(&self, key: KeyChord) -> Option<Message> {
-        self.key_command_map.get(&key).cloned()
+    pub fn resolve(&self, key: KeyChord) -> Option<CommandId> {
+        self.key_command_map.get(&key).copied()
     }
 }
 

@@ -4,7 +4,7 @@ use color_eyre::eyre::eyre;
 
 use crate::{
     config::KeymapConfig,
-    data_object::{Context, Message},
+    data_object::{CommandId, Context},
     manager::{
         command_registry::CommandRegistry,
         context::{ContextBindings, KeyChord},
@@ -52,16 +52,16 @@ fn parse_context_bindings(
     })?;
 
     let parsed = bindings.iter().try_fold(
-        HashMap::<KeyChord, (&str, Message)>::new(),
+        HashMap::<KeyChord, (&str, CommandId)>::new(),
         |mut parsed, (action_name, key_name)| -> color_eyre::Result<_> {
-            let (key, message) = parse_binding(context_name, action_name, key_name, commands)?;
+            let (key, command) = parse_binding(context_name, action_name, key_name, commands)?;
             match parsed.entry(key) {
                 Entry::Occupied(entry) => Err(eyre!(
                     "duplicate key binding `{key_name}` in keymap context `{context_name}` for actions `{}` and `{action_name}`",
                     entry.get().0
                 )),
                 Entry::Vacant(entry) => {
-                    entry.insert((action_name.as_str(), message));
+                    entry.insert((action_name.as_str(), command));
                     Ok(parsed)
                 }
             }
@@ -70,7 +70,7 @@ fn parse_context_bindings(
 
     Ok(ContextBindings::from_bindings(
         context,
-        parsed.into_iter().map(|(key, (_, message))| (key, message)),
+        parsed.into_iter().map(|(key, (_, command))| (key, command)),
     ))
 }
 
@@ -79,15 +79,16 @@ fn parse_binding(
     action_name: &str,
     key_name: &str,
     commands: &CommandRegistry,
-) -> color_eyre::Result<(KeyChord, Message)> {
-    let message = commands.message_for(action_name).ok_or_else(|| {
-        eyre!("unknown action `{action_name}` in keymap context `{context_name}`")
-    })?;
+) -> color_eyre::Result<(KeyChord, CommandId)> {
+    let command = commands
+        .get(action_name)
+        .ok_or_else(|| eyre!("unknown action `{action_name}` in keymap context `{context_name}`"))?
+        .id;
     let key = key_name
         .parse::<KeyChord>()
         .map_err(|error| eyre!("invalid key for `{context_name}.{action_name}`: {error}"))?;
 
-    Ok((key, message))
+    Ok((key, command))
 }
 
 fn parse_context(value: &str) -> Option<Context> {
@@ -128,7 +129,7 @@ mod tests {
                 .get_binding(&Context::EditorInput)
                 .unwrap()
                 .resolve(KeyChord::new(KeyCode::Esc, KeyModifiers::NONE)),
-            Some(Message::ExitInsertMode)
+            Some(CommandId("exit_insert_mode"))
         ));
     }
 
@@ -145,7 +146,7 @@ mod tests {
                 .get_binding(&Context::AppNormal)
                 .unwrap()
                 .resolve(KeyChord::new(KeyCode::Char('q'), KeyModifiers::CONTROL)),
-            Some(Message::Quit)
+            Some(CommandId("quit"))
         ));
         assert!(
             registry

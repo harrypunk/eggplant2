@@ -228,6 +228,8 @@ Implemented in the first slice: `CommandRegistry` owns all current IDs and descr
 
 Move theme-picker state/messages/update and its popup contribution behind the new registration path. This proves commands and a pure feature without conflating the work with asynchronous effects.
 
+Implemented: resolved bindings emit `InvokeCommand(CommandId)`, and `MessageManager` invokes either compatibility messages or a feature handler. `theme_picker/` now owns its state, command handler, component, and workflow tests; the page consumes the feature component while retaining placement and cursor policy. The handler still uses a small `Model` adapter until the remaining shell migration defines a narrower context.
+
 ### M6.3 — File picker vertical slice
 
 Migrate scanning, filtering, preview, and open completions to registered effects. This proves scheduling, revisions, completion routing, and interaction with the document-open capability.

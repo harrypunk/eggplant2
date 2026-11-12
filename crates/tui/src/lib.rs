@@ -18,7 +18,10 @@ mod test_utils;
 
 pub mod data_object {
 
-    use std::path::{Path, PathBuf};
+    use std::{
+        borrow::Borrow,
+        path::{Path, PathBuf},
+    };
 
     use editor::{BufferId, CursorMovement, DocumentOpenCompletion, EditorSession, SaveCompletion};
 
@@ -30,6 +33,22 @@ pub mod data_object {
         theme_picker::ThemePickerState,
         tools::ToolsPanelState,
     };
+
+    /// Stable semantic command identity shared by keymaps and feature handlers.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub struct CommandId(pub &'static str);
+
+    impl CommandId {
+        pub fn as_str(self) -> &'static str {
+            self.0
+        }
+    }
+
+    impl Borrow<str> for CommandId {
+        fn borrow(&self) -> &str {
+            self.0
+        }
+    }
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub enum Visibility {
@@ -197,6 +216,7 @@ pub mod data_object {
     #[derive(Debug, Clone)]
     pub enum Message {
         CommandMenuKey(crossterm::event::KeyCode),
+        InvokeCommand(CommandId),
         Quit,
         EnterInsertMode,
         ExitInsertMode,
@@ -229,11 +249,6 @@ pub mod data_object {
         FilePickerNext,
         FilePickerPrevious,
         OpenPickerFile,
-        OpenThemePicker,
-        CloseThemePicker,
-        ThemePickerNext,
-        ThemePickerPrevious,
-        ApplyTheme,
         FileScanFinished {
             revision: u64,
             result: Result<Vec<FileEntry>, String>,

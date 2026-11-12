@@ -47,6 +47,7 @@ impl EventManager {
                 self.keymap
                     .get_binding(ctx)
                     .and_then(|bindings| bindings.resolve(KeyChord::new(key.code, key.modifiers)))
+                    .map(Message::InvokeCommand)
                     .or_else(|| Self::unbound_key_message(ctx, key))
             }
             Event::FocusLost => Some(Message::FocusLost),
@@ -80,10 +81,8 @@ impl EventManager {
 
 #[cfg(test)]
 mod tests {
-    use editor::CursorMovement;
-
     use super::*;
-    use crate::{data_object::FocusDirection, manager::command_registry::CommandRegistry};
+    use crate::manager::command_registry::{CommandId, CommandRegistry};
 
     fn event_manager() -> EventManager {
         let config = Config::default();
@@ -127,12 +126,12 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::CloseFilePicker)
+            Some(Message::InvokeCommand(CommandId("close_file_picker")))
         ));
         let event = Event::Key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::FilePickerNext)
+            Some(Message::InvokeCommand(CommandId("file_picker_next")))
         ));
     }
 
@@ -146,19 +145,19 @@ mod tests {
             |key| manager.translate(Event::Key(KeyEvent::new(key, KeyModifiers::NONE)), &model);
         assert!(matches!(
             translate(KeyCode::Down),
-            Some(Message::ThemePickerNext)
+            Some(Message::InvokeCommand(CommandId("theme_picker_next")))
         ));
         assert!(matches!(
             translate(KeyCode::Up),
-            Some(Message::ThemePickerPrevious)
+            Some(Message::InvokeCommand(CommandId("theme_picker_previous")))
         ));
         assert!(matches!(
             translate(KeyCode::Enter),
-            Some(Message::ApplyTheme)
+            Some(Message::InvokeCommand(CommandId("apply_theme")))
         ));
         assert!(matches!(
             translate(KeyCode::Esc),
-            Some(Message::CloseThemePicker)
+            Some(Message::InvokeCommand(CommandId("close_theme_picker")))
         ));
 
         for key in [KeyCode::Char('j'), KeyCode::Char('k'), KeyCode::Char(' ')] {
@@ -174,7 +173,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &normal_model),
-            Some(Message::MoveCursor(CursorMovement::Left))
+            Some(Message::InvokeCommand(CommandId("move_left")))
         ));
 
         let mut insert_model = Model::default();
@@ -182,7 +181,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &insert_model),
-            Some(Message::ExitInsertMode)
+            Some(Message::InvokeCommand(CommandId("exit_insert_mode")))
         ));
     }
 
@@ -195,7 +194,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::OpenSelected)
+            Some(Message::InvokeCommand(CommandId("open_selected")))
         ));
         let event = Event::Key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
         assert!(matches!(
@@ -212,7 +211,7 @@ mod tests {
         model.context_stack.push(Context::Explorer);
         assert!(matches!(
             manager.translate(event(), &model),
-            Some(Message::ToggleIgnoredFiles)
+            Some(Message::InvokeCommand(CommandId("toggle_ignored_files")))
         ));
 
         model.context_stack.pop();
@@ -231,20 +230,20 @@ mod tests {
     fn routes_directional_focus_in_normal_contexts() {
         let manager = event_manager();
         let directions = [
-            ('h', FocusDirection::Left),
-            ('j', FocusDirection::Down),
-            ('k', FocusDirection::Up),
-            ('l', FocusDirection::Right),
+            ('h', "focus_left"),
+            ('j', "focus_down"),
+            ('k', "focus_up"),
+            ('l', "focus_right"),
         ];
 
         for context in [Context::AppNormal, Context::Explorer] {
             let mut model = Model::default();
             model.context_stack.push(context);
-            for (key, direction) in directions {
+            for (key, command) in directions {
                 let event = Event::Key(KeyEvent::new(KeyCode::Char(key), KeyModifiers::CONTROL));
                 assert!(matches!(
                     manager.translate(event, &model),
-                    Some(Message::MoveFocus(actual)) if actual == direction
+                    Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
                 ));
             }
         }

@@ -13,9 +13,11 @@ use crate::{
         RunningState, StatusMessage, Visibility,
     },
     explorer::{ExpansionState, ExplorerEntryKind, IgnoreMode},
-    manager::{command_registry::CommandRegistry, effect::Effect},
+    manager::{
+        command_registry::{CommandHandler, CommandRegistry},
+        effect::Effect,
+    },
     page::editor::editor_content_area,
-    theme::Theme,
 };
 
 #[derive(Debug)]
@@ -43,18 +45,10 @@ impl MessageManager {
             Message::CommandMenuKey(key) => {
                 return match model.command_menu.handle_key(key) {
                     CommandMenuOutcome::Pending | CommandMenuOutcome::Cancelled => None,
-                    CommandMenuOutcome::Action(action) => {
-                        let Some(message) = self.commands.message_for(action.as_str()) else {
-                            model.status = Some(StatusMessage::error(format!(
-                                "unknown command `{}`",
-                                action.as_str()
-                            )));
-                            return None;
-                        };
-                        self.update(model, message)
-                    }
+                    CommandMenuOutcome::Action(action) => self.invoke_command(model, action),
                 };
             }
+            Message::InvokeCommand(id) => return self.invoke_command(model, id),
             Message::Quit => return Self::request_quit(model),
             Message::CloseActive => return Self::request_close(model),
             Message::NextBuffer => {
@@ -151,11 +145,6 @@ impl MessageManager {
                     .map(Effect::FilePicker);
             }
             Message::OpenPickerFile => return self.open_picker_file(model),
-            Message::OpenThemePicker => Self::open_theme_picker(model),
-            Message::CloseThemePicker => Self::close_theme_picker(model),
-            Message::ThemePickerNext => model.theme_picker.select_next(),
-            Message::ThemePickerPrevious => model.theme_picker.select_previous(),
-            Message::ApplyTheme => Self::apply_theme(model),
             Message::FileOpened(completion) => Self::finish_open_file(model, completion),
             Message::FileScanFinished { revision, result } => {
                 let Some(workspace) = &model.workspace else {
@@ -188,6 +177,24 @@ impl MessageManager {
             _ => {}
         }
         None
+    }
+
+    fn invoke_command(
+        &self,
+        model: &mut Model,
+        id: crate::data_object::CommandId,
+    ) -> Option<Effect> {
+        let Some(command) = self.commands.get(id.as_str()) else {
+            model.status = Some(StatusMessage::error(format!(
+                "unknown command `{}`",
+                id.as_str()
+            )));
+            return None;
+        };
+        match &command.handler {
+            CommandHandler::Message(message) => self.update(model, message.clone()),
+            CommandHandler::Feature(handler) => handler(model, id),
+        }
     }
 
     fn request_quit(model: &mut Model) -> Option<Effect> {
@@ -366,37 +373,6 @@ impl MessageManager {
             Some(Context::Explorer) => FocusTarget::FileExplorer,
             _ => FocusTarget::Editor,
         };
-    }
-
-    fn open_theme_picker(model: &mut Model) {
-        model.theme_picker.open(model.theme.name());
-        if model.context_stack.last() != Some(&Context::ThemePicker) {
-            model.context_stack.push(Context::ThemePicker);
-        }
-    }
-
-    fn close_theme_picker(model: &mut Model) {
-        model.theme_picker.close();
-        model
-            .context_stack
-            .pop_if(|context| context == &Context::ThemePicker);
-    }
-
-    fn apply_theme(model: &mut Model) {
-        let selected = model.theme_picker.selected();
-        match Theme::from_builtin(selected) {
-            Ok(theme) => {
-                model.theme = theme;
-                model.status = None;
-                Self::close_theme_picker(model);
-            }
-            Err(error) => {
-                model.status = Some(StatusMessage::error(format!(
-                    "failed to apply theme `{}`: {error}",
-                    selected.as_str()
-                )));
-            }
-        }
     }
 
     fn open_picker_file(&self, model: &mut Model) -> Option<Effect> {
@@ -593,7 +569,6 @@ mod tests {
         file_picker::PreviewState,
         startup::initial_model,
         test_utils::{create_buffer, open_file},
-        theme::ThemeName,
     };
 
     fn expect_save(effect: Option<Effect>) -> SaveRequest {
@@ -912,39 +887,6 @@ mod tests {
 
         assert_eq!(std::fs::read_to_string(first_path).unwrap(), "!first");
         assert!(!model.editor.is_modified(first).unwrap());
-    }
-
-    #[test]
-    fn theme_menu_applies_selection_and_escape_preserves_the_active_theme() {
-        let manager = MessageManager::default();
-        let mut model = Model::default();
-
-        for key in [' ', 'u', 't'] {
-            assert!(
-                manager
-                    .update(&mut model, Message::CommandMenuKey(KeyCode::Char(key)))
-                    .is_none()
-            );
-        }
-        assert_eq!(model.theme_picker.visibility, Visibility::Displayed);
-        assert_eq!(model.context_stack.last(), Some(&Context::ThemePicker));
-        assert_eq!(model.theme_picker.selected(), ThemeName::Default);
-
-        manager.update(&mut model, Message::ThemePickerNext);
-        assert_eq!(model.theme_picker.selected(), ThemeName::TokyoNight);
-        assert!(manager.update(&mut model, Message::ApplyTheme).is_none());
-        assert_eq!(model.theme.name(), ThemeName::TokyoNight);
-        assert_eq!(model.theme_picker.visibility, Visibility::Hidden);
-        assert_eq!(model.context_stack.last(), None);
-
-        manager.update(&mut model, Message::OpenThemePicker);
-        assert_eq!(model.theme_picker.selected(), ThemeName::TokyoNight);
-        manager.update(&mut model, Message::ThemePickerNext);
-        assert_eq!(model.theme_picker.selected(), ThemeName::CatppuccinMocha);
-        manager.update(&mut model, Message::CloseThemePicker);
-        assert_eq!(model.theme.name(), ThemeName::TokyoNight);
-        assert_eq!(model.theme_picker.visibility, Visibility::Hidden);
-        assert_eq!(model.context_stack.last(), None);
     }
 
     #[test]

@@ -6,5 +6,4 @@ pub mod key_hints;
 pub mod popup;
 pub mod status_bar;
 pub mod text_view;
-pub mod theme_picker;
 pub mod tools_panel;
