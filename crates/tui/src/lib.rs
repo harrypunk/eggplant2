@@ -6,6 +6,7 @@ pub mod editing;
 pub mod explorer;
 pub mod file_picker;
 mod filesystem;
+pub mod lifecycle;
 pub mod manager;
 pub mod page;
 pub mod runtime;
@@ -213,10 +214,8 @@ pub mod data_object {
     pub enum Message {
         CommandMenuKey(crossterm::event::KeyCode),
         InvokeCommand(CommandId),
-        Quit,
         MoveFocus(FocusDirection),
         InsertChar(char),
-        CloseActive,
         SaveFinished(SaveCompletion),
         FileOpened(DocumentOpenCompletion),
         FocusLost,

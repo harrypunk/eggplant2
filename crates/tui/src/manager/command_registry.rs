@@ -90,7 +90,7 @@ impl Default for CommandRegistry {
 
 fn builtin_commands() -> impl IntoIterator<Item = Command> {
     [
-        Command::new(CommandId("quit"), "quit", Message::Quit),
+        Command::feature(CommandId("quit"), "quit", crate::lifecycle::handle_command),
         Command::feature(
             CommandId("enter_insert_mode"),
             "enter Insert mode",
@@ -153,10 +153,10 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
         ),
         Command::feature(CommandId("undo"), "undo", crate::editing::handle_command),
         Command::feature(CommandId("redo"), "redo", crate::editing::handle_command),
-        Command::new(
+        Command::feature(
             CommandId("close_buffer"),
             "close buffer",
-            Message::CloseActive,
+            crate::lifecycle::handle_command,
         ),
         Command::feature(
             CommandId("next_buffer"),
@@ -273,8 +273,8 @@ mod tests {
     #[test]
     fn rejects_duplicate_command_ids() {
         let error = CommandRegistry::from_commands([
-            Command::new(CommandId("test.command"), "first", Message::Quit),
-            Command::new(CommandId("test.command"), "second", Message::FocusLost),
+            Command::new(CommandId("test.command"), "first", Message::FocusLost),
+            Command::new(CommandId("test.command"), "second", Message::Resize(1, 1)),
         ])
         .unwrap_err();
 
