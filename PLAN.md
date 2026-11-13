@@ -218,7 +218,8 @@ This is not a promise that new code requires zero wiring. A new feature may be r
 - [x] Migrate the file picker as the effect-rich proof: scanning/filtering/preview/open behavior uses feature-owned effect objects and completion routing without central picker-specific runtime arms.
 - [x] Migrate buffer switching and shared dirty-save/explorer-reveal capabilities into a buffer feature with colocated tests.
 - [x] Migrate Insert-mode, movement, editing, and history commands into an editing feature with colocated tests.
-- [ ] Split the remaining lifecycle, explorer, and open/save coordination into focused modules. `MessageManager` should become a small application coordinator rather than a growing feature match.
+- [x] Migrate explorer selection, expansion, refresh, and ignore commands into the explorer module with colocated tests.
+- [ ] Split the remaining lifecycle, explorer visibility/focus, and open/save coordination into focused modules. `MessageManager` should become a small application coordinator rather than a growing feature match.
 - [ ] Replace centralized feature conditionals in pages with explicit panel/popup/status contribution points while keeping focus, cursor hiding, and modal precedence shell-owned.
 - [ ] Implement dynamic Helix-compatible user themes through the new platform: discover `~/.eggplant/themes/*.toml`, support runtime theme IDs/catalog entries, resolve inheritance and name collisions, load through effects, and preserve the active theme on failures.
 - [ ] Add a test-only example feature proving that command, state/update, popup, and effect contributions work through registration without changes to unrelated domain modules or runtime dispatch.

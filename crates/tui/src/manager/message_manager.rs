@@ -13,7 +13,7 @@ use crate::{
         StatusMessage, Visibility,
     },
     editing,
-    explorer::{ExpansionState, ExplorerEntryKind, IgnoreMode},
+    explorer::ExplorerEntryKind,
     manager::{
         command_registry::{CommandHandler, CommandRegistry},
         effect::Effect,
@@ -57,13 +57,7 @@ impl MessageManager {
             Message::SaveFinished(completion) => {
                 return Self::finish_save(model, completion);
             }
-            Message::ExplorerNext => model.explorer.select_next(),
-            Message::ExplorerPrevious => model.explorer.select_previous(),
             Message::OpenSelected => return self.open_selected(model),
-            Message::ExplorerFold => Self::change_expansion(model, ExpansionState::Collapsed),
-            Message::ExplorerUnfold => Self::change_expansion(model, ExpansionState::Expanded),
-            Message::RefreshExplorer => Self::refresh_explorer(model),
-            Message::ToggleIgnoredFiles => Self::toggle_ignored_files(model),
             Message::ToggleFileExplorer => {
                 Self::toggle_file_explorer(model);
             }
@@ -254,10 +248,10 @@ impl MessageManager {
             ExplorerEntryKind::File | ExplorerEntryKind::Link | ExplorerEntryKind::Other => {
                 self.open_file(model, &path)
             }
-            ExplorerEntryKind::Directory => {
-                Self::change_expansion(model, ExpansionState::Expanded);
-                None
-            }
+            ExplorerEntryKind::Directory => crate::explorer::handle_command(
+                model,
+                crate::data_object::CommandId("explorer_unfold"),
+            ),
         }
     }
 
@@ -331,57 +325,6 @@ impl MessageManager {
             Visibility::Hidden => {}
         }
         Self::focus_editor(model);
-    }
-
-    fn change_expansion(model: &mut Model, target: ExpansionState) {
-        let Some(workspace) = &model.workspace else {
-            return;
-        };
-        let Some(entry) = model.explorer.selected_entry() else {
-            return;
-        };
-        let path = entry.path.clone();
-        let result = match target {
-            ExpansionState::Expanded => model.explorer.unfold_selected(workspace.root()),
-            ExpansionState::Collapsed => model.explorer.fold_selected(workspace.root()),
-        };
-        match result {
-            Ok(true) => model.status = None,
-            Ok(false) => {}
-            Err(error) => {
-                Self::report_error(model, "failed to update directory tree", &path, error);
-            }
-        }
-    }
-
-    fn refresh_explorer(model: &mut Model) {
-        let Some(workspace) = &model.workspace else {
-            return;
-        };
-        let root = workspace.root().to_path_buf();
-
-        match model.explorer.reload(&root) {
-            Ok(()) => model.status = None,
-            Err(error) => Self::report_error(model, "failed to refresh", &root, error),
-        }
-    }
-
-    fn toggle_ignored_files(model: &mut Model) {
-        let Some(workspace) = &model.workspace else {
-            return;
-        };
-        let root = workspace.root().to_path_buf();
-
-        match model.explorer.toggle_ignore_mode(&root) {
-            Ok(mode) => {
-                let text = match mode {
-                    IgnoreMode::HideIgnored => "Hiding ignored files",
-                    IgnoreMode::ShowIgnored => "Showing ignored files",
-                };
-                model.status = Some(StatusMessage::info(text));
-            }
-            Err(error) => Self::report_error(model, "failed to toggle ignored files", &root, error),
-        }
     }
 
     fn report_error(model: &mut Model, action: &str, path: &Path, error: impl Display) {
@@ -465,6 +408,7 @@ mod tests {
     use super::*;
     use crate::{
         data_object::{CommandId, StatusKind},
+        explorer::ExpansionState,
         file_picker::PreviewState,
         startup::initial_model,
         test_utils::{create_buffer, open_file},
@@ -516,7 +460,10 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&first_path).unwrap(), "Afirst");
 
         manager.update(&mut model, Message::MoveFocus(FocusDirection::Left));
-        manager.update(&mut model, Message::ExplorerNext);
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("explorer_next")),
+        );
         let effect = manager.update(&mut model, Message::OpenSelected);
         complete_open(&mut model, &manager, effect);
         let second = model.editor.active_buffer().unwrap();
@@ -832,7 +779,10 @@ mod tests {
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(120, 20));
 
-        manager.update(&mut model, Message::ExplorerNext);
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("explorer_next")),
+        );
         assert_eq!(model.explorer.selected, Some(1));
         let effect = manager.update(&mut model, Message::OpenSelected);
         complete_open(&mut model, &manager, effect);
@@ -859,97 +809,6 @@ mod tests {
         complete_open(&mut model, &manager, effect);
         assert_eq!(model.editor.buffer_count(), 1);
         assert_eq!(model.current_focus, FocusTarget::Editor);
-    }
-
-    #[test]
-    fn explorer_unfolds_and_folds_without_changing_workspace_root() {
-        let directory = tempfile::tempdir().unwrap();
-        let child = directory.path().join("folder");
-        std::fs::create_dir(&child).unwrap();
-        std::fs::write(child.join("note.txt"), "hello").unwrap();
-        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
-        let manager = MessageManager::default();
-        let workspace_root = model.workspace.as_ref().unwrap().root().to_path_buf();
-
-        manager.update(&mut model, Message::OpenSelected);
-        assert_eq!(model.explorer.entries.len(), 2);
-        assert_eq!(model.explorer.entries[1].depth, 1);
-        assert_eq!(model.workspace.as_ref().unwrap().root(), workspace_root);
-
-        manager.update(&mut model, Message::ExplorerFold);
-        assert_eq!(model.explorer.entries.len(), 1);
-        manager.update(&mut model, Message::ExplorerUnfold);
-        assert_eq!(model.explorer.entries.len(), 2);
-        assert_eq!(model.workspace.as_ref().unwrap().root(), workspace_root);
-    }
-
-    #[test]
-    fn explorer_refresh_reloads_workspace_tree() {
-        let directory = tempfile::tempdir().unwrap();
-        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
-        let manager = MessageManager::default();
-        assert!(model.explorer.entries.is_empty());
-
-        std::fs::write(directory.path().join("new.txt"), "new").unwrap();
-        manager.update(&mut model, Message::RefreshExplorer);
-
-        assert_eq!(model.explorer.entries.len(), 1);
-        assert_eq!(model.explorer.selected, Some(0));
-    }
-
-    #[test]
-    fn explorer_toggles_git_ignored_entries() {
-        let directory = tempfile::tempdir().unwrap();
-        std::fs::write(directory.path().join(".gitignore"), "ignored.txt\n").unwrap();
-        std::fs::write(directory.path().join("ignored.txt"), "ignored").unwrap();
-        std::fs::write(directory.path().join("visible.txt"), "visible").unwrap();
-        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
-        let manager = MessageManager::default();
-
-        manager.update(&mut model, Message::ToggleIgnoredFiles);
-        assert!(
-            model
-                .explorer
-                .entries
-                .iter()
-                .any(|entry| entry.name == "ignored.txt")
-        );
-        assert_eq!(
-            model.status.as_ref().map(|status| status.text.as_str()),
-            Some("Showing ignored files")
-        );
-
-        manager.update(&mut model, Message::ToggleIgnoredFiles);
-        assert!(
-            model
-                .explorer
-                .entries
-                .iter()
-                .all(|entry| entry.name != "ignored.txt")
-        );
-        assert_eq!(
-            model.status.as_ref().map(|status| status.text.as_str()),
-            Some("Hiding ignored files")
-        );
-    }
-
-    #[test]
-    fn explorer_failure_preserves_the_visible_tree() {
-        let directory = tempfile::tempdir().unwrap();
-        let child = directory.path().join("folder");
-        std::fs::create_dir(&child).unwrap();
-        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
-        let manager = MessageManager::default();
-        let original_entries = model.explorer.entries.clone();
-        std::fs::remove_dir(&child).unwrap();
-        std::fs::remove_dir(directory.path()).unwrap();
-
-        manager.update(&mut model, Message::OpenSelected);
-
-        let status = model.status.as_ref().unwrap();
-        assert_eq!(status.kind, StatusKind::Error);
-        assert!(status.text.contains("failed to update directory tree"));
-        assert_eq!(model.explorer.entries, original_entries);
     }
 
     #[test]

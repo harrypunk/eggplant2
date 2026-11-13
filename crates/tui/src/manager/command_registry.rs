@@ -168,40 +168,40 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
             "previous buffer",
             crate::buffer::handle_command,
         ),
-        Command::new(
+        Command::feature(
             CommandId("explorer_next"),
             "next entry",
-            Message::ExplorerNext,
+            crate::explorer::handle_command,
         ),
-        Command::new(
+        Command::feature(
             CommandId("explorer_previous"),
             "previous entry",
-            Message::ExplorerPrevious,
+            crate::explorer::handle_command,
         ),
         Command::new(
             CommandId("open_selected"),
             "open selected",
             Message::OpenSelected,
         ),
-        Command::new(
+        Command::feature(
             CommandId("explorer_fold"),
             "fold folder",
-            Message::ExplorerFold,
+            crate::explorer::handle_command,
         ),
-        Command::new(
+        Command::feature(
             CommandId("explorer_unfold"),
             "unfold folder",
-            Message::ExplorerUnfold,
+            crate::explorer::handle_command,
         ),
-        Command::new(
+        Command::feature(
             CommandId("refresh_explorer"),
             "refresh explorer",
-            Message::RefreshExplorer,
+            crate::explorer::handle_command,
         ),
-        Command::new(
+        Command::feature(
             CommandId("toggle_ignored_files"),
             "toggle ignored files",
-            Message::ToggleIgnoredFiles,
+            crate::explorer::handle_command,
         ),
         Command::new(
             CommandId("toggle_file_explorer"),
