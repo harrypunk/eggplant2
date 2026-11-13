@@ -120,7 +120,7 @@ impl MessageManager {
                 return model
                     .file_picker
                     .insert(workspace.root(), character)
-                    .map(Effect::FilePicker);
+                    .map(Effect::feature);
             }
             Message::FilePickerBackspace => {
                 let Some(workspace) = &model.workspace else {
@@ -129,20 +129,20 @@ impl MessageManager {
                 return model
                     .file_picker
                     .backspace(workspace.root())
-                    .map(Effect::FilePicker);
+                    .map(Effect::feature);
             }
             Message::CloseFilePicker => Self::close_file_picker(model),
             Message::FilePickerNext => {
                 return model
                     .file_picker
                     .select_next(&self.documents)
-                    .map(Effect::FilePicker);
+                    .map(Effect::feature);
             }
             Message::FilePickerPrevious => {
                 return model
                     .file_picker
                     .select_previous(&self.documents)
-                    .map(Effect::FilePicker);
+                    .map(Effect::feature);
             }
             Message::OpenPickerFile => return self.open_picker_file(model),
             Message::FileOpened(completion) => Self::finish_open_file(model, completion),
@@ -153,13 +153,13 @@ impl MessageManager {
                 return model
                     .file_picker
                     .complete_scan(workspace.root(), revision, result)
-                    .map(Effect::FilePicker);
+                    .map(Effect::feature);
             }
             Message::FileFilterFinished { revision, results } => {
                 return model
                     .file_picker
                     .complete_filter(&self.documents, revision, results)
-                    .map(Effect::FilePicker);
+                    .map(Effect::feature);
             }
             Message::FilePreviewFinished { revision, preview } => {
                 model.file_picker.complete_preview(revision, preview);
@@ -361,7 +361,7 @@ impl MessageManager {
         model
             .file_picker
             .open(&root, &self.documents)
-            .map(Effect::FilePicker)
+            .map(Effect::feature)
     }
 
     fn close_file_picker(model: &mut Model) {
@@ -910,17 +910,15 @@ mod tests {
         assert_eq!(model.current_focus, FocusTarget::FilePicker);
         assert_eq!(model.context_stack.last(), Some(&Context::FilePicker));
 
-        let Some(Effect::FilePicker(request)) =
+        let Some(Effect::Feature(request)) =
             manager.update(&mut model, Message::FilePickerInsert('m'))
         else {
             panic!("a query should start one recursive scan");
         };
-        let Some(Effect::FilePicker(request)) = manager.update(&mut model, request.perform())
-        else {
+        let Some(Effect::Feature(request)) = manager.update(&mut model, request.perform()) else {
             panic!("recursive scan completion should start filtering");
         };
-        let Some(Effect::FilePicker(request)) = manager.update(&mut model, request.perform())
-        else {
+        let Some(Effect::Feature(request)) = manager.update(&mut model, request.perform()) else {
             panic!("filter completion should start a preview");
         };
         manager.update(&mut model, request.perform());

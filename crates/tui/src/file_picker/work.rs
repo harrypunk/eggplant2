@@ -12,7 +12,9 @@ use nucleo_matcher::{
 };
 
 use super::{FileEntry, PreviewState, ScanDepth};
-use crate::{data_object::Message, filesystem::is_built_in_ignored};
+use crate::{
+    data_object::Message, filesystem::is_built_in_ignored, manager::effect::FeatureEffect,
+};
 
 const PREVIEW_VIEWPORT_WIDTH: u16 = 80;
 const PREVIEW_VIEWPORT_HEIGHT: u16 = 22;
@@ -64,6 +66,12 @@ impl FilePickerRequest {
                 preview: read_preview(&documents, &path),
             },
         }
+    }
+}
+
+impl FeatureEffect for FilePickerRequest {
+    fn perform(self: Box<Self>) -> Message {
+        FilePickerRequest::perform(*self)
     }
 }
 

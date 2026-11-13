@@ -61,12 +61,7 @@ fn apply_message(
                 let _ = sender.send(Message::SaveFinished(completion));
             });
         }
-        Effect::FilePicker(request) => {
-            let sender = sender.clone();
-            tokio::task::spawn_blocking(move || {
-                let _ = sender.send(request.perform());
-            });
-        }
+        Effect::Feature(effect) => effect.execute(sender.clone()),
         Effect::OpenDocument(request) => {
             let sender = sender.clone();
             tokio::task::spawn_blocking(move || {
