@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 
 use color_eyre::eyre::eyre;
+use editor::EditorSnapshot;
 use ratatui::{
     Frame,
+    buffer::Buffer,
     layout::{Constraint, Flex, Layout, Rect, Size},
 };
 
@@ -16,6 +18,20 @@ use crate::{
 
 pub type RenderContribution = fn(&Model, &mut Frame, Rect);
 pub type OverlayProvider = fn(&Model) -> Option<OverlayContribution>;
+pub type EditorOverlayRender = fn(&Model, &EditorSnapshot, Rect, &mut Buffer);
+pub type EditorOverlayProvider = fn(&Model) -> Option<EditorOverlayContribution>;
+
+#[derive(Debug, Clone, Copy)]
+pub struct EditorOverlayContribution {
+    pub id: &'static str,
+    pub render: EditorOverlayRender,
+}
+
+impl EditorOverlayContribution {
+    pub fn new(id: &'static str, render: EditorOverlayRender) -> Self {
+        Self { id, render }
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PanelSlot {
@@ -86,6 +102,7 @@ pub struct UiRegistry {
     panels: HashMap<PanelSlot, RenderContribution>,
     status: HashMap<StatusSlot, RenderContribution>,
     overlays: Vec<(&'static str, OverlayProvider)>,
+    editor_overlays: Vec<(&'static str, EditorOverlayProvider)>,
 }
 
 impl UiRegistry {
@@ -144,6 +161,22 @@ impl UiRegistry {
         Ok(())
     }
 
+    pub fn register_editor_overlay(
+        &mut self,
+        id: &'static str,
+        provider: EditorOverlayProvider,
+    ) -> color_eyre::Result<()> {
+        if self
+            .editor_overlays
+            .iter()
+            .any(|(candidate, _)| *candidate == id)
+        {
+            return Err(eyre!("duplicate editor overlay contribution `{id}`"));
+        }
+        self.editor_overlays.push((id, provider));
+        Ok(())
+    }
+
     pub fn render_panel(&self, slot: PanelSlot, model: &Model, frame: &mut Frame, area: Rect) {
         if let Some(render) = self.panels.get(&slot) {
             render(model, frame, area);
@@ -154,6 +187,13 @@ impl UiRegistry {
         if let Some(render) = self.status.get(&slot) {
             render(model, frame, area);
         }
+    }
+
+    pub fn editor_overlays(&self, model: &Model) -> Vec<EditorOverlayContribution> {
+        self.editor_overlays
+            .iter()
+            .filter_map(|(_, provider)| provider(model))
+            .collect()
     }
 
     pub fn overlays(&self, model: &Model) -> Vec<OverlayContribution> {
@@ -287,6 +327,16 @@ mod tests {
             .unwrap();
         assert!(
             ui.register_overlay("example", command_menu_overlay)
+                .is_err()
+        );
+
+        fn no_editor_overlay(_: &Model) -> Option<EditorOverlayContribution> {
+            None
+        }
+        ui.register_editor_overlay("example", no_editor_overlay)
+            .unwrap();
+        assert!(
+            ui.register_editor_overlay("example", no_editor_overlay)
                 .is_err()
         );
     }

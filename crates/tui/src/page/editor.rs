@@ -33,9 +33,10 @@ impl Editor {
             model.tools.visibility,
         );
         let overlays = self.ui.overlays(model);
+        let editor_overlays = self.ui.editor_overlays(model);
         let snapshot = model.editor.active_snapshot();
         let editor = EditorComponent::new(
-            snapshot,
+            snapshot.as_ref(),
             focus_for(model.current_focus, FocusTarget::Editor),
             &model.theme,
         );
@@ -46,6 +47,13 @@ impl Editor {
                 .render_panel(PanelSlot::Explorer, model, frame, area)
         });
         frame.render_widget(editor, areas.editor);
+        if let Some(snapshot) = snapshot.as_ref() {
+            let content = EditorComponent::content_area(areas.editor);
+            let text_area = EditorBuffer::text_area(content, snapshot);
+            editor_overlays.iter().for_each(|overlay| {
+                (overlay.render)(model, snapshot, text_area, frame.buffer_mut());
+            });
+        }
         areas
             .tools
             .into_iter()
@@ -59,7 +67,7 @@ impl Editor {
 
         cursor
             .into_iter()
-            .filter(|_| overlays.is_empty())
+            .filter(|_| overlays.is_empty() && editor_overlays.is_empty())
             .for_each(|cursor| frame.set_cursor_position(cursor));
     }
 }

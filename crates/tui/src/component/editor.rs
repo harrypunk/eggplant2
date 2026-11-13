@@ -10,13 +10,13 @@ use crate::{data_object::FocusState, theme::Theme};
 
 #[derive(Debug)]
 pub struct Editor<'a> {
-    snapshot: Option<EditorSnapshot>,
+    snapshot: Option<&'a EditorSnapshot>,
     focus: FocusState,
     theme: &'a Theme,
 }
 
 impl<'a> Editor<'a> {
-    pub fn new(snapshot: Option<EditorSnapshot>, focus: FocusState, theme: &'a Theme) -> Self {
+    pub fn new(snapshot: Option<&'a EditorSnapshot>, focus: FocusState, theme: &'a Theme) -> Self {
         Self {
             snapshot,
             focus,
@@ -65,8 +65,8 @@ impl Widget for Editor<'_> {
 
         match self.snapshot {
             Some(snapshot) => {
-                BufferTabs::new(&snapshot, self.theme.ui()).render(tabs_area, buf);
-                EditorBuffer::new(&snapshot, self.theme).render(content_area, buf);
+                BufferTabs::new(snapshot, self.theme.ui()).render(tabs_area, buf);
+                EditorBuffer::new(snapshot, self.theme).render(content_area, buf);
             }
             None => Paragraph::new("No file open")
                 .style(self.theme.ui().base)
@@ -270,15 +270,12 @@ mod tests {
         session.resize_active_view(10, 3);
         let backend = TestBackend::new(20, 4);
         let mut terminal = Terminal::new(backend).unwrap();
+        let snapshot = session.active_snapshot();
 
         terminal
             .draw(|frame| {
                 frame.render_widget(
-                    Editor::new(
-                        session.active_snapshot(),
-                        FocusState::Focused,
-                        &Theme::default(),
-                    ),
+                    Editor::new(snapshot.as_ref(), FocusState::Focused, &Theme::default()),
                     frame.area(),
                 );
             })
