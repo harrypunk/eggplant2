@@ -54,7 +54,7 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     };
     let viewport_height = model.editor.active_view_height()?;
     let rows = model.page_scroll.rows(viewport_height);
-    let _ = model.editor.move_cursor_lines(direction, rows);
+    let _ = model.editor.scroll_lines(direction, rows);
     None
 }
 
@@ -108,17 +108,16 @@ mod tests {
                 .is_none()
         );
         let snapshot = model.editor.active_snapshot().unwrap();
-        assert_eq!(
-            snapshot.text.first_line + snapshot.cursor.unwrap().row,
-            expected
-        );
+        assert_eq!(snapshot.text.first_line, expected);
+        assert!(snapshot.cursor.is_some());
 
         manager.update(
             &mut model,
             Message::InvokeCommand(CommandId("page_scroll_up")),
         );
         let snapshot = model.editor.active_snapshot().unwrap();
-        assert_eq!(snapshot.text.first_line + snapshot.cursor.unwrap().row, 0);
+        assert_eq!(snapshot.text.first_line, 0);
+        assert!(snapshot.cursor.is_some());
     }
 
     #[test]

@@ -6,7 +6,7 @@ use std::{
 };
 
 use helix_core::{
-    RopeSlice, Transaction,
+    RopeSlice, Selection, Transaction, char_idx_at_visual_offset,
     doc_formatter::TextFormat,
     graphemes,
     movement::{self, Direction, Movement},
@@ -339,6 +339,92 @@ impl EditorSession {
         lines: usize,
     ) -> Result<(), EditorError> {
         self.move_cursor_by(direction.into(), lines)
+    }
+
+    /// Scroll the visual viewport immediately, moving the cursor only when needed
+    /// to keep it in the visible area.
+    pub fn scroll_lines(
+        &mut self,
+        direction: VerticalDirection,
+        lines: usize,
+    ) -> Result<(), EditorError> {
+        let scrolloff = self.scrolloff;
+        let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
+        let mut view_offset = document.view_offset(view.id);
+        let cursor = document
+            .selection(view.id)
+            .primary()
+            .cursor(document.text().slice(..));
+        let height = view.inner_height();
+        let scrolloff = scrolloff.min(height.saturating_sub(1) / 2);
+        let offset = isize::try_from(lines).unwrap_or(isize::MAX);
+        let offset = match direction {
+            VerticalDirection::Down => offset,
+            VerticalDirection::Up => offset.saturating_neg(),
+        };
+
+        let text = document.text().slice(..);
+        let viewport = view.inner_area(document);
+        let text_format = document.text_format(viewport.width, None);
+        let annotations = view.text_annotations(document, None);
+        (view_offset.anchor, view_offset.vertical_offset) = char_idx_at_visual_offset(
+            text,
+            view_offset.anchor,
+            isize::try_from(view_offset.vertical_offset)
+                .unwrap_or(isize::MAX)
+                .saturating_add(offset),
+            0,
+            &text_format,
+            &annotations,
+        );
+        drop(annotations);
+        document.set_view_offset(view.id, view_offset);
+        let annotations = view.text_annotations(document, None);
+
+        let text = document.text().slice(..);
+        let mut head;
+        match direction {
+            VerticalDirection::Down => {
+                let off;
+                (head, off) = char_idx_at_visual_offset(
+                    text,
+                    view_offset.anchor,
+                    isize::try_from(view_offset.vertical_offset)
+                        .unwrap_or(isize::MAX)
+                        .saturating_add(scrolloff as isize),
+                    0,
+                    &text_format,
+                    &annotations,
+                );
+                head += usize::from(off != 0);
+                if head <= cursor {
+                    return Ok(());
+                }
+            }
+            VerticalDirection::Up => {
+                head =
+                    char_idx_at_visual_offset(
+                        text,
+                        view_offset.anchor,
+                        isize::try_from(view_offset.vertical_offset)
+                            .unwrap_or(isize::MAX)
+                            .saturating_add(
+                                height.saturating_sub(scrolloff).saturating_sub(1) as isize
+                            ),
+                        0,
+                        &text_format,
+                        &annotations,
+                    )
+                    .0;
+                if head >= cursor {
+                    return Ok(());
+                }
+            }
+        }
+
+        drop(annotations);
+        document.set_selection(view.id, Selection::point(head));
+        Ok(())
     }
 
     fn move_cursor_by(
