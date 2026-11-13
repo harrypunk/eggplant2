@@ -2,6 +2,38 @@
 
 This document defines keyboard terminology and keeps terminal input compatible with the Elm-style message/update/effect architecture.
 
+## Default keymap
+
+| Context | Action | Default binding |
+| --- | --- | --- |
+| Normal / Explorer | Quit | `Space q q` |
+| Normal / Explorer | Next / previous buffer | `Space b n` / `Space b p` |
+| Normal / Explorer | Show/hide explorer | `Space e` |
+| Normal / Explorer | Find/open a file | `Space f f` |
+| Normal / Explorer | Select a UI theme | `Space u t` |
+| Normal / Explorer | Scroll down / up | `Ctrl-F` / `Ctrl-U`, or `Space v j` / `Space v k` |
+| Normal / Explorer | Focus left / right | `Ctrl-H` / `Ctrl-L` |
+| Normal / Explorer | Focus up / down (reserved) | `Ctrl-K` / `Ctrl-J` |
+| Normal | Enter Insert | `i` |
+| Normal | Move | `h`, `j`, `k`, `l` |
+| Normal | Undo / redo | `u` / `Ctrl-R` |
+| Normal | Close active buffer (saves first when dirty) | `Ctrl-W` |
+| Insert | Return to Normal | `Esc` |
+| Insert | Backspace / newline | `Backspace` / `Enter` |
+| Insert | Move | Arrow keys |
+| Explorer | Move selection | `j` / `k` |
+| Explorer | Open file / unfold folder | `Enter` |
+| Explorer | Fold / unfold folder | `h` / `l` |
+| Explorer | Refresh tree | `r` |
+| Explorer | Show/hide ignored entries | `Shift-I` |
+| File picker | Edit query | Printable input / `Backspace` |
+| File picker | Select | `Down` / `Up` |
+| File picker | Open / close | `Enter` / `Esc` |
+| Theme picker | Select | `Down` / `Up` |
+| Theme picker | Apply / close | `Enter` / `Esc` |
+
+Custom `[keymap]` entries merge with defaults by context and action, so only overrides need to be specified. Built-in Space leader sequences are not configured in TOML. Explicit unbinding is not implemented.
+
 ## Terminology
 
 | Term | Meaning | Example |
@@ -47,9 +79,7 @@ Input translation is pure. It does not change the model, execute commands, sleep
 
 Direct bindings and leader targets share `CommandRegistry`: each stable command ID has metadata and a handler. Resolved input emits `InvokeCommand(CommandId)`; unmigrated commands use compatibility messages, while the theme picker, file picker, buffer switching, editing commands, explorer state commands, lifecycle commands, and focus commands already use feature-owned handlers. Duplicate command registrations and duplicate chords in one input context are startup errors. Later feature migrations replace compatibility handlers without changing keybindings.
 
-The built-in Space leader is already a small data-driven sequence state machine. Each `CommandMenuContext` owns its semantic title and items, and each item targets either a submenu or a semantic action. `CommandMenuState` stores the active context stack, returns `Pending`, `Cancelled`, or a semantic `CommandAction`, and the update layer translates completed actions into ordinary messages. `KeyHints` renders the current context's candidates and composes its title by joining active context titles, such as `Leader > buffer`. Titles therefore grow with the menu definitions rather than requiring a separate menu-specific title match.
-
-Current sequences include `Space q q` to quit, `Space b n`/`Space b p` to switch buffers, `Space f f` to open files, and `Space u t` to open the theme list. The theme picker uses a dedicated modal context: Down/Up navigate, Enter applies, and Escape cancels without changing the active theme. Normal-mode `Ctrl-F`/`Ctrl-U` invoke the registered page-scroll commands, whose viewport percentage is configured with `[features.page_scroll] step`. `Space v j`/`Space v k` invoke the same commands through the built-in view menu, providing a control-chord-independent test path.
+The built-in Space leader is already a small data-driven sequence state machine. Each `CommandMenuContext` owns its semantic title and items, and each item targets either a submenu or a semantic `CommandId`. `CommandMenuState` stores the active context stack and returns `Pending`, `Cancelled`, or a command action. `KeyHints` renders the current context's candidates and composes its title by joining active context titles, such as `Leader > buffer`. Titles therefore grow with the menu definitions rather than requiring a separate menu-specific title match.
 
 ## Design rules
 

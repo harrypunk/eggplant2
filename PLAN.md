@@ -63,34 +63,7 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 
 ### Current default commands
 
-| Context | Command | Binding |
-| --- | --- | --- |
-| Normal / Explorer | Quit | `Space q q` |
-| Normal | Enter Insert | `i` |
-| Normal | Move | `h`, `j`, `k`, `l` |
-| Normal | Undo / redo | `u` / `Ctrl-R` |
-| Insert | Return to Normal | `Esc` |
-| Insert | Backspace / newline | `Backspace` / `Enter` |
-| Insert | Move | Arrow keys |
-| Normal | Close active buffer (saves first when dirty) | `Ctrl-W` |
-| Normal / Explorer | Move focus left / right | `Ctrl-H` / `Ctrl-L` |
-| Normal / Explorer | Move focus up / down (reserved for future panes) | `Ctrl-K` / `Ctrl-J` |
-| Normal / Explorer | Next / previous buffer | `Space b n` / `Space b p` |
-| Normal / Explorer | Show/hide files (focus when shown) | `Space e` |
-| Normal / Explorer | Find/open a file with fuzzy ranking and preview | `Space f f` |
-| Normal / Explorer | Select a UI theme | `Space u t` |
-| File picker | Edit query | Printable input / `Backspace` |
-| File picker | Select | `Down` / `Up` |
-| File picker | Open / close | `Enter` / `Esc` |
-| Theme picker | Select | `Down` / `Up` |
-| Theme picker | Apply / close | `Enter` / `Esc` |
-| Explorer | Move selection | `j`, `k` |
-| Explorer | Open file / unfold folder | `Enter` |
-| Explorer | Fold / unfold folder | `h` / `l` |
-| Explorer | Refresh tree | `r` |
-| Explorer | Show/hide Git-ignored entries | `Shift-I` |
-
-See `config.example.toml` for the configurable action names. Leader sequences are built-in. Custom `[keymap]` entries merge with built-in defaults by context and action, so users only need to specify overrides. Explicit unbinding remains a separate feature.
+The complete context/action/binding table lives in [Key input, sequences, and hints](docs/key-input.md). See `config.example.toml` for configurable action names. Leader sequences are built-in. Custom `[keymap]` entries merge with built-in defaults by context and action, so users only need to specify overrides. Explicit unbinding remains a separate feature.
 
 ### Known gaps and limitations
 

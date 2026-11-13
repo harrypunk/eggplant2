@@ -191,33 +191,21 @@ Every future asynchronous edit or AI result should carry a document ID and revis
 
 ## Input routing
 
-Input precedence should be explicit:
+Input is context-aware: overlays handle input first, followed by the focused feature and its Normal/Insert mode. Direct bindings are configurable and merge with defaults by context and action.
 
-1. Normalize the Crossterm key code and modifiers into Eggplant's input type.
-2. Give the topmost modal/overlay first opportunity to handle it.
-3. Route to the focused explorer or editor.
-4. Apply global bindings only as a fallback.
-5. When the editor is focused, dispatch according to its Normal/Insert mode; forward unbound insert-mode character input as text.
+| Common action | Default binding |
+| --- | --- |
+| Quit | `Space q q` |
+| Next / previous buffer | `Space b n` / `Space b p` |
+| Show/hide explorer | `Space e` |
+| Find/open a file | `Space f f` |
+| Select a theme | `Space u t` |
+| Scroll down / up | `Ctrl-F` / `Ctrl-U`, or `Space v j` / `Space v k` |
+| Focus left / right | `Ctrl-H` / `Ctrl-L` |
 
-Common commands use a built-in Space leader with bottom-right key hints:
-
-- `Space q q`: quit.
-- `Space b n` / `Space b p`: next/previous buffer.
-- `Space e`: show/hide and focus the explorer.
-- `Space f f`: open the fuzzy file picker with text preview.
-- `Space v j` / `Space v k`: scroll down/up through the same page-scroll commands as `Ctrl-F`/`Ctrl-U`.
-- `Space u t`: open the built-in theme list; Up/Down select, Enter applies, and Escape cancels.
-
-Direct keys remain configurable:
-
-- `Ctrl-H/J/K/L`: move focus in Normal/Explorer contexts; only left/right currently have targets.
-- `Ctrl-F` / `Ctrl-U`: scroll down/up by the percentage configured in `[features.page_scroll]` (default `75%`).
-- `Shift-I` in Explorer: toggle Git-ignored and built-in ignored entries.
-- Picker: type to filter, arrows to select, Enter to open, Escape to close.
+See [Key input, sequences, and hints](docs/key-input.md) for the complete editing, explorer, and popup keymap table. Page-scroll uses `[features.page_scroll] step` (default `75%`).
 
 Only regular UTF-8 text files open successfully. The explorer honors root/nested `.gitignore` files and also hides `.git`, `node_modules`, and `__pycache__` by default.
-
-Direct bindings use validated `KeyChord` values in context-specific registries. The built-in Space leader is a separate sequence state machine with contextual hints. Future command growth should use Milestone 6's registered command platform rather than Helix's complete keymap/modal machinery.
 
 ## Rendering
 
