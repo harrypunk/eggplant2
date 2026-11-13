@@ -135,11 +135,13 @@ impl Config {
     pub fn parse(content: &str) -> color_eyre::Result<Self> {
         let mut config: Self = toml::from_str(content)?;
         let configured_keymap = std::mem::take(&mut config.keymap);
-        let mut keymap = Self::default().keymap;
-        for (context, overrides) in configured_keymap {
-            keymap.entry(context).or_default().extend(overrides);
-        }
-        config.keymap = keymap;
+        config.keymap = configured_keymap.into_iter().fold(
+            Self::default().keymap,
+            |mut keymap, (context, overrides)| {
+                keymap.entry(context).or_default().extend(overrides);
+                keymap
+            },
+        );
         Ok(config)
     }
 
