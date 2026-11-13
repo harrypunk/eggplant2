@@ -63,7 +63,6 @@ impl Default for Config {
                     "normal",
                     [
                         ("enter_insert_mode", "i"),
-                        ("close_buffer", "ctrl-w"),
                         ("move_left", "h"),
                         ("move_right", "l"),
                         ("move_up", "k"),
@@ -187,7 +186,7 @@ mod tests {
 
         assert_eq!(config.keymap["normal"]["undo"], "ctrl-z");
         assert_eq!(config.keymap["normal"]["page_scroll_down"], "ctrl-f");
-        assert_eq!(config.keymap["normal"]["close_buffer"], "ctrl-w");
+        assert_eq!(config.keymap["normal"]["enter_insert_mode"], "i");
         assert_eq!(config.keymap["explorer"]["refresh_explorer"], "r");
         assert_eq!(config.keymap["theme_picker"]["apply_theme"], "enter");
     }

@@ -13,7 +13,6 @@ step = "75%"
 # Built-in Space leader sequences are not configured here.
 [keymap.normal]
 enter_insert_mode = "i"
-close_buffer = "ctrl-w"
 move_left = "h"
 move_right = "l"
 move_up = "k"

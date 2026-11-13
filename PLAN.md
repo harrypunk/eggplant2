@@ -210,7 +210,7 @@ This is not a promise that new code requires zero wiring. A new feature may be r
 
 #### M7.1 — Page-scroll
 
-- [x] Finalize `page_scroll_down`/`page_scroll_up` with `Ctrl-F`/`Ctrl-U`, equivalent `Space v j`/`Space v k` view-menu paths, and configurable `[features.page_scroll] step` percentages.
+- [x] Finalize `page_scroll_down`/`page_scroll_up` with `Ctrl-F`/`Ctrl-U` and configurable `[features.page_scroll] step` percentages.
 - [x] Add feature-owned page-scroll commands that preserve the desired cursor column and keep the cursor visible while clamping to document boundaries.
 - [x] Reuse the shared Helix/Eggplant viewport policy; no render-time state mutation or independent offset calculation.
 - [x] Test empty documents, documents shorter than a page, first/last pages, narrow terminals, resize, and wide Unicode text.

@@ -200,7 +200,7 @@ Input is context-aware: overlays handle input first, followed by the focused fea
 | Show/hide explorer | `Space e` |
 | Find/open a file | `Space f f` |
 | Select a theme | `Space u t` |
-| Scroll down / up | `Ctrl-F` / `Ctrl-U`, or `Space v j` / `Space v k` |
+| Scroll down / up | `Ctrl-F` / `Ctrl-U` |
 | Focus left / right | `Ctrl-H` / `Ctrl-L` |
 
 See [Key input, sequences, and hints](docs/key-input.md) for the complete editing, explorer, and popup keymap table. Page-scroll uses `[features.page_scroll] step` (default `75%`).

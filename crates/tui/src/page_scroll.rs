@@ -121,34 +121,6 @@ mod tests {
     }
 
     #[test]
-    fn leader_view_sequence_scrolls_without_control_chords() {
-        let mut model = Model::default();
-        let text = (0..100)
-            .map(|line| line.to_string())
-            .collect::<Vec<_>>()
-            .join("\n");
-        create_buffer(&mut model, &text);
-        let manager = MessageManager::default();
-        manager.update(&mut model, Message::Resize(80, 12));
-
-        for key in [' ', 'v', 'j'] {
-            manager.update(
-                &mut model,
-                Message::CommandMenuKey(crossterm::event::KeyCode::Char(key)),
-            );
-        }
-        assert!(model.editor.active_snapshot().unwrap().text.first_line > 0);
-
-        for key in [' ', 'v', 'k'] {
-            manager.update(
-                &mut model,
-                Message::CommandMenuKey(crossterm::event::KeyCode::Char(key)),
-            );
-        }
-        assert_eq!(model.editor.active_snapshot().unwrap().text.first_line, 0);
-    }
-
-    #[test]
     fn empty_and_unsized_documents_are_safe() {
         let mut model = Model::default();
         create_buffer(&mut model, "");

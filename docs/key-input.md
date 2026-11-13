@@ -11,13 +11,12 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | Normal / Explorer | Show/hide explorer | `Space e` |
 | Normal / Explorer | Find/open a file | `Space f f` |
 | Normal / Explorer | Select a UI theme | `Space u t` |
-| Normal / Explorer | Scroll down / up | `Ctrl-F` / `Ctrl-U`, or `Space v j` / `Space v k` |
+| Normal / Explorer | Scroll down / up | `Ctrl-F` / `Ctrl-U` |
 | Normal / Explorer | Focus left / right | `Ctrl-H` / `Ctrl-L` |
 | Normal / Explorer | Focus up / down (reserved) | `Ctrl-K` / `Ctrl-J` |
 | Normal | Enter Insert | `i` |
 | Normal | Move | `h`, `j`, `k`, `l` |
 | Normal | Undo / redo | `u` / `Ctrl-R` |
-| Normal | Close active buffer (saves first when dirty) | `Ctrl-W` |
 | Insert | Return to Normal | `Esc` |
 | Insert | Backspace / newline | `Backspace` / `Enter` |
 | Insert | Move | Arrow keys |
