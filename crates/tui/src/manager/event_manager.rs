@@ -167,6 +167,29 @@ mod tests {
     }
 
     #[test]
+    fn routes_buffer_jump_text_and_commands_in_its_context() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::BufferJump);
+
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::TextInput('z'))
+        ));
+        let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::InvokeCommand(CommandId("buffer_jump_backspace")))
+        ));
+        let event = Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::InvokeCommand(CommandId("buffer_jump_cancel")))
+        ));
+    }
+
+    #[test]
     fn translates_page_scroll_control_chords_when_crossterm_delivers_them() {
         let manager = event_manager();
         let mut model = Model::default();

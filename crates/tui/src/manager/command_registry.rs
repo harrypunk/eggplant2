@@ -78,7 +78,11 @@ impl CommandRegistry {
     }
 
     pub fn builtin() -> Self {
-        Self::from_commands(builtin_commands()).expect("built-in command IDs must be unique")
+        let mut registry =
+            Self::from_commands(builtin_commands()).expect("built-in command IDs must be unique");
+        crate::buffer_jump::register_commands(&mut registry)
+            .expect("buffer-jump commands must be unique");
+        registry
     }
 }
 

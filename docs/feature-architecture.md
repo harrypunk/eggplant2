@@ -259,12 +259,14 @@ Implemented: `test_utils/example_feature.rs` registers typed state, two commands
 Do not expand M6 with theme or plugin work. Once the contribution architecture is proven, use it for high-priority editing features in this order:
 
 1. **Page-scroll:** semantic page/half-page commands using the shared viewport, with boundary and resize coverage.
-2. **Current-buffer quick-search:** feature-owned query/match/revision state and a contributed search popup, with accept/cancel, next/previous navigation, and stale-match protection. Workspace-wide grep remains a separate feature.
+2. **Current-buffer visible jump:** feature-owned two-character matching and stable labels over the active visible snapshot, with accept/cancel and generic absolute cursor navigation. Incremental quick-search and workspace-wide grep remain separate features.
 3. **Text-object foundation:** document selection/operator semantics first, then add a deliberately small set of motions and inner/around objects through existing transaction/undo/auto-save paths. Do not turn this into full Visual mode or a complete Vim grammar.
 
 These are real feature consumers of the M6 contracts, not reasons to defer M6 or add a separate editing architecture.
 
 Implemented M7.1: `page_scroll.rs` registers `page_scroll_down`/`page_scroll_up` with default `Ctrl-F`/`Ctrl-U` bindings. `[features.page_scroll] step = "75%"` is validated at startup, converted to rows from the active viewport height, and executed through counted Helix vertical movement. This is built-in feature configuration, not an external extension API.
+
+Implemented M7.2: `buffer_jump/` owns the `Space c j` workflow, exact two-character matching over visible snapshot lines, stable two-key labels, cancellation/backspace, and final cursor movement. `TextInputRegistry` replaces feature-specific character messages for Insert mode, the file picker, and jump. `UiRegistry` editor overlays receive the existing snapshot and resolved text rectangle for dimming/labels without render-time scanning. The editor core exposes only generic `DocumentPosition` navigation and viewport width; it contains no jump policy.
 
 ## 12. Testing strategy
 

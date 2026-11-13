@@ -124,6 +124,13 @@ impl Default for Config {
                         ("theme_picker_previous", "up"),
                     ],
                 ),
+                keymap_context(
+                    "buffer_jump",
+                    [
+                        ("buffer_jump_cancel", "esc"),
+                        ("buffer_jump_backspace", "backspace"),
+                    ],
+                ),
             ]),
         }
     }

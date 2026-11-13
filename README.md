@@ -200,6 +200,7 @@ Input is context-aware: overlays handle input first, followed by the focused fea
 | Show/hide explorer | `Space e` |
 | Find/open a file | `Space f f` |
 | Select a theme | `Space u t` |
+| Jump in the visible buffer | `Space c j`, two characters, then a label |
 | Scroll down / up | `Ctrl-F` / `Ctrl-U` |
 | Focus left / right | `Ctrl-H` / `Ctrl-L` |
 

@@ -1,4 +1,5 @@
 pub mod buffer;
+pub mod buffer_jump;
 pub mod command_menu;
 pub mod component;
 pub mod config;
@@ -33,6 +34,7 @@ pub mod data_object {
     use editor::{BufferId, DocumentOpenCompletion, EditorSession, SaveCompletion};
 
     use crate::{
+        buffer_jump::BufferJumpState,
         command_menu::CommandMenuState,
         explorer::ExplorerState,
         file_picker::{FileEntry, FilePickerState, PreviewState},
@@ -122,6 +124,7 @@ pub mod data_object {
         pub file_picker: FilePickerState,
         pub theme_picker: ThemePickerState,
         pub page_scroll: PageScrollState,
+        pub buffer_jump: BufferJumpState,
         #[cfg(test)]
         pub example_feature: crate::test_utils::ExampleFeatureState,
     }
@@ -144,6 +147,7 @@ pub mod data_object {
                 file_picker: FilePickerState::default(),
                 theme_picker: ThemePickerState::default(),
                 page_scroll: PageScrollState::default(),
+                buffer_jump: BufferJumpState::default(),
                 #[cfg(test)]
                 example_feature: crate::test_utils::ExampleFeatureState::default(),
             }
@@ -254,5 +258,6 @@ pub mod data_object {
         Explorer,
         FilePicker,
         ThemePicker,
+        BufferJump,
     }
 }

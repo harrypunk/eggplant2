@@ -22,10 +22,38 @@ pub struct CommandMenuItem {
     target: CommandMenuTarget,
 }
 
+impl CommandMenuItem {
+    pub const fn action(key: char, description: &'static str, command: CommandId) -> Self {
+        Self {
+            key,
+            description,
+            target: CommandMenuTarget::Action(command),
+        }
+    }
+
+    pub const fn submenu(
+        key: char,
+        description: &'static str,
+        context: &'static CommandMenuContext,
+    ) -> Self {
+        Self {
+            key,
+            description,
+            target: CommandMenuTarget::Submenu(context),
+        }
+    }
+}
+
 #[derive(Debug)]
-struct CommandMenuContext {
+pub struct CommandMenuContext {
     title: &'static str,
     items: &'static [CommandMenuItem],
+}
+
+impl CommandMenuContext {
+    pub const fn new(title: &'static str, items: &'static [CommandMenuItem]) -> Self {
+        Self { title, items }
+    }
 }
 
 const QUIT_CONTEXT: CommandMenuContext = CommandMenuContext {
@@ -84,6 +112,7 @@ const ROOT_CONTEXT: CommandMenuContext = CommandMenuContext {
             description: "buffers",
             target: CommandMenuTarget::Submenu(&BUFFER_CONTEXT),
         },
+        CommandMenuItem::submenu('c', "code", &crate::buffer_jump::CODE_CONTEXT),
         CommandMenuItem {
             key: 'e',
             description: "toggle files",
@@ -212,6 +241,14 @@ mod tests {
             CommandMenuOutcome::Action(CommandId("next_buffer"))
         );
         assert!(!menu.is_active());
+
+        menu.handle_key(KeyCode::Char(' '));
+        menu.handle_key(KeyCode::Char('c'));
+        assert_eq!(menu.context_title(), "Leader > code");
+        assert_eq!(
+            menu.handle_key(KeyCode::Char('j')),
+            CommandMenuOutcome::Action(CommandId("buffer_jump_start"))
+        );
 
         menu.handle_key(KeyCode::Char(' '));
         menu.handle_key(KeyCode::Char('q'));

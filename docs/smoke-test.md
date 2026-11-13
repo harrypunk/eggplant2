@@ -26,8 +26,9 @@ cargo run -p tui -- "$workdir"
 4. **Resize:** make the terminal narrow and short, then enlarge it. Confirm that content clips without a panic and that the cursor never appears outside the editor.
 5. **Popups:** open `Space f f`, `Space u t`, and the leader hints. Confirm that the editor cursor is hidden and that Escape closes each popup.
 6. **Theme:** use `Space u t`, Down/Up, and Enter to apply each built-in theme. Escape on a later visit must preserve the applied theme.
-7. **Save safety:** make a buffer dirty and quit with `Space q q`; confirm that the application waits for the write and exits with the edited content persisted.
-8. **Terminal restoration after normal exit:** confirm that the shell prompt returns to the original screen, raw-mode input is disabled, and the cursor/keyboard behave normally.
+7. **Visible-buffer jump:** open a buffer containing `hello`, then press `Space c j`, type `el`, and enter the displayed label for `e`. Confirm that only visible matches receive labels, other text dims, and the cursor lands on `e`. Restart and confirm that Escape cancels without moving the cursor.
+8. **Save safety:** make a buffer dirty and quit with `Space q q`; confirm that the application waits for the write and exits with the edited content persisted.
+9. **Terminal restoration after normal exit:** confirm that the shell prompt returns to the original screen, raw-mode input is disabled, and the cursor/keyboard behave normally.
 
 ## Failure and panic review
 

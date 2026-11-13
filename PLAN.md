@@ -204,7 +204,7 @@ This is not a promise that new code requires zero wiring. A new feature may be r
 
 ## Third edition: core editing workflows
 
-### Milestone 7: Page-scroll, quick-search, and text objects
+### Milestone 7: Page-scroll, visible-buffer jump, and text objects
 
 **Goal:** deliver frequently used editing features through M6's command/effect/UI contribution boundaries. Finish M6 before starting these slices; no dynamic-theme or third-party-plugin work is a prerequisite.
 
@@ -217,17 +217,17 @@ This is not a promise that new code requires zero wiring. A new feature may be r
 
 **Exit criteria:** configurable percentage-based scrolling works with the existing cursor and viewport, without changing auto-save, editing history, or focus behavior.
 
-#### M7.2 — Current-buffer quick-search
+#### M7.2 — Current-buffer visible jump
 
-Start with current-buffer quick-search as the narrow MVP. Workspace-wide grep is a separate later feature unless its scope is explicitly added in the M7.2 design review.
+Start with a two-character, Leap-style jump limited to the active buffer's visible snapshot. Incremental quick-search and workspace-wide grep remain separate later features.
 
-- [ ] Document query input, match activation, accept/cancel, and next/previous bindings before implementation.
-- [ ] Add feature-owned query, matches, active match, and document-revision state with UTF-8-safe matching.
-- [ ] Reuse explicit popup/UI contributions and shared viewport updates; do not scan the document during rendering.
-- [ ] Invalidate stale matches after edits or buffer switches, and restore the original cursor/viewport on cancellation.
-- [ ] Test no matches, first/last match wrapping policy, Unicode, empty documents, resize, stale revisions, and accept/cancel behavior.
+- [x] Start with `Space c j`, accept an exact two-character pattern, assign stable two-key labels, and jump when a complete label is entered.
+- [x] Keep pattern, label, targets, and active-buffer identity in the `buffer_jump` extension; use generic absolute cursor navigation only on acceptance.
+- [x] Register text input, prompt UI, and editor-label overlays without feature-specific message/runtime/page dispatch.
+- [x] Dim visible text while labels are active; Escape cancels without movement and Backspace edits the current input.
+- [x] Test no matches, Unicode display columns, horizontal clipping, narrow resize, accept/cancel, and cursor/dimming behavior.
 
-**Exit criteria:** users can incrementally find and navigate matches in the active buffer without stale state or viewport desynchronization, while auto-save and editing history remain intact.
+**Exit criteria:** users can jump to any labeled match in the current visible viewport without scanning offscreen text, changing the document, or adding jump policy to the editor core.
 
 #### M7.3 — Text-object foundation
 

@@ -79,8 +79,8 @@ mod tests {
         let theme = Theme::default();
         let hints = KeyHints::new(&menu, theme.ui());
 
-        assert_eq!(hints.lines.len(), 5);
-        assert_eq!(hints.size().height, 7);
+        assert_eq!(hints.lines.len(), 6);
+        assert_eq!(hints.size().height, 8);
         assert_eq!(hints.size().width, 16);
     }
 

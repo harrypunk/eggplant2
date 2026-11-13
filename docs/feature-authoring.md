@@ -42,7 +42,7 @@ The handler receives the model and command ID and returns an optional effect. Ke
 - Return an error status for an unexpected ID instead of silently ignoring it.
 - Let duplicate registrations and duplicate chords fail at startup.
 
-Compatibility `Message` handlers remain available for shell concerns, but new features should prefer feature handlers.
+Compatibility `Message` handlers remain available for shell concerns, but new features should prefer feature handlers. For unbound printable input, register a `TextInputRegistry` handler for the feature context and consume the shared `Message::TextInput`; do not add a feature-specific character message or dispatcher arm.
 
 ## 4. Keep updates pure
 
@@ -79,6 +79,7 @@ Choose the smallest suitable contribution:
 - `register_panel(PanelSlot::..., render)` for a shell panel slot.
 - `register_status(StatusSlot::..., render)` for status content.
 - `register_overlay(id, provider)` for conditional popup content.
+- `register_editor_overlay(id, provider)` for decorations over the active editor's visible text. The renderer receives the existing snapshot and resolved text rectangle; it must not rescan the document or mutate state.
 
 An overlay provider returns `None` while hidden and an `OverlayContribution` while visible. The contribution includes a semantic kind, placement, and render function. The shell computes all rectangles, orders hints before modals, and suppresses the editor cursor whenever an overlay is present.
 
