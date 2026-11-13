@@ -1,6 +1,6 @@
 # Eggplant first-edition plan
 
-Last updated: 2026-11-12
+Last updated: 2026-11-13
 Current baseline: implemented first-edition feature set in final hardening
 
 ## Purpose
@@ -224,18 +224,56 @@ This is not a promise that new code requires zero wiring. A new feature may be r
 - [x] Migrate explorer visibility and logical focus commands into a focus feature with colocated tests.
 - [x] Migrate the remaining file-picker commands and completion coordination into the file-picker feature. `MessageManager` is now a small application coordinator rather than a growing feature match.
 - [ ] Replace centralized feature conditionals in pages with explicit panel/popup/status contribution points while keeping focus, cursor hiding, and modal precedence shell-owned.
-- [ ] Implement dynamic Helix-compatible user themes through the new platform: discover `~/.eggplant/themes/*.toml`, support runtime theme IDs/catalog entries, resolve inheritance and name collisions, load through effects, and preserve the active theme on failures.
 - [ ] Add a test-only example feature proving that command, state/update, popup, and effect contributions work through registration without changes to unrelated domain modules or runtime dispatch.
 - [ ] Document a feature-authoring checklist: registration, commands/keymaps, effects/completions, UI slots, errors, capabilities, and required tests.
 
-**Exit criteria:** existing user behavior and regression tests remain intact; central update, keymap parsing, and runtime dispatch contain no growing per-feature command/effect matches; a new example feature works through composition-root registration alone; dynamic themes use the same extension path rather than special-case core logic.
+**Exit criteria:** existing user behavior and regression tests remain intact; central update, keymap parsing, and runtime dispatch contain no growing per-feature command/effect matches; a new example feature works through composition-root registration alone; panel/popup/status contributions preserve shell-owned focus and modal rules. Dynamic themes and third-party extension hosts are not part of M6.
 
-### After Milestone 6: external extensions only if justified
+## Third edition: core editing workflows
 
-Do not add a native Rust dynamic-library ABI or unrestricted in-process third-party code. If external plugins become a real requirement, evaluate a versioned, capability-based WebAssembly or out-of-process extension host against the now-stable internal command/effect API. Filesystem, editor mutation, terminal, and future AI capabilities must be explicit, and plugins must not bypass save safety, revision checks, or text-file acceptance rules.
+### Milestone 7: Page-scroll, quick-search, and text objects
 
-## Deferred beyond the second edition
+**Goal:** deliver frequently used editing features through M6's command/effect/UI contribution boundaries. Finish M6 before starting these slices; no dynamic-theme or third-party-plugin work is a prerequisite.
 
+#### M7.1 — Page-scroll
+
+- [ ] Finalize page/half-page command names and bindings without adopting unrelated Vim behavior.
+- [ ] Add feature-owned page-scroll commands that preserve the desired cursor column and keep the cursor visible while clamping to document boundaries.
+- [ ] Reuse the shared Helix/Eggplant viewport policy; no render-time state mutation or independent offset calculation.
+- [ ] Test empty documents, documents shorter than a page, first/last pages, narrow terminals, resize, and wide Unicode text.
+
+**Exit criteria:** page and half-page scrolling work with the existing cursor and viewport, without changing auto-save, editing history, or focus behavior.
+
+#### M7.2 — Current-buffer quick-search
+
+Start with current-buffer quick-search as the narrow MVP. Workspace-wide grep is a separate later feature unless its scope is explicitly added in the M7.2 design review.
+
+- [ ] Document query input, match activation, accept/cancel, and next/previous bindings before implementation.
+- [ ] Add feature-owned query, matches, active match, and document-revision state with UTF-8-safe matching.
+- [ ] Reuse explicit popup/UI contributions and shared viewport updates; do not scan the document during rendering.
+- [ ] Invalidate stale matches after edits or buffer switches, and restore the original cursor/viewport on cancellation.
+- [ ] Test no matches, first/last match wrapping policy, Unicode, empty documents, resize, stale revisions, and accept/cancel behavior.
+
+**Exit criteria:** users can incrementally find and navigate matches in the active buffer without stale state or viewport desynchronization, while auto-save and editing history remain intact.
+
+#### M7.3 — Text-object foundation
+
+- [ ] Document the desired selection and operator semantics, then choose a deliberately small initial object set rather than implementing Vim's full grammar.
+- [ ] Add initial word motions and inner/around-object commands using Helix text/range primitives where useful and Eggplant command semantics where policy differs.
+- [ ] Route all resulting edits through the existing transaction, undo, dirty-revision, and auto-save paths.
+- [ ] Test empty documents, Unicode/graphemes, object boundaries, nested delimiters if supported, and stale/invalid selections.
+- [ ] Keep Visual mode, macros, registers, and the complete Vim/Helix text-object catalog out of this slice.
+
+**Exit criteria:** the documented initial motions and text objects work consistently with the editor's selection model, with no parallel edit or undo path.
+
+### Milestone 7 review rule
+
+Implement and review M7.1, M7.2, and M7.3 independently. If text-object semantics require a larger selection-model change, stop and document it before adding operators or visual-mode behavior.
+
+## TBD — much later editions
+
+- Dynamic Helix-compatible user themes and broader visual style/theming expansion. Existing built-in themes and semantic style boundaries remain unchanged.
+- Third-party plugin/extension hosts. Do not add a native Rust dynamic-library ABI or unrestricted in-process third-party code; evaluate versioned, capability-based WebAssembly or out-of-process hosting only if justified by real requirements and stable internal contracts.
 - AI agent execution/chat and automated editing.
 - LSP, DAP, formatting, and code actions.
 - Full Vim or Helix command compatibility, Visual mode, macros, and registers.

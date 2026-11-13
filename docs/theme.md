@@ -1,6 +1,6 @@
 # Theme architecture
 
-Status: living design. The application implements `default`, `tokyonight`, and `catppuccin_mocha`, exact layered syntax highlights, semantic UI styles, and interactive built-in selection through `Space u t`. User-provided theme files remain a future increment.
+Status: living design. The application implements `default`, `tokyonight`, and `catppuccin_mocha`, exact layered syntax highlights, semantic UI styles, and interactive built-in selection through `Space u t`. User-provided theme files and broader style/theming expansion are unscheduled TBD work for much later editions, after M7 core editing workflows.
 
 ## Purpose
 

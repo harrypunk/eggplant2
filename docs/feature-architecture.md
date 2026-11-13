@@ -246,13 +246,19 @@ Implemented slices: `buffer.rs` owns next/previous commands plus shared dirty-sa
 
 After two concrete popup examples exist, replace remaining page feature conditionals with explicit panel/popup/status contributions. Keep modal precedence and cursor policy shell-owned.
 
-### M6.6 — Dynamic themes as the first new consumer
-
-Add `~/.eggplant/themes/*.toml` discovery, runtime theme IDs/catalog entries, inheritance and collision rules, effect-based loading, and safe failure behavior. This must use the new platform rather than new special-case coordinator branches.
-
-### M6.7 — Architecture proof and author guide
+### M6.6 — Architecture proof and author guide
 
 Add a test-only example feature that registers state/update, a command, a popup, and an effect. The test must not modify unrelated feature modules or runtime dispatch. Document the author checklist and registration/conflict tests.
+
+### M7 — Core editing workflows after M6
+
+Do not expand M6 with theme or plugin work. Once the contribution architecture is proven, use it for high-priority editing features in this order:
+
+1. **Page-scroll:** semantic page/half-page commands using the shared viewport, with boundary and resize coverage.
+2. **Current-buffer quick-search:** feature-owned query/match/revision state and a contributed search popup, with accept/cancel, next/previous navigation, and stale-match protection. Workspace-wide grep remains a separate feature.
+3. **Text-object foundation:** document selection/operator semantics first, then add a deliberately small set of motions and inner/around objects through existing transaction/undo/auto-save paths. Do not turn this into full Visual mode or a complete Vim grammar.
+
+These are real feature consumers of the M6 contracts, not reasons to defer M6 or add a separate editing architecture.
 
 ## 12. Testing strategy
 
@@ -276,8 +282,10 @@ A migration is not complete if it merely moves match arms into another central f
 
 SOLID does not require maximal abstraction or zero composition code. It requires clear ownership and stable dependency rules.
 
-## 14. External extensions after M6
+## 14. TBD — much later editions
 
-Only evaluate external plugins after the internal contracts have real consumers and stable tests. Prefer a versioned, capability-based WebAssembly or out-of-process host. Do not expose arbitrary Rust layouts as a native ABI.
+Dynamic Helix-compatible user themes and broader visual style/theming work are unscheduled. Existing built-in themes and semantic style boundaries remain unchanged and are not prerequisites for M7.
+
+Only evaluate external plugins after the internal contracts have real consumers and stable tests. Prefer a versioned, capability-based WebAssembly or out-of-process host. Do not expose arbitrary Rust layouts as a native ABI or add unrestricted in-process third-party code.
 
 External capabilities must explicitly cover filesystem access, editor mutation, terminal/UI contributions, and any future AI operations. External code must not bypass automatic saving, revision checks, text-only file acceptance, or terminal/modal ownership. Those rules are part of the architecture, not optional policy layered on afterward.
