@@ -1,4 +1,5 @@
 use ratatui::{
+    Frame,
     buffer::Buffer,
     layout::{Constraint, Flex, Layout, Rect},
     text::Line,
@@ -7,8 +8,10 @@ use ratatui::{
 
 use super::{popup::Popup, text_view::TextView};
 use crate::{
+    data_object::{Model, Visibility},
     file_picker::{FileCollectionState, FilePickerState, PreviewState},
     theme::{Theme, UiTheme},
+    ui::{OverlayContribution, OverlayKind, OverlayPlacement},
 };
 
 /// Two-pane file picker: query/results on the left and text preview on the right.
@@ -41,6 +44,26 @@ impl Widget for FilePicker<'_> {
 struct FilePickerContent<'a> {
     state: &'a FilePickerState,
     theme: &'a Theme,
+}
+
+pub fn overlay(model: &Model) -> Option<OverlayContribution> {
+    match model.file_picker.visibility {
+        Visibility::Displayed => Some(OverlayContribution::new(
+            "file_picker",
+            OverlayKind::Modal,
+            OverlayPlacement::MainPanel {
+                max_width: 160,
+                max_height: 36,
+                margin: 2,
+            },
+            render_overlay,
+        )),
+        Visibility::Hidden => None,
+    }
+}
+
+fn render_overlay(model: &Model, frame: &mut Frame, area: Rect) {
+    frame.render_widget(FilePicker::new(&model.file_picker, &model.theme), area);
 }
 
 impl Widget for FilePickerContent<'_> {

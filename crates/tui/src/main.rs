@@ -5,6 +5,7 @@ use tui::{
     startup::{initial_model, startup_path_from},
     terminal,
     theme::Theme,
+    ui::UiRegistry,
 };
 
 #[tokio::main]
@@ -14,10 +15,11 @@ async fn main() -> color_eyre::Result<()> {
     let config = Config::load()?;
     model.theme = Theme::from_name(&config.theme)?;
     let commands = CommandRegistry::builtin();
+    let ui = UiRegistry::builtin();
     let keymap = Registry::from_config(&config.keymap, &commands)?;
     terminal::install_panic_hook();
     let mut terminal = terminal::init_terminal()?;
-    let result = runtime::run(&mut terminal, &config, keymap, commands, model);
+    let result = runtime::run(&mut terminal, &config, keymap, commands, ui, model);
     terminal::restore_terminal()?;
     result
 }

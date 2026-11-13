@@ -17,6 +17,7 @@ pub mod terminal;
 pub mod theme;
 pub mod theme_picker;
 pub mod tools;
+pub mod ui;
 
 #[cfg(test)]
 mod test_utils;

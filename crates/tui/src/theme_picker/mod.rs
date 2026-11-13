@@ -1,7 +1,7 @@
 mod component;
 mod state;
 
-pub use component::ThemePicker;
+pub use component::{ThemePicker, overlay};
 pub use state::ThemePickerState;
 
 use crate::{

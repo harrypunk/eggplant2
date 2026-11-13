@@ -1,4 +1,5 @@
 use ratatui::{
+    Frame,
     buffer::Buffer,
     layout::{Rect, Size},
     text::Line,
@@ -7,8 +8,10 @@ use ratatui::{
 
 use crate::{
     component::popup::Popup,
+    data_object::{Model, Visibility},
     theme::{Theme, ThemeName},
     theme_picker::ThemePickerState,
+    ui::{OverlayContribution, OverlayKind, OverlayPlacement},
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -33,6 +36,25 @@ impl<'a> ThemePicker<'a> {
             height: u16::try_from(ThemeName::ALL.len() + 2).unwrap_or(u16::MAX),
         }
     }
+}
+
+pub fn overlay(model: &Model) -> Option<OverlayContribution> {
+    match model.theme_picker.visibility {
+        Visibility::Displayed => {
+            let picker = ThemePicker::new(&model.theme_picker, &model.theme);
+            Some(OverlayContribution::new(
+                "theme_picker",
+                OverlayKind::Modal,
+                OverlayPlacement::Centered(picker.size()),
+                render_overlay,
+            ))
+        }
+        Visibility::Hidden => None,
+    }
+}
+
+fn render_overlay(model: &Model, frame: &mut Frame, area: Rect) {
+    frame.render_widget(ThemePicker::new(&model.theme_picker, &model.theme), area);
 }
 
 impl Widget for ThemePicker<'_> {

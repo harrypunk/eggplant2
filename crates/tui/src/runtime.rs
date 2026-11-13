@@ -8,6 +8,7 @@ use crate::{
         keyboard_input_registry::Registry, message_manager::MessageManager,
     },
     page::editor::Editor,
+    ui::UiRegistry,
 };
 
 /// Run the application's message/update/view loop until the model requests exit.
@@ -16,11 +17,12 @@ pub fn run(
     config: &Config,
     keymap: Registry,
     commands: CommandRegistry,
+    ui: UiRegistry,
     mut model: Model,
 ) -> color_eyre::Result<()> {
     let event_manager = EventManager::new(config, keymap);
     let message_manager = MessageManager::new(commands);
-    let editor_page = Editor;
+    let editor_page = Editor::new(ui);
     let (message_sender, mut message_receiver) = tokio::sync::mpsc::unbounded_channel();
 
     let initial_size = terminal.backend().size()?;
