@@ -294,7 +294,7 @@ cargo run -p tui
 cargo test --workspace
 ```
 
-The app reads `~/.eggplant/config.toml` when present. See `config.example.toml` for the current options; missing configuration falls back to defaults.
+The app reads `~/.eggplant/config.toml` when present. See `config.example.toml` for the current options; missing configuration falls back to defaults. Custom keymap entries merge with built-in defaults by context and action, so only overrides need to be specified.
 
 ## Current design documents
 

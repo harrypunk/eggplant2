@@ -8,8 +8,9 @@ step = "75%"
 
 # Keymaps map action names to key bindings.
 # Supported modifiers: ctrl, alt, and shift (for example, "ctrl-q").
-# Supplying [keymap] replaces the whole built-in keymap table, so include every
-# context and binding you need. Built-in Space leader sequences are not configured here.
+# Custom bindings merge with built-in defaults by context and action. Override only
+# what you want to change; unspecified bindings remain enabled.
+# Built-in Space leader sequences are not configured here.
 [keymap.normal]
 enter_insert_mode = "i"
 close_buffer = "ctrl-w"

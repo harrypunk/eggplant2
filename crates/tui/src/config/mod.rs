@@ -131,6 +131,18 @@ impl Default for Config {
 }
 
 impl Config {
+    /// Parse configuration and inherit unspecified keybindings from the defaults.
+    pub fn parse(content: &str) -> color_eyre::Result<Self> {
+        let mut config: Self = toml::from_str(content)?;
+        let configured_keymap = std::mem::take(&mut config.keymap);
+        let mut keymap = Self::default().keymap;
+        for (context, overrides) in configured_keymap {
+            keymap.entry(context).or_default().extend(overrides);
+        }
+        config.keymap = keymap;
+        Ok(config)
+    }
+
     /// Load `~/.eggplant/config.toml`, falling back to defaults when it does not exist.
     pub fn load() -> color_eyre::Result<Self> {
         let Some(path) =
@@ -139,7 +151,7 @@ impl Config {
             return Ok(Self::default());
         };
         match fs::read_to_string(&path) {
-            Ok(content) => Ok(toml::from_str(&content)?),
+            Ok(content) => Self::parse(&content),
             Err(e) if e.kind() == ErrorKind::NotFound => Ok(Self::default()),
             Err(e) => Err(e.into()),
         }
@@ -152,7 +164,7 @@ mod tests {
 
     #[test]
     fn empty_file_uses_defaults() {
-        let config: Config = toml::from_str("").unwrap();
+        let config = Config::parse("").unwrap();
         assert_eq!(config.event_poll_timeout, 250);
         assert_eq!(config.theme, "default");
         assert_eq!(config.features.page_scroll.step, "75%");
@@ -160,14 +172,27 @@ mod tests {
 
     #[test]
     fn partial_file_overrides_defaults() {
-        let config: Config = toml::from_str("event_poll_timeout = 16").unwrap();
+        let config = Config::parse("event_poll_timeout = 16").unwrap();
         assert_eq!(config.event_poll_timeout, 16);
         assert_eq!(config.theme, "default");
     }
 
     #[test]
+    fn partial_keymaps_override_actions_and_inherit_all_other_defaults() {
+        let config =
+            Config::parse("[keymap.normal]\nundo = \"ctrl-z\"\npage_scroll_down = \"ctrl-f\"\n")
+                .unwrap();
+
+        assert_eq!(config.keymap["normal"]["undo"], "ctrl-z");
+        assert_eq!(config.keymap["normal"]["page_scroll_down"], "ctrl-f");
+        assert_eq!(config.keymap["normal"]["close_buffer"], "ctrl-w");
+        assert_eq!(config.keymap["explorer"]["refresh_explorer"], "r");
+        assert_eq!(config.keymap["theme_picker"]["apply_theme"], "enter");
+    }
+
+    #[test]
     fn example_file_matches_all_builtin_defaults() {
-        let config: Config = toml::from_str(include_str!(concat!(
+        let config = Config::parse(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../../config.example.toml"
         )))

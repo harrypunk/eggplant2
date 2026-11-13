@@ -90,14 +90,14 @@ Detailed architecture and save semantics live in [Editor design with Helix and E
 | Explorer | Refresh tree | `r` |
 | Explorer | Show/hide Git-ignored entries | `Shift-I` |
 
-See `config.example.toml` for the configurable action names. Leader sequences are built-in. Supplying a `[keymap]` table replaces the entire built-in keymap table, so custom configurations must include every required context and binding.
+See `config.example.toml` for the configurable action names. Leader sequences are built-in. Custom `[keymap]` entries merge with built-in defaults by context and action, so users only need to specify overrides. Explicit unbinding remains a separate feature.
 
 ### Known gaps and limitations
 
 - Tools panel is hidden and remains a placeholder for future agent/search/file-info panels.
 - No new-file or Save As workflow.
 - No soft-wrap rendering, LSP, or split views.
-- Existing keymap configuration replaces the configured keymap section rather than offering sophisticated default merging/unbinding.
+- Explicit keymap unbinding and advanced rule editing are not implemented; custom entries otherwise merge with defaults.
 
 ## Roadmap
 
