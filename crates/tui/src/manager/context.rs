@@ -27,19 +27,22 @@ impl FromStr for KeyChord {
             .filter(|part| !part.is_empty())
             .ok_or_else(|| format!("invalid key binding `{value}`"))?;
 
-        let mut modifiers = KeyModifiers::NONE;
-        for modifier in parts {
-            modifiers |= match modifier.to_ascii_lowercase().as_str() {
-                "ctrl" | "control" => KeyModifiers::CONTROL,
-                "alt" => KeyModifiers::ALT,
-                "shift" => KeyModifiers::SHIFT,
-                _ => {
-                    return Err(format!(
-                        "unknown modifier `{modifier}` in key binding `{value}`"
-                    ));
-                }
-            };
-        }
+        // Combine every modifier prefix before the final key name, such as ctrl-alt-i.
+        let modifiers = parts
+            .into_iter()
+            .try_fold(KeyModifiers::NONE, |modifiers, modifier| {
+                let flag = match modifier.to_ascii_lowercase().as_str() {
+                    "ctrl" | "control" => KeyModifiers::CONTROL,
+                    "alt" => KeyModifiers::ALT,
+                    "shift" => KeyModifiers::SHIFT,
+                    _ => {
+                        return Err(format!(
+                            "unknown modifier `{modifier}` in key binding `{value}`"
+                        ));
+                    }
+                };
+                Ok(modifiers | flag)
+            })?;
 
         let code = normalize_shifted_character(parse_key_code(key_name)?, modifiers);
         Ok(Self::new(code, modifiers))
