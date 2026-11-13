@@ -102,6 +102,7 @@ pub struct UiTheme {
     pub(crate) base: Style,
     pub(crate) muted: Style,
     pub(crate) selection: Style,
+    pub(crate) unfocused_selection: Style,
     pub(crate) border: Style,
     pub(crate) focused_border: Style,
     pub(crate) error: Style,
@@ -118,14 +119,21 @@ impl UiTheme {
             .patch(source_style(source, "ui.text").unwrap_or_default());
         let border = source_style(source, "ui.window").unwrap_or_default();
         let status = source_style(source, "ui.statusline").unwrap_or_default();
+        let selection = source_style(source, "ui.menu.selected")
+            .or_else(|| source_style(source, "ui.selection"))
+            .unwrap_or_else(|| Style::new().add_modifier(Modifier::REVERSED));
+        let unfocused_selection = source_style(source, "ui.text.inactive")
+            .map(|inactive| selection.patch(inactive))
+            .unwrap_or(selection)
+            .remove_modifier(Modifier::BOLD)
+            .add_modifier(Modifier::DIM);
         Self {
             base,
             muted: source_style(source, "ui.linenr")
                 .or_else(|| source_style(source, "ui.text.inactive"))
                 .unwrap_or_default(),
-            selection: source_style(source, "ui.menu.selected")
-                .or_else(|| source_style(source, "ui.selection"))
-                .unwrap_or_else(|| Style::new().add_modifier(Modifier::REVERSED)),
+            selection,
+            unfocused_selection,
             focused_border: border,
             border,
             error: source_style(source, "error")

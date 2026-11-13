@@ -1,7 +1,7 @@
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
-    text::Line,
+    text::{Line, Span},
     widgets::{Block, BorderType, Paragraph, Widget},
 };
 
@@ -69,12 +69,22 @@ impl FileExplorer<'_> {
             .iter()
             .enumerate()
             .map(|(index, entry)| {
-                Self::entry_line(self.explorer.selected == Some(index), entry, self.styles)
+                Self::entry_line(
+                    self.explorer.selected == Some(index),
+                    entry,
+                    self.styles,
+                    self.focus,
+                )
             })
             .collect()
     }
 
-    fn entry_line(selected: bool, entry: &ExplorerEntry, styles: &UiTheme) -> Line<'static> {
+    fn entry_line(
+        selected: bool,
+        entry: &ExplorerEntry,
+        styles: &UiTheme,
+        focus: FocusState,
+    ) -> Line<'static> {
         let marker = if selected { ">" } else { " " };
         let (directory_marker, suffix) = match entry.kind {
             ExplorerEntryKind::Directory if entry.expansion == ExpansionState::Expanded => {
@@ -85,15 +95,22 @@ impl FileExplorer<'_> {
             _ => ("", ""),
         };
         let indentation = "  ".repeat(entry.depth);
-        let text = format!(
-            "{marker} {indentation}{directory_marker}{}{suffix}",
+        let content = format!(
+            " {indentation}{directory_marker}{}{suffix}",
             entry.name.to_string_lossy()
         );
-        let style = match selected {
+        let text_style = match selected {
             true => styles.base.patch(styles.selection),
             false => styles.base,
         };
-        Line::styled(text, style)
+        let marker_style = match (selected, focus) {
+            (true, FocusState::Unfocused) => styles.base.patch(styles.unfocused_selection),
+            _ => text_style,
+        };
+        Line::from(vec![
+            Span::styled(marker, marker_style),
+            Span::styled(content, text_style),
+        ])
     }
 }
 
@@ -119,7 +136,7 @@ impl Widget for FileExplorer<'_> {
 mod tests {
     use std::path::PathBuf;
 
-    use ratatui::{Terminal, backend::TestBackend};
+    use ratatui::{Terminal, backend::TestBackend, style::Modifier};
 
     use super::*;
     use crate::theme::Theme;
@@ -180,6 +197,27 @@ mod tests {
         assert!(content.contains("  note.txt"));
         assert!(content.contains("  link.txt (link)"));
         assert!(content.contains("║"));
+
+        let focused = terminal.backend().buffer().cell((1, 1)).unwrap().style();
+        let focused_text = terminal.backend().buffer().cell((5, 1)).unwrap().style();
+        terminal
+            .draw(|frame| {
+                frame.render_widget(
+                    FileExplorer::new(
+                        Some(&workspace),
+                        &explorer,
+                        FocusState::Unfocused,
+                        theme.ui(),
+                    ),
+                    frame.area(),
+                );
+            })
+            .unwrap();
+        let unfocused = terminal.backend().buffer().cell((1, 1)).unwrap().style();
+        let unfocused_text = terminal.backend().buffer().cell((5, 1)).unwrap().style();
+        assert_eq!(focused_text, unfocused_text);
+        assert_ne!(focused, unfocused);
+        assert!(unfocused.add_modifier.contains(Modifier::DIM));
 
         explorer.unfold_selected(directory.path()).unwrap();
         terminal

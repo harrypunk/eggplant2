@@ -120,6 +120,7 @@ struct UiTheme {
     base: Style,
     muted: Style,
     selection: Style,
+    unfocused_selection: Style,
     border: Style,
     focused_border: Style,
     error: Style,
