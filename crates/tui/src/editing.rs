@@ -140,7 +140,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("enter_insert_mode")),
         );
-        manager.update(&mut model, Message::InsertChar('b'));
+        manager.update(&mut model, Message::TextInput('b'));
         assert_eq!(
             model.editor.active_snapshot().unwrap().text.lines[0].text,
             "ab"
@@ -151,7 +151,7 @@ mod tests {
             model.editor.active_snapshot().unwrap().text.lines[0].text,
             "a"
         );
-        manager.update(&mut model, Message::InsertChar('c'));
+        manager.update(&mut model, Message::TextInput('c'));
         manager.update(
             &mut model,
             Message::InvokeCommand(CommandId("exit_insert_mode")),
@@ -189,7 +189,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("enter_insert_mode")),
         );
-        manager.update(&mut model, Message::InsertChar('!'));
+        manager.update(&mut model, Message::TextInput('!'));
         let effect = manager
             .update(
                 &mut model,

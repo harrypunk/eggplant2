@@ -221,13 +221,12 @@ pub mod data_object {
     pub enum Message {
         CommandMenuKey(crossterm::event::KeyCode),
         InvokeCommand(CommandId),
-        InsertChar(char),
+        TextInput(char),
         SaveFinished(SaveCompletion),
         FileOpened(DocumentOpenCompletion),
         FocusLost,
         Resize(u16, u16),
         OpenSelected,
-        FilePickerInsert(char),
         FileScanFinished {
             revision: u64,
             result: Result<Vec<FileEntry>, String>,

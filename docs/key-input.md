@@ -61,7 +61,7 @@ active input Context + Registry
         │
         ├── direct binding ──────────────► semantic Message
         ├── leader start/continuation ───► Message::CommandMenuKey
-        └── unbound Insert character ────► Message::InsertChar
+        └── registered text input ───────► Message::TextInput
                                                 │
                                                 ▼
                                   MessageManager::update(Model, Message)

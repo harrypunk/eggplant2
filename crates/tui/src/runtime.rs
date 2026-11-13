@@ -6,6 +6,7 @@ use crate::{
     manager::{
         command_registry::CommandRegistry, effect::Effect, event_manager::EventManager,
         keyboard_input_registry::Registry, message_manager::MessageManager,
+        text_input_registry::TextInputRegistry,
     },
     page::editor::Editor,
     ui::UiRegistry,
@@ -16,12 +17,13 @@ pub fn run(
     terminal: &mut DefaultTerminal,
     config: &Config,
     keymap: Registry,
+    text_input: TextInputRegistry,
     commands: CommandRegistry,
     ui: UiRegistry,
     mut model: Model,
 ) -> color_eyre::Result<()> {
-    let event_manager = EventManager::new(config, keymap);
-    let message_manager = MessageManager::new(commands);
+    let event_manager = EventManager::new(config, keymap, text_input.clone());
+    let message_manager = MessageManager::new(commands, text_input);
     let editor_page = Editor::new(ui);
     let (message_sender, mut message_receiver) = tokio::sync::mpsc::unbounded_channel();
 

@@ -104,7 +104,10 @@ mod tests {
         let mut commands = CommandRegistry::builtin();
         let mut ui = UiRegistry::builtin();
         register(&mut commands, &mut ui).unwrap();
-        let manager = MessageManager::new(commands);
+        let manager = MessageManager::new(
+            commands,
+            crate::manager::text_input_registry::TextInputRegistry::builtin(),
+        );
         let mut model = Model::default();
 
         let effect = manager.update(

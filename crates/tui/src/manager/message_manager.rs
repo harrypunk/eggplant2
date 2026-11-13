@@ -5,12 +5,13 @@ use crate::{
     buffer,
     command_menu::CommandMenuOutcome,
     data_object::{Message, Model, StatusMessage, Visibility},
-    document, editing,
+    document,
     explorer::ExplorerEntryKind,
     file_picker, focus, lifecycle,
     manager::{
         command_registry::{CommandHandler, CommandRegistry},
         effect::Effect,
+        text_input_registry::TextInputRegistry,
     },
     page::editor::editor_content_area,
 };
@@ -19,19 +20,21 @@ use crate::{
 pub struct MessageManager {
     documents: DocumentFactory,
     commands: CommandRegistry,
+    text_input: TextInputRegistry,
 }
 
 impl Default for MessageManager {
     fn default() -> Self {
-        Self::new(CommandRegistry::builtin())
+        Self::new(CommandRegistry::builtin(), TextInputRegistry::builtin())
     }
 }
 
 impl MessageManager {
-    pub fn new(commands: CommandRegistry) -> Self {
+    pub fn new(commands: CommandRegistry, text_input: TextInputRegistry) -> Self {
         Self {
             documents: DocumentFactory::new(),
             commands,
+            text_input,
         }
     }
 
@@ -44,14 +47,11 @@ impl MessageManager {
                 };
             }
             Message::InvokeCommand(id) => return self.invoke_command(model, id),
-            Message::InsertChar(character) => return editing::insert_char(model, character),
+            Message::TextInput(character) => return self.text_input.handle(model, character),
             Message::SaveFinished(completion) => {
                 return lifecycle::finish_save(model, completion);
             }
             Message::OpenSelected => return self.open_selected(model),
-            Message::FilePickerInsert(character) => {
-                return file_picker::insert_char(model, character);
-            }
             Message::FileOpened(completion) => Self::finish_open_file(model, completion),
             Message::FileScanFinished { revision, result } => {
                 return file_picker::complete_scan(model, revision, result);
@@ -168,7 +168,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("enter_insert_mode")),
         );
-        manager.update(&mut model, Message::InsertChar('A'));
+        manager.update(&mut model, Message::TextInput('A'));
         let request = expect_save(manager.update(
             &mut model,
             Message::InvokeCommand(CommandId("exit_insert_mode")),
@@ -207,7 +207,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("enter_insert_mode")),
         );
-        manager.update(&mut model, Message::InsertChar('B'));
+        manager.update(&mut model, Message::TextInput('B'));
         assert!(model.editor.active_is_modified());
         let effect = manager.update(&mut model, Message::InvokeCommand(CommandId("quit")));
         assert!(effect.is_some(), "quit did not save: {:?}", model.status);
@@ -233,7 +233,7 @@ mod tests {
             Message::InvokeCommand(CommandId("enter_insert_mode")),
         );
 
-        manager.update(&mut model, Message::InsertChar('!'));
+        manager.update(&mut model, Message::TextInput('!'));
         let effect = manager.update(
             &mut model,
             Message::InvokeCommand(CommandId("exit_insert_mode")),
@@ -256,7 +256,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("enter_insert_mode")),
         );
-        manager.update(&mut model, Message::InsertChar('!'));
+        manager.update(&mut model, Message::TextInput('!'));
 
         let request = expect_save(manager.update(&mut model, Message::FocusLost));
         let completion = request.perform().await;

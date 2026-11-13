@@ -1,6 +1,9 @@
 use tui::{
     config::Config,
-    manager::{command_registry::CommandRegistry, keyboard_input_registry::Registry},
+    manager::{
+        command_registry::CommandRegistry, keyboard_input_registry::Registry,
+        text_input_registry::TextInputRegistry,
+    },
     page_scroll::PageScrollState,
     runtime,
     startup::{initial_model, startup_path_from},
@@ -17,11 +20,20 @@ async fn main() -> color_eyre::Result<()> {
     model.theme = Theme::from_name(&config.theme)?;
     model.page_scroll = PageScrollState::from_config(&config.features.page_scroll)?;
     let commands = CommandRegistry::builtin();
+    let text_input = TextInputRegistry::builtin();
     let ui = UiRegistry::builtin();
     let keymap = Registry::from_config(&config.keymap, &commands)?;
     terminal::install_panic_hook();
     let mut terminal = terminal::init_terminal()?;
-    let result = runtime::run(&mut terminal, &config, keymap, commands, ui, model);
+    let result = runtime::run(
+        &mut terminal,
+        &config,
+        keymap,
+        text_input,
+        commands,
+        ui,
+        model,
+    );
     terminal::restore_terminal()?;
     result
 }

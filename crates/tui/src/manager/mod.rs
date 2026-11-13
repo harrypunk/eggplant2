@@ -5,3 +5,4 @@ pub mod event_manager;
 pub mod keyboard_input_registry;
 pub mod message_manager;
 pub mod mouse_manager;
+pub mod text_input_registry;

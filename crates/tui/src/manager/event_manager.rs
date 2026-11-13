@@ -5,19 +5,23 @@ use ratatui::crossterm::event::{self, Event};
 
 use crate::config::Config;
 use crate::data_object::{Context, Message, Model};
-use crate::manager::{context::KeyChord, keyboard_input_registry::Registry};
+use crate::manager::{
+    context::KeyChord, keyboard_input_registry::Registry, text_input_registry::TextInputRegistry,
+};
 
 #[derive(Debug)]
 pub struct EventManager {
     poll_timeout: Duration,
     keymap: Registry,
+    text_input: TextInputRegistry,
 }
 
 impl EventManager {
-    pub fn new(config: &Config, keymap: Registry) -> Self {
+    pub fn new(config: &Config, keymap: Registry, text_input: TextInputRegistry) -> Self {
         Self {
             poll_timeout: Duration::from_millis(config.event_poll_timeout),
             keymap,
+            text_input,
         }
     }
 
@@ -48,7 +52,7 @@ impl EventManager {
                     .get_binding(ctx)
                     .and_then(|bindings| bindings.resolve(KeyChord::new(key.code, key.modifiers)))
                     .map(Message::InvokeCommand)
-                    .or_else(|| Self::unbound_key_message(ctx, key))
+                    .or_else(|| self.unbound_key_message(ctx, key))
             }
             Event::FocusLost => Some(Message::FocusLost),
             Event::Resize(width, height) => Some(Message::Resize(width, height)),
@@ -63,16 +67,13 @@ impl EventManager {
             && key.modifiers.is_empty()
     }
 
-    fn unbound_key_message(context: &Context, key: KeyEvent) -> Option<Message> {
+    fn unbound_key_message(&self, context: &Context, key: KeyEvent) -> Option<Message> {
         match key.code {
             KeyCode::Char(character)
-                if key.modifiers.is_empty() || key.modifiers == KeyModifiers::SHIFT =>
+                if (key.modifiers.is_empty() || key.modifiers == KeyModifiers::SHIFT)
+                    && self.text_input.accepts(context) =>
             {
-                match context {
-                    Context::EditorInput => Some(Message::InsertChar(character)),
-                    Context::FilePicker => Some(Message::FilePickerInsert(character)),
-                    _ => None,
-                }
+                Some(Message::TextInput(character))
             }
             _ => None,
         }
@@ -87,7 +88,7 @@ mod tests {
     fn event_manager() -> EventManager {
         let config = Config::default();
         let keymap = Registry::from_config(&config.keymap, &CommandRegistry::default()).unwrap();
-        EventManager::new(&config, keymap)
+        EventManager::new(&config, keymap, TextInputRegistry::builtin())
     }
 
     #[test]
@@ -99,7 +100,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::InsertChar('x'))
+            Some(Message::TextInput('x'))
         ));
 
         let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
@@ -108,7 +109,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::InsertChar(' '))
+            Some(Message::TextInput(' '))
         ));
     }
 
@@ -121,7 +122,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::FilePickerInsert(' '))
+            Some(Message::TextInput(' '))
         ));
         let event = Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert!(matches!(
@@ -237,7 +238,7 @@ mod tests {
         model.context_stack.push(Context::EditorInput);
         assert!(matches!(
             manager.translate(event(), &model),
-            Some(Message::InsertChar('I'))
+            Some(Message::TextInput('I'))
         ));
     }
 

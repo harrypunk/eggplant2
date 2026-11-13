@@ -232,7 +232,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("enter_insert_mode")),
         );
-        manager.update(&mut model, Message::InsertChar('x'));
+        manager.update(&mut model, Message::TextInput('x'));
         let request = expect_save(manager.update(
             &mut model,
             Message::InvokeCommand(CommandId("exit_insert_mode")),
