@@ -122,6 +122,8 @@ pub mod data_object {
         pub command_menu: CommandMenuState,
         pub file_picker: FilePickerState,
         pub theme_picker: ThemePickerState,
+        #[cfg(test)]
+        pub example_feature: crate::test_utils::ExampleFeatureState,
     }
 
     impl Default for Model {
@@ -142,6 +144,8 @@ pub mod data_object {
                 command_menu: CommandMenuState::default(),
                 file_picker: FilePickerState::default(),
                 theme_picker: ThemePickerState::default(),
+                #[cfg(test)]
+                example_feature: crate::test_utils::ExampleFeatureState::default(),
             }
         }
     }

@@ -1,3 +1,7 @@
+pub mod example_feature;
+
+pub use example_feature::ExampleFeatureState;
+
 use std::path::Path;
 
 use editor::{BufferId, DocumentFactory};

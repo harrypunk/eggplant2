@@ -252,6 +252,8 @@ Implemented: `UiRegistry` registers panel/status renderers and overlay providers
 
 Add a test-only example feature that registers state/update, a command, a popup, and an effect. The test must not modify unrelated feature modules or runtime dispatch. Document the author checklist and registration/conflict tests.
 
+Implemented: `test_utils/example_feature.rs` registers typed state, two commands, an overlay, and an effect. Its integration test verifies popup rendering, effect completion through `InvokeCommand`, and visibility cleanup without runtime changes. `docs/feature-authoring.md` records the contribution and testing checklist. M6 is complete; M7 remains a separate edition.
+
 ### M7 — Core editing workflows after M6
 
 Do not expand M6 with theme or plugin work. Once the contribution architecture is proven, use it for high-priority editing features in this order:

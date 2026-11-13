@@ -81,7 +81,7 @@ impl OverlayContribution {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct UiRegistry {
     panels: HashMap<PanelSlot, RenderContribution>,
     status: HashMap<StatusSlot, RenderContribution>,
