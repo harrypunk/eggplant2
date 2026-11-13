@@ -145,13 +145,14 @@ impl ExplorerState {
             return Ok(());
         };
         let mut expanded_directories = self.expanded_directories.clone();
-        if let Some(parent) = relative.parent() {
-            for ancestor in parent.ancestors() {
-                if !ancestor.as_os_str().is_empty() {
-                    expanded_directories.insert(root.join(ancestor));
-                }
-            }
-        }
+        expanded_directories.extend(
+            relative
+                .parent()
+                .into_iter()
+                .flat_map(Path::ancestors)
+                .filter(|ancestor| !ancestor.as_os_str().is_empty())
+                .map(|ancestor| root.join(ancestor)),
+        );
 
         let entries = fs::read_visible_entries(root, &expanded_directories, self.ignore_mode)?;
         let Some(selected) = entries.iter().position(|entry| entry.path == path) else {
