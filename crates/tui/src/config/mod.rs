@@ -10,6 +10,17 @@ const CONFIG_FILE: &str = "config.toml";
 /// Validation and conversion into runtime keybindings happen in the keymap registry.
 pub type KeymapConfig = HashMap<String, HashMap<String, String>>;
 
+fn keymap_context<const N: usize>(
+    name: &str,
+    bindings: [(&str, &str); N],
+) -> (String, HashMap<String, String>) {
+    let bindings = bindings
+        .into_iter()
+        .map(|(action, key)| (action.to_string(), key.to_string()))
+        .collect();
+    (name.to_string(), bindings)
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -26,69 +37,69 @@ impl Default for Config {
             event_poll_timeout: 250,
             theme: "default".to_string(),
             keymap: HashMap::from([
-                (
-                    "normal".to_string(),
-                    HashMap::from([
-                        ("enter_insert_mode".to_string(), "i".to_string()),
-                        ("close_buffer".to_string(), "ctrl-w".to_string()),
-                        ("move_left".to_string(), "h".to_string()),
-                        ("move_right".to_string(), "l".to_string()),
-                        ("move_up".to_string(), "k".to_string()),
-                        ("move_down".to_string(), "j".to_string()),
-                        ("focus_left".to_string(), "ctrl-h".to_string()),
-                        ("focus_down".to_string(), "ctrl-j".to_string()),
-                        ("focus_up".to_string(), "ctrl-k".to_string()),
-                        ("focus_right".to_string(), "ctrl-l".to_string()),
-                        ("undo".to_string(), "u".to_string()),
-                        ("redo".to_string(), "ctrl-r".to_string()),
-                    ]),
+                keymap_context(
+                    "normal",
+                    [
+                        ("enter_insert_mode", "i"),
+                        ("close_buffer", "ctrl-w"),
+                        ("move_left", "h"),
+                        ("move_right", "l"),
+                        ("move_up", "k"),
+                        ("move_down", "j"),
+                        ("focus_left", "ctrl-h"),
+                        ("focus_down", "ctrl-j"),
+                        ("focus_up", "ctrl-k"),
+                        ("focus_right", "ctrl-l"),
+                        ("undo", "u"),
+                        ("redo", "ctrl-r"),
+                    ],
                 ),
-                (
-                    "editor_input".to_string(),
-                    HashMap::from([
-                        ("exit_insert_mode".to_string(), "esc".to_string()),
-                        ("backspace".to_string(), "backspace".to_string()),
-                        ("insert_newline".to_string(), "enter".to_string()),
-                        ("move_left".to_string(), "left".to_string()),
-                        ("move_right".to_string(), "right".to_string()),
-                        ("move_up".to_string(), "up".to_string()),
-                        ("move_down".to_string(), "down".to_string()),
-                    ]),
+                keymap_context(
+                    "editor_input",
+                    [
+                        ("exit_insert_mode", "esc"),
+                        ("backspace", "backspace"),
+                        ("insert_newline", "enter"),
+                        ("move_left", "left"),
+                        ("move_right", "right"),
+                        ("move_up", "up"),
+                        ("move_down", "down"),
+                    ],
                 ),
-                (
-                    "explorer".to_string(),
-                    HashMap::from([
-                        ("explorer_next".to_string(), "j".to_string()),
-                        ("explorer_previous".to_string(), "k".to_string()),
-                        ("open_selected".to_string(), "enter".to_string()),
-                        ("explorer_fold".to_string(), "h".to_string()),
-                        ("explorer_unfold".to_string(), "l".to_string()),
-                        ("focus_left".to_string(), "ctrl-h".to_string()),
-                        ("focus_down".to_string(), "ctrl-j".to_string()),
-                        ("focus_up".to_string(), "ctrl-k".to_string()),
-                        ("focus_right".to_string(), "ctrl-l".to_string()),
-                        ("refresh_explorer".to_string(), "r".to_string()),
-                        ("toggle_ignored_files".to_string(), "shift-i".to_string()),
-                    ]),
+                keymap_context(
+                    "explorer",
+                    [
+                        ("explorer_next", "j"),
+                        ("explorer_previous", "k"),
+                        ("open_selected", "enter"),
+                        ("explorer_fold", "h"),
+                        ("explorer_unfold", "l"),
+                        ("focus_left", "ctrl-h"),
+                        ("focus_down", "ctrl-j"),
+                        ("focus_up", "ctrl-k"),
+                        ("focus_right", "ctrl-l"),
+                        ("refresh_explorer", "r"),
+                        ("toggle_ignored_files", "shift-i"),
+                    ],
                 ),
-                (
-                    "file_picker".to_string(),
-                    HashMap::from([
-                        ("close_file_picker".to_string(), "esc".to_string()),
-                        ("file_picker_backspace".to_string(), "backspace".to_string()),
-                        ("open_picker_file".to_string(), "enter".to_string()),
-                        ("file_picker_next".to_string(), "down".to_string()),
-                        ("file_picker_previous".to_string(), "up".to_string()),
-                    ]),
+                keymap_context(
+                    "file_picker",
+                    [
+                        ("close_file_picker", "esc"),
+                        ("file_picker_backspace", "backspace"),
+                        ("open_picker_file", "enter"),
+                        ("file_picker_next", "down"),
+                        ("file_picker_previous", "up"),
+                    ],
                 ),
-                (
-                    "theme_picker".to_string(),
-                    HashMap::from([
-                        ("close_theme_picker".to_string(), "esc".to_string()),
-                        ("apply_theme".to_string(), "enter".to_string()),
-                        ("theme_picker_next".to_string(), "down".to_string()),
-                        ("theme_picker_previous".to_string(), "up".to_string()),
-                    ]),
+                keymap_context(
+                    "theme_picker",
+                    [
+                        ("close_theme_picker", "esc"),
+                        ("apply_theme", "enter"),
+                        ("theme_picker_next", "down"),
+                        ("theme_picker_previous", "up"),
+                    ],
                 ),
             ]),
         }
