@@ -49,6 +49,10 @@ pub(crate) fn auto_save_active(model: &mut Model) -> Option<Effect> {
 
 pub(crate) fn save_active(model: &mut Model) -> Option<Effect> {
     let id = model.editor.active_buffer()?;
+    save_if_dirty(model, id)
+}
+
+pub(crate) fn save_if_dirty(model: &mut Model, id: BufferId) -> Option<Effect> {
     if model.editor.is_modified(id) != Some(true) || model.editor.is_saving(id) {
         return None;
     }

@@ -31,65 +31,70 @@ pub(crate) fn finish_save(model: &mut Model, completion: SaveCompletion) -> Opti
     model.status = Some(StatusMessage::info("Saved"));
 
     match model.deferred_action {
-        Some(DeferredAction::Quit) => {
-            if !model.editor.has_modified_buffers() && !model.editor.has_saving_buffers() {
-                model.deferred_action = None;
-                model.running_state = RunningState::Done;
-                return None;
-            }
-            model
-                .editor
-                .first_dirty_buffer()
-                .filter(|&id| !model.editor.is_saving(id))
-                .and_then(|id| buffer::start_save(model, id))
-        }
-        Some(DeferredAction::CloseBuffer(id)) => {
-            if model.editor.is_saving(id) {
-                return None;
-            }
-            match model.editor.is_modified(id) {
-                Some(true) => buffer::start_save(model, id),
-                Some(false) => {
-                    model.deferred_action = None;
-                    match model.editor.close_buffer(id) {
-                        Ok(()) => model.status = None,
-                        Err(error) => {
-                            model.status = Some(StatusMessage::error(error.to_string()));
-                        }
-                    }
-                    None
-                }
-                None => {
-                    model.deferred_action = None;
-                    None
-                }
-            }
-        }
-        None if model.editor.mode() != EditMode::Insert
-            && model.editor.is_modified(buffer_id) == Some(true)
-            && !model.editor.is_saving(buffer_id) =>
-        {
-            buffer::start_save(model, buffer_id)
-        }
-        None => None,
+        Some(DeferredAction::Quit) => finish_quit(model),
+        Some(DeferredAction::CloseBuffer(id)) => finish_close(model, id),
+        None => follow_up_save(model, buffer_id),
     }
 }
 
-fn request_quit(model: &mut Model) -> Option<Effect> {
-    model.editor.enter_normal_mode();
-    if !model.editor.has_modified_buffers() && !model.editor.has_saving_buffers() {
-        model.deferred_action = None;
-        model.running_state = RunningState::Done;
+fn finish_quit(model: &mut Model) -> Option<Effect> {
+    if model.editor.has_modified_buffers() || model.editor.has_saving_buffers() {
+        return save_next_dirty_buffer(model);
+    }
+    model.deferred_action = None;
+    model.running_state = RunningState::Done;
+    None
+}
+
+fn finish_close(model: &mut Model, id: editor::BufferId) -> Option<Effect> {
+    if model.editor.is_saving(id) {
         return None;
     }
+    match model.editor.is_modified(id) {
+        Some(true) => buffer::start_save(model, id),
+        Some(false) => {
+            model.deferred_action = None;
+            match model.editor.close_buffer(id) {
+                Ok(()) => model.status = None,
+                Err(error) => {
+                    model.status = Some(StatusMessage::error(error.to_string()));
+                }
+            }
+            None
+        }
+        None => {
+            model.deferred_action = None;
+            None
+        }
+    }
+}
 
-    model.deferred_action = Some(DeferredAction::Quit);
-    model.status = Some(StatusMessage::info("Saving before quit"));
+fn follow_up_save(model: &mut Model, id: editor::BufferId) -> Option<Effect> {
+    match model.editor.mode() {
+        EditMode::Insert => None,
+        EditMode::Normal => buffer::save_if_dirty(model, id),
+    }
+}
+
+fn save_next_dirty_buffer(model: &mut Model) -> Option<Effect> {
     model
         .editor
         .first_dirty_buffer()
         .filter(|&id| !model.editor.is_saving(id))
         .and_then(|id| buffer::start_save(model, id))
+}
+
+fn request_quit(model: &mut Model) -> Option<Effect> {
+    model.editor.enter_normal_mode();
+    if model.editor.has_modified_buffers() || model.editor.has_saving_buffers() {
+        model.deferred_action = Some(DeferredAction::Quit);
+        model.status = Some(StatusMessage::info("Saving before quit"));
+        return save_next_dirty_buffer(model);
+    }
+
+    model.deferred_action = None;
+    model.running_state = RunningState::Done;
+    None
 }
 
 fn request_close(model: &mut Model) -> Option<Effect> {
