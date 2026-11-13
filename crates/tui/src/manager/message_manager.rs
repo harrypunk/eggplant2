@@ -4,12 +4,10 @@ use ratatui::layout::Rect;
 use crate::{
     buffer,
     command_menu::CommandMenuOutcome,
-    data_object::{
-        Context, FocusDirection, FocusTarget, Message, Model, StatusMessage, Visibility,
-    },
+    data_object::{Context, FocusTarget, Message, Model, StatusMessage, Visibility},
     document, editing,
     explorer::ExplorerEntryKind,
-    lifecycle,
+    focus, lifecycle,
     manager::{
         command_registry::{CommandHandler, CommandRegistry},
         effect::Effect,
@@ -46,15 +44,11 @@ impl MessageManager {
                 };
             }
             Message::InvokeCommand(id) => return self.invoke_command(model, id),
-            Message::MoveFocus(direction) => Self::move_focus(model, direction),
             Message::InsertChar(character) => return editing::insert_char(model, character),
             Message::SaveFinished(completion) => {
                 return lifecycle::finish_save(model, completion);
             }
             Message::OpenSelected => return self.open_selected(model),
-            Message::ToggleFileExplorer => {
-                Self::toggle_file_explorer(model);
-            }
             Message::OpenFilePicker => return self.open_file_picker(model),
             Message::FilePickerInsert(character) => {
                 let Some(workspace) = &model.workspace else {
@@ -195,73 +189,7 @@ impl MessageManager {
             Visibility::Displayed => Self::close_file_picker(model),
             Visibility::Hidden => {}
         }
-        Self::focus_editor(model);
-    }
-
-    // Only explorer focus needs to move when the panel is hidden. Other current
-    // and future focus targets intentionally remain unchanged.
-    #[allow(clippy::single_match)]
-    fn toggle_file_explorer(model: &mut Model) {
-        match model.explorer_visibility {
-            Visibility::Hidden => match model.workspace {
-                None => model.status = Some(StatusMessage::info("No folder open")),
-                Some(_) => {
-                    model.explorer_visibility = Visibility::Displayed;
-                    Self::focus_explorer(model);
-                }
-            },
-            Visibility::Displayed => {
-                model.explorer_visibility = Visibility::Hidden;
-                match model.current_focus {
-                    FocusTarget::FileExplorer => {
-                        model
-                            .context_stack
-                            .pop_if(|context| context == &Context::Explorer);
-                        model.current_focus = FocusTarget::Editor;
-                    }
-                    _ => {}
-                }
-            }
-        }
-    }
-
-    // The single-view layout only needs this explicit horizontal relationship.
-    // When splits arrive, query the logical layout tree instead: start at the
-    // focused pane's stable ID, walk toward `direction` through visible
-    // siblings, and select the nearest focusable leaf. Keep terminal cursor
-    // coordinates and Ratatui rectangles out of this application-state policy.
-    fn move_focus(model: &mut Model, direction: FocusDirection) {
-        match (model.current_focus, direction, model.explorer_visibility) {
-            (FocusTarget::Editor, FocusDirection::Left, Visibility::Displayed) => {
-                Self::focus_explorer(model);
-            }
-            (FocusTarget::FileExplorer, FocusDirection::Right, _) => {
-                Self::focus_editor(model);
-            }
-            _ => {}
-        }
-    }
-
-    fn focus_explorer(model: &mut Model) {
-        if model.workspace.is_none() {
-            return;
-        }
-
-        model.current_focus = FocusTarget::FileExplorer;
-        if model.context_stack.last() != Some(&Context::Explorer) {
-            model.context_stack.push(Context::Explorer);
-        }
-    }
-
-    fn focus_editor(model: &mut Model) {
-        if model.editor.active_buffer().is_none() {
-            return;
-        }
-
-        model.current_focus = FocusTarget::Editor;
-        model
-            .context_stack
-            .pop_if(|context| context == &Context::Explorer);
+        focus::focus_editor(model);
     }
 }
 
@@ -323,7 +251,7 @@ mod tests {
         manager.update(&mut model, Message::SaveFinished(completion));
         assert_eq!(std::fs::read_to_string(&first_path).unwrap(), "Afirst");
 
-        manager.update(&mut model, Message::MoveFocus(FocusDirection::Left));
+        manager.update(&mut model, Message::InvokeCommand(CommandId("focus_left")));
         manager.update(
             &mut model,
             Message::InvokeCommand(CommandId("explorer_next")),
@@ -505,9 +433,15 @@ mod tests {
             "b.txt"
         );
 
-        manager.update(&mut model, Message::ToggleFileExplorer);
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("toggle_file_explorer")),
+        );
         assert_eq!(model.explorer_visibility, Visibility::Hidden);
-        manager.update(&mut model, Message::ToggleFileExplorer);
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("toggle_file_explorer")),
+        );
         assert_eq!(model.explorer_visibility, Visibility::Displayed);
         assert_eq!(model.current_focus, FocusTarget::FileExplorer);
         assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
@@ -515,75 +449,5 @@ mod tests {
         complete_open(&mut model, &manager, effect);
         assert_eq!(model.editor.buffer_count(), 1);
         assert_eq!(model.current_focus, FocusTarget::Editor);
-    }
-
-    #[test]
-    fn hiding_and_showing_explorer_updates_focus() {
-        let directory = tempfile::tempdir().unwrap();
-        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
-        let manager = MessageManager::default();
-
-        manager.update(&mut model, Message::ToggleFileExplorer);
-        assert_eq!(model.explorer_visibility, Visibility::Hidden);
-        assert_eq!(model.current_focus, FocusTarget::Editor);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
-
-        manager.update(&mut model, Message::ToggleFileExplorer);
-        assert_eq!(model.explorer_visibility, Visibility::Displayed);
-        assert_eq!(model.current_focus, FocusTarget::FileExplorer);
-        assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
-    }
-
-    #[test]
-    fn directional_focus_moves_between_editor_and_explorer() {
-        let directory = tempfile::tempdir().unwrap();
-        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
-        create_buffer(&mut model, "buffer");
-        let manager = MessageManager::default();
-
-        manager.update(&mut model, Message::MoveFocus(FocusDirection::Right));
-        assert_eq!(model.current_focus, FocusTarget::Editor);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
-
-        manager.update(&mut model, Message::MoveFocus(FocusDirection::Left));
-        assert_eq!(model.current_focus, FocusTarget::FileExplorer);
-        assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
-
-        for direction in [FocusDirection::Up, FocusDirection::Down] {
-            manager.update(&mut model, Message::MoveFocus(direction));
-            assert_eq!(model.current_focus, FocusTarget::FileExplorer);
-            assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
-        }
-    }
-
-    #[test]
-    fn directional_focus_ignores_unavailable_targets() {
-        let directory = tempfile::tempdir().unwrap();
-        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
-        let manager = MessageManager::default();
-
-        manager.update(&mut model, Message::MoveFocus(FocusDirection::Right));
-        assert_eq!(model.current_focus, FocusTarget::FileExplorer);
-        assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
-
-        create_buffer(&mut model, "buffer");
-        manager.update(&mut model, Message::MoveFocus(FocusDirection::Right));
-        manager.update(&mut model, Message::ToggleFileExplorer);
-        manager.update(&mut model, Message::MoveFocus(FocusDirection::Left));
-        assert_eq!(model.current_focus, FocusTarget::Editor);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
-
-        let mut without_workspace = Model::default();
-        without_workspace.context_stack.push(Context::AppNormal);
-        create_buffer(&mut without_workspace, "buffer");
-        manager.update(
-            &mut without_workspace,
-            Message::MoveFocus(FocusDirection::Left),
-        );
-        assert_eq!(without_workspace.current_focus, FocusTarget::Editor);
-        assert_eq!(
-            without_workspace.context_stack.last(),
-            Some(&Context::AppNormal)
-        );
     }
 }

@@ -4,7 +4,7 @@ use color_eyre::eyre::eyre;
 
 pub use crate::data_object::CommandId;
 use crate::{
-    data_object::{FocusDirection, Message, Model},
+    data_object::{Message, Model},
     manager::effect::Effect,
 };
 
@@ -121,25 +121,25 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
             "move down",
             crate::editing::handle_command,
         ),
-        Command::new(
+        Command::feature(
             CommandId("focus_left"),
             "focus left",
-            Message::MoveFocus(FocusDirection::Left),
+            crate::focus::handle_command,
         ),
-        Command::new(
+        Command::feature(
             CommandId("focus_down"),
             "focus down",
-            Message::MoveFocus(FocusDirection::Down),
+            crate::focus::handle_command,
         ),
-        Command::new(
+        Command::feature(
             CommandId("focus_up"),
             "focus up",
-            Message::MoveFocus(FocusDirection::Up),
+            crate::focus::handle_command,
         ),
-        Command::new(
+        Command::feature(
             CommandId("focus_right"),
             "focus right",
-            Message::MoveFocus(FocusDirection::Right),
+            crate::focus::handle_command,
         ),
         Command::feature(
             CommandId("backspace"),
@@ -203,10 +203,10 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
             "toggle ignored files",
             crate::explorer::handle_command,
         ),
-        Command::new(
+        Command::feature(
             CommandId("toggle_file_explorer"),
             "toggle files",
-            Message::ToggleFileExplorer,
+            crate::focus::handle_command,
         ),
         Command::new(
             CommandId("open_file_picker"),
