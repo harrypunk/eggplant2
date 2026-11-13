@@ -4,10 +4,10 @@ use ratatui::layout::Rect;
 use crate::{
     buffer,
     command_menu::CommandMenuOutcome,
-    data_object::{Context, FocusTarget, Message, Model, StatusMessage, Visibility},
+    data_object::{Message, Model, StatusMessage, Visibility},
     document, editing,
     explorer::ExplorerEntryKind,
-    focus, lifecycle,
+    file_picker, focus, lifecycle,
     manager::{
         command_registry::{CommandHandler, CommandRegistry},
         effect::Effect,
@@ -49,57 +49,18 @@ impl MessageManager {
                 return lifecycle::finish_save(model, completion);
             }
             Message::OpenSelected => return self.open_selected(model),
-            Message::OpenFilePicker => return self.open_file_picker(model),
             Message::FilePickerInsert(character) => {
-                let Some(workspace) = &model.workspace else {
-                    return None;
-                };
-                return model
-                    .file_picker
-                    .insert(workspace.root(), character)
-                    .map(Effect::feature);
+                return file_picker::insert_char(model, character);
             }
-            Message::FilePickerBackspace => {
-                let Some(workspace) = &model.workspace else {
-                    return None;
-                };
-                return model
-                    .file_picker
-                    .backspace(workspace.root())
-                    .map(Effect::feature);
-            }
-            Message::CloseFilePicker => Self::close_file_picker(model),
-            Message::FilePickerNext => {
-                return model
-                    .file_picker
-                    .select_next(&self.documents)
-                    .map(Effect::feature);
-            }
-            Message::FilePickerPrevious => {
-                return model
-                    .file_picker
-                    .select_previous(&self.documents)
-                    .map(Effect::feature);
-            }
-            Message::OpenPickerFile => return self.open_picker_file(model),
             Message::FileOpened(completion) => Self::finish_open_file(model, completion),
             Message::FileScanFinished { revision, result } => {
-                let Some(workspace) = &model.workspace else {
-                    return None;
-                };
-                return model
-                    .file_picker
-                    .complete_scan(workspace.root(), revision, result)
-                    .map(Effect::feature);
+                return file_picker::complete_scan(model, revision, result);
             }
             Message::FileFilterFinished { revision, results } => {
-                return model
-                    .file_picker
-                    .complete_filter(&self.documents, revision, results)
-                    .map(Effect::feature);
+                return file_picker::complete_filter(model, revision, results);
             }
             Message::FilePreviewFinished { revision, preview } => {
-                model.file_picker.complete_preview(revision, preview);
+                file_picker::complete_preview(model, revision, preview);
             }
             Message::FocusLost => return buffer::save_active(model),
             Message::Resize(width, height) => {
@@ -148,45 +109,12 @@ impl MessageManager {
         }
     }
 
-    fn open_file_picker(&self, model: &mut Model) -> Option<Effect> {
-        let Some(workspace) = &model.workspace else {
-            model.status = Some(StatusMessage::info("No folder open"));
-            return None;
-        };
-        let root = workspace.root().to_path_buf();
-        if model.context_stack.last() != Some(&Context::FilePicker) {
-            model.context_stack.push(Context::FilePicker);
-        }
-        model.current_focus = FocusTarget::FilePicker;
-        model
-            .file_picker
-            .open(&root, &self.documents)
-            .map(Effect::feature)
-    }
-
-    fn close_file_picker(model: &mut Model) {
-        model.file_picker.close();
-        model
-            .context_stack
-            .pop_if(|context| context == &Context::FilePicker);
-        model.current_focus = match model.context_stack.last() {
-            Some(Context::Explorer) => FocusTarget::FileExplorer,
-            _ => FocusTarget::Editor,
-        };
-    }
-
-    fn open_picker_file(&self, model: &mut Model) -> Option<Effect> {
-        let entry = model.file_picker.selected_entry()?;
-        let path = entry.path.clone();
-        document::open_file(&self.documents, model, &path)
-    }
-
     fn finish_open_file(model: &mut Model, completion: DocumentOpenCompletion) {
         if document::finish_open_file(model, completion).is_none() {
             return;
         }
         match model.file_picker.visibility {
-            Visibility::Displayed => Self::close_file_picker(model),
+            Visibility::Displayed => file_picker::close(model),
             Visibility::Hidden => {}
         }
         focus::focus_editor(model);
@@ -199,9 +127,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        data_object::{CommandId, RunningState, StatusKind},
-        explorer::ExpansionState,
-        file_picker::PreviewState,
+        data_object::{CommandId, Context, FocusTarget, RunningState, StatusKind},
         startup::initial_model,
         test_utils::{create_buffer, open_file},
     };
@@ -338,70 +264,6 @@ mod tests {
 
         assert_eq!(model.editor.mode(), EditMode::Insert);
         assert_eq!(std::fs::read_to_string(path).unwrap(), "!hello");
-    }
-
-    #[test]
-    fn file_picker_scans_previews_and_opens_selected_file() {
-        let directory = tempfile::tempdir().unwrap();
-        let nested = directory.path().join("nested");
-        let file = nested.join("main.rs");
-        std::fs::create_dir(&nested).unwrap();
-        std::fs::write(&file, "fn main() {}").unwrap();
-        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
-        let manager = MessageManager::default();
-        manager.update(&mut model, Message::Resize(120, 20));
-        let mut effect = None;
-        for key in [' ', 'f', 'f'] {
-            effect = manager.update(
-                &mut model,
-                Message::CommandMenuKey(crossterm::event::KeyCode::Char(key)),
-            );
-        }
-        assert!(effect.is_none());
-        assert_eq!(model.current_focus, FocusTarget::FilePicker);
-        assert_eq!(model.context_stack.last(), Some(&Context::FilePicker));
-
-        let Some(Effect::Feature(request)) =
-            manager.update(&mut model, Message::FilePickerInsert('m'))
-        else {
-            panic!("a query should start one recursive scan");
-        };
-        let Some(Effect::Feature(request)) = manager.update(&mut model, request.perform()) else {
-            panic!("recursive scan completion should start filtering");
-        };
-        let Some(Effect::Feature(request)) = manager.update(&mut model, request.perform()) else {
-            panic!("filter completion should start a preview");
-        };
-        manager.update(&mut model, request.perform());
-        assert_eq!(model.file_picker.results.len(), 1);
-        let PreviewState::Text(snapshot) = &model.file_picker.preview else {
-            panic!("text file should have a preview snapshot");
-        };
-        assert_eq!(snapshot.lines[0].text, "fn main() {}");
-        assert!(snapshot.lines[0].highlights.iter().any(|span| {
-            !span.highlights.is_empty() && span.start_byte == 0 && span.end_byte == 2
-        }));
-        assert!(snapshot.lines[0].highlights.iter().any(|span| {
-            !span.highlights.is_empty() && span.start_byte == 3 && span.end_byte == 7
-        }));
-
-        let effect = manager.update(&mut model, Message::OpenPickerFile);
-        complete_open(&mut model, &manager, effect);
-        assert_eq!(model.file_picker.visibility, Visibility::Hidden);
-        assert_eq!(model.current_focus, FocusTarget::Editor);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
-        assert_eq!(
-            model.explorer.selected_entry().unwrap().path,
-            std::fs::canonicalize(file).unwrap()
-        );
-        assert_eq!(
-            model.explorer.entries[0].expansion,
-            ExpansionState::Expanded
-        );
-        assert_eq!(
-            model.editor.active_snapshot().unwrap().text.lines[0].text,
-            "fn main() {}"
-        );
     }
 
     #[test]

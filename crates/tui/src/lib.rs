@@ -222,13 +222,7 @@ pub mod data_object {
         FocusLost,
         Resize(u16, u16),
         OpenSelected,
-        OpenFilePicker,
         FilePickerInsert(char),
-        FilePickerBackspace,
-        CloseFilePicker,
-        FilePickerNext,
-        FilePickerPrevious,
-        OpenPickerFile,
         FileScanFinished {
             revision: u64,
             result: Result<Vec<FileEntry>, String>,

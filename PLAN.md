@@ -222,7 +222,7 @@ This is not a promise that new code requires zero wiring. A new feature may be r
 - [x] Migrate quit, close-buffer, deferred lifecycle actions, and save completion into a lifecycle feature with colocated tests.
 - [x] Extract document-open request/completion capabilities with colocated stale-completion and rejected-file tests.
 - [x] Migrate explorer visibility and logical focus commands into a focus feature with colocated tests.
-- [ ] Migrate the remaining file-picker commands and completion coordination into the file-picker feature. `MessageManager` should become a small application coordinator rather than a growing feature match.
+- [x] Migrate the remaining file-picker commands and completion coordination into the file-picker feature. `MessageManager` is now a small application coordinator rather than a growing feature match.
 - [ ] Replace centralized feature conditionals in pages with explicit panel/popup/status contribution points while keeping focus, cursor hiding, and modal precedence shell-owned.
 - [ ] Implement dynamic Helix-compatible user themes through the new platform: discover `~/.eggplant/themes/*.toml`, support runtime theme IDs/catalog entries, resolve inheritance and name collisions, load through effects, and preserve the active theme on failures.
 - [ ] Add a test-only example feature proving that command, state/update, popup, and effect contributions work through registration without changes to unrelated domain modules or runtime dispatch.

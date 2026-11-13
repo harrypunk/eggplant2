@@ -208,35 +208,35 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
             "toggle files",
             crate::focus::handle_command,
         ),
-        Command::new(
+        Command::feature(
             CommandId("open_file_picker"),
             "find file",
-            Message::OpenFilePicker,
+            crate::file_picker::handle_command,
         ),
-        Command::new(
+        Command::feature(
             CommandId("close_file_picker"),
             "close file picker",
-            Message::CloseFilePicker,
+            crate::file_picker::handle_command,
         ),
-        Command::new(
+        Command::feature(
             CommandId("file_picker_backspace"),
             "delete query character",
-            Message::FilePickerBackspace,
+            crate::file_picker::handle_command,
         ),
-        Command::new(
+        Command::feature(
             CommandId("open_picker_file"),
             "open file",
-            Message::OpenPickerFile,
+            crate::file_picker::handle_command,
         ),
-        Command::new(
+        Command::feature(
             CommandId("file_picker_next"),
             "next file",
-            Message::FilePickerNext,
+            crate::file_picker::handle_command,
         ),
-        Command::new(
+        Command::feature(
             CommandId("file_picker_previous"),
             "previous file",
-            Message::FilePickerPrevious,
+            crate::file_picker::handle_command,
         ),
         Command::feature(
             CommandId("open_theme_picker"),

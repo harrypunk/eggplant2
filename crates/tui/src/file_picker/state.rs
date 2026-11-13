@@ -46,6 +46,7 @@ pub struct FilePickerState {
     pub selected: Option<usize>,
     pub collection: FileCollectionState,
     pub preview: PreviewState,
+    documents: DocumentFactory,
     files: Arc<Vec<FileEntry>>,
     depth: ScanDepth,
     preview_cache: HashMap<PathBuf, TextViewSnapshot>,
@@ -63,6 +64,7 @@ impl Default for FilePickerState {
             selected: None,
             collection: FileCollectionState::Loading,
             preview: PreviewState::Empty,
+            documents: DocumentFactory::new(),
             files: Arc::new(Vec::new()),
             depth: ScanDepth::TopLevel,
             preview_cache: HashMap::new(),
@@ -74,6 +76,10 @@ impl Default for FilePickerState {
 }
 
 impl FilePickerState {
+    pub fn documents(&self) -> &DocumentFactory {
+        &self.documents
+    }
+
     /// Seed an immediate top-level cache from data already loaded at startup.
     pub fn seed_top_level(&mut self, mut files: Vec<FileEntry>) {
         files.sort_by(|left, right| left.display.cmp(&right.display));
@@ -83,7 +89,7 @@ impl FilePickerState {
     }
 
     /// Reuse ready entries on reopen; otherwise start with a top-level scan.
-    pub fn open(&mut self, root: &Path, documents: &DocumentFactory) -> Option<FilePickerRequest> {
+    pub fn open(&mut self, root: &Path) -> Option<FilePickerRequest> {
         self.visibility = Visibility::Displayed;
         self.query.clear();
         self.filter_revision = self.filter_revision.wrapping_add(1);
@@ -94,7 +100,7 @@ impl FilePickerState {
                 self.collection = FileCollectionState::Ready;
                 self.results = self.files.as_ref().clone();
                 self.selected = (!self.results.is_empty()).then_some(0);
-                self.start_preview(documents)
+                self.start_preview()
             }
             FileCollectionState::Loading | FileCollectionState::Failed => {
                 self.results.clear();
@@ -152,7 +158,6 @@ impl FilePickerState {
 
     pub fn complete_filter(
         &mut self,
-        documents: &DocumentFactory,
         revision: u64,
         results: Vec<FileEntry>,
     ) -> Option<FilePickerRequest> {
@@ -163,24 +168,24 @@ impl FilePickerState {
         self.collection = FileCollectionState::Ready;
         self.results = results;
         self.selected = (!self.results.is_empty()).then_some(0);
-        self.start_preview(documents)
+        self.start_preview()
     }
 
-    pub fn select_next(&mut self, documents: &DocumentFactory) -> Option<FilePickerRequest> {
+    pub fn select_next(&mut self) -> Option<FilePickerRequest> {
         if self.results.is_empty() {
             return None;
         }
         let selected = self.selected.unwrap_or(0);
         self.selected = Some((selected + 1).min(self.results.len() - 1));
-        self.start_preview(documents)
+        self.start_preview()
     }
 
-    pub fn select_previous(&mut self, documents: &DocumentFactory) -> Option<FilePickerRequest> {
+    pub fn select_previous(&mut self) -> Option<FilePickerRequest> {
         if self.results.is_empty() {
             return None;
         }
         self.selected = Some(self.selected.unwrap_or(0).saturating_sub(1));
-        self.start_preview(documents)
+        self.start_preview()
     }
 
     pub fn complete_preview(&mut self, revision: u64, preview: PreviewState) {
@@ -231,7 +236,7 @@ impl FilePickerState {
         })
     }
 
-    fn start_preview(&mut self, documents: &DocumentFactory) -> Option<FilePickerRequest> {
+    fn start_preview(&mut self) -> Option<FilePickerRequest> {
         self.preview_revision = self.preview_revision.wrapping_add(1);
         let Some(entry) = self.selected_entry() else {
             self.preview = PreviewState::Empty;
@@ -251,7 +256,7 @@ impl FilePickerState {
         }
         self.pending_preview_path = Some(path.clone());
         Some(FilePickerRequest::Preview {
-            documents: documents.clone(),
+            documents: self.documents.clone(),
             path,
             revision: self.preview_revision,
         })
@@ -280,12 +285,11 @@ mod tests {
     #[test]
     fn typing_during_top_level_scan_upgrades_to_one_recursive_scan() {
         let mut state = FilePickerState::default();
-        let documents = DocumentFactory::new();
         let Some(FilePickerRequest::Scan {
             depth: ScanDepth::TopLevel,
             revision,
             ..
-        }) = state.open(Path::new("/workspace"), &documents)
+        }) = state.open(Path::new("/workspace"))
         else {
             panic!("opening should start with a top-level scan");
         };
@@ -320,18 +324,14 @@ mod tests {
         let Some(FilePickerRequest::Preview {
             revision: first_preview,
             ..
-        }) = state.complete_filter(
-            &documents,
-            filter_revision,
-            vec![entry("main.rs"), entry("mod.rs")],
-        )
+        }) = state.complete_filter(filter_revision, vec![entry("main.rs"), entry("mod.rs")])
         else {
             panic!("filter completion should preview the first result");
         };
         let Some(FilePickerRequest::Preview {
             revision: second_preview,
             ..
-        }) = state.select_next(&documents)
+        }) = state.select_next()
         else {
             panic!("selection should preview the next result");
         };
@@ -355,9 +355,7 @@ mod tests {
     #[test]
     fn reopen_reuses_ready_cache_without_scanning() {
         let mut state = FilePickerState::default();
-        let documents = DocumentFactory::new();
-        let Some(FilePickerRequest::Scan { revision, .. }) =
-            state.open(Path::new("/workspace"), &documents)
+        let Some(FilePickerRequest::Scan { revision, .. }) = state.open(Path::new("/workspace"))
         else {
             panic!("opening should scan files");
         };
@@ -374,12 +372,12 @@ mod tests {
         };
         assert!(
             state
-                .complete_filter(&documents, filter_revision, vec![entry("main.rs")])
+                .complete_filter(filter_revision, vec![entry("main.rs")])
                 .is_some()
         );
         state.close();
 
-        let request = state.open(Path::new("/workspace"), &documents);
+        let request = state.open(Path::new("/workspace"));
         assert!(matches!(request, Some(FilePickerRequest::Preview { .. })));
         assert_eq!(state.results, vec![entry("main.rs")]);
         assert_eq!(state.collection, FileCollectionState::Ready);
@@ -387,7 +385,6 @@ mod tests {
 
     #[test]
     fn preview_cache_returns_instantly_and_uncached_loads_keep_previous_text() {
-        let documents = DocumentFactory::new();
         let mut state = FilePickerState {
             visibility: Visibility::Displayed,
             results: vec![entry("first.txt"), entry("second.txt")],
@@ -400,7 +397,7 @@ mod tests {
         let Some(FilePickerRequest::Preview {
             revision: first_revision,
             ..
-        }) = state.start_preview(&documents)
+        }) = state.start_preview()
         else {
             panic!("the first preview should load");
         };
@@ -408,23 +405,21 @@ mod tests {
         let Some(FilePickerRequest::Preview {
             revision: second_revision,
             ..
-        }) = state.select_next(&documents)
+        }) = state.select_next()
         else {
             panic!("the second preview should load");
         };
         assert_eq!(state.preview, PreviewState::Text(first_snapshot.clone()));
         state.complete_preview(second_revision, PreviewState::Text(second_snapshot));
 
-        assert!(state.select_previous(&documents).is_none());
+        assert!(state.select_previous().is_none());
         assert_eq!(state.preview, PreviewState::Text(first_snapshot));
     }
 
     #[test]
     fn closing_invalidates_pending_completions() {
         let mut state = FilePickerState::default();
-        let documents = DocumentFactory::new();
-        let Some(FilePickerRequest::Scan { revision, .. }) =
-            state.open(Path::new("/workspace"), &documents)
+        let Some(FilePickerRequest::Scan { revision, .. }) = state.open(Path::new("/workspace"))
         else {
             panic!("opening should scan files");
         };
