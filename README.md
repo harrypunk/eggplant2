@@ -205,6 +205,7 @@ Common commands use a built-in Space leader with bottom-right key hints:
 - `Space b n` / `Space b p`: next/previous buffer.
 - `Space e`: show/hide and focus the explorer.
 - `Space f f`: open the fuzzy file picker with text preview.
+- `Space v j` / `Space v k`: scroll down/up through the same page-scroll commands as `Ctrl-F`/`Ctrl-U`.
 - `Space u t`: open the built-in theme list; Up/Down select, Enter applies, and Escape cancels.
 
 Direct keys remain configurable:

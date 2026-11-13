@@ -71,6 +71,22 @@ const UI_CONTEXT: CommandMenuContext = CommandMenuContext {
     }],
 };
 
+const VIEW_CONTEXT: CommandMenuContext = CommandMenuContext {
+    title: "view",
+    items: &[
+        CommandMenuItem {
+            key: 'j',
+            description: "scroll down",
+            target: CommandMenuTarget::Action(CommandId("page_scroll_down")),
+        },
+        CommandMenuItem {
+            key: 'k',
+            description: "scroll up",
+            target: CommandMenuTarget::Action(CommandId("page_scroll_up")),
+        },
+    ],
+};
+
 const ROOT_CONTEXT: CommandMenuContext = CommandMenuContext {
     title: "Leader",
     items: &[
@@ -98,6 +114,11 @@ const ROOT_CONTEXT: CommandMenuContext = CommandMenuContext {
             key: 'u',
             description: "ui",
             target: CommandMenuTarget::Submenu(&UI_CONTEXT),
+        },
+        CommandMenuItem {
+            key: 'v',
+            description: "view",
+            target: CommandMenuTarget::Submenu(&VIEW_CONTEXT),
         },
     ],
 };
@@ -242,6 +263,16 @@ mod tests {
             menu.handle_key(KeyCode::Char('t')),
             CommandMenuOutcome::Action(CommandId("open_theme_picker"))
         );
+
+        for (key, command) in [('j', "page_scroll_down"), ('k', "page_scroll_up")] {
+            menu.handle_key(KeyCode::Char(' '));
+            menu.handle_key(KeyCode::Char('v'));
+            assert_eq!(menu.context_title(), "Leader > view");
+            assert_eq!(
+                menu.handle_key(KeyCode::Char(key)),
+                CommandMenuOutcome::Action(CommandId(command))
+            );
+        }
     }
 
     #[test]

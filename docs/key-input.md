@@ -49,7 +49,7 @@ Direct bindings and leader targets share `CommandRegistry`: each stable command 
 
 The built-in Space leader is already a small data-driven sequence state machine. Each `CommandMenuContext` owns its semantic title and items, and each item targets either a submenu or a semantic action. `CommandMenuState` stores the active context stack, returns `Pending`, `Cancelled`, or a semantic `CommandAction`, and the update layer translates completed actions into ordinary messages. `KeyHints` renders the current context's candidates and composes its title by joining active context titles, such as `Leader > buffer`. Titles therefore grow with the menu definitions rather than requiring a separate menu-specific title match.
 
-Current sequences include `Space q q` to quit, `Space b n`/`Space b p` to switch buffers, `Space f f` to open files, and `Space u t` to open the theme list. The theme picker uses a dedicated modal context: Down/Up navigate, Enter applies, and Escape cancels without changing the active theme. Normal-mode `Ctrl-F`/`Ctrl-U` invoke the registered page-scroll commands, whose viewport percentage is configured with `[features.page_scroll] step`.
+Current sequences include `Space q q` to quit, `Space b n`/`Space b p` to switch buffers, `Space f f` to open files, and `Space u t` to open the theme list. The theme picker uses a dedicated modal context: Down/Up navigate, Enter applies, and Escape cancels without changing the active theme. Normal-mode `Ctrl-F`/`Ctrl-U` invoke the registered page-scroll commands, whose viewport percentage is configured with `[features.page_scroll] step`. `Space v j`/`Space v k` invoke the same commands through the built-in view menu, providing a control-chord-independent test path.
 
 ## Design rules
 

@@ -166,6 +166,21 @@ mod tests {
     }
 
     #[test]
+    fn translates_page_scroll_control_chords_when_crossterm_delivers_them() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+
+        for (key, command) in [('f', "page_scroll_down"), ('u', "page_scroll_up")] {
+            let event = Event::Key(KeyEvent::new(KeyCode::Char(key), KeyModifiers::CONTROL));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+    }
+
+    #[test]
     fn configured_bindings_still_take_precedence() {
         let manager = event_manager();
         let mut normal_model = Model::default();
