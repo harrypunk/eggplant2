@@ -2,6 +2,7 @@ pub mod buffer;
 pub mod command_menu;
 pub mod component;
 pub mod config;
+pub mod document;
 pub mod editing;
 pub mod explorer;
 pub mod file_picker;

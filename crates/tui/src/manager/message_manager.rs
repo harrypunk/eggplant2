@@ -1,6 +1,4 @@
-use std::{fmt::Display, path::Path};
-
-use editor::{DocumentFactory, DocumentOpenCompletion, DocumentOpenRequest};
+use editor::{DocumentFactory, DocumentOpenCompletion};
 use ratatui::layout::Rect;
 
 use crate::{
@@ -9,7 +7,7 @@ use crate::{
     data_object::{
         Context, FocusDirection, FocusTarget, Message, Model, StatusMessage, Visibility,
     },
-    editing,
+    document, editing,
     explorer::ExplorerEntryKind,
     lifecycle,
     manager::{
@@ -147,7 +145,7 @@ impl MessageManager {
         let path = entry.path.clone();
         match entry.kind {
             ExplorerEntryKind::File | ExplorerEntryKind::Link | ExplorerEntryKind::Other => {
-                self.open_file(model, &path)
+                document::open_file(&self.documents, model, &path)
             }
             ExplorerEntryKind::Directory => crate::explorer::handle_command(
                 model,
@@ -186,53 +184,18 @@ impl MessageManager {
     fn open_picker_file(&self, model: &mut Model) -> Option<Effect> {
         let entry = model.file_picker.selected_entry()?;
         let path = entry.path.clone();
-        self.open_file(model, &path)
-    }
-
-    /// Single document-open path shared by explorer, picker, and future commands.
-    fn open_file(&self, model: &mut Model, path: &Path) -> Option<Effect> {
-        model.opening_file = Some(path.to_path_buf());
-        Some(Effect::OpenDocument(DocumentOpenRequest::new(
-            self.documents.clone(),
-            path,
-        )))
+        document::open_file(&self.documents, model, &path)
     }
 
     fn finish_open_file(model: &mut Model, completion: DocumentOpenCompletion) {
-        if model.opening_file.as_deref() != Some(completion.path()) {
+        if document::finish_open_file(model, completion).is_none() {
             return;
         }
-        let path = completion.path().to_path_buf();
-        model.opening_file = None;
-        let opened = match completion.into_result() {
-            Ok(opened) => opened,
-            Err(error) => {
-                Self::report_error(model, "failed to open file", &path, error);
-                return;
-            }
-        };
-        let id = match model.editor.insert_opened_document(opened) {
-            Ok(id) => id,
-            Err(error) => {
-                Self::report_error(model, "failed to open file", &path, error);
-                return;
-            }
-        };
-        model.status = None;
-        buffer::reveal_buffer(model, id);
-
         match model.file_picker.visibility {
             Visibility::Displayed => Self::close_file_picker(model),
             Visibility::Hidden => {}
         }
         Self::focus_editor(model);
-    }
-
-    fn report_error(model: &mut Model, action: &str, path: &Path, error: impl Display) {
-        model.status = Some(StatusMessage::error(format!(
-            "{action} `{}`: {error}",
-            path.display()
-        )));
     }
 
     // Only explorer focus needs to move when the panel is hidden. Other current
@@ -510,67 +473,6 @@ mod tests {
         assert_eq!(
             model.editor.active_snapshot().unwrap().text.lines[0].text,
             "fn main() {}"
-        );
-    }
-
-    #[test]
-    fn non_text_open_reports_error_without_changing_state() {
-        let directory = tempfile::tempdir().unwrap();
-        let text = directory.path().join("text.txt");
-        let binary = directory.path().join("binary.bin");
-        let link = directory.path().join("link.txt");
-        std::fs::write(&text, "text").unwrap();
-        std::fs::write(&binary, [0xff, 0x00]).unwrap();
-        std::os::unix::fs::symlink(&text, &link).unwrap();
-        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
-        let manager = MessageManager::default();
-        let original_entries = model.explorer.entries.clone();
-
-        for path in [binary, link] {
-            let effect = manager.open_file(&mut model, &path);
-            complete_open(&mut model, &manager, effect);
-            assert!(model.editor.is_empty());
-            assert_eq!(model.explorer.entries, original_entries);
-            assert!(
-                model
-                    .status
-                    .as_ref()
-                    .unwrap()
-                    .text
-                    .contains("not a text file")
-            );
-        }
-    }
-
-    #[test]
-    fn stale_open_completion_does_not_replace_the_latest_request() {
-        let directory = tempfile::tempdir().unwrap();
-        let first = directory.path().join("first.txt");
-        let second = directory.path().join("second.txt");
-        std::fs::write(&first, "first").unwrap();
-        std::fs::write(&second, "second").unwrap();
-        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
-        let manager = MessageManager::default();
-        let first_completion = match manager.open_file(&mut model, &first) {
-            Some(Effect::OpenDocument(request)) => request.perform(),
-            _ => panic!("expected an open-document effect"),
-        };
-        let second_completion = match manager.open_file(&mut model, &second) {
-            Some(Effect::OpenDocument(request)) => request.perform(),
-            _ => panic!("expected an open-document effect"),
-        };
-
-        manager.update(&mut model, Message::FileOpened(first_completion));
-        assert!(model.editor.is_empty());
-        assert_eq!(model.opening_file, Some(second.clone()));
-        manager.update(&mut model, Message::FileOpened(second_completion));
-
-        assert_eq!(model.editor.buffer_count(), 1);
-        assert_eq!(
-            model
-                .editor
-                .buffer_path(model.editor.active_buffer().unwrap()),
-            Some(std::fs::canonicalize(second).unwrap().as_path())
         );
     }
 
