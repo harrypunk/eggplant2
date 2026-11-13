@@ -38,24 +38,36 @@ impl<'a> TextView<'a> {
 
     fn line(&self, snapshot: &LineSnapshot) -> Line<'static> {
         let base = self.theme.ui().base;
-        let mut spans = Vec::new();
-        let mut offset = 0;
-        for highlight in &snapshot.highlights {
-            if highlight.start_byte > offset {
-                spans.push(Span::styled(
-                    snapshot.text[offset..highlight.start_byte].to_string(),
-                    base,
-                ));
-            }
-            spans.push(Span::styled(
-                snapshot.text[highlight.start_byte..highlight.end_byte].to_string(),
-                base.patch(self.theme.highlight(&highlight.highlights)),
-            ));
-            offset = highlight.end_byte;
-        }
-        if offset < snapshot.text.len() {
-            spans.push(Span::styled(snapshot.text[offset..].to_string(), base));
-        }
+        let text = &snapshot.text;
+        let trailing_offset = snapshot
+            .highlights
+            .last()
+            .map_or(0, |highlight| highlight.end_byte);
+        let spans = std::iter::once(0)
+            .chain(
+                snapshot
+                    .highlights
+                    .iter()
+                    .map(|highlight| highlight.end_byte),
+            )
+            .zip(&snapshot.highlights)
+            .flat_map(|(offset, highlight)| {
+                [
+                    (highlight.start_byte > offset).then(|| {
+                        Span::styled(text[offset..highlight.start_byte].to_string(), base)
+                    }),
+                    Some(Span::styled(
+                        text[highlight.start_byte..highlight.end_byte].to_string(),
+                        base.patch(self.theme.highlight(&highlight.highlights)),
+                    )),
+                ]
+            })
+            .flatten()
+            .chain(
+                (trailing_offset < text.len())
+                    .then(|| Span::styled(text[trailing_offset..].to_string(), base)),
+            )
+            .collect::<Vec<_>>();
         Line::from(spans)
     }
 }
