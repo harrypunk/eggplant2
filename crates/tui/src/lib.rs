@@ -2,6 +2,7 @@ pub mod buffer;
 pub mod command_menu;
 pub mod component;
 pub mod config;
+pub mod editing;
 pub mod explorer;
 pub mod file_picker;
 mod filesystem;
@@ -24,7 +25,7 @@ pub mod data_object {
         path::{Path, PathBuf},
     };
 
-    use editor::{BufferId, CursorMovement, DocumentOpenCompletion, EditorSession, SaveCompletion};
+    use editor::{BufferId, DocumentOpenCompletion, EditorSession, SaveCompletion};
 
     use crate::{
         command_menu::CommandMenuState,
@@ -213,15 +214,8 @@ pub mod data_object {
         CommandMenuKey(crossterm::event::KeyCode),
         InvokeCommand(CommandId),
         Quit,
-        EnterInsertMode,
-        ExitInsertMode,
-        MoveCursor(CursorMovement),
         MoveFocus(FocusDirection),
         InsertChar(char),
-        InsertNewline,
-        Backspace,
-        Undo,
-        Redo,
         CloseActive,
         SaveFinished(SaveCompletion),
         FileOpened(DocumentOpenCompletion),

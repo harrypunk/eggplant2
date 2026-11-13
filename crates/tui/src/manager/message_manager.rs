@@ -12,6 +12,7 @@ use crate::{
         Context, DeferredAction, FocusDirection, FocusTarget, Message, Model, RunningState,
         StatusMessage, Visibility,
     },
+    editing,
     explorer::{ExpansionState, ExplorerEntryKind, IgnoreMode},
     manager::{
         command_registry::{CommandHandler, CommandRegistry},
@@ -51,48 +52,8 @@ impl MessageManager {
             Message::InvokeCommand(id) => return self.invoke_command(model, id),
             Message::Quit => return Self::request_quit(model),
             Message::CloseActive => return Self::request_close(model),
-            Message::EnterInsertMode => {
-                if model.editor.active_buffer().is_some() {
-                    model.context_stack.push(Context::EditorInput);
-                    model.editor.enter_insert_mode();
-                }
-            }
-            Message::ExitInsertMode => {
-                model
-                    .context_stack
-                    .pop_if(|ctx| ctx == &Context::EditorInput);
-                model.editor.enter_normal_mode();
-                return buffer::auto_save_active(model);
-            }
-            Message::MoveCursor(movement) => {
-                let _ = model.editor.move_cursor(movement);
-            }
             Message::MoveFocus(direction) => Self::move_focus(model, direction),
-            Message::InsertChar(character) => {
-                if model.editor.insert_text(&character.to_string()).is_ok() {
-                    return buffer::auto_save_active(model);
-                }
-            }
-            Message::InsertNewline => {
-                if model.editor.insert_text("\n").is_ok() {
-                    return buffer::auto_save_active(model);
-                }
-            }
-            Message::Backspace => {
-                if model.editor.backspace().is_ok() {
-                    return buffer::auto_save_active(model);
-                }
-            }
-            Message::Undo => {
-                if model.editor.undo().unwrap_or(false) {
-                    return buffer::auto_save_active(model);
-                }
-            }
-            Message::Redo => {
-                if model.editor.redo().unwrap_or(false) {
-                    return buffer::auto_save_active(model);
-                }
-            }
+            Message::InsertChar(character) => return editing::insert_char(model, character),
             Message::SaveFinished(completion) => {
                 return Self::finish_save(model, completion);
             }
@@ -499,11 +460,11 @@ impl MessageManager {
 
 #[cfg(test)]
 mod tests {
-    use editor::{CursorMovement, EditMode, SaveRequest};
+    use editor::{EditMode, SaveRequest};
 
     use super::*;
     use crate::{
-        data_object::StatusKind,
+        data_object::{CommandId, StatusKind},
         file_picker::PreviewState,
         startup::initial_model,
         test_utils::{create_buffer, open_file},
@@ -521,74 +482,6 @@ mod tests {
             panic!("expected an open-document effect");
         };
         manager.update(model, Message::FileOpened(request.perform()));
-    }
-
-    #[test]
-    fn mode_messages_update_editor_session_and_context() {
-        let manager = MessageManager::default();
-        let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
-        create_buffer(&mut model, "");
-
-        manager.update(&mut model, Message::EnterInsertMode);
-        assert_eq!(model.editor.mode(), EditMode::Insert);
-        assert_eq!(model.context_stack.last(), Some(&Context::EditorInput));
-
-        manager.update(&mut model, Message::ExitInsertMode);
-        assert_eq!(model.editor.mode(), EditMode::Normal);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
-    }
-
-    #[test]
-    fn insert_mode_requires_an_active_buffer() {
-        let manager = MessageManager::default();
-        let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
-
-        manager.update(&mut model, Message::EnterInsertMode);
-
-        assert_eq!(model.editor.mode(), EditMode::Normal);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
-    }
-
-    #[test]
-    fn editing_messages_update_text_history_and_viewport() {
-        let manager = MessageManager::default();
-        let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
-        create_buffer(&mut model, "a");
-        manager.update(&mut model, Message::Resize(120, 20));
-
-        manager.update(&mut model, Message::MoveCursor(CursorMovement::Right));
-        manager.update(&mut model, Message::EnterInsertMode);
-        manager.update(&mut model, Message::InsertChar('b'));
-        assert_eq!(
-            model.editor.active_snapshot().unwrap().text.lines[0].text,
-            "ab"
-        );
-
-        manager.update(&mut model, Message::Backspace);
-        assert_eq!(
-            model.editor.active_snapshot().unwrap().text.lines[0].text,
-            "a"
-        );
-        manager.update(&mut model, Message::InsertChar('c'));
-        manager.update(&mut model, Message::ExitInsertMode);
-        assert_eq!(
-            model.editor.active_snapshot().unwrap().text.lines[0].text,
-            "ac"
-        );
-
-        manager.update(&mut model, Message::Undo);
-        assert_eq!(
-            model.editor.active_snapshot().unwrap().text.lines[0].text,
-            "a"
-        );
-        manager.update(&mut model, Message::Redo);
-        assert_eq!(
-            model.editor.active_snapshot().unwrap().text.lines[0].text,
-            "ac"
-        );
     }
 
     #[tokio::test]
@@ -609,9 +502,15 @@ mod tests {
             Some(std::fs::canonicalize(&first_path).unwrap().as_path())
         );
 
-        manager.update(&mut model, Message::EnterInsertMode);
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("enter_insert_mode")),
+        );
         manager.update(&mut model, Message::InsertChar('A'));
-        let request = expect_save(manager.update(&mut model, Message::ExitInsertMode));
+        let request = expect_save(manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("exit_insert_mode")),
+        ));
         let completion = request.perform().await;
         manager.update(&mut model, Message::SaveFinished(completion));
         assert_eq!(std::fs::read_to_string(&first_path).unwrap(), "Afirst");
@@ -636,7 +535,10 @@ mod tests {
         assert_eq!(model.editor.buffer_count(), 1);
         assert_eq!(model.editor.active_buffer(), Some(second));
 
-        manager.update(&mut model, Message::EnterInsertMode);
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("enter_insert_mode")),
+        );
         manager.update(&mut model, Message::InsertChar('B'));
         assert!(model.editor.active_is_modified());
         let effect = manager.update(&mut model, Message::Quit);
@@ -697,10 +599,16 @@ mod tests {
         let mut model = Model::default();
         create_buffer(&mut model, "scratch");
         model.context_stack.push(Context::AppNormal);
-        manager.update(&mut model, Message::EnterInsertMode);
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("enter_insert_mode")),
+        );
 
         manager.update(&mut model, Message::InsertChar('!'));
-        let effect = manager.update(&mut model, Message::ExitInsertMode);
+        let effect = manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("exit_insert_mode")),
+        );
         assert!(effect.is_none());
         assert!(model.editor.active_is_modified());
         assert_eq!(model.status.unwrap().kind, StatusKind::Error);
@@ -749,9 +657,15 @@ mod tests {
         open_file(&mut model, &path);
         model.context_stack.push(Context::AppNormal);
         let manager = MessageManager::default();
-        manager.update(&mut model, Message::EnterInsertMode);
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("enter_insert_mode")),
+        );
         manager.update(&mut model, Message::InsertChar('x'));
-        let request = expect_save(manager.update(&mut model, Message::ExitInsertMode));
+        let request = expect_save(manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("exit_insert_mode")),
+        ));
 
         manager.update(&mut model, Message::Quit);
         assert_eq!(model.running_state, RunningState::Running);
@@ -759,30 +673,6 @@ mod tests {
         manager.update(&mut model, Message::SaveFinished(completion));
         manager.update(&mut model, Message::Quit);
         assert_eq!(model.running_state, RunningState::Done);
-    }
-
-    #[tokio::test]
-    async fn auto_save_on_edit_executes_effect_and_applies_completion() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("note.txt");
-        std::fs::write(&path, "hello").unwrap();
-        let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
-        open_file(&mut model, &path);
-        for _ in 0..5 {
-            model.editor.move_cursor(CursorMovement::Right).unwrap();
-        }
-        let manager = MessageManager::default();
-        manager.update(&mut model, Message::EnterInsertMode);
-        manager.update(&mut model, Message::InsertChar('!'));
-        let effect = manager.update(&mut model, Message::ExitInsertMode).unwrap();
-        let request = expect_save(Some(effect));
-        let completion = request.perform().await;
-        manager.update(&mut model, Message::SaveFinished(completion));
-
-        assert_eq!(std::fs::read_to_string(path).unwrap(), "hello!");
-        assert!(!model.editor.active_is_modified());
-        assert_eq!(model.status.unwrap().kind, StatusKind::Info);
     }
 
     #[tokio::test]
@@ -794,7 +684,10 @@ mod tests {
         model.context_stack.push(Context::AppNormal);
         open_file(&mut model, &path);
         let manager = MessageManager::default();
-        manager.update(&mut model, Message::EnterInsertMode);
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("enter_insert_mode")),
+        );
         manager.update(&mut model, Message::InsertChar('!'));
 
         let request = expect_save(manager.update(&mut model, Message::FocusLost));

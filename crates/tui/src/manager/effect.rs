@@ -35,7 +35,7 @@ mod tests {
 
     impl FeatureEffect for TestEffect {
         fn perform(self: Box<Self>) -> Message {
-            Message::Undo
+            Message::FocusLost
         }
     }
 
@@ -49,6 +49,6 @@ mod tests {
 
         effect.execute(sender);
 
-        assert!(matches!(receiver.recv().await, Some(Message::Undo)));
+        assert!(matches!(receiver.recv().await, Some(Message::FocusLost)));
     }
 }

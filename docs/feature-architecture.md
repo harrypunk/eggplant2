@@ -240,7 +240,7 @@ Implemented: `FeatureEffect` is a feature-owned effect object with default block
 
 Split lifecycle, buffers, editor, explorer, and open/save coordination into focused modules. `MessageManager` becomes a small coordinator. Preserve save-before-close/quit, dirty follow-ups, and explorer synchronization tests.
 
-First implemented slice: `buffer.rs` owns next/previous commands plus shared dirty-save and explorer-reveal capabilities, with buffer-specific tests colocated. Other update paths consume those helpers rather than duplicating save/reveal logic. Lifecycle, editor, explorer, and save/open completion coordination remain for subsequent slices.
+Implemented slices: `buffer.rs` owns next/previous commands plus shared dirty-save and explorer-reveal capabilities. `editing.rs` owns Insert-mode transitions, movement, insertion, deletion, and history commands, with feature tests colocated. Other update paths consume the shared save/reveal helpers rather than duplicating logic. Lifecycle, explorer, and save/open completion coordination remain for subsequent slices.
 
 ### M6.5 — Generalize UI contributions
 

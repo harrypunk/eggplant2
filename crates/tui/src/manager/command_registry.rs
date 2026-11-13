@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
 use color_eyre::eyre::eyre;
-use editor::CursorMovement;
 
 pub use crate::data_object::CommandId;
 use crate::{
@@ -92,35 +91,35 @@ impl Default for CommandRegistry {
 fn builtin_commands() -> impl IntoIterator<Item = Command> {
     [
         Command::new(CommandId("quit"), "quit", Message::Quit),
-        Command::new(
+        Command::feature(
             CommandId("enter_insert_mode"),
             "enter Insert mode",
-            Message::EnterInsertMode,
+            crate::editing::handle_command,
         ),
-        Command::new(
+        Command::feature(
             CommandId("exit_insert_mode"),
             "leave Insert mode",
-            Message::ExitInsertMode,
+            crate::editing::handle_command,
         ),
-        Command::new(
+        Command::feature(
             CommandId("move_left"),
             "move left",
-            Message::MoveCursor(CursorMovement::Left),
+            crate::editing::handle_command,
         ),
-        Command::new(
+        Command::feature(
             CommandId("move_right"),
             "move right",
-            Message::MoveCursor(CursorMovement::Right),
+            crate::editing::handle_command,
         ),
-        Command::new(
+        Command::feature(
             CommandId("move_up"),
             "move up",
-            Message::MoveCursor(CursorMovement::Up),
+            crate::editing::handle_command,
         ),
-        Command::new(
+        Command::feature(
             CommandId("move_down"),
             "move down",
-            Message::MoveCursor(CursorMovement::Down),
+            crate::editing::handle_command,
         ),
         Command::new(
             CommandId("focus_left"),
@@ -142,14 +141,18 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
             "focus right",
             Message::MoveFocus(FocusDirection::Right),
         ),
-        Command::new(CommandId("backspace"), "backspace", Message::Backspace),
-        Command::new(
+        Command::feature(
+            CommandId("backspace"),
+            "backspace",
+            crate::editing::handle_command,
+        ),
+        Command::feature(
             CommandId("insert_newline"),
             "insert newline",
-            Message::InsertNewline,
+            crate::editing::handle_command,
         ),
-        Command::new(CommandId("undo"), "undo", Message::Undo),
-        Command::new(CommandId("redo"), "redo", Message::Redo),
+        Command::feature(CommandId("undo"), "undo", crate::editing::handle_command),
+        Command::feature(CommandId("redo"), "redo", crate::editing::handle_command),
         Command::new(
             CommandId("close_buffer"),
             "close buffer",
@@ -270,8 +273,8 @@ mod tests {
     #[test]
     fn rejects_duplicate_command_ids() {
         let error = CommandRegistry::from_commands([
-            Command::new(CommandId("test.command"), "first", Message::Undo),
-            Command::new(CommandId("test.command"), "second", Message::Redo),
+            Command::new(CommandId("test.command"), "first", Message::Quit),
+            Command::new(CommandId("test.command"), "second", Message::FocusLost),
         ])
         .unwrap_err();
 
