@@ -31,7 +31,7 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | File picker | Open / close | `Enter` / `Esc` |
 | Theme picker | Select | `Down` / `Up` |
 | Theme picker | Apply / close | `Enter` / `Esc` |
-| Buffer jump | Enter two-character pattern, then label | Printable input |
+| Buffer jump | Enter smart-case two-character pattern, then label | Printable input |
 | Buffer jump | Edit input / cancel | `Backspace` / `Esc` |
 
 Custom `[keymap]` entries merge with defaults by context and action, so only overrides need to be specified. Built-in Space leader sequences are not configured in TOML. Explicit unbinding is not implemented.

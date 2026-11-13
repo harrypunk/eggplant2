@@ -221,7 +221,7 @@ This is not a promise that new code requires zero wiring. A new feature may be r
 
 Start with a two-character, Leap-style jump limited to the active buffer's visible snapshot. Incremental quick-search and workspace-wide grep remain separate later features.
 
-- [x] Start with `Space c j`, accept an exact two-character pattern, assign stable two-key labels, and jump when a complete label is entered.
+- [x] Start with `Space c j`, accept a smart-case two-character pattern, assign one-key labels for up to 26 matches or two-key labels above that, and jump when a complete label is entered.
 - [x] Keep pattern, label, targets, and active-buffer identity in the `buffer_jump` extension; use generic absolute cursor navigation only on acceptance.
 - [x] Register text input, prompt UI, and editor-label overlays without feature-specific message/runtime/page dispatch.
 - [x] Dim visible text while labels are active; Escape cancels without movement and Backspace edits the current input.

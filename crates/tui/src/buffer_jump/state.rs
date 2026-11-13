@@ -1,8 +1,8 @@
 use editor::{BufferId, DocumentPosition, TextViewSnapshot};
 use unicode_width::UnicodeWidthStr;
 
+const PATTERN_LENGTH: usize = 2;
 const LABEL_KEYS: &[u8] = b"zxcvbnmasdfghjklqwertyuiop";
-pub(crate) const LABEL_WIDTH: usize = 2;
 const MAX_TARGETS: usize = LABEL_KEYS.len() * LABEL_KEYS.len();
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,7 +42,13 @@ impl BufferJumpState {
     }
 
     pub(crate) fn is_label_phase(&self) -> bool {
-        self.pattern.chars().count() == LABEL_WIDTH
+        self.pattern.chars().count() == PATTERN_LENGTH
+    }
+
+    fn label_length(&self) -> usize {
+        self.targets
+            .first()
+            .map_or(1, |target| target.label.chars().count())
     }
 
     pub(crate) fn start(&mut self, buffer: BufferId) {
@@ -65,7 +71,7 @@ impl BufferJumpState {
     /// Match the visible snapshot once and assign stable labels to the results.
     pub(crate) fn assign_targets(&mut self, text: &TextViewSnapshot, viewport_width: usize) {
         let pattern = self.pattern.chars().collect::<Vec<_>>();
-        let Ok(pattern): Result<[char; LABEL_WIDTH], _> = pattern.try_into() else {
+        let Ok(pattern): Result<[char; PATTERN_LENGTH], _> = pattern.try_into() else {
             self.targets.clear();
             return;
         };
@@ -77,7 +83,7 @@ impl BufferJumpState {
     }
 
     pub(crate) fn complete_label(&self) -> Option<Option<DocumentPosition>> {
-        if self.label.chars().count() < LABEL_WIDTH {
+        if self.label.chars().count() < self.label_length() {
             return None;
         }
         Some(
@@ -106,27 +112,57 @@ impl BufferJumpState {
 fn visible_targets(
     text: &TextViewSnapshot,
     viewport_width: usize,
-    pattern: [char; LABEL_WIDTH],
+    pattern: [char; PATTERN_LENGTH],
 ) -> Vec<JumpTarget> {
-    let pattern = pattern.into_iter().collect::<String>();
-    text.lines
+    let case_sensitive = pattern.iter().any(|character| character.is_uppercase());
+    let positions = text
+        .lines
         .iter()
         .enumerate()
         .flat_map(|(row, line)| {
-            line.text
-                .match_indices(&pattern)
-                .map(|(byte, _)| DocumentPosition {
-                    line: text.first_line + row,
-                    character: line.text[..byte].chars().count(),
-                })
-                .collect::<Vec<_>>()
+            let characters = line.text.chars().collect::<Vec<_>>();
+            let mut matches = Vec::new();
+            let mut index = 0;
+            while index + PATTERN_LENGTH <= characters.len() {
+                if characters[index..index + PATTERN_LENGTH]
+                    .iter()
+                    .zip(pattern)
+                    .all(|(actual, expected)| {
+                        *actual == expected
+                            || (!case_sensitive
+                                && actual.to_lowercase().eq(expected.to_lowercase()))
+                    })
+                {
+                    matches.push(DocumentPosition {
+                        line: text.first_line + row,
+                        character: index,
+                    });
+                    index += PATTERN_LENGTH;
+                } else {
+                    index += 1;
+                }
+            }
+            matches
         })
-        .filter(|position| visible_cell(text, viewport_width, *position).is_some())
-        .take(MAX_TARGETS)
+        .collect::<Vec<_>>();
+    let label_length = if positions.len() <= LABEL_KEYS.len() {
+        1
+    } else {
+        2
+    };
+    let max_targets = match label_length {
+        1 => LABEL_KEYS.len(),
+        _ => MAX_TARGETS,
+    };
+
+    positions
+        .into_iter()
+        .filter(|position| visible_cell(text, viewport_width, *position, label_length).is_some())
+        .take(max_targets)
         .enumerate()
         .map(|(index, position)| JumpTarget {
             position,
-            label: label_for(index),
+            label: label_for(index, label_length),
         })
         .collect()
 }
@@ -135,6 +171,7 @@ pub(crate) fn visible_cell(
     text: &TextViewSnapshot,
     viewport_width: usize,
     position: DocumentPosition,
+    label_width: usize,
 ) -> Option<(usize, usize)> {
     let row = position.line.checked_sub(text.first_line)?;
     let line = text.lines.get(row)?;
@@ -145,10 +182,13 @@ pub(crate) fn visible_cell(
         .map_or(line.text.len(), |(byte, _)| byte);
     let display_column = UnicodeWidthStr::width(&line.text[..byte]);
     let column = display_column.checked_sub(text.horizontal_offset)?;
-    (column + LABEL_WIDTH <= viewport_width).then_some((row, column))
+    (column + label_width <= viewport_width).then_some((row, column))
 }
 
-fn label_for(index: usize) -> String {
+fn label_for(index: usize, length: usize) -> String {
+    if length == 1 {
+        return (LABEL_KEYS[index] as char).to_string();
+    }
     let first = LABEL_KEYS[index / LABEL_KEYS.len()];
     let second = LABEL_KEYS[(index + 1) % LABEL_KEYS.len()];
     String::from_utf8(vec![first, second]).expect("label alphabet must remain ASCII")
@@ -178,16 +218,71 @@ mod tests {
                         line: 10,
                         character: 1,
                     },
-                    label: "zx".to_string(),
+                    label: "z".to_string(),
                 },
                 JumpTarget {
                     position: DocumentPosition {
                         line: 12,
                         character: 0,
                     },
-                    label: "zc".to_string(),
+                    label: "x".to_string(),
                 },
             ]
+        );
+    }
+
+    #[test]
+    fn matching_is_smart_case_sensitive() {
+        let text = TextViewSnapshot::plain(
+            ["hello", "HELLO", "Elite", "ELITE", "Élan"]
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
+        );
+
+        assert_eq!(visible_targets(&text, 20, ['e', 'l']).len(), 4);
+        assert_eq!(visible_targets(&text, 20, ['é', 'l']).len(), 1);
+        let matches = visible_targets(&text, 20, ['E', 'l']);
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].position.line, 2);
+        let matches = visible_targets(&text, 20, ['E', 'L']);
+        assert_eq!(matches.len(), 2);
+        assert_eq!(
+            matches
+                .iter()
+                .map(|target| target.position.line)
+                .collect::<Vec<_>>(),
+            vec![1, 3]
+        );
+    }
+
+    #[test]
+    fn many_matches_use_two_character_labels() {
+        let text = TextViewSnapshot::plain(vec!["el".repeat(27)]);
+        let mut state = BufferJumpState::default();
+        state.push_pattern('e');
+        state.push_pattern('l');
+        state.assign_targets(&text, 100);
+
+        assert_eq!(state.targets().len(), 27);
+        assert_eq!(state.targets()[0].label, "zx");
+        assert!(state.targets().iter().all(|target| target.label.len() == 2));
+        let unique = state
+            .targets()
+            .iter()
+            .map(|target| target.label.as_str())
+            .collect::<std::collections::HashSet<_>>();
+        assert_eq!(unique.len(), state.targets().len());
+
+        state.push_label('z');
+        assert_eq!(state.complete_label(), None);
+        state.push_label('x');
+        assert_eq!(
+            state.complete_label(),
+            Some(Some(DocumentPosition {
+                line: 0,
+                character: 0,
+            }))
         );
     }
 
@@ -198,13 +293,13 @@ mod tests {
             line: 0,
             character: 2,
         };
-        assert_eq!(visible_cell(&text, 6, target), Some((0, 3)));
-        assert_eq!(visible_cell(&text, 4, target), None);
+        assert_eq!(visible_cell(&text, 6, target, 2), Some((0, 3)));
+        assert_eq!(visible_cell(&text, 4, target, 2), None);
 
         text.horizontal_offset = 3;
-        assert_eq!(visible_cell(&text, 3, target), Some((0, 0)));
+        assert_eq!(visible_cell(&text, 3, target, 2), Some((0, 0)));
         text.horizontal_offset = 5;
-        assert_eq!(visible_cell(&text, 20, target), None);
+        assert_eq!(visible_cell(&text, 20, target, 2), None);
     }
 
     #[test]

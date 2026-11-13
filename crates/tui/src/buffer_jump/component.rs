@@ -3,7 +3,7 @@ use ratatui::{
     Frame,
     buffer::Buffer,
     layout::{Rect, Size},
-    style::{Modifier, Style},
+    style::{Color, Modifier, Style},
     widgets::Paragraph,
 };
 
@@ -13,7 +13,7 @@ use crate::{
     ui::{EditorOverlayContribution, OverlayContribution, OverlayKind, OverlayPlacement},
 };
 
-use super::state::{LABEL_WIDTH, visible_cell};
+use super::state::visible_cell;
 
 pub(crate) fn overlay(model: &Model) -> Option<OverlayContribution> {
     model.buffer_jump.is_active().then(|| {
@@ -54,7 +54,8 @@ fn render_labels(model: &Model, snapshot: &EditorSnapshot, area: Rect, buffer: &
         return;
     }
 
-    buffer.set_style(area, Style::new().add_modifier(Modifier::DIM));
+    let dim_color = model.theme.ui().muted.fg.unwrap_or(Color::DarkGray);
+    buffer.set_style(area, Style::new().fg(dim_color).add_modifier(Modifier::DIM));
     let label_style = model
         .theme
         .ui()
@@ -63,8 +64,12 @@ fn render_labels(model: &Model, snapshot: &EditorSnapshot, area: Rect, buffer: &
         .patch(model.theme.ui().key_hint)
         .remove_modifier(Modifier::DIM);
     state.targets().iter().for_each(|target| {
-        let Some((row, column)) = visible_cell(&snapshot.text, area.width.into(), target.position)
-        else {
+        let Some((row, column)) = visible_cell(
+            &snapshot.text,
+            area.width.into(),
+            target.position,
+            target.label.len(),
+        ) else {
             return;
         };
         let Ok(column) = u16::try_from(column) else {
@@ -80,7 +85,7 @@ fn render_labels(model: &Model, snapshot: &EditorSnapshot, area: Rect, buffer: &
             area.x + column,
             area.y + row,
             &target.label,
-            LABEL_WIDTH,
+            target.label.len(),
             label_style,
         );
     });

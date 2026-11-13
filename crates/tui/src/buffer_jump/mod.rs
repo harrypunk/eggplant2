@@ -139,7 +139,11 @@ fn close(model: &mut Model) {
 #[cfg(test)]
 mod tests {
     use crossterm::event::KeyCode;
-    use ratatui::{Terminal, backend::TestBackend, style::Modifier};
+    use ratatui::{
+        Terminal,
+        backend::TestBackend,
+        style::{Color, Modifier},
+    };
 
     use super::*;
     use crate::{
@@ -179,9 +183,7 @@ mod tests {
             0
         );
 
-        for character in ['z', 'x'] {
-            manager.update(&mut model, Message::TextInput(character));
-        }
+        manager.update(&mut model, Message::TextInput('z'));
         assert!(!model.buffer_jump.is_active());
         assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
         assert_eq!(
@@ -276,14 +278,13 @@ mod tests {
 
         let content = terminal.backend().buffer().content();
         let text = content.iter().map(|cell| cell.symbol()).collect::<String>();
-        assert!(text.contains("zx"));
         assert!(text.contains("Jump: label"));
         assert!(!terminal.backend().cursor_visible());
-        assert!(
-            content
-                .iter()
-                .any(|cell| cell.symbol() == "h" && cell.modifier.contains(Modifier::DIM))
-        );
+        assert!(content.iter().any(|cell| {
+            cell.symbol() == "h"
+                && cell.modifier.contains(Modifier::DIM)
+                && cell.fg == Color::DarkGray
+        }));
         assert!(
             content
                 .iter()
