@@ -69,6 +69,13 @@ pub enum VerticalDirection {
     Down,
 }
 
+/// Zero-based logical line and Unicode-scalar offset within that line.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DocumentPosition {
+    pub line: usize,
+    pub character: usize,
+}
+
 impl From<VerticalDirection> for CursorMovement {
     fn from(direction: VerticalDirection) -> Self {
         match direction {
@@ -258,6 +265,12 @@ impl EditorSession {
             .map(|active| active.view.inner_height())
     }
 
+    pub fn active_view_width(&self) -> Option<usize> {
+        let active = self.active_view.as_ref()?;
+        let document = &self.buffers.get(&active.buffer)?.document;
+        Some(active.view.inner_width(document).into())
+    }
+
     /// Store the latest view dimensions and keep the active cursor visible.
     /// The size is retained while empty so the first newly opened buffer can use it.
     pub fn resize_active_view(&mut self, width: u16, height: u16) {
@@ -330,6 +343,20 @@ impl EditorSession {
     /// Move the active cursor without extending the selection.
     pub fn move_cursor(&mut self, movement: CursorMovement) -> Result<(), EditorError> {
         self.move_cursor_by(movement, 1)
+    }
+
+    /// Move the active cursor to a logical document position without extending the selection.
+    pub fn move_cursor_to(&mut self, position: DocumentPosition) -> Result<(), EditorError> {
+        let scrolloff = self.scrolloff;
+        let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
+        let text = document.text();
+        let line = position.line.min(text.len_lines().saturating_sub(1));
+        let line_start = text.line_to_char(line);
+        let line_end = helix_core::line_ending::line_end_char_index(&text.slice(..), line);
+        let target = line_start + position.character.min(line_end.saturating_sub(line_start));
+        document.set_selection(view.id, Selection::point(target));
+        view.ensure_cursor_in_view(document, scrolloff);
+        Ok(())
     }
 
     /// Move vertically by a feature-computed number of logical lines.
@@ -830,6 +857,38 @@ mod tests {
         session.move_cursor(CursorMovement::Left).unwrap();
         assert_eq!(active_cursor(&mut session), 0);
         assert!(!session.active_is_modified());
+    }
+
+    #[test]
+    fn absolute_cursor_movement_uses_character_offsets_and_document_boundaries() {
+        let mut session = EditorSession::new();
+        create_buffer(&mut session, "hello\na界🙂b\nlast");
+        session.resize_active_view(20, 2);
+        assert_eq!(session.active_view_width(), Some(20));
+
+        session
+            .move_cursor_to(DocumentPosition {
+                line: 1,
+                character: 3,
+            })
+            .unwrap();
+        assert_eq!(active_cursor(&mut session), 9);
+        let snapshot = session.active_snapshot().unwrap();
+        assert!(snapshot.text.first_line <= 1);
+        assert!(snapshot.cursor.is_some());
+
+        session
+            .move_cursor_to(DocumentPosition {
+                line: 100,
+                character: 100,
+            })
+            .unwrap();
+        let document_end = {
+            let (document, _) = active_parts(&mut session);
+            document.text().len_chars()
+        };
+        assert_eq!(active_cursor(&mut session), document_end);
+        assert!(session.active_snapshot().unwrap().cursor.is_some());
     }
 
     #[test]
