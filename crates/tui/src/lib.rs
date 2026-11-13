@@ -107,10 +107,7 @@ pub mod data_object {
         // Shared shell for independent search, agent, and info tools.
         pub tools: ToolsPanelState,
 
-        // Layout visibility and focus/input routing. Explorer visibility stays
-        // separate from filesystem-tree behavior so hiding it retains the tree.
-        // A future ExplorerPanelState wrapper can group these if useful.
-        pub explorer_visibility: Visibility,
+        // Focus/input routing. Panel visibility lives in each feature's state.
         pub current_focus: FocusTarget,
         pub context_stack: Vec<Context>,
         pub theme: Theme,
@@ -134,7 +131,6 @@ pub mod data_object {
                 workspace: None,
                 explorer: ExplorerState::default(),
                 tools: ToolsPanelState::default(),
-                explorer_visibility: Visibility::Displayed,
                 current_focus: FocusTarget::Editor,
                 context_stack: Vec::new(),
                 theme: Theme::default(),

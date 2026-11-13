@@ -6,6 +6,7 @@ use std::{
 };
 
 use super::fs;
+use crate::data_object::Visibility;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExplorerEntryKind {
@@ -48,13 +49,26 @@ pub struct ExplorerEntry {
     pub expansion: ExpansionState,
 }
 
-/// A flattened, visible tree under a fixed workspace root.
-#[derive(Debug, Default)]
+/// Explorer tree and panel visibility under a fixed workspace root.
+#[derive(Debug)]
 pub struct ExplorerState {
+    pub visibility: Visibility,
     pub entries: Vec<ExplorerEntry>,
     pub selected: Option<usize>,
     expanded_directories: HashSet<PathBuf>,
     ignore_mode: IgnoreMode,
+}
+
+impl Default for ExplorerState {
+    fn default() -> Self {
+        Self {
+            visibility: Visibility::Displayed,
+            entries: Vec::new(),
+            selected: None,
+            expanded_directories: HashSet::new(),
+            ignore_mode: IgnoreMode::HideIgnored,
+        }
+    }
 }
 
 impl ExplorerState {

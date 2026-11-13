@@ -25,16 +25,16 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
 
 #[allow(clippy::single_match)]
 fn toggle_file_explorer(model: &mut Model) {
-    match model.explorer_visibility {
+    match model.explorer.visibility {
         Visibility::Hidden => match model.workspace {
             None => model.status = Some(StatusMessage::info("No folder open")),
             Some(_) => {
-                model.explorer_visibility = Visibility::Displayed;
+                model.explorer.visibility = Visibility::Displayed;
                 focus_explorer(model);
             }
         },
         Visibility::Displayed => {
-            model.explorer_visibility = Visibility::Hidden;
+            model.explorer.visibility = Visibility::Hidden;
             match model.current_focus {
                 FocusTarget::FileExplorer => {
                     model
@@ -51,7 +51,7 @@ fn toggle_file_explorer(model: &mut Model) {
 // The single-view layout only needs this explicit horizontal relationship.
 // Future splits should navigate a logical layout tree, never Ratatui rectangles.
 fn move_focus(model: &mut Model, direction: FocusDirection) {
-    match (model.current_focus, direction, model.explorer_visibility) {
+    match (model.current_focus, direction, model.explorer.visibility) {
         (FocusTarget::Editor, FocusDirection::Left, Visibility::Displayed) => {
             focus_explorer(model);
         }
@@ -95,14 +95,17 @@ mod tests {
     #[test]
     fn hiding_and_showing_explorer_updates_focus() {
         let directory = tempfile::tempdir().unwrap();
+        std::fs::write(directory.path().join("a.txt"), "a").unwrap();
         let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let original_entries = model.explorer.entries.clone();
         let manager = MessageManager::default();
 
         manager.update(
             &mut model,
             Message::InvokeCommand(CommandId("toggle_file_explorer")),
         );
-        assert_eq!(model.explorer_visibility, Visibility::Hidden);
+        assert_eq!(model.explorer.visibility, Visibility::Hidden);
+        assert_eq!(model.explorer.entries, original_entries);
         assert_eq!(model.current_focus, FocusTarget::Editor);
         assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
 
@@ -110,7 +113,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("toggle_file_explorer")),
         );
-        assert_eq!(model.explorer_visibility, Visibility::Displayed);
+        assert_eq!(model.explorer.visibility, Visibility::Displayed);
         assert_eq!(model.current_focus, FocusTarget::FileExplorer);
         assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
     }

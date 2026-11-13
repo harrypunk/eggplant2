@@ -66,7 +66,7 @@ impl MessageManager {
             Message::Resize(width, height) => {
                 let area = editor_content_area(
                     Rect::new(0, 0, width, height),
-                    model.explorer_visibility,
+                    model.explorer.visibility,
                     model.tools.visibility,
                     model.editor.active_snapshot().as_ref(),
                 );
@@ -299,12 +299,12 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("toggle_file_explorer")),
         );
-        assert_eq!(model.explorer_visibility, Visibility::Hidden);
+        assert_eq!(model.explorer.visibility, Visibility::Hidden);
         manager.update(
             &mut model,
             Message::InvokeCommand(CommandId("toggle_file_explorer")),
         );
-        assert_eq!(model.explorer_visibility, Visibility::Displayed);
+        assert_eq!(model.explorer.visibility, Visibility::Displayed);
         assert_eq!(model.current_focus, FocusTarget::FileExplorer);
         assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
         let effect = manager.update(&mut model, Message::OpenSelected);

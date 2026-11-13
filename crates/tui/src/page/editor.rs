@@ -29,7 +29,7 @@ impl Editor {
     pub fn view(&self, model: &Model, frame: &mut Frame) {
         let areas = layout_areas(
             frame.area(),
-            model.explorer_visibility,
+            model.explorer.visibility,
             model.tools.visibility,
         );
         let overlays = self.ui.overlays(model);
@@ -175,7 +175,7 @@ mod tests {
             manager.update(&mut model, Message::Resize(width, height));
             let text_area = editor_content_area(
                 Rect::new(0, 0, width, height),
-                model.explorer_visibility,
+                model.explorer.visibility,
                 model.tools.visibility,
                 model.editor.active_snapshot().as_ref(),
             );
