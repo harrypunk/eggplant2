@@ -237,12 +237,12 @@ This is not a promise that new code requires zero wiring. A new feature may be r
 
 #### M7.1 — Page-scroll
 
-- [ ] Finalize page/half-page command names and bindings without adopting unrelated Vim behavior.
-- [ ] Add feature-owned page-scroll commands that preserve the desired cursor column and keep the cursor visible while clamping to document boundaries.
-- [ ] Reuse the shared Helix/Eggplant viewport policy; no render-time state mutation or independent offset calculation.
-- [ ] Test empty documents, documents shorter than a page, first/last pages, narrow terminals, resize, and wide Unicode text.
+- [x] Finalize `page_scroll_down`/`page_scroll_up` with `Ctrl-F`/`Ctrl-U` and configurable `[features.page_scroll] step` percentages.
+- [x] Add feature-owned page-scroll commands that preserve the desired cursor column and keep the cursor visible while clamping to document boundaries.
+- [x] Reuse the shared Helix/Eggplant viewport policy; no render-time state mutation or independent offset calculation.
+- [x] Test empty documents, documents shorter than a page, first/last pages, narrow terminals, resize, and wide Unicode text.
 
-**Exit criteria:** page and half-page scrolling work with the existing cursor and viewport, without changing auto-save, editing history, or focus behavior.
+**Exit criteria:** configurable percentage-based scrolling works with the existing cursor and viewport, without changing auto-save, editing history, or focus behavior.
 
 #### M7.2 — Current-buffer quick-search
 

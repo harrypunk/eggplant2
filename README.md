@@ -210,6 +210,7 @@ Common commands use a built-in Space leader with bottom-right key hints:
 Direct keys remain configurable:
 
 - `Ctrl-H/J/K/L`: move focus in Normal/Explorer contexts; only left/right currently have targets.
+- `Ctrl-F` / `Ctrl-U`: scroll down/up by the percentage configured in `[features.page_scroll]` (default `75%`).
 - `Shift-I` in Explorer: toggle Git-ignored and built-in ignored entries.
 - Picker: type to filter, arrows to select, Enter to open, Escape to close.
 

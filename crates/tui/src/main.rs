@@ -1,6 +1,7 @@
 use tui::{
     config::Config,
     manager::{command_registry::CommandRegistry, keyboard_input_registry::Registry},
+    page_scroll::PageScrollState,
     runtime,
     startup::{initial_model, startup_path_from},
     terminal,
@@ -14,6 +15,7 @@ async fn main() -> color_eyre::Result<()> {
     let mut model = initial_model(initial_path)?;
     let config = Config::load()?;
     model.theme = Theme::from_name(&config.theme)?;
+    model.page_scroll = PageScrollState::from_config(&config.features.page_scroll)?;
     let commands = CommandRegistry::builtin();
     let ui = UiRegistry::builtin();
     let keymap = Registry::from_config(&config.keymap, &commands)?;

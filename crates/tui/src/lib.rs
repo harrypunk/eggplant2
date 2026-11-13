@@ -11,6 +11,7 @@ pub mod focus;
 pub mod lifecycle;
 pub mod manager;
 pub mod page;
+pub mod page_scroll;
 pub mod runtime;
 pub mod startup;
 pub mod terminal;
@@ -35,6 +36,7 @@ pub mod data_object {
         command_menu::CommandMenuState,
         explorer::ExplorerState,
         file_picker::{FileEntry, FilePickerState, PreviewState},
+        page_scroll::PageScrollState,
         theme::Theme,
         theme_picker::ThemePickerState,
         tools::ToolsPanelState,
@@ -119,6 +121,7 @@ pub mod data_object {
         pub command_menu: CommandMenuState,
         pub file_picker: FilePickerState,
         pub theme_picker: ThemePickerState,
+        pub page_scroll: PageScrollState,
         #[cfg(test)]
         pub example_feature: crate::test_utils::ExampleFeatureState,
     }
@@ -140,6 +143,7 @@ pub mod data_object {
                 command_menu: CommandMenuState::default(),
                 file_picker: FilePickerState::default(),
                 theme_picker: ThemePickerState::default(),
+                page_scroll: PageScrollState::default(),
                 #[cfg(test)]
                 example_feature: crate::test_utils::ExampleFeatureState::default(),
             }

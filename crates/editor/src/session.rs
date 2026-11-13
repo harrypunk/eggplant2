@@ -63,6 +63,21 @@ pub enum CursorMovement {
     Down,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VerticalDirection {
+    Up,
+    Down,
+}
+
+impl From<VerticalDirection> for CursorMovement {
+    fn from(direction: VerticalDirection) -> Self {
+        match direction {
+            VerticalDirection::Up => Self::Up,
+            VerticalDirection::Down => Self::Down,
+        }
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum EditorError {
     #[error("no active buffer")]
@@ -237,6 +252,12 @@ impl EditorSession {
             .find_map(|(&id, buffer)| buffer.document.is_modified().then_some(id))
     }
 
+    pub fn active_view_height(&self) -> Option<usize> {
+        self.active_view
+            .as_ref()
+            .map(|active| active.view.inner_height())
+    }
+
     /// Store the latest view dimensions and keep the active cursor visible.
     /// The size is retained while empty so the first newly opened buffer can use it.
     pub fn resize_active_view(&mut self, width: u16, height: u16) {
@@ -308,6 +329,23 @@ impl EditorSession {
 
     /// Move the active cursor without extending the selection.
     pub fn move_cursor(&mut self, movement: CursorMovement) -> Result<(), EditorError> {
+        self.move_cursor_by(movement, 1)
+    }
+
+    /// Move vertically by a feature-computed number of logical lines.
+    pub fn move_cursor_lines(
+        &mut self,
+        direction: VerticalDirection,
+        lines: usize,
+    ) -> Result<(), EditorError> {
+        self.move_cursor_by(direction.into(), lines)
+    }
+
+    fn move_cursor_by(
+        &mut self,
+        movement: CursorMovement,
+        count: usize,
+    ) -> Result<(), EditorError> {
         let scrolloff = self.scrolloff;
         let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
         let text = document.text().slice(..);
@@ -325,7 +363,7 @@ impl EditorSession {
                 text,
                 range,
                 direction,
-                1,
+                count,
                 Movement::Move,
                 &text_format,
                 &mut annotations,
@@ -728,6 +766,34 @@ mod tests {
         assert_eq!(active_cursor(&mut session), 6);
         session.move_cursor(CursorMovement::Up).unwrap();
         assert_eq!(active_cursor(&mut session), 3);
+    }
+
+    #[test]
+    fn counted_vertical_movement_uses_the_same_boundaries_and_viewport() {
+        let text = (0..=10)
+            .map(|line| line.to_string())
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut session = EditorSession::new();
+        create_buffer(&mut session, &text);
+        session.resize_active_view(20, 4);
+        assert_eq!(session.active_view_height(), Some(4));
+
+        session
+            .move_cursor_lines(VerticalDirection::Down, 5)
+            .unwrap();
+        assert_eq!(active_cursor(&mut session), 10);
+        session.move_cursor_lines(VerticalDirection::Up, 2).unwrap();
+        assert_eq!(active_cursor(&mut session), 6);
+        session
+            .move_cursor_lines(VerticalDirection::Up, 100)
+            .unwrap();
+        assert_eq!(active_cursor(&mut session), 0);
+        session
+            .move_cursor_lines(VerticalDirection::Down, 100)
+            .unwrap();
+        assert_eq!(active_cursor(&mut session), text.len() - 2);
+        assert!(session.active_snapshot().unwrap().cursor.is_some());
     }
 
     #[test]

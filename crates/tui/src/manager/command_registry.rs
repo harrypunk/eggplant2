@@ -122,6 +122,16 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
             crate::editing::handle_command,
         ),
         Command::feature(
+            CommandId("page_scroll_down"),
+            "scroll down",
+            crate::page_scroll::handle_command,
+        ),
+        Command::feature(
+            CommandId("page_scroll_up"),
+            "scroll up",
+            crate::page_scroll::handle_command,
+        ),
+        Command::feature(
             CommandId("focus_left"),
             "focus left",
             crate::focus::handle_command,

@@ -12,7 +12,9 @@ pub use document::{DocumentFactory, OpenDocumentError};
 pub use open::{DocumentOpenCompletion, DocumentOpenRequest};
 pub use preview::preview_document;
 pub use save::{SaveCompletion, SaveError, SaveRequest};
-pub use session::{BufferId, CursorMovement, EditMode, EditorError, EditorSession};
+pub use session::{
+    BufferId, CursorMovement, EditMode, EditorError, EditorSession, VerticalDirection,
+};
 pub use snapshot::{
     BufferInfo, CursorPosition, DirtyState, EditorSnapshot, HighlightSpan, LineSnapshot,
     TextViewSnapshot,

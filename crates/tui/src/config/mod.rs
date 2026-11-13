@@ -21,6 +21,26 @@ fn keymap_context<const N: usize>(
     (name.to_string(), bindings)
 }
 
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct FeaturesConfig {
+    pub page_scroll: PageScrollConfig,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+pub struct PageScrollConfig {
+    pub step: String,
+}
+
+impl Default for PageScrollConfig {
+    fn default() -> Self {
+        Self {
+            step: "75%".to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -28,6 +48,7 @@ pub struct Config {
     pub event_poll_timeout: u64,
     /// Name of a built-in theme, resolved by the TUI theme module.
     pub theme: String,
+    pub features: FeaturesConfig,
     pub keymap: KeymapConfig,
 }
 
@@ -36,6 +57,7 @@ impl Default for Config {
         Self {
             event_poll_timeout: 250,
             theme: "default".to_string(),
+            features: FeaturesConfig::default(),
             keymap: HashMap::from([
                 keymap_context(
                     "normal",
@@ -52,6 +74,8 @@ impl Default for Config {
                         ("focus_right", "ctrl-l"),
                         ("undo", "u"),
                         ("redo", "ctrl-r"),
+                        ("page_scroll_down", "ctrl-f"),
+                        ("page_scroll_up", "ctrl-u"),
                     ],
                 ),
                 keymap_context(
@@ -131,6 +155,7 @@ mod tests {
         let config: Config = toml::from_str("").unwrap();
         assert_eq!(config.event_poll_timeout, 250);
         assert_eq!(config.theme, "default");
+        assert_eq!(config.features.page_scroll.step, "75%");
     }
 
     #[test]
@@ -151,6 +176,10 @@ mod tests {
 
         assert_eq!(config.theme, defaults.theme);
         assert_eq!(config.event_poll_timeout, defaults.event_poll_timeout);
+        assert_eq!(
+            config.features.page_scroll.step,
+            defaults.features.page_scroll.step
+        );
         assert_eq!(config.keymap, defaults.keymap);
     }
 }

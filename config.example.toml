@@ -3,6 +3,9 @@
 theme = "default"
 event_poll_timeout = 250
 
+[features.page_scroll]
+step = "75%"
+
 # Keymaps map action names to key bindings.
 # Supported modifiers: ctrl, alt, and shift (for example, "ctrl-q").
 # Supplying [keymap] replaces the whole built-in keymap table, so include every
@@ -20,6 +23,8 @@ focus_up = "ctrl-k"
 focus_right = "ctrl-l"
 undo = "u"
 redo = "ctrl-r"
+page_scroll_down = "ctrl-f"
+page_scroll_up = "ctrl-u"
 
 [keymap.editor_input]
 exit_insert_mode = "esc"

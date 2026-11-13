@@ -264,6 +264,8 @@ Do not expand M6 with theme or plugin work. Once the contribution architecture i
 
 These are real feature consumers of the M6 contracts, not reasons to defer M6 or add a separate editing architecture.
 
+Implemented M7.1: `page_scroll.rs` registers `page_scroll_down`/`page_scroll_up` with default `Ctrl-F`/`Ctrl-U` bindings. `[features.page_scroll] step = "75%"` is validated at startup, converted to rows from the active viewport height, and executed through counted Helix vertical movement. This is built-in feature configuration, not an external extension API.
+
 ## 12. Testing strategy
 
 - Keep all first-edition behavior and smoke tests as characterization coverage.
