@@ -1,3 +1,4 @@
+pub mod buffer;
 pub mod command_menu;
 pub mod component;
 pub mod config;
@@ -60,12 +61,6 @@ pub mod data_object {
     pub enum FocusState {
         Focused,
         Unfocused,
-    }
-
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    pub enum BufferMovement {
-        Next,
-        Previous,
     }
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -228,8 +223,6 @@ pub mod data_object {
         Undo,
         Redo,
         CloseActive,
-        NextBuffer,
-        PreviousBuffer,
         SaveFinished(SaveCompletion),
         FileOpened(DocumentOpenCompletion),
         FocusLost,

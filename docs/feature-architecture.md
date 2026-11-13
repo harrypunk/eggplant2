@@ -240,6 +240,8 @@ Implemented: `FeatureEffect` is a feature-owned effect object with default block
 
 Split lifecycle, buffers, editor, explorer, and open/save coordination into focused modules. `MessageManager` becomes a small coordinator. Preserve save-before-close/quit, dirty follow-ups, and explorer synchronization tests.
 
+First implemented slice: `buffer.rs` owns next/previous commands plus shared dirty-save and explorer-reveal capabilities, with buffer-specific tests colocated. Other update paths consume those helpers rather than duplicating save/reveal logic. Lifecycle, editor, explorer, and save/open completion coordination remain for subsequent slices.
+
 ### M6.5 — Generalize UI contributions
 
 After two concrete popup examples exist, replace remaining page feature conditionals with explicit panel/popup/status contributions. Keep modal precedence and cursor policy shell-owned.

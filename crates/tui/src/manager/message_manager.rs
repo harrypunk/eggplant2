@@ -1,16 +1,16 @@
 use std::{fmt::Display, path::Path};
 
 use editor::{
-    BufferId, DocumentFactory, DocumentOpenCompletion, DocumentOpenRequest, EditMode,
-    SaveCompletion,
+    DocumentFactory, DocumentOpenCompletion, DocumentOpenRequest, EditMode, SaveCompletion,
 };
 use ratatui::layout::Rect;
 
 use crate::{
+    buffer,
     command_menu::CommandMenuOutcome,
     data_object::{
-        BufferMovement, Context, DeferredAction, FocusDirection, FocusTarget, Message, Model,
-        RunningState, StatusMessage, Visibility,
+        Context, DeferredAction, FocusDirection, FocusTarget, Message, Model, RunningState,
+        StatusMessage, Visibility,
     },
     explorer::{ExpansionState, ExplorerEntryKind, IgnoreMode},
     manager::{
@@ -51,12 +51,6 @@ impl MessageManager {
             Message::InvokeCommand(id) => return self.invoke_command(model, id),
             Message::Quit => return Self::request_quit(model),
             Message::CloseActive => return Self::request_close(model),
-            Message::NextBuffer => {
-                return Self::change_buffer(model, BufferMovement::Next);
-            }
-            Message::PreviousBuffer => {
-                return Self::change_buffer(model, BufferMovement::Previous);
-            }
             Message::EnterInsertMode => {
                 if model.editor.active_buffer().is_some() {
                     model.context_stack.push(Context::EditorInput);
@@ -68,7 +62,7 @@ impl MessageManager {
                     .context_stack
                     .pop_if(|ctx| ctx == &Context::EditorInput);
                 model.editor.enter_normal_mode();
-                return Self::auto_save_active(model);
+                return buffer::auto_save_active(model);
             }
             Message::MoveCursor(movement) => {
                 let _ = model.editor.move_cursor(movement);
@@ -76,27 +70,27 @@ impl MessageManager {
             Message::MoveFocus(direction) => Self::move_focus(model, direction),
             Message::InsertChar(character) => {
                 if model.editor.insert_text(&character.to_string()).is_ok() {
-                    return Self::auto_save_active(model);
+                    return buffer::auto_save_active(model);
                 }
             }
             Message::InsertNewline => {
                 if model.editor.insert_text("\n").is_ok() {
-                    return Self::auto_save_active(model);
+                    return buffer::auto_save_active(model);
                 }
             }
             Message::Backspace => {
                 if model.editor.backspace().is_ok() {
-                    return Self::auto_save_active(model);
+                    return buffer::auto_save_active(model);
                 }
             }
             Message::Undo => {
                 if model.editor.undo().unwrap_or(false) {
-                    return Self::auto_save_active(model);
+                    return buffer::auto_save_active(model);
                 }
             }
             Message::Redo => {
                 if model.editor.redo().unwrap_or(false) {
-                    return Self::auto_save_active(model);
+                    return buffer::auto_save_active(model);
                 }
             }
             Message::SaveFinished(completion) => {
@@ -164,7 +158,7 @@ impl MessageManager {
             Message::FilePreviewFinished { revision, preview } => {
                 model.file_picker.complete_preview(revision, preview);
             }
-            Message::FocusLost => return Self::save_active(model),
+            Message::FocusLost => return buffer::save_active(model),
             Message::Resize(width, height) => {
                 let area = editor_content_area(
                     Rect::new(0, 0, width, height),
@@ -211,7 +205,7 @@ impl MessageManager {
             .editor
             .first_dirty_buffer()
             .filter(|&id| !model.editor.is_saving(id))
-            .and_then(|id| Self::start_save(model, id))
+            .and_then(|id| buffer::start_save(model, id))
     }
 
     fn request_close(model: &mut Model) -> Option<Effect> {
@@ -227,7 +221,7 @@ impl MessageManager {
             if model.editor.is_saving(id) {
                 return None;
             }
-            return Self::start_save(model, id);
+            return buffer::start_save(model, id);
         }
 
         model.deferred_action = None;
@@ -236,48 +230,6 @@ impl MessageManager {
             Err(error) => model.status = Some(StatusMessage::error(error.to_string())),
         }
         None
-    }
-
-    fn change_buffer(model: &mut Model, movement: BufferMovement) -> Option<Effect> {
-        let effect = Self::auto_save_active(model);
-        match movement {
-            BufferMovement::Next => {
-                let _ = model.editor.activate_next_buffer();
-            }
-            BufferMovement::Previous => {
-                let _ = model.editor.activate_previous_buffer();
-            }
-        }
-        if let Some(id) = model.editor.active_buffer() {
-            Self::reveal_buffer(model, id);
-        }
-        effect
-    }
-
-    fn auto_save_active(model: &mut Model) -> Option<Effect> {
-        if model.editor.mode() == EditMode::Insert {
-            return None;
-        }
-        Self::save_active(model)
-    }
-
-    fn save_active(model: &mut Model) -> Option<Effect> {
-        let id = model.editor.active_buffer()?;
-        if model.editor.is_modified(id) != Some(true) || model.editor.is_saving(id) {
-            return None;
-        }
-        Self::start_save(model, id)
-    }
-
-    fn start_save(model: &mut Model, id: BufferId) -> Option<Effect> {
-        match model.editor.save_buffer(id) {
-            Ok(request) => Some(Effect::Save(request)),
-            Err(error) => {
-                model.deferred_action = None;
-                model.status = Some(StatusMessage::error(error.to_string()));
-                None
-            }
-        }
     }
 
     fn finish_save(model: &mut Model, completion: SaveCompletion) -> Option<Effect> {
@@ -300,14 +252,14 @@ impl MessageManager {
                     .editor
                     .first_dirty_buffer()
                     .filter(|&id| !model.editor.is_saving(id))
-                    .and_then(|id| Self::start_save(model, id))
+                    .and_then(|id| buffer::start_save(model, id))
             }
             Some(DeferredAction::CloseBuffer(id)) => {
                 if model.editor.is_saving(id) {
                     return None;
                 }
                 match model.editor.is_modified(id) {
-                    Some(true) => Self::start_save(model, id),
+                    Some(true) => buffer::start_save(model, id),
                     Some(false) => {
                         model.deferred_action = None;
                         match model.editor.close_buffer(id) {
@@ -328,7 +280,7 @@ impl MessageManager {
                 && model.editor.is_modified(buffer_id) == Some(true)
                 && !model.editor.is_saving(buffer_id) =>
             {
-                Self::start_save(model, buffer_id)
+                buffer::start_save(model, buffer_id)
             }
             None => None,
         }
@@ -411,26 +363,13 @@ impl MessageManager {
             }
         };
         model.status = None;
-        Self::reveal_buffer(model, id);
+        buffer::reveal_buffer(model, id);
 
         match model.file_picker.visibility {
             Visibility::Displayed => Self::close_file_picker(model),
             Visibility::Hidden => {}
         }
         Self::focus_editor(model);
-    }
-
-    fn reveal_buffer(model: &mut Model, id: BufferId) {
-        let Some(path) = model.editor.buffer_path(id).map(Path::to_path_buf) else {
-            return;
-        };
-        let Some(workspace) = &model.workspace else {
-            return;
-        };
-        let root = workspace.root().to_path_buf();
-        if let Err(error) = model.explorer.reveal(&root, &path) {
-            Self::report_error(model, "failed to update file explorer", &path, error);
-        }
     }
 
     fn change_expansion(model: &mut Model, target: ExpansionState) {
@@ -560,7 +499,6 @@ impl MessageManager {
 
 #[cfg(test)]
 mod tests {
-    use crossterm::event::KeyCode;
     use editor::{CursorMovement, EditMode, SaveRequest};
 
     use super::*;
@@ -687,7 +625,10 @@ mod tests {
 
         assert!(
             manager
-                .update(&mut model, Message::PreviousBuffer)
+                .update(
+                    &mut model,
+                    Message::InvokeCommand(crate::data_object::CommandId("previous_buffer"))
+                )
                 .is_none()
         );
         assert_eq!(model.editor.active_buffer(), Some(first));
@@ -862,31 +803,6 @@ mod tests {
 
         assert_eq!(model.editor.mode(), EditMode::Insert);
         assert_eq!(std::fs::read_to_string(path).unwrap(), "!hello");
-    }
-
-    #[tokio::test]
-    async fn switching_buffers_saves_the_outgoing_dirty_buffer() {
-        let directory = tempfile::tempdir().unwrap();
-        let first_path = directory.path().join("first.txt");
-        let second_path = directory.path().join("second.txt");
-        std::fs::write(&first_path, "first").unwrap();
-        std::fs::write(&second_path, "second").unwrap();
-        let mut model = Model::default();
-        let first = open_file(&mut model, &first_path);
-        model.editor.enter_insert_mode();
-        model.editor.insert_text("!").unwrap();
-        model.editor.enter_normal_mode();
-        let second = open_file(&mut model, &second_path);
-        model.editor.activate_buffer(first).unwrap();
-        let manager = MessageManager::default();
-
-        let request = expect_save(manager.update(&mut model, Message::NextBuffer));
-        assert_eq!(model.editor.active_buffer(), Some(second));
-        let completion = request.perform().await;
-        manager.update(&mut model, Message::SaveFinished(completion));
-
-        assert_eq!(std::fs::read_to_string(first_path).unwrap(), "!first");
-        assert!(!model.editor.is_modified(first).unwrap());
     }
 
     #[test]
@@ -1211,69 +1127,6 @@ mod tests {
             without_workspace.context_stack.last(),
             Some(&Context::AppNormal)
         );
-    }
-
-    #[test]
-    fn buffer_switch_commands_reveal_the_active_file_in_the_explorer() {
-        let directory = tempfile::tempdir().unwrap();
-        let nested = directory.path().join("nested");
-        std::fs::create_dir(&nested).unwrap();
-        let first_path = directory.path().join("first.txt");
-        let second_path = nested.join("second.txt");
-        std::fs::write(&first_path, "first").unwrap();
-        std::fs::write(&second_path, "second").unwrap();
-        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
-        let first = open_file(&mut model, &first_path);
-        let second = open_file(&mut model, &second_path);
-        let manager = MessageManager::default();
-
-        for key in [' ', 'b', 'n'] {
-            manager.update(&mut model, Message::CommandMenuKey(KeyCode::Char(key)));
-        }
-        assert_eq!(model.editor.active_buffer(), Some(first));
-        assert_eq!(
-            model
-                .explorer
-                .selected_entry()
-                .map(|entry| entry.path.as_path()),
-            Some(std::fs::canonicalize(&first_path).unwrap().as_path())
-        );
-
-        for key in [' ', 'b', 'p'] {
-            manager.update(&mut model, Message::CommandMenuKey(KeyCode::Char(key)));
-        }
-        assert_eq!(model.editor.active_buffer(), Some(second));
-        assert_eq!(
-            model
-                .explorer
-                .selected_entry()
-                .map(|entry| entry.path.as_path()),
-            Some(std::fs::canonicalize(&second_path).unwrap().as_path())
-        );
-    }
-
-    #[test]
-    fn leader_buffer_sequence_switches_buffer() {
-        let manager = MessageManager::default();
-        let mut model = Model::default();
-        let first = create_buffer(&mut model, "first");
-        create_buffer(&mut model, "second");
-
-        manager.update(
-            &mut model,
-            Message::CommandMenuKey(crossterm::event::KeyCode::Char(' ')),
-        );
-        manager.update(
-            &mut model,
-            Message::CommandMenuKey(crossterm::event::KeyCode::Char('b')),
-        );
-        manager.update(
-            &mut model,
-            Message::CommandMenuKey(crossterm::event::KeyCode::Char('n')),
-        );
-
-        assert_eq!(model.editor.active_buffer(), Some(first));
-        assert!(!model.command_menu.is_active());
     }
 
     #[test]

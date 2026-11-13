@@ -155,11 +155,15 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
             "close buffer",
             Message::CloseActive,
         ),
-        Command::new(CommandId("next_buffer"), "next buffer", Message::NextBuffer),
-        Command::new(
+        Command::feature(
+            CommandId("next_buffer"),
+            "next buffer",
+            crate::buffer::handle_command,
+        ),
+        Command::feature(
             CommandId("previous_buffer"),
             "previous buffer",
-            Message::PreviousBuffer,
+            crate::buffer::handle_command,
         ),
         Command::new(
             CommandId("explorer_next"),
