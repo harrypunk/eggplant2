@@ -196,6 +196,12 @@ Normal `gg` moves to the first line and `G` to the last line. A count beginning 
 
 `line_jump` owns the count/prefix state machine through registered text input and `line_jump_cancel`. The status bar renders its derived `Model.pending_input` separately from persistent status messages, so pending counts/`g` do not replace save or error feedback. Completion, Escape, and invalid input clear the pending state without unexpected movement.
 
+### Viewport alignment (M8.2)
+
+Normal `zz`, `zt`, and `zb` center, top-align, and bottom-align the cursor line. The `view_align_start` command opens a pending `ViewAlign` context and publishes `z` through `Model.pending_input`; registered text input accepts only the three second keys. Escape and invalid input clear pending state without moving the viewport.
+
+`EditorSession::align_cursor_line` maps the feature-neutral `ViewAlignment` enum to `helix_view::align_view`. Helix performs visual-row and document-boundary calculations. Cursor, selection, text, revision, dirty state, and save state remain unchanged, including for empty viewports.
+
 ### Delete/change commands planned for M8.6
 
 | Input | Context | Planned behavior |

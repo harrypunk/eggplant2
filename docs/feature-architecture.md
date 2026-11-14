@@ -293,6 +293,8 @@ Vertical slices, detailed in `PLAN.md`:
 
 Implemented M8.1: `line_jump` owns the count/`g` state machine and registers text input plus Escape cancellation. `EditorSession::move_cursor_to_line` provides clamped first-nonblank navigation. `Model.pending_input` gives the status bar a feature-neutral transient display that preserves persistent messages and can be reused by later M8 prefixes.
 
+Implemented M8.2: `view_align` registers `view_align_start`/`view_align_cancel` and second-key input for `zz`/`zt`/`zb`. `EditorSession::align_cursor_line` delegates to Helix's visual alignment primitive. The feature reuses `Model.pending_input` and changes no cursor/document/save state.
+
 Eggplant intentionally supports one cursor/selection only. Only `gg`/`G` accept counts; existing `w`/`b`/`e` and all other motions are uncounted. Visual selection is the intended workflow for larger ranges instead of adding a broader text-object motion catalog. Beyond the M8.5–M8.7 slices, M8 does not introduce general Visual operators, macros, named/register-selection workflows, multi-cursor behavior, or full Vim/Helix compatibility.
 
 ## 12. Testing strategy

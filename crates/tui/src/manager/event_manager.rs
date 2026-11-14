@@ -240,6 +240,30 @@ mod tests {
     }
 
     #[test]
+    fn routes_view_alignment_prefix_second_key_and_escape() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::InvokeCommand(CommandId("view_align_start")))
+        ));
+
+        model.context_stack.push(Context::ViewAlign);
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::TextInput('z'))
+        ));
+        let event = Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::InvokeCommand(CommandId("view_align_cancel")))
+        ));
+    }
+
+    #[test]
     fn routes_line_jump_text_and_escape() {
         let manager = event_manager();
         let mut model = Model::default();

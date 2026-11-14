@@ -291,10 +291,12 @@ Implement and review M7.1, M7.2, M7.3, M7.4, M7.5, and M7.6 independently. If te
 
 #### M8.2 — `zz`/`zt`/`zb` viewport alignment
 
-- [ ] `zz` centers the cursor line, `zt` aligns it to the top, and `zb` aligns it to the bottom of the visible editor viewport.
-- [ ] Reuse the shared Helix visual-viewport policy; change only the viewport while preserving the cursor, selection, text, revision, and dirty/save state.
-- [ ] Reuse M8.1's transient pending-input display for `z`, with the same completion/Escape/invalid-key cleanup.
-- [ ] Clamp alignment at document start/end and test short documents, first/last lines, narrow/empty viewports, Unicode/visual rows, and resize.
+**Status: complete (2026-11-14).**
+
+- [x] `zz` centers the cursor line, `zt` aligns it to the top, and `zb` aligns it to the bottom of the visible editor viewport.
+- [x] Reuse the shared Helix visual-viewport policy; change only the viewport while preserving the cursor, selection, text, revision, and dirty/save state.
+- [x] Reuse M8.1's transient pending-input display for `z`, with the same completion/Escape/invalid-key cleanup.
+- [x] Clamp alignment at document start/end and test short documents, first/last lines, narrow/empty viewports, Unicode/visual rows, and resize.
 
 #### M8.3 — Common insert variants
 

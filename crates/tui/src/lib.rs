@@ -26,6 +26,7 @@ pub mod theme;
 pub mod theme_picker;
 pub mod tools;
 pub mod ui;
+pub mod view_align;
 
 #[cfg(test)]
 mod test_utils;
@@ -291,5 +292,6 @@ pub mod data_object {
         BufferGrep,
         ProjectGrep,
         LineJump,
+        ViewAlign,
     }
 }

@@ -23,6 +23,8 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | Normal | First line / line N | `gg` / `[count]gg` |
 | Normal | Last line / line N | `G` / `[count]G` |
 | Pending line jump | Cancel | `Esc` |
+| Normal | Center / top / bottom cursor line | `zz` / `zt` / `zb` |
+| Pending viewport alignment | Cancel | `Esc` |
 | Normal | Undo / redo | `u` / `Ctrl-R` |
 | Insert | Return to Normal | `Esc` |
 | Insert | Backspace / newline | `Backspace` / `Enter` |

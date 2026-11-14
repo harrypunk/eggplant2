@@ -28,6 +28,7 @@ undo = "u"
 redo = "ctrl-r"
 page_scroll_down = "ctrl-f"
 page_scroll_up = "ctrl-u"
+view_align_start = "z"
 
 [keymap.editor_input]
 exit_insert_mode = "esc"
@@ -84,3 +85,6 @@ project_grep_accept = "enter"
 
 [keymap.line_jump]
 line_jump_cancel = "esc"
+
+[keymap.view_align]
+view_align_cancel = "esc"

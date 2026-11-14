@@ -207,6 +207,7 @@ Input is context-aware: overlays handle input first, followed by the focused fea
 | Focus left / right | `Ctrl-H` / `Ctrl-L` |
 | First line / line N | `gg` / `[count]gg` |
 | Last line / line N | `G` / `[count]G` |
+| Center / top / bottom cursor line | `zz` / `zt` / `zb` |
 
 See [Key input, sequences, and hints](docs/key-input.md) for the complete editing, explorer, and popup keymap table. Page-scroll uses `[features.page_scroll] step` (default `75%`).
 

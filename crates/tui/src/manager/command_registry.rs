@@ -88,6 +88,8 @@ impl CommandRegistry {
             .expect("project-grep commands must be unique");
         crate::line_jump::register_commands(&mut registry)
             .expect("line-jump commands must be unique");
+        crate::view_align::register_commands(&mut registry)
+            .expect("view-alignment commands must be unique");
         registry
     }
 }

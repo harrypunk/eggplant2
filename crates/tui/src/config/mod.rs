@@ -78,6 +78,7 @@ impl Default for Config {
                         ("redo", "ctrl-r"),
                         ("page_scroll_down", "ctrl-f"),
                         ("page_scroll_up", "ctrl-u"),
+                        ("view_align_start", "z"),
                     ],
                 ),
                 keymap_context(
@@ -155,6 +156,7 @@ impl Default for Config {
                     ],
                 ),
                 keymap_context("line_jump", [("line_jump_cancel", "esc")]),
+                keymap_context("view_align", [("view_align_cancel", "esc")]),
             ]),
         }
     }
