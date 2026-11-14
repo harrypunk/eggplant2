@@ -19,6 +19,7 @@ pub mod manager;
 pub mod page;
 pub mod page_scroll;
 pub mod project_grep;
+pub mod register;
 pub mod runtime;
 pub mod search;
 pub mod startup;
@@ -28,6 +29,7 @@ pub mod theme_picker;
 pub mod tools;
 pub mod ui;
 pub mod view_align;
+pub mod yank;
 
 #[cfg(test)]
 mod test_utils;
@@ -55,9 +57,11 @@ pub mod data_object {
         line_jump::LineJumpState,
         page_scroll::PageScrollState,
         project_grep::ProjectGrepState,
+        register::RegisterState,
         theme::Theme,
         theme_picker::ThemePickerState,
         tools::ToolsPanelState,
+        yank::YankState,
     };
 
     /// Stable semantic command identity shared by keymaps and feature handlers.
@@ -149,6 +153,8 @@ pub mod data_object {
         pub page_scroll: PageScrollState,
         pub line_jump: LineJumpState,
         pub change: ChangeState,
+        pub register: RegisterState,
+        pub yank: YankState,
         pub buffer_jump: BufferJumpState,
         pub buffer_grep: BufferGrepState,
         pub project_grep: ProjectGrepState,
@@ -177,6 +183,8 @@ pub mod data_object {
                 page_scroll: PageScrollState::default(),
                 line_jump: LineJumpState::default(),
                 change: ChangeState::default(),
+                register: RegisterState::default(),
+                yank: YankState::default(),
                 buffer_jump: BufferJumpState::default(),
                 buffer_grep: BufferGrepState::default(),
                 project_grep: ProjectGrepState::default(),
@@ -291,6 +299,7 @@ pub mod data_object {
         EditorInput,
         EditorVisual,
         EditorChange,
+        EditorYank,
         Explorer,
         FilePicker,
         ThemePicker,

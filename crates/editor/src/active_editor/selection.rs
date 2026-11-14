@@ -1,4 +1,5 @@
 use helix_core::{Selection, graphemes};
+use helix_stdx::rope::RopeSliceExt;
 
 use super::{ActiveEditor, SelectionBehavior};
 
@@ -30,5 +31,41 @@ impl ActiveEditor<'_> {
             .text()
             .slice(range.from()..range.to())
             .to_string()
+    }
+
+    /// Read the current line, including an existing line ending.
+    pub fn current_line_text(&self) -> String {
+        let text = self.document.text().slice(..);
+        let cursor = self.document.selection(self.view.id).primary().cursor(text);
+        let line = text.char_to_line(cursor);
+        let start = text.line_to_char(line);
+        let end = if line + 1 < text.len_lines() {
+            text.line_to_char(line + 1)
+        } else {
+            helix_core::line_ending::line_end_char_index(&text, line)
+        };
+        text.slice(start..end).to_string()
+    }
+
+    /// Read the grapheme under the primary cursor.
+    pub fn cursor_grapheme_text(&self) -> String {
+        let text = self.document.text().slice(..);
+        let cursor = self.document.selection(self.view.id).primary().cursor(text);
+        let end = graphemes::next_grapheme_boundary(text, cursor);
+        text.slice(cursor..end).to_string()
+    }
+
+    /// Read the content that `cc` removes, excluding indentation it preserves.
+    pub fn current_line_change_text(&self) -> String {
+        let text = self.document.text().slice(..);
+        let cursor = self.document.selection(self.view.id).primary().cursor(text);
+        let line = text.char_to_line(cursor);
+        let line_start = text.line_to_char(line);
+        let line_end = helix_core::line_ending::line_end_char_index(&text, line);
+        let content_start = text
+            .line(line)
+            .first_non_whitespace_char()
+            .map_or(line_start, |character| line_start + character);
+        text.slice(content_start..line_end).to_string()
     }
 }

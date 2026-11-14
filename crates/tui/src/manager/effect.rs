@@ -42,11 +42,20 @@ pub enum Effect {
     Save(SaveRequest),
     OpenDocument(DocumentOpenRequest),
     Feature(Box<dyn FeatureEffect>),
+    Batch(Vec<Effect>),
 }
 
 impl Effect {
     pub fn feature(request: impl FeatureEffect) -> Self {
         Self::Feature(Box::new(request))
+    }
+
+    pub fn combine(first: Option<Self>, second: Option<Self>) -> Option<Self> {
+        match (first, second) {
+            (None, None) => None,
+            (Some(effect), None) | (None, Some(effect)) => Some(effect),
+            (Some(first), Some(second)) => Some(Self::Batch(vec![first, second])),
+        }
     }
 }
 

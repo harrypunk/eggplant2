@@ -123,13 +123,23 @@ fn reset(model: &mut Model) {
 }
 
 fn delete_grapheme(model: &mut Model) -> Option<Effect> {
+    let text = match model.editor.active_editor() {
+        Ok(editor) => editor.cursor_grapheme_text(),
+        Err(_) => return None,
+    };
+    let register = model.register.record(text);
     if let Ok(mut editor) = model.editor.active_editor() {
         let _ = editor.delete_grapheme_forward();
     }
-    buffer::auto_save_active(model)
+    Effect::combine(register, buffer::auto_save_active(model))
 }
 
 fn delete_selection(model: &mut Model, insert: bool) -> Option<Effect> {
+    let text = match model.editor.active_editor() {
+        Ok(editor) => editor.selected_text(),
+        Err(_) => return None,
+    };
+    let register = model.register.record(text);
     if let Ok(mut editor) = model.editor.active_editor() {
         if insert {
             let _ = editor.change_selection();
@@ -142,28 +152,44 @@ fn delete_selection(model: &mut Model, insert: bool) -> Option<Effect> {
         .pop_if(|context| context == &Context::EditorVisual);
     if insert {
         editing::enter_insert(model);
-        None
+        register
     } else {
         model.editor.enter_normal_mode();
-        buffer::auto_save_active(model)
+        Effect::combine(register, buffer::auto_save_active(model))
     }
 }
 
 fn delete_line(model: &mut Model) -> Option<Effect> {
+    let text = match model.editor.active_editor() {
+        Ok(editor) => editor.current_line_text(),
+        Err(_) => {
+            reset(model);
+            return None;
+        }
+    };
     reset(model);
+    let register = model.register.record(text);
     if let Ok(mut editor) = model.editor.active_editor() {
         let _ = editor.delete_current_line();
     }
-    buffer::auto_save_active(model)
+    Effect::combine(register, buffer::auto_save_active(model))
 }
 
 fn change_line(model: &mut Model) -> Option<Effect> {
+    let text = match model.editor.active_editor() {
+        Ok(editor) => editor.current_line_change_text(),
+        Err(_) => {
+            reset(model);
+            return None;
+        }
+    };
     reset(model);
+    let register = model.register.record(text);
     if let Ok(mut editor) = model.editor.active_editor() {
         let _ = editor.change_current_line();
     }
     editing::enter_insert(model);
-    None
+    register
 }
 
 #[cfg(test)]
@@ -192,6 +218,7 @@ mod tests {
             "second"
         );
         assert_eq!(model.pending_input, None);
+        assert_eq!(model.register.unnamed(), "first\n");
 
         manager.update(
             &mut model,
@@ -211,6 +238,7 @@ mod tests {
         );
         manager.update(&mut model, Message::TextInput('c'));
         assert_eq!(model.editor.mode(), editor::EditMode::Insert);
+        assert_eq!(model.register.unnamed(), "second");
         assert_eq!(
             model.editor.active_snapshot().unwrap().text.lines[0].text,
             ""
@@ -241,6 +269,7 @@ mod tests {
             "llo"
         );
         assert_eq!(model.editor.mode(), editor::EditMode::Normal);
+        assert_eq!(model.register.unnamed(), "he");
         assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
     }
 
@@ -262,6 +291,7 @@ mod tests {
         );
         manager.update(&mut model, Message::TextInput('X'));
         assert_eq!(model.editor.mode(), editor::EditMode::Insert);
+        assert_eq!(model.register.unnamed(), "he");
         assert_eq!(
             model.editor.active_snapshot().unwrap().text.lines[0].text,
             "Xllo"

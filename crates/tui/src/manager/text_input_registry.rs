@@ -36,6 +36,7 @@ impl TextInputRegistry {
             .expect("view-alignment text input must be unique");
         crate::change::register_text_input(&mut registry)
             .expect("change text input must be unique");
+        crate::yank::register_text_input(&mut registry).expect("yank text input must be unique");
         registry
     }
 

@@ -257,6 +257,31 @@ mod tests {
     }
 
     #[test]
+    fn routes_yank_commands_and_pending_cancellation() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::InvokeCommand(CommandId("yank_line_pending")))
+        ));
+
+        model.context_stack.push(Context::EditorYank);
+        let event = Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::InvokeCommand(CommandId("yank_cancel")))
+        ));
+        model.context_stack.push(Context::EditorVisual);
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::InvokeCommand(CommandId("yank_selection")))
+        ));
+    }
+
+    #[test]
     fn routes_delete_change_commands_and_pending_cancellation() {
         let manager = event_manager();
         let mut model = Model::default();

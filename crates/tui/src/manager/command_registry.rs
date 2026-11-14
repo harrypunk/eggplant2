@@ -91,6 +91,7 @@ impl CommandRegistry {
         crate::view_align::register_commands(&mut registry)
             .expect("view-alignment commands must be unique");
         crate::change::register_commands(&mut registry).expect("change commands must be unique");
+        crate::yank::register_commands(&mut registry).expect("yank commands must be unique");
         registry
     }
 }

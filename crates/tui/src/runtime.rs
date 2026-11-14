@@ -68,9 +68,12 @@ fn apply_message(
     message: Message,
     sender: &tokio::sync::mpsc::UnboundedSender<Message>,
 ) {
-    let Some(effect) = manager.update(model, message) else {
-        return;
-    };
+    if let Some(effect) = manager.update(model, message) {
+        apply_effect(effect, sender);
+    }
+}
+
+fn apply_effect(effect: Effect, sender: &tokio::sync::mpsc::UnboundedSender<Message>) {
     match effect {
         Effect::Save(request) => {
             let sender = sender.clone();
@@ -85,6 +88,11 @@ fn apply_message(
             tokio::task::spawn_blocking(move || {
                 let _ = sender.send(Message::FileOpened(request.perform()));
             });
+        }
+        Effect::Batch(effects) => {
+            effects
+                .into_iter()
+                .for_each(|effect| apply_effect(effect, sender));
         }
     }
 }

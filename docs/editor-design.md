@@ -238,11 +238,11 @@ Normal `v` enters Visual mode with a characterwise selection at the current grap
 
 Normal `d`/`c` wait only for the matching second key and use the shared transient pending-input display. M8 does not add general operator-motion combinations. Every accepted command is one transaction through the existing undo/redo, dirty-revision, viewport, and auto-save paths. Normal deletes commit history immediately; Visual `c` and `cc` commit when their Insert session ends, preserving one-step undo. Clipboard/register synchronization is centralized separately in M8.7, and all commands operate on the single cursor/selection.
 
-### Yank and clipboard synchronization planned for M8.7
+### Yank and clipboard synchronization (M8.7)
 
 Visual `y` yanks the characterwise selection and returns to Normal; Normal `yy` yanks the current line, with pending `y` shown through the shared transient status input. One automatic unnamed register stores yanks and accepted M8.6 deletes/changes, so users never select a register or run a clipboard command.
 
-A shared background-capability adapter mirrors the unnamed register to the system clipboard, reusing Helix clipboard support where practical. System clipboard failure leaves the internal register intact and reports a concise non-blocking status. Yanks never change text, revision, or dirty state and do not trigger auto-save. Paste commands, named registers, and register UIs remain separate work.
+`RegisterState` owns the unnamed register and a cloned Helix `ClipboardProvider`. Clipboard writes run in a blocking feature effect, because Helix's providers may wait on external processes. An unavailable provider leaves the internal register intact and reports a concise non-blocking status. `Effect::combine` lets delete commands run register/clipboard work alongside auto-save; change commands retain save-on-Insert-exit. Yanks never change text, revision, or dirty state and do not trigger auto-save. Paste commands, named registers, and register UIs remain separate work.
 
 ### Update and rendering responsibilities
 

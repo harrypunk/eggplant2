@@ -305,6 +305,8 @@ Implemented M8.5: `v`/Escape switch Normal and characterwise Visual through the 
 
 Implemented M8.6: `change` owns Visual `x`/`d`/`c`, Normal `x`, pending `dd`/`cc`, and status cleanup. `ActiveEditor` supplies single-selection delete/change transactions. Normal deletes commit history immediately; change commands commit on Insert exit. Auto-save and undo paths are shared, with no general operator grammar.
 
+Implemented M8.7: `yank` owns Visual `y`, Normal pending `yy`, and Escape cleanup. `RegisterState` stores the automatic unnamed register shared with M8.6 and mirrors it through a cloned Helix `ClipboardProvider` in a blocking effect. Clipboard failure is non-blocking, yanks do not edit/save, and generic `Effect::Batch` supports register-plus-save work.
+
 Eggplant intentionally supports one cursor/selection only. Only `gg`/`G` accept counts; existing `w`/`b`/`e` and all other motions are uncounted. Visual selection is the intended workflow for larger ranges instead of adding a broader text-object motion catalog. Beyond the M8.5–M8.7 slices, M8 does not introduce general Visual operators, macros, named/register-selection workflows, multi-cursor behavior, or full Vim/Helix compatibility.
 
 ## 12. Testing strategy

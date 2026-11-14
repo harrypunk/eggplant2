@@ -1,7 +1,7 @@
 # Eggplant first-edition plan
 
 Last updated: 2026-11-14
-Current baseline: Milestone 7 complete; Milestone 8 in progress
+Current baseline: Milestone 8 complete
 
 ## Purpose
 
@@ -275,7 +275,7 @@ Implement and review M7.1, M7.2, M7.3, M7.4, M7.5, and M7.6 independently. If te
 
 ### Milestone 8: Common editing workflows
 
-**Status: in progress.**
+**Status: complete (2026-11-14).**
 
 **Goal:** add frequent navigation and insert workflows through the existing editor/session, command, input-context, and status/UI boundaries. Keep the implementation Vim-inspired, not a general Vim compatibility project.
 
@@ -338,11 +338,13 @@ Implement and review M7.1, M7.2, M7.3, M7.4, M7.5, and M7.6 independently. If te
 
 #### M8.7 — Yank and automatic system clipboard synchronization
 
-- [ ] Add Visual `y` to yank the characterwise selection and return to Normal mode, and Normal `yy` to yank the current line including its line-ending semantics. Pending Normal `y` uses the shared transient status display and cancellation rules.
-- [ ] Maintain one automatic unnamed register for Visual/Normal yanks and accepted M8.6 deletes/changes. Users never select a register or manage a low-level clipboard command.
-- [ ] Mirror the unnamed register to the system clipboard through a shared background-capability adapter, reusing Helix clipboard support where practical. Clipboard failure leaves the internal register successful and reports a concise non-blocking status; it must not change text or interrupt the workflow.
-- [ ] Yanks never modify text, dirty state, or revision and therefore do not trigger auto-save. Test visual/line yanks, delete/change register updates, pending-key cancellation, Unicode, empty selections, and clipboard-unavailable fallback.
-- [ ] Keep paste commands, named/register selection, macros, and register UIs as separate work.
+**Status: complete (2026-11-14).**
+
+- [x] Add Visual `y` to yank the characterwise selection and return to Normal mode, and Normal `yy` to yank the current line including its line-ending semantics. Pending Normal `y` uses the shared transient status display and cancellation rules.
+- [x] Maintain one automatic unnamed register for Visual/Normal yanks and accepted M8.6 deletes/changes. Users never select a register or manage a low-level clipboard command.
+- [x] Mirror the unnamed register to the system clipboard through a shared background-capability adapter, reusing Helix clipboard support where practical. Clipboard failure leaves the internal register successful and reports a concise non-blocking status; it must not change text or interrupt the workflow.
+- [x] Yanks never modify text, dirty state, or revision and therefore do not trigger auto-save. Test visual/line yanks, delete/change register updates, pending-key cancellation, Unicode, empty selections, and clipboard-unavailable fallback.
+- [x] Keep paste commands, named/register selection, macros, and register UIs as separate work.
 
 ### Milestone 8 review rule
 

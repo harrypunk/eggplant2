@@ -37,8 +37,9 @@ cargo run -p tui -- "$workdir"
 15. **Line boundaries:** verify `0` and `$` on blank, Unicode, and populated lines. Confirm that `0` after starting a count continues the count instead of moving the cursor, and that these motions never change text.
 16. **Visual selection:** press `v` and extend the selection with character, word, line-boundary, and counted line-jump motions in both directions. Confirm visible selection styling and `VISUAL` status, then press Escape to return to Normal without changing text.
 17. **Delete/change:** verify Normal `x`, `dd`, and `cc`, plus Visual `x`/`d`/`c`. Confirm pending `d`/`c` status and Escape/invalid-key cleanup, immediate auto-save for deletes, save on Insert exit for changes, and one-step undo for each workflow.
-18. **Save safety:** make a buffer dirty and quit with `Space q q`; confirm that the application waits for the write and exits with the edited content persisted.
-19. **Terminal restoration after normal exit:** confirm that the shell prompt returns to the original screen, raw-mode input is disabled, and the cursor/keyboard behave normally.
+18. **Yank/clipboard:** verify Visual `y` and Normal `yy`, including pending `y` status and Escape. Confirm that yanks do not change text, deletes/changes update the same register, and an available system clipboard contains the yanked text; clipboard-unavailable environments must preserve the internal register and show non-blocking feedback.
+19. **Save safety:** make a buffer dirty and quit with `Space q q`; confirm that the application waits for the write and exits with the edited content persisted.
+20. **Terminal restoration after normal exit:** confirm that the shell prompt returns to the original screen, raw-mode input is disabled, and the cursor/keyboard behave normally.
 
 ## Failure and panic review
 

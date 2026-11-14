@@ -90,6 +90,7 @@ impl Default for Config {
                         ("delete_grapheme", "x"),
                         ("delete_line_pending", "d"),
                         ("change_line_pending", "c"),
+                        ("yank_line_pending", "y"),
                     ],
                 ),
                 keymap_context(
@@ -120,6 +121,7 @@ impl Default for Config {
                         ("delete_selection_x", "x"),
                         ("delete_selection_d", "d"),
                         ("change_selection", "c"),
+                        ("yank_selection", "y"),
                     ],
                 ),
                 keymap_context(
@@ -187,6 +189,7 @@ impl Default for Config {
                 keymap_context("line_jump", [("line_jump_cancel", "esc")]),
                 keymap_context("view_align", [("view_align_cancel", "esc")]),
                 keymap_context("change", [("change_cancel", "esc")]),
+                keymap_context("yank", [("yank_cancel", "esc")]),
             ]),
         }
     }

@@ -40,6 +40,7 @@ view_align_start = "z"
 delete_grapheme = "x"
 delete_line_pending = "d"
 change_line_pending = "c"
+yank_line_pending = "y"
 
 [keymap.editor_input]
 exit_insert_mode = "esc"
@@ -64,9 +65,13 @@ move_line_end = "$"
 delete_selection_x = "x"
 delete_selection_d = "d"
 change_selection = "c"
+yank_selection = "y"
 
 [keymap.change]
 change_cancel = "esc"
+
+[keymap.yank]
+yank_cancel = "esc"
 
 [keymap.explorer]
 explorer_next = "j"
