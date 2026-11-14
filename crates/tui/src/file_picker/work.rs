@@ -11,13 +11,12 @@ use nucleo_matcher::{
     pattern::{CaseMatching, Normalization, Pattern},
 };
 
-use super::{FileEntry, PreviewState, ScanDepth};
+use super::{FileEntry, PREVIEW_VIEWPORT_HEIGHT, PreviewState, ScanDepth};
 use crate::{
     data_object::Message, filesystem::is_built_in_ignored, manager::effect::FeatureEffect,
 };
 
 const PREVIEW_VIEWPORT_WIDTH: u16 = 80;
-const PREVIEW_VIEWPORT_HEIGHT: u16 = 22;
 
 /// Blocking filesystem/matching work executed outside the terminal event loop.
 pub enum FilePickerRequest {
@@ -211,6 +210,28 @@ mod tests {
             .map(|entry| entry.display.as_str())
             .collect::<Vec<_>>();
         assert_eq!(names, ["nested/child.txt", "top.txt"]);
+    }
+
+    #[test]
+    fn preview_snapshot_fills_the_largest_preview_viewport() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("long.txt");
+        let height = usize::from(PREVIEW_VIEWPORT_HEIGHT);
+        let text = (0..height + 5)
+            .map(|line| format!("line {line}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(&path, text).unwrap();
+
+        let PreviewState::Text(snapshot) = read_preview(&DocumentFactory::new(), &path) else {
+            panic!("text file should produce a view snapshot");
+        };
+
+        assert_eq!(snapshot.lines.len(), height);
+        assert_eq!(
+            snapshot.lines.last().unwrap().text,
+            format!("line {}", height - 1)
+        );
     }
 
     #[test]

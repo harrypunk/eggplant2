@@ -13,7 +13,7 @@ use super::{
 };
 use crate::{
     data_object::{Model, Visibility},
-    file_picker::{FileCollectionState, FilePickerState, PreviewState},
+    file_picker::{FileCollectionState, FilePickerState, POPUP_MAX_HEIGHT, PreviewState},
     theme::{Theme, UiTheme},
     ui::{OverlayContribution, OverlayKind, OverlayPlacement},
 };
@@ -85,7 +85,7 @@ pub fn overlay(model: &Model) -> Option<OverlayContribution> {
                 OverlayKind::Modal,
                 OverlayPlacement::MainPanel {
                     max_width: 160,
-                    max_height: 36,
+                    max_height: POPUP_MAX_HEIGHT,
                     margin: 2,
                 },
                 render_overlay,
