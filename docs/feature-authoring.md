@@ -117,6 +117,7 @@ Every feature must retain:
 - Main-thread construction of non-`Send` Helix documents.
 - One terminal owner and one application event/update loop.
 - Shell-owned focus, modal precedence, layout, and cursor policy.
+- Use `ActiveEditor` for active-document navigation/viewport/editing. Do not add feature-specific policy or key handling to `EditorSession`.
 
 Future unattended edits must name an explicit buffer and expected revision; active-buffer UI commands are not an agent-safe mutation API.
 

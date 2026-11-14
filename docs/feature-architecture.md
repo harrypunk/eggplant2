@@ -51,6 +51,8 @@ One registration per feature is allowed and desirable. “Open for extension” 
 | Workspace root and shared filesystem acceptance rules | Shell/editor capabilities |
 | Feature-specific state, messages, updates, effects, components, and tests | Each feature |
 
+Within the editor crate, `EditorSession` owns buffer lifecycle, mode, snapshots, and persistence/reload coordination. `ActiveEditor` is the narrow active-document capability for navigation, viewport, and editing operations; its focused modules prevent the session from becoming a god object as features grow.
+
 A feature may use shared capabilities, but it must not mutate another feature's private state directly. Cross-feature behavior goes through a semantic command or shell capability, such as “open this document” or “reveal this buffer.”
 
 ## 4. Preserve one Elm loop

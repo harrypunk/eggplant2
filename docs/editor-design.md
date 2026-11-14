@@ -88,6 +88,12 @@ This is deliberately smaller than a general window tree. A future split implemen
 
 Start with the simplest map-based implementation that satisfies the invariants. `Vec<BufferInfo>` can be derived for a picker or tab line. If MRU order becomes a feature, store ordered `BufferId`s or timestamps rather than treating `BufferInfo` as the source of truth.
 
+### Session and active-editor responsibilities
+
+`EditorSession` owns buffer identity/lifecycle, editor mode, session-level snapshots, and save/external-reload coordination. It does not implement every motion or text operation. `active_editor()` returns an `ActiveEditor` adapter around the active Helix `Document + View` plus the session scrolloff policy. Navigation, viewport, and editing operations live in focused `active_editor/` modules and retain cursor-following invariants without exposing Helix types to the TUI.
+
+Adding a motion or editing feature should normally change only its feature module and the appropriate `ActiveEditor` capability. A session change is justified for buffer lifecycle, persistence, or session-level state—not for adding key-specific behavior. `session/tests.rs` owns the remaining lifecycle and capability integration tests.
+
 ### Preserving cursor and scroll when switching
 
 Switching buffers should not reset the user's position. Where that state lives depends on the selected adapter:
