@@ -1,4 +1,4 @@
-use std::{ops::Range, sync::Arc};
+use std::sync::Arc;
 
 use editor::{BufferId, BufferTextSnapshot, TextViewSnapshot};
 
@@ -7,14 +7,7 @@ use crate::data_object::Visibility;
 
 pub(crate) const PREVIEW_HEIGHT: usize = 34;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GrepMatch {
-    /// Zero-based document line.
-    pub line: usize,
-    pub text: String,
-    /// UTF-8 byte ranges of every non-overlapping match on this line.
-    pub match_ranges: Vec<Range<usize>>,
-}
+pub type GrepMatch = crate::search::MatchLine;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SearchStatus {

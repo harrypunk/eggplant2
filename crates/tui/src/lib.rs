@@ -15,6 +15,7 @@ pub mod manager;
 pub mod page;
 pub mod page_scroll;
 pub mod runtime;
+pub mod search;
 pub mod startup;
 pub mod terminal;
 pub mod theme;
