@@ -35,8 +35,9 @@ cargo run -p tui -- "$workdir"
 13. **Viewport alignment:** with a scrollable buffer, verify `zz`, `zt`, and `zb` center/top/bottom-align the cursor line without changing the text or cursor position. Confirm that `z` appears in the status bar and that Escape/invalid input cancels safely, including in tiny terminals.
 14. **Insert variants:** verify `a`, `A`, and `I` by typing after each command. Verify `o`/`O` create correctly indented lines and enter Insert on empty and populated documents; leaving Insert must auto-save, and one undo must remove the open-line plus typed content.
 15. **Line boundaries:** verify `0` and `$` on blank, Unicode, and populated lines. Confirm that `0` after starting a count continues the count instead of moving the cursor, and that these motions never change text.
-16. **Save safety:** make a buffer dirty and quit with `Space q q`; confirm that the application waits for the write and exits with the edited content persisted.
-17. **Terminal restoration after normal exit:** confirm that the shell prompt returns to the original screen, raw-mode input is disabled, and the cursor/keyboard behave normally.
+16. **Visual selection:** press `v` and extend the selection with character, word, line-boundary, and counted line-jump motions in both directions. Confirm visible selection styling and `VISUAL` status, then press Escape to return to Normal without changing text.
+17. **Save safety:** make a buffer dirty and quit with `Space q q`; confirm that the application waits for the write and exits with the edited content persisted.
+18. **Terminal restoration after normal exit:** confirm that the shell prompt returns to the original screen, raw-mode input is disabled, and the cursor/keyboard behave normally.
 
 ## Failure and panic review
 

@@ -63,6 +63,7 @@ impl Default for Config {
                     "normal",
                     [
                         ("enter_insert_mode", "i"),
+                        ("enter_visual_mode", "v"),
                         ("insert_after_cursor", "a"),
                         ("insert_at_line_end", "shift-a"),
                         ("insert_at_first_nonblank", "shift-i"),
@@ -98,6 +99,21 @@ impl Default for Config {
                         ("move_right", "right"),
                         ("move_up", "up"),
                         ("move_down", "down"),
+                    ],
+                ),
+                keymap_context(
+                    "visual",
+                    [
+                        ("exit_visual_mode", "esc"),
+                        ("move_left", "h"),
+                        ("move_right", "l"),
+                        ("move_up", "k"),
+                        ("move_down", "j"),
+                        ("move_next_word_start", "w"),
+                        ("move_previous_word_start", "b"),
+                        ("move_next_word_end", "e"),
+                        ("move_line_start", "0"),
+                        ("move_line_end", "$"),
                     ],
                 ),
                 keymap_context(

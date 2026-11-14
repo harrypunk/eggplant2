@@ -42,6 +42,8 @@ pub struct HighlightSpan {
 pub struct LineSnapshot {
     pub text: String,
     pub highlights: Vec<HighlightSpan>,
+    /// Optional selected UTF-8 byte range within this line.
+    pub selection: Option<Range<usize>>,
 }
 
 impl LineSnapshot {
@@ -49,6 +51,7 @@ impl LineSnapshot {
         Self {
             text,
             highlights: Vec::new(),
+            selection: None,
         }
     }
 
@@ -127,6 +130,34 @@ pub(crate) fn text_view_snapshot(document: &Document, view: &View) -> TextViewSn
     let mut snapshot = text_view_snapshot_at(document, first_line, view.inner_height());
     snapshot.horizontal_offset = offset.horizontal_offset;
     snapshot
+}
+
+pub(crate) fn apply_selection_snapshot(
+    snapshot: &mut TextViewSnapshot,
+    document: &Document,
+    view: &View,
+) {
+    let text = document.text();
+    let selection = document.selection(view.id).primary();
+    snapshot
+        .lines
+        .iter_mut()
+        .enumerate()
+        .for_each(|(index, line)| {
+            let document_line = snapshot.first_line + index;
+            let line_start = text.line_to_char(document_line);
+            let line_end =
+                helix_core::line_ending::line_end_char_index(&text.slice(..), document_line);
+            let start = selection.from().max(line_start);
+            let end = selection.to().min(line_end);
+            if start < end {
+                let line_start_byte = text.char_to_byte(line_start);
+                line.selection = Some(
+                    text.char_to_byte(start) - line_start_byte
+                        ..text.char_to_byte(end) - line_start_byte,
+                );
+            }
+        });
 }
 
 /// Project an arbitrary logical-line range with the document's current syntax highlights.

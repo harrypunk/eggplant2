@@ -21,6 +21,8 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | Normal | Insert after cursor / line end / first non-blank | `a` / `Shift-A` / `Shift-I` |
 | Normal | Open indented line below / above | `o` / `Shift-O` |
 | Normal | Line start / line end | `0` / `$` |
+| Normal | Start characterwise Visual selection | `v` |
+| Visual | Extend selection with existing movement keys / return to Normal | `h`/`j`/`k`/`l`, `w`/`b`/`e`, `0`/`$`, `[count]gg`/`G` / `Esc` |
 | Normal | Move | `h`, `j`, `k`, `l` |
 | Normal | Next word / previous word / word end | `w` / `b` / `e` |
 | Normal | First line / line N | `gg` / `[count]gg` |

@@ -9,6 +9,14 @@ use crate::{
 /// Editing feature commands, independent of physical keybindings.
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     match id.as_str() {
+        "enter_visual_mode" => enter_visual(model),
+        "exit_visual_mode" => {
+            model
+                .context_stack
+                .pop_if(|context| context == &Context::EditorVisual);
+            model.editor.enter_normal_mode();
+            None
+        }
         "enter_insert_mode" => enter_insert(model),
         "insert_after_cursor" => enter_insert_at(model, InsertPosition::AfterCursor),
         "insert_at_line_end" => enter_insert_at(model, InsertPosition::LineEnd),
@@ -77,6 +85,14 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
 
 pub(crate) fn insert_char(model: &mut Model, character: char) -> Option<Effect> {
     insert(model, &character.to_string())
+}
+
+fn enter_visual(model: &mut Model) -> Option<Effect> {
+    if model.editor.active_buffer().is_some() {
+        model.context_stack.push(Context::EditorVisual);
+        model.editor.enter_visual_mode();
+    }
+    None
 }
 
 fn enter_insert(model: &mut Model) -> Option<Effect> {
@@ -296,6 +312,73 @@ mod tests {
                 .column,
             6
         );
+    }
+
+    #[test]
+    fn visual_mode_extends_snapshot_selection_and_escape_collapses_it() {
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+        create_buffer(&mut model, "hello");
+        let manager = MessageManager::default();
+        manager.update(&mut model, Message::Resize(80, 10));
+
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("enter_visual_mode")),
+        );
+        manager.update(&mut model, Message::InvokeCommand(CommandId("move_right")));
+        assert_eq!(model.editor.mode(), EditMode::Visual);
+        assert_eq!(model.context_stack.last(), Some(&Context::EditorVisual));
+        assert_eq!(
+            model.editor.active_snapshot().unwrap().text.lines[0].selection,
+            Some(0..2)
+        );
+
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("exit_visual_mode")),
+        );
+        assert_eq!(model.editor.mode(), EditMode::Normal);
+        assert_eq!(
+            model.editor.active_snapshot().unwrap().text.lines[0].selection,
+            None
+        );
+        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(!model.editor.active_is_modified());
+    }
+
+    #[test]
+    fn visual_word_and_counted_line_motions_extend_the_same_selection() {
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+        create_buffer(&mut model, "hello world\nthird");
+        let manager = MessageManager::default();
+        manager.update(&mut model, Message::Resize(80, 10));
+
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("enter_visual_mode")),
+        );
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("move_next_word_start")),
+        );
+        assert_eq!(
+            model.editor.active_editor().unwrap().selected_text(),
+            "hello w"
+        );
+        manager.update(&mut model, Message::TextInput('2'));
+        manager.update(&mut model, Message::TextInput('G'));
+        assert!(
+            model
+                .editor
+                .active_editor()
+                .unwrap()
+                .selected_text()
+                .contains("hello world\n")
+        );
+        assert_eq!(model.editor.mode(), EditMode::Visual);
+        assert!(!model.editor.active_is_modified());
     }
 
     #[test]

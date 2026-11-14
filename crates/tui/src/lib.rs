@@ -285,6 +285,7 @@ pub mod data_object {
         AgentChatDialog,
         VCS,
         EditorInput,
+        EditorVisual,
         Explorer,
         FilePicker,
         ThemePicker,

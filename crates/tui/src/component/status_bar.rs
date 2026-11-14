@@ -40,6 +40,7 @@ impl Widget for StatusBar<'_> {
         let (mode, mode_style) = match self.mode {
             EditMode::Normal => ("NORMAL", self.styles.status_normal),
             EditMode::Insert => ("INSERT", self.styles.status_insert),
+            EditMode::Visual => ("VISUAL", self.styles.selection),
         };
         let mut spans = vec![Span::styled(
             format!(" {mode}"),
@@ -74,7 +75,7 @@ mod tests {
     #[test]
     fn renders_current_mode() {
         let theme = Theme::default();
-        for mode in [EditMode::Normal, EditMode::Insert] {
+        for mode in [EditMode::Normal, EditMode::Insert, EditMode::Visual] {
             let backend = TestBackend::new(7, 1);
             let mut terminal = Terminal::new(backend).unwrap();
 
@@ -87,8 +88,16 @@ mod tests {
             let expected = match mode {
                 EditMode::Normal => " NORMAL",
                 EditMode::Insert => " INSERT",
+                EditMode::Visual => " VISUAL",
             };
-            terminal.backend().assert_buffer_lines([expected]);
+            let content = terminal
+                .backend()
+                .buffer()
+                .content()
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect::<String>();
+            assert_eq!(content, expected);
         }
     }
 

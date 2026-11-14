@@ -72,7 +72,7 @@ fn finish_close(model: &mut Model, id: editor::BufferId) -> Option<Effect> {
 fn follow_up_save(model: &mut Model, id: editor::BufferId) -> Option<Effect> {
     match model.editor.mode() {
         EditMode::Insert => None,
-        EditMode::Normal => buffer::save_if_dirty(model, id),
+        EditMode::Normal | EditMode::Visual => buffer::save_if_dirty(model, id),
     }
 }
 

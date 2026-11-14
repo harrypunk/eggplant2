@@ -318,11 +318,13 @@ Implement and review M7.1, M7.2, M7.3, M7.4, M7.5, and M7.6 independently. If te
 
 #### M8.5 — Characterwise Visual selection
 
-- [ ] Add `v` in Normal mode to start a characterwise selection anchored at the current cursor. Existing movement commands extend the primary selection while in Visual mode.
-- [ ] Render the selection with the existing theme selection style, show `VISUAL` in the status bar, and keep the moving cursor visible in both selection directions.
-- [ ] Escape returns to Normal mode and collapses the selection at the current cursor without changing text. Reuse existing movement adapters with explicit move/extend behavior rather than duplicating motion rules.
-- [ ] Test empty documents, Unicode/graphemes, forward/backward selection, direction reversal, line crossings, viewport scrolling, mode display, and cancellation.
-- [ ] Use Visual mode for selections larger than the supported word/line motions instead of expanding the text-object motion catalog. Keep Visual-mode operators, clipboard/register integration, and other selection grammars for separate slices.
+**Status: complete (2026-11-14).**
+
+- [x] Add `v` in Normal mode to start a characterwise selection anchored at the current cursor. Existing movement commands extend the primary selection while in Visual mode.
+- [x] Render the selection with the existing theme selection style, show `VISUAL` in the status bar, and keep the moving cursor visible in both selection directions.
+- [x] Escape returns to Normal mode and collapses the selection at the current cursor without changing text. Reuse existing movement adapters with explicit move/extend behavior rather than duplicating motion rules.
+- [x] Test empty documents, Unicode/graphemes, forward/backward selection, direction reversal, line crossings, viewport scrolling, mode display, and cancellation.
+- [x] Use Visual mode for selections larger than the supported word/line motions instead of expanding the text-object motion catalog. Keep Visual-mode operators, clipboard/register integration, and other selection grammars for separate slices.
 
 #### M8.6 — Delete/change with `x`/`d`/`dd`/`c`/`cc`
 

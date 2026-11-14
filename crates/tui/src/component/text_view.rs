@@ -5,6 +5,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Paragraph, Widget},
 };
+use unicode_width::UnicodeWidthStr;
 
 use crate::theme::Theme;
 
@@ -34,6 +35,37 @@ impl<'a> TextView<'a> {
     fn gutter_width(snapshot: &TextViewSnapshot) -> u16 {
         let digits = snapshot.line_count.max(1).to_string().len();
         u16::try_from(digits + 1).unwrap_or(u16::MAX)
+    }
+
+    fn apply_selection(&self, text_area: Rect, buf: &mut Buffer) {
+        self.snapshot
+            .lines
+            .iter()
+            .enumerate()
+            .filter_map(|(row, line)| {
+                let range = line.selection.as_ref()?;
+                let start = UnicodeWidthStr::width(&line.text[..range.start]);
+                let end = UnicodeWidthStr::width(&line.text[..range.end]);
+                let offset = self.snapshot.horizontal_offset;
+                let viewport_start = offset;
+                let viewport_end = offset + usize::from(text_area.width);
+                let start = start.max(viewport_start);
+                let end = end.min(viewport_end);
+                if end <= start {
+                    return None;
+                }
+                let row = u16::try_from(row).ok()?;
+                if row >= text_area.height {
+                    return None;
+                }
+                Some(Rect::new(
+                    text_area.x + u16::try_from(start - offset).ok()?,
+                    text_area.y + row,
+                    u16::try_from(end - start).ok()?,
+                    1,
+                ))
+            })
+            .for_each(|area| buf.set_style(area, self.theme.ui().selection));
     }
 
     fn line(&self, snapshot: &LineSnapshot) -> Line<'static> {
@@ -104,6 +136,7 @@ impl Widget for TextView<'_> {
             .style(self.theme.ui().base)
             .scroll((0, horizontal_offset))
             .render(text_area, buf);
+        self.apply_selection(text_area, buf);
     }
 }
 
@@ -111,7 +144,11 @@ impl Widget for TextView<'_> {
 mod tests {
     use editor::HighlightSpan;
     use helix_view::theme::Loader as HelixThemeLoader;
-    use ratatui::style::{Color, Modifier};
+    use ratatui::{
+        Terminal,
+        backend::TestBackend,
+        style::{Color, Modifier},
+    };
 
     use super::*;
 
@@ -133,5 +170,36 @@ mod tests {
         assert_eq!(line.spans[0].style.fg, Some(Color::Magenta));
         assert!(line.spans[0].style.add_modifier.contains(Modifier::BOLD));
         assert_eq!(line.spans[1].content.as_ref(), " main");
+    }
+
+    #[test]
+    fn applies_selection_over_unicode_cells_without_replacing_text() {
+        let mut snapshot = TextViewSnapshot::plain(vec!["a界b".to_string()]);
+        snapshot.lines[0].selection = Some(1..4);
+        let backend = TestBackend::new(6, 1);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal
+            .draw(|frame| {
+                frame.render_widget(TextView::new(&snapshot, &Theme::default()), frame.area())
+            })
+            .unwrap();
+
+        let cells = terminal.backend().buffer().content();
+        assert!(
+            cells.iter().any(|cell| {
+                cell.symbol() == "界" && cell.modifier.contains(Modifier::REVERSED)
+            })
+        );
+        assert!(
+            cells.iter().any(|cell| {
+                cell.symbol() == "a" && !cell.modifier.contains(Modifier::REVERSED)
+            })
+        );
+        assert!(
+            cells
+                .iter()
+                .any(|cell| cell.symbol() == "b" && !cell.modifier.contains(Modifier::REVERSED))
+        );
     }
 }

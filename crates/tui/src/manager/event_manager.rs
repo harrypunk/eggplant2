@@ -257,6 +257,30 @@ mod tests {
     }
 
     #[test]
+    fn routes_visual_entry_motion_and_exit() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('v'), KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::InvokeCommand(CommandId("enter_visual_mode")))
+        ));
+
+        model.context_stack.push(Context::EditorVisual);
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::InvokeCommand(CommandId("move_left")))
+        ));
+        let event = Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::InvokeCommand(CommandId("exit_visual_mode")))
+        ));
+    }
+
+    #[test]
     fn line_boundary_bindings_do_not_consume_count_digits() {
         let manager = event_manager();
         let mut model = Model::default();

@@ -279,7 +279,7 @@ Implemented M7.4: `project_grep/` owns the `Space s p` workflow, shared `TextSea
 
 Implemented M7.5: `file_watcher.rs` owns `notify` setup and forwards file updates into the single message loop. `external_sync.rs` schedules the existing background `DocumentOpenRequest` for matching clean buffers. `EditorSession::complete_external_reload` rejects stale versions and dirty/saving buffers, then applies Helix's diff with history/cursor preservation and refreshed syntax. Auto-save paths are unchanged.
 
-Implemented M7.6: the editing feature registers `move_next_word_start`, `move_previous_word_start`, and `move_next_word_end` with Normal `w`/`b`/`e`. `EditorSession::move_cursor_word` adapts Helix's word motions and collapses them to cursor points, retaining Unicode/boundary behavior without edits or a new selection mode.
+Implemented M7.6: the editing feature registers `move_next_word_start`, `move_previous_word_start`, and `move_next_word_end` with Normal `w`/`b`/`e`. `ActiveEditor::move_cursor_word` adapts Helix's word motions and collapses them to cursor points, retaining Unicode/boundary behavior without edits or a new selection mode.
 
 ### M8 — Common editing workflows after M7
 
@@ -293,13 +293,15 @@ Vertical slices, detailed in `PLAN.md`:
 6. **Delete/change commands:** Visual `x`/`d`/`c`, Normal `x`, and Normal `dd`/`cc` through existing transaction/history/auto-save paths, with pending `d`/`c` display and no general operator grammar.
 7. **Yank and clipboard sync:** Visual `y` and Normal `yy`, one automatic unnamed register shared with delete/change commands, and best-effort system clipboard mirroring without blocking editing.
 
-Implemented M8.1: `line_jump` owns the count/`g` state machine and registers text input plus Escape cancellation. `EditorSession::move_cursor_to_line` provides clamped first-nonblank navigation. `Model.pending_input` gives the status bar a feature-neutral transient display that preserves persistent messages and can be reused by later M8 prefixes.
+Implemented M8.1: `line_jump` owns the count/`g` state machine and registers text input plus Escape cancellation. `ActiveEditor::move_cursor_to_line` provides clamped first-nonblank navigation. `Model.pending_input` gives the status bar a feature-neutral transient display that preserves persistent messages and can be reused by later M8 prefixes.
 
-Implemented M8.2: `view_align` registers `view_align_start`/`view_align_cancel` and second-key input for `zz`/`zt`/`zb`. `EditorSession::align_cursor_line` delegates to Helix's visual alignment primitive. The feature reuses `Model.pending_input` and changes no cursor/document/save state.
+Implemented M8.2: `view_align` registers `view_align_start`/`view_align_cancel` and second-key input for `zz`/`zt`/`zb`. `ActiveEditor::align_cursor_line` delegates to Helix's visual alignment primitive. The feature reuses `Model.pending_input` and changes no cursor/document/save state.
 
 Implemented M8.3: the editing feature registers `a`/`A`/`I` and `o`/`O` commands. `move_cursor_to_insert` and `open_line` are the only core capabilities; Insert context, auto-save, and history policy remain in the existing editing/buffer paths. Open-line and typed content share one undoable Insert session.
 
-Implemented M8.4: `move_line_start`/`move_line_end` bind Normal `0`/`$` through the editing feature. `EditorSession::move_cursor_to_line_boundary` provides grapheme-safe boundaries without text changes. Direct-key precedence keeps `0` available as a digit inside active line-jump counts.
+Implemented M8.4: `move_line_start`/`move_line_end` bind Normal `0`/`$` through the editing feature. `ActiveEditor::move_cursor_to_line_boundary` provides grapheme-safe boundaries without text changes. Direct-key precedence keeps `0` available as a digit inside active line-jump counts.
+
+Implemented M8.5: `v`/Escape switch Normal and characterwise Visual through the editing feature. `ActiveEditor` derives Move/Extend from session mode and shares all existing motion paths. `EditMode::Visual`, per-line snapshot ranges, and `TextView` selection styling provide mode and visual feedback while preserving one cursor/selection.
 
 Eggplant intentionally supports one cursor/selection only. Only `gg`/`G` accept counts; existing `w`/`b`/`e` and all other motions are uncounted. Visual selection is the intended workflow for larger ranges instead of adding a broader text-object motion catalog. Beyond the M8.5–M8.7 slices, M8 does not introduce general Visual operators, macros, named/register-selection workflows, multi-cursor behavior, or full Vim/Helix compatibility.
 

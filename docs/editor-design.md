@@ -192,13 +192,13 @@ All mutations go through the editor command API so undo, dirty tracking, viewpor
 
 ### Word motion semantics
 
-Normal mode supports `w` for next word start, `b` for previous word start, and `e` for next word end. These are cursor-only motions: `EditorSession::move_cursor_word` uses Helix's Unicode-aware word primitives, then collapses the result to a cursor point instead of exposing Helix's selection-oriented motion. `e` uses the resulting block-cursor edge so it lands on the final character. Helix's boundary policy, including line-ending boundaries, is retained rather than reimplemented as Vim compatibility. These motions never modify text.
+Normal mode supports `w` for next word start, `b` for previous word start, and `e` for next word end. These are cursor-only motions: `ActiveEditor::move_cursor_word` uses Helix's Unicode-aware word primitives, then collapses the result to a cursor point instead of exposing Helix's selection-oriented motion. `e` uses the resulting block-cursor edge so it lands on the final character. Helix's boundary policy, including line-ending boundaries, is retained rather than reimplemented as Vim compatibility. These motions never modify text.
 
-Only M8.1's `gg`/`G` accept counts; existing word motions and all other motions are uncounted. Operators, inner/around objects, and a broader Vim/Helix grammar remain outside the word-motion slice. Visual selection is the intended workflow for larger ranges instead of adding more text-object motions. M8.5 plans characterwise Visual selection by reusing these motions with explicit move/extend behavior. Eggplant exposes exactly one cursor/selection and intentionally does not support user-facing multi-cursor behavior.
+Only M8.1's `gg`/`G` accept counts; existing word motions and all other motions are uncounted. Operators, inner/around objects, and a broader Vim/Helix grammar remain outside the word-motion slice. Visual selection is the intended workflow for larger ranges instead of adding more text-object motions. M8.5 reuses these motions with explicit move/extend behavior. Eggplant exposes exactly one cursor/selection and intentionally does not support user-facing multi-cursor behavior.
 
 ### Counted line jumps and pending input (M8.1)
 
-Normal `gg` moves to the first line and `G` to the last line. A count beginning with `1`–`9` and continuing with digits selects that one-based line for either command; out-of-range values clamp to the document boundary. Only these commands accept counts. `EditorSession::move_cursor_to_line` targets the first non-blank character, falling back to column zero, and uses the existing viewport-following path.
+Normal `gg` moves to the first line and `G` to the last line. A count beginning with `1`–`9` and continuing with digits selects that one-based line for either command; out-of-range values clamp to the document boundary. Only these commands accept counts. `ActiveEditor::move_cursor_to_line` targets the first non-blank character, falling back to column zero, and uses the existing viewport-following path.
 
 `line_jump` owns the count/prefix state machine through registered text input and `line_jump_cancel`. The status bar renders its derived `Model.pending_input` separately from persistent status messages, so pending counts/`g` do not replace save or error feedback. Completion, Escape, and invalid input clear the pending state without unexpected movement.
 
@@ -206,19 +206,25 @@ Normal `gg` moves to the first line and `G` to the last line. A count beginning 
 
 Normal `zz`, `zt`, and `zb` center, top-align, and bottom-align the cursor line. The `view_align_start` command opens a pending `ViewAlign` context and publishes `z` through `Model.pending_input`; registered text input accepts only the three second keys. Escape and invalid input clear pending state without moving the viewport.
 
-`EditorSession::align_cursor_line` maps the feature-neutral `ViewAlignment` enum to `helix_view::align_view`. Helix performs visual-row and document-boundary calculations. Cursor, selection, text, revision, dirty state, and save state remain unchanged, including for empty viewports.
+`ActiveEditor::align_cursor_line` maps the feature-neutral `ViewAlignment` enum to `helix_view::align_view`. Helix performs visual-row and document-boundary calculations. Cursor, selection, text, revision, dirty state, and save state remain unchanged, including for empty viewports.
 
 ### Insert variants and open-line editing (M8.3)
 
-Normal `a`, `A`, and `I` position the cursor after the current grapheme, at line end, or at the first non-blank character before entering Insert. `EditorSession::move_cursor_to_insert` owns these document positions; the editing feature owns mode/context transitions. Existing `i` is unchanged.
+Normal `a`, `A`, and `I` position the cursor after the current grapheme, at line end, or at the first non-blank character before entering Insert. `ActiveEditor::move_cursor_to_insert` owns these document positions; the editing feature owns mode/context transitions. Existing `i` is unchanged.
 
-`o`/`O` use `EditorSession::open_line` to insert a newline below/above with `indent_for_newline`, set the new cursor, and enter Insert. Helix's current indentation heuristic and detected indent style are retained, without comment continuation or multi-selection commands. The open-line transaction and subsequent typing share one Insert history group, so one undo removes the whole accepted edit. Auto-save follows the existing policy when leaving Insert; no manual Save path is added.
+`o`/`O` use `ActiveEditor::open_line` to insert a newline below/above with `indent_for_newline`, set the new cursor, and enter Insert. Helix's current indentation heuristic and detected indent style are retained, without comment continuation or multi-selection commands. The open-line transaction and subsequent typing share one Insert history group, so one undo removes the whole accepted edit. Auto-save follows the existing policy when leaving Insert; no manual Save path is added.
 
 ### Line-boundary motions (M8.4)
 
-Normal `0` and `$` use `move_line_start`/`move_line_end` and `EditorSession::move_cursor_to_line_boundary`. `0` targets column zero. `$` targets the final grapheme before the line ending, with empty lines safely at column zero. These are cursor-only motions with normal viewport following and no document/revision/save changes.
+Normal `0` and `$` use `move_line_start`/`move_line_end` and `ActiveEditor::move_cursor_to_line_boundary`. `0` targets column zero. `$` targets the final grapheme before the line ending, with empty lines safely at column zero. These are cursor-only motions with normal viewport following and no document/revision/save changes.
 
 The direct Normal `0` binding takes precedence over unbound text input. An active line-jump count has no `0` binding, so `0` continues the count as intended. M8.5 will reuse the same core boundary operation with selection extension.
+
+### Characterwise Visual selection (M8.5)
+
+Normal `v` enters Visual mode with a characterwise selection at the current grapheme. `ActiveEditor` receives `SelectionBehavior::Move` in Normal/Insert and `Extend` in Visual, so existing directional, word, line-boundary, and counted line-jump commands share one motion path. Helix's `put_cursor` controls forward/backward selection edges and reversal; no second Visual navigation implementation exists.
+
+`EditorSession::enter_normal_mode` collapses the selection at the moving cursor without changing text. `EditMode::Visual` renders as `VISUAL` in the status bar. Active snapshots project only the primary selection into per-line UTF-8 ranges, and `TextView` applies the existing selection style after syntax rendering with Unicode/horizontal clipping. Eggplant still exposes exactly one cursor/selection and no multi-cursor behavior.
 
 ### Delete/change commands planned for M8.6
 

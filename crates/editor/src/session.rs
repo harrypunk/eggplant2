@@ -13,12 +13,12 @@ use helix_view::{
 use thiserror::Error;
 
 use crate::{
-    active_editor::ActiveEditor,
+    active_editor::{ActiveEditor, SelectionBehavior},
     open::OpenedDocument,
     save::{SaveCompletion, SaveError, SaveRequest},
     snapshot::{
         BufferInfo, BufferTextSnapshot, CursorPosition, DirtyState, EditorSnapshot,
-        TextViewSnapshot, text_view_snapshot, text_view_snapshot_at,
+        TextViewSnapshot, apply_selection_snapshot, text_view_snapshot, text_view_snapshot_at,
     },
     viewport,
 };
@@ -41,6 +41,7 @@ pub enum EditMode {
     #[default]
     Normal,
     Insert,
+    Visual,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -321,7 +322,10 @@ impl EditorSession {
         let active = self.active_view.as_ref()?;
         let document = &self.buffers.get(&active.buffer)?.document;
         let view = &active.view;
-        let text = text_view_snapshot(document, view);
+        let mut text = text_view_snapshot(document, view);
+        if self.mode == EditMode::Visual {
+            apply_selection_snapshot(&mut text, document, view);
+        }
         let cursor = document
             .selection(view.id)
             .primary()
@@ -382,8 +386,14 @@ impl EditorSession {
     /// Borrow the active document/view through the focused editing capability.
     pub fn active_editor(&mut self) -> Result<ActiveEditor<'_>, EditorError> {
         let scrolloff = self.scrolloff;
+        let selection_behavior = match self.mode {
+            EditMode::Visual => SelectionBehavior::Extend,
+            EditMode::Normal | EditMode::Insert => SelectionBehavior::Move,
+        };
         self.active_parts()
-            .map(|(document, view)| ActiveEditor::new(document, view, scrolloff))
+            .map(|(document, view)| {
+                ActiveEditor::new(document, view, scrolloff, selection_behavior)
+            })
             .ok_or(EditorError::NoActiveBuffer)
     }
 
@@ -397,7 +407,21 @@ impl EditorSession {
         }
     }
 
+    pub fn enter_visual_mode(&mut self) {
+        if self.active_view.is_some() {
+            if let Ok(mut editor) = self.active_editor() {
+                editor.start_selection();
+            }
+            self.mode = EditMode::Visual;
+        }
+    }
+
     pub fn enter_normal_mode(&mut self) {
+        if self.mode == EditMode::Visual
+            && let Ok(mut editor) = self.active_editor()
+        {
+            editor.collapse_selection();
+        }
         if self.mode == EditMode::Insert
             && let Some((document, view)) = self.active_parts()
         {

@@ -51,7 +51,8 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
 
 pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
     input.register(Context::AppNormal, handle_input)?;
-    input.register(Context::LineJump, handle_input)
+    input.register(Context::LineJump, handle_input)?;
+    input.register(Context::EditorVisual, handle_input)
 }
 
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {

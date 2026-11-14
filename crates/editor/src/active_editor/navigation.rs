@@ -1,5 +1,5 @@
 use helix_core::{
-    RopeSlice, Selection,
+    RopeSlice,
     doc_formatter::TextFormat,
     graphemes,
     movement::{self, Direction, Movement},
@@ -46,7 +46,7 @@ impl ActiveEditor<'_> {
                     WordMovement::NextEnd => moved.cursor(text),
                     WordMovement::NextStart | WordMovement::PreviousStart => moved.head,
                 };
-                helix_core::Range::point(target)
+                self.put_cursor(text, range, target)
             });
         self.document.set_selection(self.view.id, selection);
         self.ensure_cursor_in_view();
@@ -68,21 +68,29 @@ impl ActiveEditor<'_> {
             LineBoundary::End if line_end == line_start => line_start,
             LineBoundary::End => graphemes::prev_grapheme_boundary(text, line_end),
         };
-        self.document
-            .set_selection(self.view.id, Selection::point(target));
+        let selection = self
+            .document
+            .selection(self.view.id)
+            .clone()
+            .transform(|range| self.put_cursor(text, range, target));
+        self.document.set_selection(self.view.id, selection);
         self.ensure_cursor_in_view();
         Ok(())
     }
 
     /// Move the active cursor to a logical document position without extending the selection.
     pub fn move_cursor_to(&mut self, position: DocumentPosition) -> Result<(), EditorError> {
-        let text = self.document.text();
+        let text = self.document.text().slice(..);
         let line = position.line.min(text.len_lines().saturating_sub(1));
         let line_start = text.line_to_char(line);
         let line_end = helix_core::line_ending::line_end_char_index(&text.slice(..), line);
         let target = line_start + position.character.min(line_end.saturating_sub(line_start));
-        self.document
-            .set_selection(self.view.id, Selection::point(target));
+        let selection = self
+            .document
+            .selection(self.view.id)
+            .clone()
+            .transform(|range| self.put_cursor(text, range, target));
+        self.document.set_selection(self.view.id, selection);
         self.ensure_cursor_in_view();
         Ok(())
     }
@@ -118,6 +126,7 @@ impl ActiveEditor<'_> {
             .document
             .text_format(self.view.inner_area(self.document).width, None);
         let mut annotations = self.view.text_annotations(self.document, None);
+        let movement_behavior = self.movement();
 
         let selection = self
             .document
@@ -135,7 +144,7 @@ impl ActiveEditor<'_> {
                     range,
                     direction,
                     count,
-                    Movement::Move,
+                    movement_behavior,
                     &text_format,
                     &mut annotations,
                 )

@@ -104,6 +104,16 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
     [
         Command::feature(CommandId("quit"), "quit", crate::lifecycle::handle_command),
         Command::feature(
+            CommandId("enter_visual_mode"),
+            "enter Visual mode",
+            crate::editing::handle_command,
+        ),
+        Command::feature(
+            CommandId("exit_visual_mode"),
+            "leave Visual mode",
+            crate::editing::handle_command,
+        ),
+        Command::feature(
             CommandId("enter_insert_mode"),
             "enter Insert mode",
             crate::editing::handle_command,

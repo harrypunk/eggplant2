@@ -1,4 +1,3 @@
-
 use helix_core::{Selection, Transaction};
 use helix_view::graphics::Rect;
 
@@ -758,6 +757,69 @@ fn undo_and_redo_restore_an_insert_session() {
     assert!(session.active_editor().unwrap().redo().unwrap());
     assert_eq!(session.buffers[&id].document.text(), "abc");
     assert!(session.active_is_modified());
+}
+
+#[test]
+fn visual_selection_extends_reverses_and_collapses_without_editing() {
+    let mut session = EditorSession::new();
+    let id = create_buffer(&mut session, "hello\nworld");
+    session.resize_active_view(20, 4);
+
+    session.enter_visual_mode();
+    assert_eq!(session.mode(), EditMode::Visual);
+    assert_eq!(session.active_editor().unwrap().selected_text(), "h");
+    session
+        .active_editor()
+        .unwrap()
+        .move_cursor(CursorMovement::Right)
+        .unwrap();
+    session
+        .active_editor()
+        .unwrap()
+        .move_cursor(CursorMovement::Right)
+        .unwrap();
+    assert_eq!(session.active_editor().unwrap().selected_text(), "hel");
+    session
+        .active_editor()
+        .unwrap()
+        .move_cursor(CursorMovement::Left)
+        .unwrap();
+    assert_eq!(session.active_editor().unwrap().selected_text(), "he");
+    session
+        .active_editor()
+        .unwrap()
+        .move_cursor(CursorMovement::Down)
+        .unwrap();
+    assert!(
+        session
+            .active_editor()
+            .unwrap()
+            .selected_text()
+            .contains("hello\n")
+    );
+
+    session.enter_normal_mode();
+    assert_eq!(session.mode(), EditMode::Normal);
+    assert_eq!(session.active_editor().unwrap().selected_text(), "");
+    assert!(!session.buffers[&id].document.is_modified());
+}
+
+#[test]
+fn visual_selection_is_safe_for_empty_or_missing_buffers() {
+    let mut session = EditorSession::new();
+    session.enter_visual_mode();
+    assert_eq!(session.mode(), EditMode::Normal);
+
+    create_buffer(&mut session, "");
+    session.resize_active_view(20, 4);
+    session.enter_visual_mode();
+    session
+        .active_editor()
+        .unwrap()
+        .move_cursor(CursorMovement::Right)
+        .unwrap();
+    assert_eq!(session.active_editor().unwrap().selected_text(), "");
+    session.enter_normal_mode();
 }
 
 #[test]
