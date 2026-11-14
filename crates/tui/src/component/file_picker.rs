@@ -1,12 +1,13 @@
 use ratatui::{
     Frame,
     buffer::Buffer,
-    layout::{Constraint, Flex, Layout, Position, Rect},
+    layout::{Position, Rect},
     text::Line,
     widgets::{Block, Paragraph, Widget},
 };
 
 use super::{
+    picker,
     popup::{self, Popup},
     text_input::TextInput,
     text_view::TextView,
@@ -31,7 +32,7 @@ impl<'a> FilePicker<'a> {
     }
 
     pub fn cursor_position(self, area: Rect) -> Option<Position> {
-        let input = FilePickerContent::areas(popup::content_area(area)).input;
+        let input = picker::content_areas(popup::content_area(area)).input;
         TextInput::new(&self.state.query, self.theme.ui()).cursor_position(input)
     }
 }
@@ -53,28 +54,6 @@ impl Widget for FilePicker<'_> {
 struct FilePickerContent<'a> {
     state: &'a FilePickerState,
     theme: &'a Theme,
-}
-
-struct ContentAreas {
-    input: Rect,
-    results: Rect,
-    preview: Rect,
-}
-
-impl FilePickerContent<'_> {
-    fn areas(area: Rect) -> ContentAreas {
-        let [left, preview] = Layout::horizontal([Constraint::Ratio(1, 2), Constraint::Fill(1)])
-            .flex(Flex::Start)
-            .areas(area);
-        let [input, results] = Layout::vertical([Constraint::Length(3), Constraint::Fill(1)])
-            .flex(Flex::Start)
-            .areas(left);
-        ContentAreas {
-            input,
-            results,
-            preview,
-        }
-    }
 }
 
 pub fn overlay(model: &Model) -> Option<OverlayContribution> {
@@ -106,7 +85,7 @@ fn cursor_overlay(model: &Model, area: Rect) -> Option<Position> {
 
 impl Widget for FilePickerContent<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let areas = Self::areas(area);
+        let areas = picker::content_areas(area);
         let surface = self.theme.ui().popup_surface();
         let border = surface.patch(self.theme.ui().border);
         TextInput::new(&self.state.query, self.theme.ui()).render(areas.input, buf);
