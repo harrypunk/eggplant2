@@ -98,6 +98,12 @@ pub enum InsertPosition {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LineBoundary {
+    Start,
+    End,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OpenLineDirection {
     Below,
     Above,
@@ -430,6 +436,28 @@ impl EditorSession {
                 .map_or(text.line_to_char(line), |character| {
                     text.line_to_char(line) + character
                 }),
+        };
+        document.set_selection(view.id, Selection::point(target));
+        view.ensure_cursor_in_view(document, scrolloff);
+        Ok(())
+    }
+
+    /// Move to the current line's start or final grapheme without changing text.
+    pub fn move_cursor_to_line_boundary(
+        &mut self,
+        boundary: LineBoundary,
+    ) -> Result<(), EditorError> {
+        let scrolloff = self.scrolloff;
+        let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
+        let text = document.text().slice(..);
+        let cursor = document.selection(view.id).primary().cursor(text);
+        let line = text.char_to_line(cursor);
+        let line_start = text.line_to_char(line);
+        let line_end = helix_core::line_ending::line_end_char_index(&text, line);
+        let target = match boundary {
+            LineBoundary::Start => line_start,
+            LineBoundary::End if line_end == line_start => line_start,
+            LineBoundary::End => graphemes::prev_grapheme_boundary(text, line_end),
         };
         document.set_selection(view.id, Selection::point(target));
         view.ensure_cursor_in_view(document, scrolloff);
@@ -1236,6 +1264,40 @@ mod tests {
             .move_cursor_to_insert(InsertPosition::AfterCursor)
             .unwrap();
         assert_eq!(active_cursor(&mut grapheme), 3);
+    }
+
+    #[test]
+    fn line_boundaries_target_column_zero_and_the_final_grapheme() {
+        let mut session = EditorSession::new();
+        create_buffer(&mut session, "  hé\n\n👩\u{200d}💻x");
+        session.resize_active_view(20, 4);
+
+        session
+            .move_cursor_to_line_boundary(LineBoundary::End)
+            .unwrap();
+        assert_eq!(active_cursor(&mut session), 3);
+        session
+            .move_cursor_to_line_boundary(LineBoundary::Start)
+            .unwrap();
+        assert_eq!(active_cursor(&mut session), 0);
+        session.move_cursor_to_line(1).unwrap();
+        session
+            .move_cursor_to_line_boundary(LineBoundary::End)
+            .unwrap();
+        assert_eq!(session.active_snapshot().unwrap().cursor.unwrap().column, 0);
+        session.move_cursor_to_line(2).unwrap();
+        session
+            .move_cursor_to_line_boundary(LineBoundary::End)
+            .unwrap();
+        assert_eq!(active_cursor(&mut session), 9);
+        assert!(!session.active_is_modified());
+
+        let mut empty = EditorSession::new();
+        create_buffer(&mut empty, "");
+        for boundary in [LineBoundary::Start, LineBoundary::End] {
+            empty.move_cursor_to_line_boundary(boundary).unwrap();
+            assert_eq!(active_cursor(&mut empty), 0);
+        }
     }
 
     #[test]
