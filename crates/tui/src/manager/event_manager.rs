@@ -190,6 +190,31 @@ mod tests {
     }
 
     #[test]
+    fn routes_buffer_grep_input_selection_acceptance_and_cancellation() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::BufferGrep);
+
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::TextInput('e'))
+        ));
+        for (key, command) in [
+            (KeyCode::Down, "buffer_grep_next"),
+            (KeyCode::Up, "buffer_grep_previous"),
+            (KeyCode::Enter, "buffer_grep_accept"),
+            (KeyCode::Esc, "buffer_grep_close"),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+    }
+
+    #[test]
     fn translates_page_scroll_control_chords_when_crossterm_delivers_them() {
         let manager = event_manager();
         let mut model = Model::default();

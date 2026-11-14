@@ -131,6 +131,16 @@ impl Default for Config {
                         ("buffer_jump_backspace", "backspace"),
                     ],
                 ),
+                keymap_context(
+                    "buffer_grep",
+                    [
+                        ("buffer_grep_close", "esc"),
+                        ("buffer_grep_backspace", "backspace"),
+                        ("buffer_grep_next", "down"),
+                        ("buffer_grep_previous", "up"),
+                        ("buffer_grep_accept", "enter"),
+                    ],
+                ),
             ]),
         }
     }

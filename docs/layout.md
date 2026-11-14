@@ -31,6 +31,7 @@ Overlay layer:
 | Editor | `buffer tabs = Length(1)`, `editing area = Fill(1)`; line-number gutter = document digits + one space, text = `Fill(1)` |
 | Key-hints overlay | Bottom-right of `main`; content-sized vertical list with borders, above the status bar |
 | File-picker overlay | Centered in `main`, maximum 160×36; left query/results and right preview in equal columns. Preview snapshots cover the maximum 34 inner rows and smaller layouts clip them. |
+| Buffer-grep overlay | Same picker geometry and input cursor as the file picker; left regex/results and right match-centered buffer context. |
 
 All layout groups use `Flex::Start`. Hidden nodes remain in the layout tree and use zero width, so they do not reduce the editor's fill area.
 
@@ -42,7 +43,7 @@ All layout groups use `Flex::Start`. Hidden nodes remain in the layout tree and 
 - The tools panel component receives resolved shell props and delegates tool-specific rendering rather than implementing every tool itself.
 - `Popup` is a reusable visual container: it clears the background, draws the border/title, and renders any `Widget` in the inner area. Pages own placement; input contexts own modality.
 - `KeyHints` owns list presentation and intrinsic size; the page owns bottom-right popup placement.
-- `FilePicker` composes the query, ranked result list, and preview inside `Popup`; it never performs filesystem I/O during rendering.
+- `FilePicker` composes the query, ranked result list, and preview inside `Popup`; it never performs filesystem I/O during rendering. `BufferGrep` reuses the shared `picker::content_areas` calculation and `TextInput`, and renders only its revisioned source snapshot.
 - `Editor::content_area` excludes tabs, and `TextView::text_area` excludes the line-number gutter. Together they are the shared text calculation for viewport sizing and cursor coordinates. `EditorBuffer` and picker previews both delegate rendering to `TextView`, including semantic syntax styles resolved through the shared built-in theme.
 - `TextInput` owns single-line horizontal scrolling and end-of-value cursor coordinates. The file picker derives its input rectangle from the same layout used for rendering, and the topmost overlay publishes that cursor to the terminal.
 - Add future panels as explicit layout regions rather than embedding them inside unrelated components.

@@ -1,4 +1,5 @@
 pub mod buffer;
+pub mod buffer_grep;
 pub mod buffer_jump;
 pub mod command_menu;
 pub mod component;
@@ -36,6 +37,7 @@ pub mod data_object {
     use crate::manager::effect::FeatureCompletion;
 
     use crate::{
+        buffer_grep::BufferGrepState,
         buffer_jump::BufferJumpState,
         command_menu::CommandMenuState,
         explorer::ExplorerState,
@@ -127,6 +129,7 @@ pub mod data_object {
         pub theme_picker: ThemePickerState,
         pub page_scroll: PageScrollState,
         pub buffer_jump: BufferJumpState,
+        pub buffer_grep: BufferGrepState,
         #[cfg(test)]
         pub example_feature: crate::test_utils::ExampleFeatureState,
     }
@@ -150,6 +153,7 @@ pub mod data_object {
                 theme_picker: ThemePickerState::default(),
                 page_scroll: PageScrollState::default(),
                 buffer_jump: BufferJumpState::default(),
+                buffer_grep: BufferGrepState::default(),
                 #[cfg(test)]
                 example_feature: crate::test_utils::ExampleFeatureState::default(),
             }
@@ -262,5 +266,6 @@ pub mod data_object {
         FilePicker,
         ThemePicker,
         BufferJump,
+        BufferGrep,
     }
 }

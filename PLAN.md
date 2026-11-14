@@ -204,7 +204,7 @@ This is not a promise that new code requires zero wiring. A new feature may be r
 
 ## Third edition: core editing workflows
 
-### Milestone 7: Page-scroll, visible-buffer jump, and text objects
+### Milestone 7: Page-scroll, visible-buffer jump, live grep, and text objects
 
 **Goal:** deliver frequently used editing features through M6's command/effect/UI contribution boundaries. Finish M6 before starting these slices; no dynamic-theme or third-party-plugin work is a prerequisite.
 
@@ -219,7 +219,7 @@ This is not a promise that new code requires zero wiring. A new feature may be r
 
 #### M7.2 — Current-buffer visible jump
 
-Start with a two-character, Leap-style jump limited to the active buffer's visible snapshot. Incremental quick-search and workspace-wide grep remain separate later features.
+Start with a two-character, Leap-style jump limited to the active buffer's visible snapshot. Workspace-wide grep remains a separate later feature.
 
 - [x] Start with `Space c j`, accept a smart-case two-character pattern, assign one-key labels for up to 26 matches or two-key labels above that, and jump when a complete label is entered.
 - [x] Keep pattern, label, targets, and active-buffer identity in the `buffer_jump` extension; use generic absolute cursor navigation only on acceptance.
@@ -229,7 +229,17 @@ Start with a two-character, Leap-style jump limited to the active buffer's visib
 
 **Exit criteria:** users can jump to any labeled match in the current visible viewport without scanning offscreen text, changing the document, or adding jump policy to the editor core.
 
-#### M7.3 — Text-object foundation
+#### M7.3 — Current-buffer live grep
+
+- [x] Use the pinned LAN ripgrep `grep-regex`/`grep-searcher` crates so current and future project search share the same matching/searching foundation.
+- [x] Open a picker-style extension with `Space s c`; provide a shared text input with cursor, smart-case regex results, and match-centered context preview.
+- [x] Search an immutable active-buffer text snapshot in a revisioned blocking effect and return results through typed `FeatureCompletion` routing.
+- [x] Reject stale query and document revisions; support Up/Down selection, Enter to jump to the match line, and Escape to cancel without movement.
+- [x] Test smart case, Unicode, invalid regexes, stale completions, preview context, and the leader/search/selection/jump workflow.
+
+**Exit criteria:** live grep searches current in-memory buffer text without filesystem access or blocking terminal input, while extension-owned state/effects/UI preserve document and cursor invariants.
+
+#### M7.4 — Text-object foundation
 
 - [ ] Document the desired selection and operator semantics, then choose a deliberately small initial object set rather than implementing Vim's full grammar.
 - [ ] Add initial word motions and inner/around-object commands using Helix text/range primitives where useful and Eggplant command semantics where policy differs.
@@ -241,7 +251,7 @@ Start with a two-character, Leap-style jump limited to the active buffer's visib
 
 ### Milestone 7 review rule
 
-Implement and review M7.1, M7.2, and M7.3 independently. If text-object semantics require a larger selection-model change, stop and document it before adding operators or visual-mode behavior.
+Implement and review M7.1, M7.2, M7.3, and M7.4 independently. If text-object semantics require a larger selection-model change, stop and document it before adding operators or visual-mode behavior.
 
 ## TBD — much later editions
 

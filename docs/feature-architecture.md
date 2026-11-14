@@ -252,21 +252,24 @@ Implemented: `UiRegistry` registers panel/status renderers and overlay providers
 
 Add a test-only example feature that registers state/update, a command, a popup, and an effect. The test must not modify unrelated feature modules or runtime dispatch. Document the author checklist and registration/conflict tests.
 
-Implemented: `test_utils/example_feature.rs` registers typed state, two commands, an overlay, and an effect. Its integration test verifies popup rendering, effect completion through `InvokeCommand`, and visibility cleanup without runtime changes. `docs/feature-authoring.md` records the contribution and testing checklist. M6 is complete; M7 remains a separate edition.
+Implemented: `test_utils/example_feature.rs` registers typed state, a command, an overlay, and an effect. Its integration test verifies popup rendering, typed `FeatureCompletion` delivery, and visibility cleanup without runtime changes. `docs/feature-authoring.md` records the contribution and testing checklist. M6 is complete; M7 remains a separate edition.
 
 ### M7 — Core editing workflows after M6
 
 Do not expand M6 with theme or plugin work. Once the contribution architecture is proven, use it for high-priority editing features in this order:
 
 1. **Page-scroll:** semantic page/half-page commands using the shared viewport, with boundary and resize coverage.
-2. **Current-buffer visible jump:** feature-owned smart-case two-character matching and stable adaptive labels over the active visible snapshot, with accept/cancel and generic absolute cursor navigation. Incremental quick-search and workspace-wide grep remain separate features.
-3. **Text-object foundation:** document selection/operator semantics first, then add a deliberately small set of motions and inner/around objects through existing transaction/undo/auto-save paths. Do not turn this into full Visual mode or a complete Vim grammar.
+2. **Current-buffer visible jump:** feature-owned smart-case two-character matching and stable adaptive labels over the active visible snapshot, with accept/cancel and generic absolute cursor navigation. Workspace-wide grep remains a separate feature.
+3. **Current-buffer live grep:** revisioned in-memory text search through ripgrep's matcher/searcher crates, typed completions, picker-style input/results/context preview, and jump-to-line acceptance.
+4. **Text-object foundation:** document selection/operator semantics first, then add a deliberately small set of motions and inner/around objects through existing transaction/undo/auto-save paths. Do not turn this into full Visual mode or a complete Vim grammar.
 
 These are real feature consumers of the M6 contracts, not reasons to defer M6 or add a separate editing architecture.
 
 Implemented M7.1: `page_scroll.rs` registers `page_scroll_down`/`page_scroll_up` with default `Ctrl-F`/`Ctrl-U` bindings. `[features.page_scroll] step = "75%"` is validated at startup, converted to rows from the active viewport height, and executed through counted Helix vertical movement. This is built-in feature configuration, not an external extension API.
 
 Implemented M7.2: `buffer_jump/` owns the `Space c j` workflow, smart-case two-character matching over visible snapshot lines, stable one-key labels for up to 26 matches and two-key labels above that, cancellation/backspace, and final cursor movement. `TextInputRegistry` replaces feature-specific character messages for Insert mode, the file picker, and jump. `UiRegistry` editor overlays receive the existing snapshot and resolved text rectangle for dimming/labels without render-time scanning. The editor core exposes only generic `DocumentPosition` navigation and viewport width; it contains no jump policy.
+
+Implemented M7.3: `buffer_grep/` owns the `Space s c` workflow, ripgrep smart-case regex searching over an immutable `BufferTextSnapshot`, query/document revision checks, result selection, match-centered previews, and jump-to-line acceptance. Its blocking request returns a typed `FeatureCompletion`, so central messages/runtime contain no buffer-grep dispatch. Shared picker layout and `TextInput` provide the file-picker-style geometry and cursor.
 
 ## 12. Testing strategy
 

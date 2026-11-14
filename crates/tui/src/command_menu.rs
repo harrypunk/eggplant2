@@ -123,6 +123,7 @@ const ROOT_CONTEXT: CommandMenuContext = CommandMenuContext {
             description: "files",
             target: CommandMenuTarget::Submenu(&FILES_CONTEXT),
         },
+        CommandMenuItem::submenu('s', "search", &crate::buffer_grep::SEARCH_CONTEXT),
         CommandMenuItem {
             key: 'u',
             description: "ui",
@@ -248,6 +249,14 @@ mod tests {
         assert_eq!(
             menu.handle_key(KeyCode::Char('j')),
             CommandMenuOutcome::Action(CommandId("buffer_jump_start"))
+        );
+
+        menu.handle_key(KeyCode::Char(' '));
+        menu.handle_key(KeyCode::Char('s'));
+        assert_eq!(menu.context_title(), "Leader > search");
+        assert_eq!(
+            menu.handle_key(KeyCode::Char('c')),
+            CommandMenuOutcome::Action(CommandId("buffer_grep_open"))
         );
 
         menu.handle_key(KeyCode::Char(' '));

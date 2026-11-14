@@ -82,6 +82,8 @@ impl CommandRegistry {
             Self::from_commands(builtin_commands()).expect("built-in command IDs must be unique");
         crate::buffer_jump::register_commands(&mut registry)
             .expect("buffer-jump commands must be unique");
+        crate::buffer_grep::register_commands(&mut registry)
+            .expect("buffer-grep commands must be unique");
         registry
     }
 }

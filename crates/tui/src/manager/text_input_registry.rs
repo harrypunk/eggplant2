@@ -26,6 +26,8 @@ impl TextInputRegistry {
             .expect("file-picker text input must be unique");
         crate::buffer_jump::register_text_input(&mut registry)
             .expect("buffer-jump text input must be unique");
+        crate::buffer_grep::register_text_input(&mut registry)
+            .expect("buffer-grep text input must be unique");
         registry
     }
 

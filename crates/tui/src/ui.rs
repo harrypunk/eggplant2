@@ -133,6 +133,7 @@ impl UiRegistry {
         ui.register_overlay("command_menu", command_menu_overlay)
             .expect("command menu overlay must be unique");
         crate::buffer_jump::register_ui(&mut ui).expect("buffer-jump UI must be unique");
+        crate::buffer_grep::register_ui(&mut ui).expect("buffer-grep UI must be unique");
         ui
     }
 
