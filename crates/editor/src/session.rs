@@ -82,6 +82,13 @@ pub enum VerticalDirection {
     Down,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ViewAlignment {
+    Top,
+    Center,
+    Bottom,
+}
+
 /// Zero-based logical line and Unicode-scalar offset within that line.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DocumentPosition {
@@ -452,6 +459,18 @@ impl EditorSession {
             DocumentPosition { line, character }
         };
         self.move_cursor_to(position)
+    }
+
+    /// Align the cursor line in the visual viewport without changing document state.
+    pub fn align_cursor_line(&mut self, alignment: ViewAlignment) -> Result<(), EditorError> {
+        let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
+        let alignment = match alignment {
+            ViewAlignment::Top => helix_view::Align::Top,
+            ViewAlignment::Center => helix_view::Align::Center,
+            ViewAlignment::Bottom => helix_view::Align::Bottom,
+        };
+        helix_view::align_view(document, view, alignment);
+        Ok(())
     }
 
     /// Move vertically by a feature-computed number of logical lines.
@@ -1115,6 +1134,38 @@ mod tests {
         assert_eq!(snapshot.text.first_line + snapshot.cursor.unwrap().row, 2);
         assert_eq!(snapshot.cursor.unwrap().column, 4);
         assert!(!session.active_is_modified());
+    }
+
+    #[test]
+    fn cursor_alignment_moves_only_the_viewport() {
+        let text = (0..30)
+            .map(|line| format!("line {line}"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mut session = EditorSession::new();
+        let id = create_buffer(&mut session, &text);
+        session.resize_active_view(30, 6);
+        session.move_cursor_to_line(10).unwrap();
+        let revision = session.buffer_version(id);
+
+        session.align_cursor_line(ViewAlignment::Top).unwrap();
+        let snapshot = session.active_snapshot().unwrap();
+        assert_eq!(snapshot.text.first_line, 10);
+        assert_eq!(snapshot.cursor.unwrap().row, 0);
+        session.align_cursor_line(ViewAlignment::Bottom).unwrap();
+        let snapshot = session.active_snapshot().unwrap();
+        assert_eq!(snapshot.text.first_line, 5);
+        assert_eq!(snapshot.cursor.unwrap().row, 5);
+        session.align_cursor_line(ViewAlignment::Center).unwrap();
+        let snapshot = session.active_snapshot().unwrap();
+        assert_eq!(snapshot.text.first_line, 8);
+        assert_eq!(snapshot.cursor.unwrap().row, 2);
+        assert_eq!(session.buffer_version(id), revision);
+        assert!(!session.active_is_modified());
+
+        session.move_cursor_to_line(0).unwrap();
+        session.align_cursor_line(ViewAlignment::Top).unwrap();
+        assert_eq!(session.active_snapshot().unwrap().text.first_line, 0);
     }
 
     #[test]
