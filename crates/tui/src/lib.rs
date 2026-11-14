@@ -13,6 +13,7 @@ pub mod file_watcher;
 mod filesystem;
 pub mod focus;
 pub mod lifecycle;
+pub mod line_jump;
 pub mod manager;
 pub mod page;
 pub mod page_scroll;
@@ -48,6 +49,7 @@ pub mod data_object {
         command_menu::CommandMenuState,
         explorer::ExplorerState,
         file_picker::{FileEntry, FilePickerState, PreviewState},
+        line_jump::LineJumpState,
         page_scroll::PageScrollState,
         project_grep::ProjectGrepState,
         theme::Theme,
@@ -135,12 +137,14 @@ pub mod data_object {
 
         // Transient feedback, popup, and save-dependent workflows.
         pub status: Option<StatusMessage>,
+        pub pending_input: Option<String>,
         pub opening_file: Option<OpenLocation>,
         pub deferred_action: Option<DeferredAction>,
         pub command_menu: CommandMenuState,
         pub file_picker: FilePickerState,
         pub theme_picker: ThemePickerState,
         pub page_scroll: PageScrollState,
+        pub line_jump: LineJumpState,
         pub buffer_jump: BufferJumpState,
         pub buffer_grep: BufferGrepState,
         pub project_grep: ProjectGrepState,
@@ -160,12 +164,14 @@ pub mod data_object {
                 context_stack: Vec::new(),
                 theme: Theme::default(),
                 status: None,
+                pending_input: None,
                 opening_file: None,
                 deferred_action: None,
                 command_menu: CommandMenuState::default(),
                 file_picker: FilePickerState::default(),
                 theme_picker: ThemePickerState::default(),
                 page_scroll: PageScrollState::default(),
+                line_jump: LineJumpState::default(),
                 buffer_jump: BufferJumpState::default(),
                 buffer_grep: BufferGrepState::default(),
                 project_grep: ProjectGrepState::default(),
@@ -284,5 +290,6 @@ pub mod data_object {
         BufferJump,
         BufferGrep,
         ProjectGrep,
+        LineJump,
     }
 }

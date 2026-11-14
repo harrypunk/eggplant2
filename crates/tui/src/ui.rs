@@ -250,7 +250,12 @@ fn render_tools_panel(model: &Model, frame: &mut Frame, area: Rect) {
 
 fn render_status(model: &Model, frame: &mut Frame, area: Rect) {
     frame.render_widget(
-        StatusBar::new(model.editor.mode(), model.status.as_ref(), model.theme.ui()),
+        StatusBar::new(
+            model.editor.mode(),
+            model.status.as_ref(),
+            model.pending_input.as_deref(),
+            model.theme.ui(),
+        ),
         area,
     );
 }

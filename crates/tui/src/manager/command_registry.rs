@@ -86,6 +86,8 @@ impl CommandRegistry {
             .expect("buffer-grep commands must be unique");
         crate::project_grep::register_commands(&mut registry)
             .expect("project-grep commands must be unique");
+        crate::line_jump::register_commands(&mut registry)
+            .expect("line-jump commands must be unique");
         registry
     }
 }

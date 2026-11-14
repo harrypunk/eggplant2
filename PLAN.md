@@ -1,7 +1,7 @@
 # Eggplant first-edition plan
 
 Last updated: 2026-11-14
-Current baseline: Milestone 7 complete; Milestone 8 planned
+Current baseline: Milestone 7 complete; Milestone 8 in progress
 
 ## Purpose
 
@@ -275,17 +275,19 @@ Implement and review M7.1, M7.2, M7.3, M7.4, M7.5, and M7.6 independently. If te
 
 ### Milestone 8: Common editing workflows
 
-**Status: planned.**
+**Status: in progress.**
 
 **Goal:** add frequent navigation and insert workflows through the existing editor/session, command, input-context, and status/UI boundaries. Keep the implementation Vim-inspired, not a general Vim compatibility project.
 
 #### M8.1 — Counted `gg`/`G` and visible pending input
 
-- [ ] Support `gg` to the first line and `G` to the last line; an optional count selects that one-based line for either command.
-- [ ] Accept counts beginning with `1`–`9` and continuing with any digit. Only `gg`/`G` accept a count: forms such as `3w`, `2j`, and counted operators are unsupported. Keep existing word motions limited to the common, uncounted `w`/`b`/`e`; do not add a general count/operator grammar.
-- [ ] Move to the target line's first non-blank character, falling back to column zero for blank lines, clamp out-of-range lines to document boundaries, and keep the cursor visible.
-- [ ] Show the active count and pending `g` prefix in the status bar as transient input, separate from persistent save/error messages. Clear it on completion, Escape, or an invalid sequence; invalid input must not edit or move unexpectedly.
-- [ ] Test empty/single-line documents, blank lines, Unicode, repeated digits, out-of-range counts, cancellation, invalid keys, viewport scrolling, and status cleanup.
+**Status: complete (2026-11-14).**
+
+- [x] Support `gg` to the first line and `G` to the last line; an optional count selects that one-based line for either command.
+- [x] Accept counts beginning with `1`–`9` and continuing with any digit. Only `gg`/`G` accept a count: forms such as `3w`, `2j`, and counted operators are unsupported. Keep existing word motions limited to the common, uncounted `w`/`b`/`e`; do not add a general count/operator grammar.
+- [x] Move to the target line's first non-blank character, falling back to column zero for blank lines, clamp out-of-range lines to document boundaries, and keep the cursor visible.
+- [x] Show the active count and pending `g` prefix in the status bar as transient input, separate from persistent save/error messages. Clear it on completion, Escape, or an invalid sequence; invalid input must not edit or move unexpectedly.
+- [x] Test empty/single-line documents, blank lines, Unicode, repeated digits, out-of-range counts, cancellation, invalid keys, viewport scrolling, and status cleanup.
 
 #### M8.2 — `zz`/`zt`/`zb` viewport alignment
 

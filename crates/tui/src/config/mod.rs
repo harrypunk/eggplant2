@@ -154,6 +154,7 @@ impl Default for Config {
                         ("project_grep_accept", "enter"),
                     ],
                 ),
+                keymap_context("line_jump", [("line_jump_cancel", "esc")]),
             ]),
         }
     }

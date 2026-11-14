@@ -240,6 +240,28 @@ mod tests {
     }
 
     #[test]
+    fn routes_line_jump_text_and_escape() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+
+        for (character, modifiers) in [('2', KeyModifiers::NONE), ('G', KeyModifiers::SHIFT)] {
+            let event = Event::Key(KeyEvent::new(KeyCode::Char(character), modifiers));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::TextInput(actual)) if actual == character
+            ));
+        }
+
+        model.context_stack.push(Context::LineJump);
+        let event = Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::InvokeCommand(CommandId("line_jump_cancel")))
+        ));
+    }
+
+    #[test]
     fn translates_page_scroll_control_chords_when_crossterm_delivers_them() {
         let manager = event_manager();
         let mut model = Model::default();
@@ -305,7 +327,10 @@ mod tests {
 
         model.context_stack.pop();
         model.context_stack.push(Context::AppNormal);
-        assert!(manager.translate(event(), &model).is_none());
+        assert!(matches!(
+            manager.translate(event(), &model),
+            Some(Message::TextInput('I'))
+        ));
 
         model.context_stack.pop();
         model.context_stack.push(Context::EditorInput);

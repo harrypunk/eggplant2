@@ -30,6 +30,8 @@ impl TextInputRegistry {
             .expect("buffer-grep text input must be unique");
         crate::project_grep::register_text_input(&mut registry)
             .expect("project-grep text input must be unique");
+        crate::line_jump::register_text_input(&mut registry)
+            .expect("line-jump text input must be unique");
         registry
     }
 

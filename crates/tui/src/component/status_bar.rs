@@ -15,14 +15,21 @@ use crate::{
 pub struct StatusBar<'a> {
     mode: EditMode,
     message: Option<&'a StatusMessage>,
+    pending_input: Option<&'a str>,
     styles: &'a UiTheme,
 }
 
 impl<'a> StatusBar<'a> {
-    pub fn new(mode: EditMode, message: Option<&'a StatusMessage>, styles: &'a UiTheme) -> Self {
+    pub fn new(
+        mode: EditMode,
+        message: Option<&'a StatusMessage>,
+        pending_input: Option<&'a str>,
+        styles: &'a UiTheme,
+    ) -> Self {
         Self {
             mode,
             message,
+            pending_input,
             styles,
         }
     }
@@ -44,6 +51,12 @@ impl Widget for StatusBar<'_> {
                 StatusKind::Info => self.styles.base,
             };
             spans.push(Span::styled(format!(" | {}", message.text), style));
+        }
+        if let Some(pending) = self.pending_input {
+            spans.push(Span::styled(
+                format!(" | {pending}"),
+                self.styles.base.patch(self.styles.key_hint),
+            ));
         }
         Paragraph::new(Line::from(spans))
             .style(self.styles.base)
@@ -67,7 +80,7 @@ mod tests {
 
             terminal
                 .draw(|frame| {
-                    frame.render_widget(StatusBar::new(mode, None, theme.ui()), frame.area())
+                    frame.render_widget(StatusBar::new(mode, None, None, theme.ui()), frame.area())
                 })
                 .unwrap();
 
@@ -80,6 +93,31 @@ mod tests {
     }
 
     #[test]
+    fn renders_transient_pending_input() {
+        let theme = Theme::default();
+        let backend = TestBackend::new(20, 1);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal
+            .draw(|frame| {
+                frame.render_widget(
+                    StatusBar::new(EditMode::Normal, None, Some("12g"), theme.ui()),
+                    frame.area(),
+                )
+            })
+            .unwrap();
+
+        let content = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(content.contains("NORMAL | 12g"));
+    }
+
+    #[test]
     fn renders_error_message() {
         let message = StatusMessage::error("read failed");
         let theme = Theme::default();
@@ -89,7 +127,7 @@ mod tests {
         terminal
             .draw(|frame| {
                 frame.render_widget(
-                    StatusBar::new(EditMode::Normal, Some(&message), theme.ui()),
+                    StatusBar::new(EditMode::Normal, Some(&message), None, theme.ui()),
                     frame.area(),
                 );
             })

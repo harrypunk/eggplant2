@@ -190,6 +190,12 @@ Normal mode supports `w` for next word start, `b` for previous word start, and `
 
 Only M8.1's `gg`/`G` accept counts; existing word motions and all other motions are uncounted. Operators, inner/around objects, and a broader Vim/Helix grammar remain outside the word-motion slice. Visual selection is the intended workflow for larger ranges instead of adding more text-object motions. M8.5 plans characterwise Visual selection by reusing these motions with explicit move/extend behavior. Eggplant exposes exactly one cursor/selection and intentionally does not support user-facing multi-cursor behavior.
 
+### Counted line jumps and pending input (M8.1)
+
+Normal `gg` moves to the first line and `G` to the last line. A count beginning with `1`–`9` and continuing with digits selects that one-based line for either command; out-of-range values clamp to the document boundary. Only these commands accept counts. `EditorSession::move_cursor_to_line` targets the first non-blank character, falling back to column zero, and uses the existing viewport-following path.
+
+`line_jump` owns the count/prefix state machine through registered text input and `line_jump_cancel`. The status bar renders its derived `Model.pending_input` separately from persistent status messages, so pending counts/`g` do not replace save or error feedback. Completion, Escape, and invalid input clear the pending state without unexpected movement.
+
 ### Delete/change commands planned for M8.6
 
 | Input | Context | Planned behavior |

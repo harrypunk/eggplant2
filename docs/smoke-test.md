@@ -31,8 +31,9 @@ cargo run -p tui -- "$workdir"
 9. **Project grep:** press `Space s p`, enter a regex present in multiple workspace files, and confirm path/line results, yellow match blocks, and syntax-highlighted previews. Select a match and press Enter; the file must open at that line. Confirm that binary and ignored files do not appear.
 10. **External synchronization:** while a clean buffer is open, modify its file with another process; the open buffer must reload automatically with valid cursor and syntax state. Repeat with a locally modified buffer and confirm that local text is preserved with a conflict status.
 11. **Word motions:** in a buffer containing multiple Unicode words, verify that `w` moves to the next word start, `b` returns to the previous start, and `e` moves to the word end. Confirm that repeated motions are safe at document boundaries and never change the text.
-12. **Save safety:** make a buffer dirty and quit with `Space q q`; confirm that the application waits for the write and exits with the edited content persisted.
-13. **Terminal restoration after normal exit:** confirm that the shell prompt returns to the original screen, raw-mode input is disabled, and the cursor/keyboard behave normally.
+12. **Counted line jumps:** verify `gg` and `G` at document boundaries, then `3gg` and `3G` for the third line. While entering a count/prefix, confirm that the status bar shows it without hiding other messages; Escape and invalid input must clear it without unexpected movement.
+13. **Save safety:** make a buffer dirty and quit with `Space q q`; confirm that the application waits for the write and exits with the edited content persisted.
+14. **Terminal restoration after normal exit:** confirm that the shell prompt returns to the original screen, raw-mode input is disabled, and the cursor/keyboard behave normally.
 
 ## Failure and panic review
 

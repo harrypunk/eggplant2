@@ -20,6 +20,9 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | Normal | Enter Insert | `i` |
 | Normal | Move | `h`, `j`, `k`, `l` |
 | Normal | Next word / previous word / word end | `w` / `b` / `e` |
+| Normal | First line / line N | `gg` / `[count]gg` |
+| Normal | Last line / line N | `G` / `[count]G` |
+| Pending line jump | Cancel | `Esc` |
 | Normal | Undo / redo | `u` / `Ctrl-R` |
 | Insert | Return to Normal | `Esc` |
 | Insert | Backspace / newline | `Backspace` / `Enter` |
