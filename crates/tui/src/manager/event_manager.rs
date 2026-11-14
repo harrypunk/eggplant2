@@ -215,6 +215,31 @@ mod tests {
     }
 
     #[test]
+    fn routes_project_grep_input_selection_acceptance_and_cancellation() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::ProjectGrep);
+
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::TextInput('e'))
+        ));
+        for (key, command) in [
+            (KeyCode::Down, "project_grep_next"),
+            (KeyCode::Up, "project_grep_previous"),
+            (KeyCode::Enter, "project_grep_accept"),
+            (KeyCode::Esc, "project_grep_close"),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+    }
+
+    #[test]
     fn translates_page_scroll_control_chords_when_crossterm_delivers_them() {
         let manager = event_manager();
         let mut model = Model::default();

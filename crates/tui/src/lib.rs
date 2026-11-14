@@ -14,6 +14,7 @@ pub mod lifecycle;
 pub mod manager;
 pub mod page;
 pub mod page_scroll;
+pub mod project_grep;
 pub mod runtime;
 pub mod search;
 pub mod startup;
@@ -46,6 +47,7 @@ pub mod data_object {
         explorer::ExplorerState,
         file_picker::{FileEntry, FilePickerState, PreviewState},
         page_scroll::PageScrollState,
+        project_grep::ProjectGrepState,
         theme::Theme,
         theme_picker::ThemePickerState,
         tools::ToolsPanelState,
@@ -139,6 +141,7 @@ pub mod data_object {
         pub page_scroll: PageScrollState,
         pub buffer_jump: BufferJumpState,
         pub buffer_grep: BufferGrepState,
+        pub project_grep: ProjectGrepState,
         #[cfg(test)]
         pub example_feature: crate::test_utils::ExampleFeatureState,
     }
@@ -163,6 +166,7 @@ pub mod data_object {
                 page_scroll: PageScrollState::default(),
                 buffer_jump: BufferJumpState::default(),
                 buffer_grep: BufferGrepState::default(),
+                project_grep: ProjectGrepState::default(),
                 #[cfg(test)]
                 example_feature: crate::test_utils::ExampleFeatureState::default(),
             }
@@ -276,5 +280,6 @@ pub mod data_object {
         ThemePicker,
         BufferJump,
         BufferGrep,
+        ProjectGrep,
     }
 }

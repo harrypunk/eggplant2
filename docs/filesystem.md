@@ -54,7 +54,7 @@ Filter and preview revisions are independent. A late filter completion cannot ov
 
 Every application document open uses `DocumentFactory::open`. Existing targets must be regular, NUL-free UTF-8 text files. Directories, links, binary data, invalid UTF-8, and other file types return `not a text file` without changing buffers, picker state, or explorer state. A missing path remains valid for deliberate new-file startup behavior.
 
-`document::open_file` is the single application open capability for explorer, picker, and future open commands. It returns an `OpenDocument` effect instead of reading and parsing on the UI thread. The worker performs one UTF-8 file read and prepares `Rope`, language configuration, and optional `Syntax`; the main update then constructs Helix's non-`Send` `Document` through `DocumentFactory::build_document`. `document::finish_open_file` applies path-based stale-open checks, inserts the document, reports failures, and reconciles the explorer; picker close and editor focus remain shell responsibilities.
+`document::open_file` is the shared application open capability for explorer, picker, and future open commands; `document::open_file_at` additionally accepts an optional `DocumentPosition`. They return an `OpenDocument` effect instead of reading and parsing on the UI thread. The worker performs one UTF-8 file read and prepares `Rope`, language configuration, and optional `Syntax`; the main update then constructs Helix's non-`Send` `Document` through `DocumentFactory::build_document`. `document::finish_open_file` applies path-based stale-open checks, inserts the document, reports failures, and reconciles the explorer; picker close and editor focus remain shell responsibilities.
 
 After insertion, `EditorSession` supplies the canonical buffer path. The same update asks `ExplorerState::reveal` to expand visible ancestors and select that exact file, even if the explorer is hidden. Next/previous buffer commands reuse this reconciliation for the newly active file; untitled buffers leave the explorer unchanged. Reveal is transactional: outside-workspace, ignored, missing, and read-failure paths do not partially change expansion or selection. Only after open reconciliation does the picker close and the editor receive focus.
 
@@ -63,6 +63,12 @@ After insertion, `EditorSession` supplies the canonical buffer path. The same up
 `TextViewSnapshot` is the editor crate's common projection of a Helix `Document + View`: visible lines, first-line offset, total line count, and horizontal offset. `EditorSnapshot` wraps it with buffer/mode/dirty/cursor metadata for the real editor; previews use the smaller projection directly and do not fabricate editor metadata.
 
 `preview_document` constructs an independent document/view through the same `DocumentFactory`, then drops those Helix values after snapshotting. Preview documents never join `EditorSession`, buffer tabs, auto-save, or close/quit workflows and expose no editing API. The picker renders successful previews with the same TUI `TextView` used by `EditorBuffer`, so line numbers, scrolling, and syntax highlighting, themes, and match annotations have one presentation path. Grep and find-replace previews can reuse this path with match annotations and a different initial viewport offset.
+
+## Project live grep
+
+`Space s p` opens `project_grep`, which searches fixed-workspace files on disk rather than the in-memory snapshots used by current-buffer grep. `TextSearcher` compiles each smart-case regex once, `workspace_walk` applies the shared Git/built-in ignore policy, and `read_text_file` rejects links, non-regular files, NUL-containing files, and invalid UTF-8 without making them search results. Search and preview work run on the blocking pool with independent revisions and typed `FeatureCompletion` routing.
+
+Project results retain relative path, zero-based line, text, and match ranges. Only selection changes trigger `preview_document_at`, which provides match-centered syntax highlighting. Acceptance closes the extension and calls `document::open_file_at`; the normal safe insertion/reveal flow completes before cursor movement, with no project-specific completion branch in the shell.
 
 ## Fuzzy matching and ranking
 

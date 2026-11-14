@@ -141,6 +141,16 @@ impl Default for Config {
                         ("buffer_grep_accept", "enter"),
                     ],
                 ),
+                keymap_context(
+                    "project_grep",
+                    [
+                        ("project_grep_close", "esc"),
+                        ("project_grep_backspace", "backspace"),
+                        ("project_grep_next", "down"),
+                        ("project_grep_previous", "up"),
+                        ("project_grep_accept", "enter"),
+                    ],
+                ),
             ]),
         }
     }

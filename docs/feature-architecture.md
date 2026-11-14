@@ -261,7 +261,8 @@ Do not expand M6 with theme or plugin work. Once the contribution architecture i
 1. **Page-scroll:** semantic page/half-page commands using the shared viewport, with boundary and resize coverage.
 2. **Current-buffer visible jump:** feature-owned smart-case two-character matching and stable adaptive labels over the active visible snapshot, with accept/cancel and generic absolute cursor navigation. Workspace-wide grep remains a separate feature.
 3. **Current-buffer live grep:** revisioned in-memory text search through ripgrep's matcher/searcher crates, typed completions, picker-style input/results/context preview, and jump-to-line acceptance.
-4. **Text-object foundation:** document selection/operator semantics first, then add a deliberately small set of motions and inner/around objects through existing transaction/undo/auto-save paths. Do not turn this into full Visual mode or a complete Vim grammar.
+4. **Project live grep:** fixed-workspace search through the shared ripgrep/text-file/traversal capabilities, revisioned search and preview effects, and generic open-at-position acceptance.
+5. **Text-object foundation:** document selection/operator semantics first, then add a deliberately small set of motions and inner/around objects through existing transaction/undo/auto-save paths. Do not turn this into full Visual mode or a complete Vim grammar.
 
 These are real feature consumers of the M6 contracts, not reasons to defer M6 or add a separate editing architecture.
 
@@ -270,6 +271,8 @@ Implemented M7.1: `page_scroll.rs` registers `page_scroll_down`/`page_scroll_up`
 Implemented M7.2: `buffer_jump/` owns the `Space c j` workflow, smart-case two-character matching over visible snapshot lines, stable one-key labels for up to 26 matches and two-key labels above that, cancellation/backspace, and final cursor movement. `TextInputRegistry` replaces feature-specific character messages for Insert mode, the file picker, and jump. `UiRegistry` editor overlays receive the existing snapshot and resolved text rectangle for dimming/labels without render-time scanning. The editor core exposes only generic `DocumentPosition` navigation and viewport width; it contains no jump policy.
 
 Implemented M7.3: `buffer_grep/` owns the `Space s c` workflow, ripgrep smart-case regex searching over an immutable `BufferTextSnapshot`, query/document revision checks, result selection, match-centered previews with current Helix syntax highlights, yellow match blocks in results/context, selected preview-line styling, and jump-to-line acceptance. Its blocking request returns a typed `FeatureCompletion`, so central messages/runtime contain no buffer-grep dispatch. Shared picker layout and `TextInput` provide the file-picker-style geometry and cursor.
+
+Implemented M7.4: `project_grep/` owns the `Space s p` workflow, shared `TextSearcher` matching over fixed-workspace regular UTF-8 files, path/line results, independently revisioned syntax previews, and selected-match highlighting through `component/search_highlight`. Search and preview effects return typed `FeatureCompletion`s. Acceptance uses `document::open_file_at`, which inserts through the existing safe document flow before moving to the match line; no project-specific message/runtime branch is added.
 
 ## 12. Testing strategy
 

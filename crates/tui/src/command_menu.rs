@@ -99,6 +99,14 @@ const UI_CONTEXT: CommandMenuContext = CommandMenuContext {
     }],
 };
 
+static SEARCH_CONTEXT: CommandMenuContext = CommandMenuContext::new(
+    "search",
+    &[
+        crate::buffer_grep::CURRENT_FILE_MENU_ITEM,
+        crate::project_grep::PROJECT_MENU_ITEM,
+    ],
+);
+
 const ROOT_CONTEXT: CommandMenuContext = CommandMenuContext {
     title: "Leader",
     items: &[
@@ -123,7 +131,7 @@ const ROOT_CONTEXT: CommandMenuContext = CommandMenuContext {
             description: "files",
             target: CommandMenuTarget::Submenu(&FILES_CONTEXT),
         },
-        CommandMenuItem::submenu('s', "search", &crate::buffer_grep::SEARCH_CONTEXT),
+        CommandMenuItem::submenu('s', "search", &SEARCH_CONTEXT),
         CommandMenuItem {
             key: 'u',
             description: "ui",
@@ -257,6 +265,13 @@ mod tests {
         assert_eq!(
             menu.handle_key(KeyCode::Char('c')),
             CommandMenuOutcome::Action(CommandId("buffer_grep_open"))
+        );
+
+        menu.handle_key(KeyCode::Char(' '));
+        menu.handle_key(KeyCode::Char('s'));
+        assert_eq!(
+            menu.handle_key(KeyCode::Char('p')),
+            CommandMenuOutcome::Action(CommandId("project_grep_open"))
         );
 
         menu.handle_key(KeyCode::Char(' '));

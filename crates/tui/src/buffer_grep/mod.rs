@@ -7,7 +7,7 @@ pub use state::{BufferGrepState, GrepMatch, SearchStatus};
 pub use work::BufferGrepRequest;
 
 use crate::{
-    command_menu::{CommandMenuContext, CommandMenuItem},
+    command_menu::CommandMenuItem,
     data_object::{CommandId, Context, Model, StatusMessage},
     focus,
     manager::{
@@ -19,14 +19,8 @@ use crate::{
 };
 use editor::DocumentPosition;
 
-pub static SEARCH_CONTEXT: CommandMenuContext = CommandMenuContext::new(
-    "search",
-    &[CommandMenuItem::action(
-        'c',
-        "current file",
-        CommandId("buffer_grep_open"),
-    )],
-);
+pub static CURRENT_FILE_MENU_ITEM: CommandMenuItem =
+    CommandMenuItem::action('c', "current file", CommandId("buffer_grep_open"));
 
 pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<()> {
     [

@@ -204,7 +204,7 @@ This is not a promise that new code requires zero wiring. A new feature may be r
 
 ## Third edition: core editing workflows
 
-### Milestone 7: Page-scroll, visible-buffer jump, live grep, and text objects
+### Milestone 7: Page-scroll, visible-buffer jump, buffer/project live grep, and text objects
 
 **Goal:** deliver frequently used editing features through M6's command/effect/UI contribution boundaries. Finish M6 before starting these slices; no dynamic-theme or third-party-plugin work is a prerequisite.
 
@@ -239,7 +239,17 @@ Start with a two-character, Leap-style jump limited to the active buffer's visib
 
 **Exit criteria:** live grep searches current in-memory buffer text without filesystem access or blocking terminal input, while extension-owned state/effects/UI preserve document and cursor invariants.
 
-#### M7.4 — Text-object foundation
+#### M7.4 — Project live grep
+
+- [x] Reuse the shared ripgrep `TextSearcher`, workspace ignore traversal, and regular-file/NUL-free UTF-8 acceptance rules; compile each query once and search in a blocking effect.
+- [x] Open with `Space s p`; show path/line results with yellow match blocks and selected syntax-highlighted file previews using the shared picker layout and input cursor.
+- [x] Route search and preview completions through typed `FeatureCompletion`, with independent query/preview revisions and a 1,000-result cap.
+- [x] Open the selected file through generic `document::open_file_at` and move to its match line after safe insertion; close/cancel without project-specific shell dispatch.
+- [x] Test workspace ignore/binary rules, invalid regexes, stale query/preview completions, syntax/match highlighting, and the leader/search/preview/open workflow.
+
+**Exit criteria:** users can live-search fixed-workspace files and open a selected match without blocking terminal input, bypassing file acceptance rules, or adding project-grep policy to central dispatch.
+
+#### M7.5 — Text-object foundation
 
 - [ ] Document the desired selection and operator semantics, then choose a deliberately small initial object set rather than implementing Vim's full grammar.
 - [ ] Add initial word motions and inner/around-object commands using Helix text/range primitives where useful and Eggplant command semantics where policy differs.
@@ -251,7 +261,7 @@ Start with a two-character, Leap-style jump limited to the active buffer's visib
 
 ### Milestone 7 review rule
 
-Implement and review M7.1, M7.2, M7.3, and M7.4 independently. If text-object semantics require a larger selection-model change, stop and document it before adding operators or visual-mode behavior.
+Implement and review M7.1, M7.2, M7.3, M7.4, and M7.5 independently. If text-object semantics require a larger selection-model change, stop and document it before adding operators or visual-mode behavior.
 
 ## TBD — much later editions
 

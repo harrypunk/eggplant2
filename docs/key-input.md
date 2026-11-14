@@ -13,6 +13,7 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | Normal / Explorer | Select a UI theme | `Space u t` |
 | Normal / Explorer | Jump in the visible buffer | `Space c j` |
 | Normal / Explorer | Search the current file | `Space s c` |
+| Normal / Explorer | Search the project | `Space s p` |
 | Normal / Explorer | Scroll down / up | `Ctrl-F` / `Ctrl-U` |
 | Normal / Explorer | Focus left / right | `Ctrl-H` / `Ctrl-L` |
 | Normal / Explorer | Focus up / down (reserved) | `Ctrl-K` / `Ctrl-J` |
@@ -37,6 +38,9 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | Buffer grep | Edit smart-case regex | Printable input / `Backspace` |
 | Buffer grep | Select | `Down` / `Up` |
 | Buffer grep | Jump to match / close | `Enter` / `Esc` |
+| Project grep | Edit smart-case regex | Printable input / `Backspace` |
+| Project grep | Select | `Down` / `Up` |
+| Project grep | Open match / close | `Enter` / `Esc` |
 
 Custom `[keymap]` entries merge with defaults by context and action, so only overrides need to be specified. Built-in Space leader sequences are not configured in TOML. Explicit unbinding is not implemented.
 

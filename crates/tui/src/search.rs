@@ -15,43 +15,58 @@ pub struct MatchLine {
     pub match_ranges: Vec<Range<usize>>,
 }
 
-/// Search one UTF-8 text snapshot with ripgrep's smart-case regex engine.
+pub struct TextSearcher {
+    matcher: grep_regex::RegexMatcher,
+}
+
+impl TextSearcher {
+    pub fn new(query: &str) -> Result<Self, String> {
+        let matcher = RegexMatcherBuilder::new()
+            .case_smart(true)
+            .build(query)
+            .map_err(|error| error.to_string())?;
+        Ok(Self { matcher })
+    }
+
+    /// Search one UTF-8 text snapshot with this compiled smart-case regex.
+    pub fn search(&self, text: &str) -> Result<Vec<MatchLine>, String> {
+        let mut matches = Vec::new();
+        SearcherBuilder::new()
+            .line_number(true)
+            .build()
+            .search_slice(
+                &self.matcher,
+                text.as_bytes(),
+                UTF8(|line_number, line| {
+                    let line_number =
+                        usize::try_from(line_number.saturating_sub(1)).unwrap_or(usize::MAX);
+                    let text = line.trim_end_matches(['\r', '\n']);
+                    let mut match_ranges = Vec::new();
+                    self.matcher
+                        .find_iter(text.as_bytes(), |matched| {
+                            match_ranges.push(matched.start()..matched.end());
+                            true
+                        })
+                        .map_err(std::io::Error::other)?;
+                    matches.push(MatchLine {
+                        line: line_number,
+                        text: text.to_string(),
+                        match_ranges,
+                    });
+                    Ok(matches.len() < MAX_RESULTS)
+                }),
+            )
+            .map_err(|error| error.to_string())?;
+        Ok(matches)
+    }
+}
+
+/// Compile a query once and search one UTF-8 text snapshot.
 pub fn search_text(text: &str, query: &str) -> Result<Vec<MatchLine>, String> {
     if query.is_empty() {
         return Ok(Vec::new());
     }
-    let matcher = RegexMatcherBuilder::new()
-        .case_smart(true)
-        .build(query)
-        .map_err(|error| error.to_string())?;
-    let mut matches = Vec::new();
-    SearcherBuilder::new()
-        .line_number(true)
-        .build()
-        .search_slice(
-            &matcher,
-            text.as_bytes(),
-            UTF8(|line_number, line| {
-                let line_number =
-                    usize::try_from(line_number.saturating_sub(1)).unwrap_or(usize::MAX);
-                let text = line.trim_end_matches(['\r', '\n']);
-                let mut match_ranges = Vec::new();
-                matcher
-                    .find_iter(text.as_bytes(), |matched| {
-                        match_ranges.push(matched.start()..matched.end());
-                        true
-                    })
-                    .map_err(std::io::Error::other)?;
-                matches.push(MatchLine {
-                    line: line_number,
-                    text: text.to_string(),
-                    match_ranges,
-                });
-                Ok(matches.len() < MAX_RESULTS)
-            }),
-        )
-        .map_err(|error| error.to_string())?;
-    Ok(matches)
+    TextSearcher::new(query)?.search(text)
 }
 
 #[cfg(test)]
