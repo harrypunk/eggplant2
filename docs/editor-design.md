@@ -184,6 +184,12 @@ Built-in common commands use a Space leader and bottom-right key-hints popup, no
 
 All mutations go through the editor command API so undo, dirty tracking, viewport updates, and future AI-generated transactions share the same path.
 
+### Word motion semantics
+
+Normal mode supports `w` for next word start, `b` for previous word start, and `e` for next word end. These are cursor-only motions: `EditorSession::move_cursor_word` uses Helix's Unicode-aware word primitives, then collapses the result to a cursor point instead of exposing Helix's selection-oriented motion. `e` uses the resulting block-cursor edge so it lands on the final character. Helix's boundary policy, including line-ending boundaries, is retained rather than reimplemented as Vim compatibility. These motions never modify text.
+
+Visual mode, counts, operators, inner/around objects, and a broader Vim/Helix grammar remain out of scope. Future text objects need a separate documented selection model before implementation.
+
 ### Update and rendering responsibilities
 
 Movement, editing, activation, and resize handling update viewport state. Rendering only reads the result and draws visible content. Editor buffers and independent previews share one viewport policy: Eggplant owns the gutter and statusline, while Helix receives exactly the resolved text dimensions plus its internally required statusline compensation. Cursor placement is suppressed for empty or out-of-bounds text rectangles. Buffer tabs use filename-only `BufferInfo` summaries with active/dirty styling and occupy the editor's top row. The layout tree is root vertical main/status, main horizontal explorer/editor/tools with display/hidden states, and editor vertical tabs/content. The editor is borderless, and shared Flex layouts allow future panels without component-specific box offsets.

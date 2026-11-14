@@ -263,7 +263,7 @@ Do not expand M6 with theme or plugin work. Once the contribution architecture i
 3. **Current-buffer live grep:** revisioned in-memory text search through ripgrep's matcher/searcher crates, typed completions, picker-style input/results/context preview, and jump-to-line acceptance.
 4. **Project live grep:** fixed-workspace search through the shared ripgrep/text-file/traversal capabilities, revisioned search and preview effects, and generic open-at-position acceptance.
 5. **External buffer synchronization:** watch file updates, prepare reads off the UI thread, and apply revision-checked diff reloads to clean buffers while preserving dirty/saving buffers.
-6. **Text-object foundation:** document selection/operator semantics first, then add a deliberately small set of motions and inner/around objects through existing transaction/undo/auto-save paths. Do not turn this into full Visual mode or a complete Vim grammar.
+6. **Common word motions:** add cursor-only `w`/`b`/`e` through Helix word primitives, explicitly collapsing motion results to cursor points. Defer inner/around objects until selection/operator semantics exist; do not build a complete Vim grammar.
 
 These are real feature consumers of the M6 contracts, not reasons to defer M6 or add a separate editing architecture.
 
@@ -276,6 +276,8 @@ Implemented M7.3: `buffer_grep/` owns the `Space s c` workflow, ripgrep smart-ca
 Implemented M7.4: `project_grep/` owns the `Space s p` workflow, shared `TextSearcher` matching over fixed-workspace regular UTF-8 files, path/line results, independently revisioned syntax previews, and selected-match highlighting through `component/search_highlight`. Search and preview effects return typed `FeatureCompletion`s. Acceptance uses `document::open_file_at`, which inserts through the existing safe document flow before moving to the match line; no project-specific message/runtime branch is added.
 
 Implemented M7.5: `file_watcher.rs` owns `notify` setup and forwards file updates into the single message loop. `external_sync.rs` schedules the existing background `DocumentOpenRequest` for matching clean buffers. `EditorSession::complete_external_reload` rejects stale versions and dirty/saving buffers, then applies Helix's diff with history/cursor preservation and refreshed syntax. Auto-save paths are unchanged.
+
+Implemented M7.6: the editing feature registers `move_next_word_start`, `move_previous_word_start`, and `move_next_word_end` with Normal `w`/`b`/`e`. `EditorSession::move_cursor_word` adapts Helix's word motions and collapses them to cursor points, retaining Unicode/boundary behavior without edits or a new selection mode.
 
 ## 12. Testing strategy
 

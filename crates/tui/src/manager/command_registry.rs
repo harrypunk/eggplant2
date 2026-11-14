@@ -130,6 +130,21 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
             crate::editing::handle_command,
         ),
         Command::feature(
+            CommandId("move_next_word_start"),
+            "move to next word start",
+            crate::editing::handle_command,
+        ),
+        Command::feature(
+            CommandId("move_previous_word_start"),
+            "move to previous word start",
+            crate::editing::handle_command,
+        ),
+        Command::feature(
+            CommandId("move_next_word_end"),
+            "move to next word end",
+            crate::editing::handle_command,
+        ),
+        Command::feature(
             CommandId("page_scroll_down"),
             "scroll down",
             crate::page_scroll::handle_command,

@@ -69,6 +69,13 @@ pub enum CursorMovement {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WordMovement {
+    NextStart,
+    PreviousStart,
+    NextEnd,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VerticalDirection {
     Up,
     Down,
@@ -385,6 +392,28 @@ impl EditorSession {
     /// Move the active cursor without extending the selection.
     pub fn move_cursor(&mut self, movement: CursorMovement) -> Result<(), EditorError> {
         self.move_cursor_by(movement, 1)
+    }
+
+    /// Move by Helix word boundaries without extending the selection.
+    pub fn move_cursor_word(&mut self, movement: WordMovement) -> Result<(), EditorError> {
+        let scrolloff = self.scrolloff;
+        let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
+        let text = document.text().slice(..);
+        let selection = document.selection(view.id).clone().transform(|range| {
+            let moved = match movement {
+                WordMovement::NextStart => movement::move_next_word_start(text, range, 1),
+                WordMovement::PreviousStart => movement::move_prev_word_start(text, range, 1),
+                WordMovement::NextEnd => movement::move_next_word_end(text, range, 1),
+            };
+            let target = match movement {
+                WordMovement::NextEnd => moved.cursor(text),
+                WordMovement::NextStart | WordMovement::PreviousStart => moved.head,
+            };
+            helix_core::Range::point(target)
+        });
+        document.set_selection(view.id, selection);
+        view.ensure_cursor_in_view(document, scrolloff);
+        Ok(())
     }
 
     /// Move the active cursor to a logical document position without extending the selection.
@@ -1043,6 +1072,54 @@ mod tests {
         };
         assert_eq!(active_cursor(&mut session), document_end);
         assert!(session.active_snapshot().unwrap().cursor.is_some());
+    }
+
+    #[test]
+    fn word_motions_cover_unicode_and_document_boundaries() {
+        let mut session = EditorSession::new();
+        create_buffer(&mut session, "hello world élan test");
+        session.resize_active_view(30, 4);
+
+        session.move_cursor_word(WordMovement::NextEnd).unwrap();
+        assert_eq!(active_cursor(&mut session), 4);
+        session
+            .move_cursor_word(WordMovement::PreviousStart)
+            .unwrap();
+        assert_eq!(active_cursor(&mut session), 0);
+        session.move_cursor_word(WordMovement::NextStart).unwrap();
+        assert_eq!(active_cursor(&mut session), 6);
+        session.move_cursor_word(WordMovement::NextStart).unwrap();
+        assert_eq!(active_cursor(&mut session), 12);
+        session.move_cursor_word(WordMovement::NextEnd).unwrap();
+        assert_eq!(active_cursor(&mut session), 15);
+        session
+            .move_cursor_word(WordMovement::PreviousStart)
+            .unwrap();
+        assert_eq!(active_cursor(&mut session), 12);
+        session
+            .move_cursor_word(WordMovement::PreviousStart)
+            .unwrap();
+        assert_eq!(active_cursor(&mut session), 6);
+        session
+            .move_cursor_word(WordMovement::PreviousStart)
+            .unwrap();
+        assert_eq!(active_cursor(&mut session), 0);
+        session
+            .move_cursor_word(WordMovement::PreviousStart)
+            .unwrap();
+        assert_eq!(active_cursor(&mut session), 0);
+        assert!(!session.active_is_modified());
+
+        let mut empty = EditorSession::new();
+        create_buffer(&mut empty, "");
+        for movement in [
+            WordMovement::NextStart,
+            WordMovement::PreviousStart,
+            WordMovement::NextEnd,
+        ] {
+            empty.move_cursor_word(movement).unwrap();
+            assert_eq!(active_cursor(&mut empty), 0);
+        }
     }
 
     #[test]

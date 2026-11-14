@@ -1,4 +1,4 @@
-use editor::CursorMovement;
+use editor::{CursorMovement, WordMovement};
 
 use crate::{
     buffer,
@@ -27,6 +27,9 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         "move_right" => move_cursor(model, CursorMovement::Right),
         "move_up" => move_cursor(model, CursorMovement::Up),
         "move_down" => move_cursor(model, CursorMovement::Down),
+        "move_next_word_start" => move_word(model, WordMovement::NextStart),
+        "move_previous_word_start" => move_word(model, WordMovement::PreviousStart),
+        "move_next_word_end" => move_word(model, WordMovement::NextEnd),
         "backspace" => {
             if model.editor.backspace().is_ok() {
                 return buffer::auto_save_active(model);
@@ -62,6 +65,11 @@ pub(crate) fn insert_char(model: &mut Model, character: char) -> Option<Effect> 
 
 fn move_cursor(model: &mut Model, movement: CursorMovement) -> Option<Effect> {
     let _ = model.editor.move_cursor(movement);
+    None
+}
+
+fn move_word(model: &mut Model, movement: WordMovement) -> Option<Effect> {
+    let _ = model.editor.move_cursor_word(movement);
     None
 }
 
@@ -170,6 +178,58 @@ mod tests {
         assert_eq!(
             model.editor.active_snapshot().unwrap().text.lines[0].text,
             "ac"
+        );
+    }
+
+    #[test]
+    fn word_motion_commands_move_the_normal_mode_cursor() {
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+        create_buffer(&mut model, "hello world");
+        let manager = MessageManager::default();
+        manager.update(&mut model, Message::Resize(80, 10));
+
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("move_next_word_start")),
+        );
+        assert_eq!(
+            model
+                .editor
+                .active_snapshot()
+                .unwrap()
+                .cursor
+                .unwrap()
+                .column,
+            6
+        );
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("move_next_word_end")),
+        );
+        assert_eq!(
+            model
+                .editor
+                .active_snapshot()
+                .unwrap()
+                .cursor
+                .unwrap()
+                .column,
+            10
+        );
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("move_previous_word_start")),
+        );
+        assert_eq!(
+            model
+                .editor
+                .active_snapshot()
+                .unwrap()
+                .cursor
+                .unwrap()
+                .column,
+            6
         );
     }
 

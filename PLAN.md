@@ -258,15 +258,14 @@ Start with a two-character, Leap-style jump limited to the active buffer's visib
 
 **Exit criteria:** external tools update clean open buffers automatically without user save/reload commands, while local edits and save conflict protections remain intact.
 
-#### M7.6 — Text-object foundation
+#### M7.6 — Common word motions
 
-- [ ] Document the desired selection and operator semantics, then choose a deliberately small initial object set rather than implementing Vim's full grammar.
-- [ ] Add initial word motions and inner/around-object commands using Helix text/range primitives where useful and Eggplant command semantics where policy differs.
-- [ ] Route all resulting edits through the existing transaction, undo, dirty-revision, and auto-save paths.
-- [ ] Test empty documents, Unicode/graphemes, object boundaries, nested delimiters if supported, and stale/invalid selections.
-- [ ] Keep Visual mode, macros, registers, and the complete Vim/Helix text-object catalog out of this slice.
+- [x] Document cursor-only selection semantics and exclude operators, counts, Visual mode, and inner/around-object grammar.
+- [x] Add Normal-mode `w`, `b`, and `e` for next word start, previous word start, and next word end through semantic editing commands.
+- [x] Use Helix word primitives and collapse motion results to cursor points without modifying text; retain Helix's Unicode and line-ending boundary policy.
+- [x] Test empty documents, Unicode, repeated motion, document boundaries, and command-level cursor behavior.
 
-**Exit criteria:** the documented initial motions and text objects work consistently with the editor's selection model, with no parallel edit or undo path.
+**Exit criteria:** common word motions work predictably with the existing single-cursor editor, without introducing a selection/operator system or a parallel text-object implementation.
 
 ### Milestone 7 review rule
 

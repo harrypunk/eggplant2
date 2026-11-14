@@ -19,6 +19,7 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | Normal / Explorer | Focus up / down (reserved) | `Ctrl-K` / `Ctrl-J` |
 | Normal | Enter Insert | `i` |
 | Normal | Move | `h`, `j`, `k`, `l` |
+| Normal | Next word / previous word / word end | `w` / `b` / `e` |
 | Normal | Undo / redo | `u` / `Ctrl-R` |
 | Insert | Return to Normal | `Esc` |
 | Insert | Backspace / newline | `Backspace` / `Enter` |
