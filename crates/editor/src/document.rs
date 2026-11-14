@@ -44,6 +44,20 @@ pub(crate) fn default_syntax_loader() -> SharedSyntaxLoader {
         .clone()
 }
 
+/// Read a regular UTF-8 text file without following links or accepting NUL bytes.
+pub fn read_text_file(path: &Path) -> Result<String, OpenDocumentError> {
+    let metadata = std::fs::symlink_metadata(path)?;
+    if !metadata.file_type().is_file() {
+        return Err(OpenDocumentError::NotTextFile);
+    }
+    let bytes = std::fs::read(path)?;
+    let text = String::from_utf8(bytes).map_err(|_| OpenDocumentError::NotTextFile)?;
+    if text.contains('\0') {
+        return Err(OpenDocumentError::NotTextFile);
+    }
+    Ok(text)
+}
+
 /// Owns Helix runtime resources needed to construct documents.
 #[derive(Clone)]
 pub struct DocumentFactory {
@@ -78,24 +92,14 @@ impl DocumentFactory {
 
     /// Read and parse on any thread; construct the non-Send Document on the caller's thread.
     pub(crate) fn prepare_open(&self, path: &Path) -> Result<PreparedDocument, OpenDocumentError> {
-        let text = match std::fs::symlink_metadata(path) {
-            Ok(metadata) => {
-                if !metadata.file_type().is_file() {
-                    return Err(OpenDocumentError::NotTextFile);
-                }
-                let bytes = std::fs::read(path)?;
-                let text = String::from_utf8(bytes).map_err(|_| OpenDocumentError::NotTextFile)?;
-                if text.contains('\0') {
-                    return Err(OpenDocumentError::NotTextFile);
-                }
-                Rope::from(text)
-            }
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+        let text = match read_text_file(path) {
+            Ok(text) => Rope::from(text),
+            Err(OpenDocumentError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
                 let line_ending: helix_core::LineEnding =
                     self.config.load().default_line_ending.into();
                 Rope::from(line_ending.as_str())
             }
-            Err(error) => return Err(error.into()),
+            Err(error) => return Err(error),
         };
         let path = helix_stdx::path::canonicalize(path);
         let loader = self.syntax_loader.load();

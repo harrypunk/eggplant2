@@ -8,9 +8,9 @@ mod session;
 mod snapshot;
 mod viewport;
 
-pub use document::{DocumentFactory, OpenDocumentError};
+pub use document::{DocumentFactory, OpenDocumentError, read_text_file};
 pub use open::{DocumentOpenCompletion, DocumentOpenRequest};
-pub use preview::preview_document;
+pub use preview::{preview_document, preview_document_at};
 pub use save::{SaveCompletion, SaveError, SaveRequest};
 pub use session::{
     BufferId, CursorMovement, DocumentPosition, EditMode, EditorError, EditorSession,

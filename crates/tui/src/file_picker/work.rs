@@ -5,16 +5,13 @@ use std::{
 
 use editor::{DocumentFactory, OpenDocumentError, preview_document};
 
-use ignore::WalkBuilder;
 use nucleo_matcher::{
     Config, Matcher, Utf32Str,
     pattern::{CaseMatching, Normalization, Pattern},
 };
 
 use super::{FileEntry, PREVIEW_VIEWPORT_HEIGHT, PreviewState, ScanDepth};
-use crate::{
-    data_object::Message, filesystem::is_built_in_ignored, manager::effect::FeatureEffect,
-};
+use crate::{data_object::Message, filesystem::workspace_walk, manager::effect::FeatureEffect};
 
 const PREVIEW_VIEWPORT_WIDTH: u16 = 80;
 
@@ -75,20 +72,11 @@ impl FeatureEffect for FilePickerRequest {
 }
 
 fn scan_files(root: &Path, depth: ScanDepth) -> Result<Vec<FileEntry>, String> {
-    let mut builder = WalkBuilder::new(root);
+    let mut builder = workspace_walk(root);
     builder.max_depth(match depth {
         ScanDepth::TopLevel => Some(1),
         ScanDepth::Recursive => None,
     });
-    builder
-        .hidden(false)
-        .parents(true)
-        .ignore(false)
-        .git_ignore(true)
-        .git_global(false)
-        .git_exclude(false)
-        .require_git(false)
-        .filter_entry(|entry| entry.depth() == 0 || !is_built_in_ignored(entry.file_name()));
 
     let mut files = builder
         .build()
