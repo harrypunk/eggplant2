@@ -204,7 +204,7 @@ This is not a promise that new code requires zero wiring. A new feature may be r
 
 ## Third edition: core editing workflows
 
-### Milestone 7: Page-scroll, visible-buffer jump, buffer/project live grep, and text objects
+### Milestone 7: Editing workflows, buffer/project grep, and external buffer sync
 
 **Goal:** deliver frequently used editing features through M6's command/effect/UI contribution boundaries. Finish M6 before starting these slices; no dynamic-theme or third-party-plugin work is a prerequisite.
 
@@ -249,7 +249,16 @@ Start with a two-character, Leap-style jump limited to the active buffer's visib
 
 **Exit criteria:** users can live-search fixed-workspace files and open a selected match without blocking terminal input, bypassing file acceptance rules, or adding project-grep policy to central dispatch.
 
-#### M7.5 — Text-object foundation
+#### M7.5 — External buffer synchronization
+
+- [x] Watch the fixed workspace or initial file's parent with `notify` and forward create/modify events as ordinary messages.
+- [x] Reuse background document preparation for changed open files; check buffer identity/version and dirty/save state before applying a Helix diff reload.
+- [x] Reload clean buffers with valid cursor/history/syntax state; preserve dirty buffers, active saves, and missing-file contents without changing auto-save behavior.
+- [x] Test clean/same-content reloads, dirty conflicts, deletion, stale completions, watcher event filtering, and the message/effect workflow.
+
+**Exit criteria:** external tools update clean open buffers automatically without user save/reload commands, while local edits and save conflict protections remain intact.
+
+#### M7.6 — Text-object foundation
 
 - [ ] Document the desired selection and operator semantics, then choose a deliberately small initial object set rather than implementing Vim's full grammar.
 - [ ] Add initial word motions and inner/around-object commands using Helix text/range primitives where useful and Eggplant command semantics where policy differs.
@@ -261,7 +270,7 @@ Start with a two-character, Leap-style jump limited to the active buffer's visib
 
 ### Milestone 7 review rule
 
-Implement and review M7.1, M7.2, M7.3, M7.4, and M7.5 independently. If text-object semantics require a larger selection-model change, stop and document it before adding operators or visual-mode behavior.
+Implement and review M7.1, M7.2, M7.3, M7.4, M7.5, and M7.6 independently. If text-object semantics require a larger selection-model change, stop and document it before adding operators or visual-mode behavior.
 
 ## TBD — much later editions
 

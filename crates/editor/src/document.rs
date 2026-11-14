@@ -23,9 +23,10 @@ pub enum OpenDocumentError {
 
 pub(crate) struct PreparedDocument {
     path: PathBuf,
-    text: Rope,
-    language: Option<Arc<syntax::config::LanguageConfiguration>>,
-    syntax: Option<syntax::Syntax>,
+    pub(crate) text: Rope,
+    pub(crate) language: Option<Arc<syntax::config::LanguageConfiguration>>,
+    pub(crate) syntax: Option<syntax::Syntax>,
+    pub(crate) existed: bool,
 }
 
 type SharedConfig = Arc<ArcSwap<Config>>;
@@ -92,12 +93,12 @@ impl DocumentFactory {
 
     /// Read and parse on any thread; construct the non-Send Document on the caller's thread.
     pub(crate) fn prepare_open(&self, path: &Path) -> Result<PreparedDocument, OpenDocumentError> {
-        let text = match read_text_file(path) {
-            Ok(text) => Rope::from(text),
+        let (text, existed) = match read_text_file(path) {
+            Ok(text) => (Rope::from(text), true),
             Err(OpenDocumentError::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
                 let line_ending: helix_core::LineEnding =
                     self.config.load().default_line_ending.into();
-                Rope::from(line_ending.as_str())
+                (Rope::from(line_ending.as_str()), false)
             }
             Err(error) => return Err(error),
         };
@@ -117,6 +118,7 @@ impl DocumentFactory {
             text,
             language,
             syntax,
+            existed,
         })
     }
 

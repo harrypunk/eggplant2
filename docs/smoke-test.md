@@ -29,8 +29,9 @@ cargo run -p tui -- "$workdir"
 7. **Visible-buffer jump:** open a buffer containing `hello`, then press `Space c j`, type `el`, and enter the displayed label for `e`. Confirm that only visible matches receive labels, other text dims, and the cursor lands on `e`. Restart and confirm that Escape cancels without moving the cursor.
 8. **Current-file grep:** press `Space s c`, enter a smart-case regex such as `ell`, and confirm live results, normal buffer syntax colors in preview, yellow match blocks in results and preview, and a selected preview-line style. Select a result with Down/Up and press Enter; the editor must jump to that line. Reopen and confirm that Escape cancels without moving the cursor.
 9. **Project grep:** press `Space s p`, enter a regex present in multiple workspace files, and confirm path/line results, yellow match blocks, and syntax-highlighted previews. Select a match and press Enter; the file must open at that line. Confirm that binary and ignored files do not appear.
-10. **Save safety:** make a buffer dirty and quit with `Space q q`; confirm that the application waits for the write and exits with the edited content persisted.
-11. **Terminal restoration after normal exit:** confirm that the shell prompt returns to the original screen, raw-mode input is disabled, and the cursor/keyboard behave normally.
+10. **External synchronization:** while a clean buffer is open, modify its file with another process; the open buffer must reload automatically with valid cursor and syntax state. Repeat with a locally modified buffer and confirm that local text is preserved with a conflict status.
+11. **Save safety:** make a buffer dirty and quit with `Space q q`; confirm that the application waits for the write and exits with the edited content persisted.
+12. **Terminal restoration after normal exit:** confirm that the shell prompt returns to the original screen, raw-mode input is disabled, and the cursor/keyboard behave normally.
 
 ## Failure and panic review
 

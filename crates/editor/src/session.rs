@@ -21,6 +21,7 @@ use helix_view::{
 use thiserror::Error;
 
 use crate::{
+    open::OpenedDocument,
     save::{SaveCompletion, SaveError, SaveRequest},
     snapshot::{
         BufferInfo, BufferTextSnapshot, CursorPosition, DirtyState, EditorSnapshot,
@@ -104,6 +105,12 @@ pub enum EditorError {
         buffer_id: BufferId,
         #[source]
         source: SaveError,
+    },
+    #[error("failed to reload buffer {buffer_id}: {source}")]
+    ReloadDocument {
+        buffer_id: BufferId,
+        #[source]
+        source: anyhow::Error,
     },
 }
 
@@ -229,6 +236,10 @@ impl EditorSession {
     /// Canonical path of an open file-backed buffer, if it has one.
     pub fn buffer_path(&self, id: BufferId) -> Option<&Path> {
         self.buffers.get(&id)?.document.path()
+    }
+
+    pub fn buffer_version(&self, id: BufferId) -> Option<i32> {
+        Some(self.buffers.get(&id)?.document.version())
     }
 
     pub fn active_is_modified(&self) -> bool {
@@ -525,6 +536,60 @@ impl EditorSession {
         Ok(changed)
     }
 
+    /// Apply a prepared external reload if the buffer has not changed since scheduling.
+    /// Returns `false` for a stale completion and `true` after applying the document state.
+    pub fn complete_external_reload(
+        &mut self,
+        id: BufferId,
+        expected_version: i32,
+        result: Result<OpenedDocument, String>,
+    ) -> Result<bool, EditorError> {
+        if self.saving_buffers.contains(&id) {
+            return Err(EditorError::SaveInProgress(id));
+        }
+        let view = &mut self
+            .active_view
+            .as_mut()
+            .ok_or(EditorError::NoActiveBuffer)?
+            .view;
+        let document = &mut self
+            .buffers
+            .get_mut(&id)
+            .ok_or(EditorError::UnknownBuffer(id))?
+            .document;
+        if document.version() != expected_version {
+            return Ok(false);
+        }
+        if document.is_modified() {
+            return Err(EditorError::BufferModified(id));
+        }
+
+        let prepared = result
+            .and_then(|opened| opened.into_prepared())
+            .map_err(anyhow::Error::msg)
+            .and_then(|prepared| {
+                if prepared.existed {
+                    Ok(prepared)
+                } else {
+                    Err(anyhow::Error::msg("file no longer exists"))
+                }
+            })
+            .map_err(|source| EditorError::ReloadDocument {
+                buffer_id: id,
+                source,
+            })?;
+        let transaction = helix_core::diff::compare_ropes(document.text(), &prepared.text);
+        document.apply(&transaction, view.id);
+        document.append_changes_to_history(view);
+        document.reset_modified();
+        document.pickup_last_saved_time();
+        document.language = prepared.language;
+        document.syntax = prepared.syntax;
+        document.detect_indent_and_line_ending();
+        view.ensure_cursor_in_view(document, self.scrolloff);
+        Ok(true)
+    }
+
     /// Prepare an asynchronous save of one buffer's current snapshot.
     pub fn save_buffer(&mut self, id: BufferId) -> Result<SaveRequest, EditorError> {
         if self.saving_buffers.contains(&id) {
@@ -601,7 +666,7 @@ impl EditorSession {
             .collect()
     }
 
-    fn buffer_by_path(&self, path: &Path) -> Option<BufferId> {
+    pub fn buffer_by_path(&self, path: &Path) -> Option<BufferId> {
         self.buffers
             .iter()
             .find_map(|(&id, buffer)| (buffer.document.path() == Some(path)).then_some(id))
@@ -733,7 +798,7 @@ mod tests {
     use helix_view::graphics::Rect;
 
     use super::*;
-    use crate::{DocumentFactory, OpenDocumentError};
+    use crate::{DocumentFactory, DocumentOpenRequest, OpenDocumentError};
 
     fn create_buffer(session: &mut EditorSession, text: &str) -> BufferId {
         session.insert_document(DocumentFactory::new().create(text))
@@ -742,6 +807,18 @@ mod tests {
     fn open_file(session: &mut EditorSession, path: &Path) -> BufferId {
         let document = DocumentFactory::new().open(path).unwrap();
         session.insert_document(document)
+    }
+
+    fn complete_external_reload(
+        session: &mut EditorSession,
+        id: BufferId,
+    ) -> Result<bool, EditorError> {
+        let path = session.buffer_path(id).unwrap().to_path_buf();
+        let expected_version = session.buffer_version(id).unwrap();
+        let result = DocumentOpenRequest::new(DocumentFactory::new(), &path)
+            .perform()
+            .into_result();
+        session.complete_external_reload(id, expected_version, result)
     }
 
     fn active_parts(session: &mut EditorSession) -> (&mut Document, &mut View) {
@@ -1138,6 +1215,80 @@ mod tests {
         assert_eq!(snapshot.text.lines.len(), 4);
         assert!(snapshot.text.lines.iter().any(|line| line.text == "6"));
         assert!(cursor.row < snapshot.text.lines.len());
+    }
+
+    #[test]
+    fn external_reload_updates_a_clean_buffer_and_keeps_cursor_valid() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("note.txt");
+        std::fs::write(&path, "zero\none").unwrap();
+        let mut session = EditorSession::new();
+        let id = open_file(&mut session, &path);
+        session.resize_active_view(20, 2);
+        session
+            .move_cursor_to(DocumentPosition {
+                line: 1,
+                character: 1,
+            })
+            .unwrap();
+        std::fs::write(&path, "zero\none changed\nthree").unwrap();
+
+        complete_external_reload(&mut session, id).unwrap();
+
+        assert_eq!(
+            session.buffers[&id].document.text(),
+            "zero\none changed\nthree"
+        );
+        assert!(!session.active_is_modified());
+        assert!(session.active_snapshot().unwrap().cursor.is_some());
+        complete_external_reload(&mut session, id).unwrap();
+        assert!(!session.active_is_modified());
+    }
+
+    #[test]
+    fn external_reload_preserves_dirty_or_deleted_local_buffers() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("note.txt");
+        std::fs::write(&path, "original").unwrap();
+        let mut session = EditorSession::new();
+        let id = open_file(&mut session, &path);
+        append_text(&mut session, " local");
+        std::fs::write(&path, "external").unwrap();
+
+        assert!(matches!(
+            complete_external_reload(&mut session, id),
+            Err(EditorError::BufferModified(buffer_id)) if buffer_id == id
+        ));
+        assert_eq!(session.buffers[&id].document.text(), "original local");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "external");
+
+        let mut clean_session = EditorSession::new();
+        let clean_id = open_file(&mut clean_session, &path);
+        std::fs::remove_file(&path).unwrap();
+        assert!(complete_external_reload(&mut clean_session, clean_id).is_err());
+        assert_eq!(clean_session.buffers[&clean_id].document.text(), "external");
+        assert_eq!(session.buffers[&id].document.text(), "original local");
+    }
+
+    #[test]
+    fn stale_external_reload_does_not_overwrite_a_newer_edit() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("note.txt");
+        std::fs::write(&path, "original").unwrap();
+        let mut session = EditorSession::new();
+        let id = open_file(&mut session, &path);
+        let expected_version = session.buffer_version(id).unwrap();
+        session.insert_text("!").unwrap();
+        std::fs::write(&path, "external").unwrap();
+        let result = DocumentOpenRequest::new(DocumentFactory::new(), &path)
+            .perform()
+            .into_result();
+
+        assert!(matches!(
+            session.complete_external_reload(id, expected_version, result),
+            Ok(false)
+        ));
+        assert_eq!(session.buffers[&id].document.text(), "!original");
     }
 
     #[tokio::test]

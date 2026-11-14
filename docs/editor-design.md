@@ -229,6 +229,7 @@ SaveFinished { id, saved_revision, result }
 - Save errors keep the buffer dirty and remain visible. Close/quit actions are canceled on failure rather than discarding content.
 - A missing file-backed path is created on its first successful save; no manual Save command is required.
 - Use atomic/replace-safe writes where supported and detect external file changes before overwriting them. Readonly permissions and a newer external mtime fail the save without overwriting either local edits or the external version; there is no automatic merge or force-overwrite workflow.
+- A `notify` watcher reports external create/modify events for the workspace or initial file's parent. Matching clean buffers reload through a background `DocumentOpenRequest`; completion checks the expected document version and applies Helix's diff so cursor/history remain valid. Dirty buffers and in-progress saves are left unchanged, and missing files never become empty reloads.
 
 With standalone `helix-view::Document`, `Document::save` returns a future and completion event; the caller applies `set_last_saved_revision`. Helix's auto-save handlers live in `helix-term`, so Eggplant directly triggers its shared save path at the events listed above.
 

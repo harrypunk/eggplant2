@@ -7,7 +7,9 @@ pub mod config;
 pub mod document;
 pub mod editing;
 pub mod explorer;
+pub mod external_sync;
 pub mod file_picker;
+pub mod file_watcher;
 mod filesystem;
 pub mod focus;
 pub mod lifecycle;
@@ -249,6 +251,7 @@ pub mod data_object {
         SaveFinished(SaveCompletion),
         FileOpened(DocumentOpenCompletion),
         FocusLost,
+        ExternalFileChanged(PathBuf),
         Resize(u16, u16),
         OpenSelected,
         FileScanFinished {

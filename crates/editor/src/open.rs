@@ -70,12 +70,19 @@ impl DocumentOpenCompletion {
     }
 }
 
-impl EditorSession {
-    pub fn insert_opened_document(&mut self, opened: OpenedDocument) -> Result<BufferId, String> {
-        let prepared = Arc::try_unwrap(opened.prepared)
+impl OpenedDocument {
+    pub(crate) fn into_prepared(self) -> Result<PreparedDocument, String> {
+        Arc::try_unwrap(self.prepared)
             .map_err(|_| "opened document is still shared".to_string())?
             .into_inner()
-            .map_err(|_| "opened document lock is poisoned".to_string())?;
-        Ok(self.insert_document(opened.documents.build_document(prepared)))
+            .map_err(|_| "opened document lock is poisoned".to_string())
+    }
+}
+
+impl EditorSession {
+    pub fn insert_opened_document(&mut self, opened: OpenedDocument) -> Result<BufferId, String> {
+        let documents = opened.documents.clone();
+        let prepared = opened.into_prepared()?;
+        Ok(self.insert_document(documents.build_document(prepared)))
     }
 }

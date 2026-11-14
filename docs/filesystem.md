@@ -70,6 +70,12 @@ After insertion, `EditorSession` supplies the canonical buffer path. The same up
 
 Project results retain relative path, zero-based line, text, and match ranges. Only selection changes trigger `preview_document_at`, which provides match-centered syntax highlighting. Acceptance closes the extension and calls `document::open_file_at`; the normal safe insertion/reveal flow completes before cursor movement, with no project-specific completion branch in the shell.
 
+## External buffer synchronization
+
+A `notify` watcher covers the fixed workspace, or the initial file's parent when no workspace is open. Create/modify events become `ExternalFileChanged` messages; paths without an open buffer are ignored. Dirty buffers and in-progress saves remain untouched, while clean buffers schedule the same background `DocumentOpenRequest` used by normal opens.
+
+The reload completion carries the expected Helix document version. Stale completions are ignored. Existing files apply a Helix diff, append history, preserve cursor/view state, update syntax, and become clean without invoking another save. Missing files and read/UTF-8 failures leave the existing buffer intact. No manual reload command or reload queue is introduced.
+
 ## Fuzzy matching and ranking
 
 Use `nucleo-matcher` rather than implementing a fuzzy algorithm in Eggplant. It is maintained for and used by the Helix ecosystem, supports Unicode normalization and path-oriented matching, and reuses matcher scratch allocations.

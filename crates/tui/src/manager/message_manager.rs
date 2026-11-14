@@ -64,6 +64,9 @@ impl MessageManager {
                 file_picker::complete_preview(model, revision, preview);
             }
             Message::FocusLost => return buffer::save_active(model),
+            Message::ExternalFileChanged(path) => {
+                return crate::external_sync::file_changed(model, &path);
+            }
             Message::Resize(width, height) => {
                 let area = editor_content_area(
                     Rect::new(0, 0, width, height),
