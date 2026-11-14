@@ -353,7 +353,9 @@ mod tests {
         model.context_stack.push(Context::AppNormal);
         assert!(matches!(
             manager.translate(event(), &model),
-            Some(Message::TextInput('I'))
+            Some(Message::InvokeCommand(CommandId(
+                "insert_at_first_nonblank"
+            )))
         ));
 
         model.context_stack.pop();

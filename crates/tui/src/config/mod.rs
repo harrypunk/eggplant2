@@ -63,6 +63,11 @@ impl Default for Config {
                     "normal",
                     [
                         ("enter_insert_mode", "i"),
+                        ("insert_after_cursor", "a"),
+                        ("insert_at_line_end", "shift-a"),
+                        ("insert_at_first_nonblank", "shift-i"),
+                        ("open_line_below", "o"),
+                        ("open_line_above", "shift-o"),
                         ("move_left", "h"),
                         ("move_right", "l"),
                         ("move_up", "k"),

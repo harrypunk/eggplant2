@@ -109,6 +109,31 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
             crate::editing::handle_command,
         ),
         Command::feature(
+            CommandId("insert_after_cursor"),
+            "insert after cursor",
+            crate::editing::handle_command,
+        ),
+        Command::feature(
+            CommandId("insert_at_line_end"),
+            "insert at line end",
+            crate::editing::handle_command,
+        ),
+        Command::feature(
+            CommandId("insert_at_first_nonblank"),
+            "insert at first non-blank character",
+            crate::editing::handle_command,
+        ),
+        Command::feature(
+            CommandId("open_line_below"),
+            "open indented line below",
+            crate::editing::handle_command,
+        ),
+        Command::feature(
+            CommandId("open_line_above"),
+            "open indented line above",
+            crate::editing::handle_command,
+        ),
+        Command::feature(
             CommandId("exit_insert_mode"),
             "leave Insert mode",
             crate::editing::handle_command,

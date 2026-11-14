@@ -300,10 +300,12 @@ Implement and review M7.1, M7.2, M7.3, M7.4, M7.5, and M7.6 independently. If te
 
 #### M8.3 — Common insert variants
 
-- [ ] Keep existing `i`; add `a` after the current grapheme, `A` at line end, and `I` at the first non-blank character of the current line.
-- [ ] Add `o`/`O` to insert an indented empty line below/above the current line and enter Insert mode. Use Helix's indentation/transaction primitives where useful and keep behavior predictable on blank or empty lines.
-- [ ] Route open-line edits through the existing transaction, dirty-revision, auto-save, and undo paths; subsequent typing remains in the same Insert session/history group.
-- [ ] Test empty documents, blank lines, first/last lines, Unicode/grapheme boundaries, indentation, undo/redo, and auto-save without adding a manual Save workflow.
+**Status: complete (2026-11-14).**
+
+- [x] Keep existing `i`; add `a` after the current grapheme, `A` at line end, and `I` at the first non-blank character of the current line.
+- [x] Add `o`/`O` to insert an indented empty line below/above the current line and enter Insert mode. Use Helix's indentation/transaction primitives where useful and keep behavior predictable on blank or empty lines.
+- [x] Route open-line edits through the existing transaction, dirty-revision, auto-save, and undo paths; subsequent typing remains in the same Insert session/history group.
+- [x] Test empty documents, blank lines, first/last lines, Unicode/grapheme boundaries, indentation, undo/redo, and auto-save without adding a manual Save workflow.
 
 #### M8.4 — Line start/end with `0`/`$`
 

@@ -202,6 +202,12 @@ Normal `zz`, `zt`, and `zb` center, top-align, and bottom-align the cursor line.
 
 `EditorSession::align_cursor_line` maps the feature-neutral `ViewAlignment` enum to `helix_view::align_view`. Helix performs visual-row and document-boundary calculations. Cursor, selection, text, revision, dirty state, and save state remain unchanged, including for empty viewports.
 
+### Insert variants and open-line editing (M8.3)
+
+Normal `a`, `A`, and `I` position the cursor after the current grapheme, at line end, or at the first non-blank character before entering Insert. `EditorSession::move_cursor_to_insert` owns these document positions; the editing feature owns mode/context transitions. Existing `i` is unchanged.
+
+`o`/`O` use `EditorSession::open_line` to insert a newline below/above with `indent_for_newline`, set the new cursor, and enter Insert. Helix's current indentation heuristic and detected indent style are retained, without comment continuation or multi-selection commands. The open-line transaction and subsequent typing share one Insert history group, so one undo removes the whole accepted edit. Auto-save follows the existing policy when leaving Insert; no manual Save path is added.
+
 ### Delete/change commands planned for M8.6
 
 | Input | Context | Planned behavior |

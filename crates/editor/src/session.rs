@@ -1257,6 +1257,22 @@ mod tests {
         assert_eq!(snapshot.text.lines[1].text, "\t");
         assert_eq!(snapshot.text.first_line + snapshot.cursor.unwrap().row, 1);
         assert_eq!(snapshot.cursor.unwrap().column, 4);
+
+        let mut empty = EditorSession::new();
+        create_buffer(&mut empty, "");
+        empty.resize_active_view(20, 4);
+        empty.open_line(OpenLineDirection::Below).unwrap();
+        let snapshot = empty.active_snapshot().unwrap();
+        assert_eq!(snapshot.text.line_count, 2);
+        assert_eq!(snapshot.text.first_line + snapshot.cursor.unwrap().row, 1);
+
+        let mut empty_above = EditorSession::new();
+        create_buffer(&mut empty_above, "");
+        empty_above.resize_active_view(20, 4);
+        empty_above.open_line(OpenLineDirection::Above).unwrap();
+        let snapshot = empty_above.active_snapshot().unwrap();
+        assert_eq!(snapshot.text.line_count, 2);
+        assert_eq!(snapshot.text.first_line + snapshot.cursor.unwrap().row, 0);
     }
 
     #[test]

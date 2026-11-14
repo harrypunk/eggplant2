@@ -18,6 +18,8 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | Normal / Explorer | Focus left / right | `Ctrl-H` / `Ctrl-L` |
 | Normal / Explorer | Focus up / down (reserved) | `Ctrl-K` / `Ctrl-J` |
 | Normal | Enter Insert | `i` |
+| Normal | Insert after cursor / line end / first non-blank | `a` / `Shift-A` / `Shift-I` |
+| Normal | Open indented line below / above | `o` / `Shift-O` |
 | Normal | Move | `h`, `j`, `k`, `l` |
 | Normal | Next word / previous word / word end | `w` / `b` / `e` |
 | Normal | First line / line N | `gg` / `[count]gg` |

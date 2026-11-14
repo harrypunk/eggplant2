@@ -1,4 +1,4 @@
-use editor::{CursorMovement, WordMovement};
+use editor::{CursorMovement, InsertPosition, OpenLineDirection, WordMovement};
 
 use crate::{
     buffer,
@@ -9,13 +9,12 @@ use crate::{
 /// Editing feature commands, independent of physical keybindings.
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     match id.as_str() {
-        "enter_insert_mode" => {
-            if model.editor.active_buffer().is_some() {
-                model.context_stack.push(Context::EditorInput);
-                model.editor.enter_insert_mode();
-            }
-            None
-        }
+        "enter_insert_mode" => enter_insert(model),
+        "insert_after_cursor" => enter_insert_at(model, InsertPosition::AfterCursor),
+        "insert_at_line_end" => enter_insert_at(model, InsertPosition::LineEnd),
+        "insert_at_first_nonblank" => enter_insert_at(model, InsertPosition::FirstNonBlank),
+        "open_line_below" => open_line(model, OpenLineDirection::Below),
+        "open_line_above" => open_line(model, OpenLineDirection::Above),
         "exit_insert_mode" => {
             model
                 .context_stack
@@ -61,6 +60,29 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
 
 pub(crate) fn insert_char(model: &mut Model, character: char) -> Option<Effect> {
     insert(model, &character.to_string())
+}
+
+fn enter_insert(model: &mut Model) -> Option<Effect> {
+    if model.editor.active_buffer().is_some() {
+        model.context_stack.push(Context::EditorInput);
+        model.editor.enter_insert_mode();
+    }
+    None
+}
+
+fn enter_insert_at(model: &mut Model, position: InsertPosition) -> Option<Effect> {
+    if model.editor.move_cursor_to_insert(position).is_ok() {
+        enter_insert(model);
+    }
+    None
+}
+
+fn open_line(model: &mut Model, direction: OpenLineDirection) -> Option<Effect> {
+    if model.editor.open_line(direction).is_ok() {
+        enter_insert(model);
+        return buffer::auto_save_active(model);
+    }
+    None
 }
 
 fn move_cursor(model: &mut Model, movement: CursorMovement) -> Option<Effect> {
@@ -231,6 +253,83 @@ mod tests {
                 .column,
             6
         );
+    }
+
+    #[test]
+    fn insert_variants_accept_text_at_the_expected_positions() {
+        for (command, text, expected) in [
+            ("insert_after_cursor", "hello", "hxello"),
+            ("insert_at_line_end", "hello", "hellox"),
+            ("insert_at_first_nonblank", "  hello", "  xhello"),
+        ] {
+            let mut model = Model::default();
+            model.context_stack.push(Context::AppNormal);
+            create_buffer(&mut model, text);
+            let manager = MessageManager::default();
+            manager.update(&mut model, Message::Resize(40, 4));
+
+            manager.update(&mut model, Message::InvokeCommand(CommandId(command)));
+            manager.update(&mut model, Message::TextInput('x'));
+
+            assert_eq!(model.editor.mode(), EditMode::Insert);
+            assert_eq!(model.context_stack.last(), Some(&Context::EditorInput));
+            assert_eq!(
+                model.editor.active_snapshot().unwrap().text.lines[0].text,
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn open_line_and_typing_share_one_undoable_insert_session() {
+        for command in ["open_line_below", "open_line_above"] {
+            let mut model = Model::default();
+            model.context_stack.push(Context::AppNormal);
+            create_buffer(&mut model, "first");
+            let manager = MessageManager::default();
+            manager.update(&mut model, Message::Resize(40, 4));
+
+            manager.update(&mut model, Message::InvokeCommand(CommandId(command)));
+            manager.update(&mut model, Message::TextInput('x'));
+            assert_eq!(model.editor.mode(), EditMode::Insert);
+            manager.update(
+                &mut model,
+                Message::InvokeCommand(CommandId("exit_insert_mode")),
+            );
+            manager.update(&mut model, Message::InvokeCommand(CommandId("undo")));
+
+            assert_eq!(
+                model.editor.active_snapshot().unwrap().text.lines[0].text,
+                "first"
+            );
+            assert_eq!(model.editor.active_snapshot().unwrap().text.line_count, 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn open_line_auto_saves_when_leaving_insert() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("note.txt");
+        std::fs::write(&path, "first\nsecond").unwrap();
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+        open_file(&mut model, &path);
+        let manager = MessageManager::default();
+
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("open_line_below")),
+        );
+        let request = expect_save(manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("exit_insert_mode")),
+        ));
+        let completion = request.perform().await;
+        manager.update(&mut model, Message::SaveFinished(completion));
+
+        assert_eq!(std::fs::read_to_string(path).unwrap(), "first\n\nsecond");
+        assert_eq!(model.editor.mode(), EditMode::Normal);
+        assert!(!model.editor.active_is_modified());
     }
 
     #[tokio::test]

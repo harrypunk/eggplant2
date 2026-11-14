@@ -33,8 +33,9 @@ cargo run -p tui -- "$workdir"
 11. **Word motions:** in a buffer containing multiple Unicode words, verify that `w` moves to the next word start, `b` returns to the previous start, and `e` moves to the word end. Confirm that repeated motions are safe at document boundaries and never change the text.
 12. **Counted line jumps:** verify `gg` and `G` at document boundaries, then `3gg` and `3G` for the third line. While entering a count/prefix, confirm that the status bar shows it without hiding other messages; Escape and invalid input must clear it without unexpected movement.
 13. **Viewport alignment:** with a scrollable buffer, verify `zz`, `zt`, and `zb` center/top/bottom-align the cursor line without changing the text or cursor position. Confirm that `z` appears in the status bar and that Escape/invalid input cancels safely, including in tiny terminals.
-14. **Save safety:** make a buffer dirty and quit with `Space q q`; confirm that the application waits for the write and exits with the edited content persisted.
-15. **Terminal restoration after normal exit:** confirm that the shell prompt returns to the original screen, raw-mode input is disabled, and the cursor/keyboard behave normally.
+14. **Insert variants:** verify `a`, `A`, and `I` by typing after each command. Verify `o`/`O` create correctly indented lines and enter Insert on empty and populated documents; leaving Insert must auto-save, and one undo must remove the open-line plus typed content.
+15. **Save safety:** make a buffer dirty and quit with `Space q q`; confirm that the application waits for the write and exits with the edited content persisted.
+16. **Terminal restoration after normal exit:** confirm that the shell prompt returns to the original screen, raw-mode input is disabled, and the cursor/keyboard behave normally.
 
 ## Failure and panic review
 
