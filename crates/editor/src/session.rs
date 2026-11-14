@@ -8,7 +8,7 @@ use std::{
 use helix_core::{
     RopeSlice, Selection, Transaction, char_idx_at_visual_offset,
     doc_formatter::TextFormat,
-    graphemes,
+    graphemes, indent,
     movement::{self, Direction, Movement},
     text_annotations::TextAnnotations,
 };
@@ -22,6 +22,7 @@ use helix_view::{
 use thiserror::Error;
 
 use crate::{
+    document::default_syntax_loader,
     open::OpenedDocument,
     save::{SaveCompletion, SaveError, SaveRequest},
     snapshot::{
@@ -87,6 +88,19 @@ pub enum ViewAlignment {
     Top,
     Center,
     Bottom,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InsertPosition {
+    AfterCursor,
+    LineEnd,
+    FirstNonBlank,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpenLineDirection {
+    Below,
+    Above,
 }
 
 /// Zero-based logical line and Unicode-scalar offset within that line.
@@ -395,6 +409,79 @@ impl EditorSession {
             document.append_changes_to_history(view);
         }
         self.mode = EditMode::Normal;
+    }
+
+    /// Position the cursor for an Insert-mode variant without changing text.
+    pub fn move_cursor_to_insert(&mut self, position: InsertPosition) -> Result<(), EditorError> {
+        let scrolloff = self.scrolloff;
+        let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
+        let text = document.text().slice(..);
+        let cursor = document.selection(view.id).primary().cursor(text);
+        let line = text.char_to_line(cursor);
+        let line_end = helix_core::line_ending::line_end_char_index(&text, line);
+        let target = match position {
+            InsertPosition::AfterCursor => {
+                graphemes::next_grapheme_boundary(text, cursor).min(line_end)
+            }
+            InsertPosition::LineEnd => line_end,
+            InsertPosition::FirstNonBlank => text
+                .line(line)
+                .first_non_whitespace_char()
+                .map_or(text.line_to_char(line), |character| {
+                    text.line_to_char(line) + character
+                }),
+        };
+        document.set_selection(view.id, Selection::point(target));
+        view.ensure_cursor_in_view(document, scrolloff);
+        Ok(())
+    }
+
+    /// Open an indented line below or above the cursor through one transaction.
+    pub fn open_line(&mut self, direction: OpenLineDirection) -> Result<(), EditorError> {
+        let transaction = {
+            let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
+            let text = document.text().slice(..);
+            let cursor = document.selection(view.id).primary().cursor(text);
+            let current_line = text.char_to_line(cursor);
+            let new_line = match direction {
+                OpenLineDirection::Below => current_line + 1,
+                OpenLineDirection::Above => current_line,
+            };
+            let previous_line = new_line.saturating_sub(1);
+            let insert_at = match new_line {
+                0 => 0,
+                _ => helix_core::line_ending::line_end_char_index(&text, previous_line),
+            };
+            let loader = default_syntax_loader();
+            let loader = loader.load();
+            let indent = indent::indent_for_newline(
+                &loader,
+                document.syntax(),
+                &helix_core::syntax::config::IndentationHeuristic::default(),
+                &document.indent_style,
+                document.tab_width(),
+                text,
+                previous_line,
+                insert_at,
+                current_line,
+            );
+            let line_ending = document.line_ending.as_str();
+            let inserted = match (direction, new_line) {
+                (OpenLineDirection::Above, 0) => format!("{indent}{line_ending}"),
+                _ => format!("{line_ending}{indent}"),
+            };
+            let indent_len = indent.chars().count();
+            let cursor = match (direction, new_line) {
+                (OpenLineDirection::Above, 0) => insert_at + indent_len,
+                _ => insert_at + line_ending.chars().count() + indent_len,
+            };
+            Transaction::change(
+                document.text(),
+                [(insert_at, insert_at, Some(inserted.into()))].into_iter(),
+            )
+            .with_selection(Selection::point(cursor))
+        };
+        self.apply_active_transaction(transaction)
     }
 
     /// Move the active cursor without extending the selection.
@@ -1115,6 +1202,61 @@ mod tests {
         };
         assert_eq!(active_cursor(&mut session), document_end);
         assert!(session.active_snapshot().unwrap().cursor.is_some());
+    }
+
+    #[test]
+    fn insert_positions_respect_graphemes_and_line_boundaries() {
+        let mut session = EditorSession::new();
+        create_buffer(&mut session, "  hé");
+        session.resize_active_view(20, 3);
+        session
+            .move_cursor_to(DocumentPosition {
+                line: 0,
+                character: 2,
+            })
+            .unwrap();
+
+        session
+            .move_cursor_to_insert(InsertPosition::AfterCursor)
+            .unwrap();
+        assert_eq!(active_cursor(&mut session), 3);
+        session
+            .move_cursor_to_insert(InsertPosition::LineEnd)
+            .unwrap();
+        assert_eq!(active_cursor(&mut session), 4);
+        session
+            .move_cursor_to_insert(InsertPosition::FirstNonBlank)
+            .unwrap();
+        assert_eq!(active_cursor(&mut session), 2);
+        assert!(!session.active_is_modified());
+
+        let mut grapheme = EditorSession::new();
+        create_buffer(&mut grapheme, "👩\u{200d}💻x");
+        grapheme
+            .move_cursor_to_insert(InsertPosition::AfterCursor)
+            .unwrap();
+        assert_eq!(active_cursor(&mut grapheme), 3);
+    }
+
+    #[test]
+    fn open_line_preserves_indentation_and_positions_the_new_cursor() {
+        let mut session = EditorSession::new();
+        create_buffer(&mut session, "    first\nsecond");
+        session.resize_active_view(20, 4);
+
+        session.open_line(OpenLineDirection::Below).unwrap();
+        assert_eq!(session.active_snapshot().unwrap().text.lines[1].text, "\t");
+        assert_eq!(session.active_snapshot().unwrap().cursor.unwrap().column, 4);
+
+        let mut above = EditorSession::new();
+        create_buffer(&mut above, "first\n    second");
+        above.resize_active_view(20, 4);
+        above.move_cursor_to_line(1).unwrap();
+        above.open_line(OpenLineDirection::Above).unwrap();
+        let snapshot = above.active_snapshot().unwrap();
+        assert_eq!(snapshot.text.lines[1].text, "\t");
+        assert_eq!(snapshot.text.first_line + snapshot.cursor.unwrap().row, 1);
+        assert_eq!(snapshot.cursor.unwrap().column, 4);
     }
 
     #[test]
