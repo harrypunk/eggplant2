@@ -157,7 +157,11 @@ fn accept(model: &mut Model) {
         ));
         return;
     }
-    match model.editor.move_cursor_to(position) {
+    match model
+        .editor
+        .active_editor()
+        .and_then(|mut editor| editor.move_cursor_to(position))
+    {
         Ok(()) => focus::focus_editor(model),
         Err(error) => model.status = Some(StatusMessage::error(error.to_string())),
     }

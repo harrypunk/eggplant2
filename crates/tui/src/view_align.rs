@@ -52,8 +52,10 @@ pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
         _ => None,
     };
     reset(model);
-    if let Some(alignment) = alignment {
-        let _ = model.editor.align_cursor_line(alignment);
+    if let Some(alignment) = alignment
+        && let Ok(mut editor) = model.editor.active_editor()
+    {
+        let _ = editor.align_cursor_line(alignment);
     }
     None
 }
@@ -98,7 +100,12 @@ mod tests {
         create_buffer(&mut model, &text);
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(50, 10));
-        model.editor.move_cursor_to_line(10).unwrap();
+        model
+            .editor
+            .active_editor()
+            .unwrap()
+            .move_cursor_to_line(10)
+            .unwrap();
         let revision = model.editor.active_revision();
 
         start_alignment(&mut model, &manager);

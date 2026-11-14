@@ -130,7 +130,9 @@ fn complete(model: &mut Model, first_line: bool) {
         (_, Some(count)) => count.saturating_sub(1),
     };
     reset(model);
-    let _ = model.editor.move_cursor_to_line(line);
+    if let Ok(mut editor) = model.editor.active_editor() {
+        let _ = editor.move_cursor_to_line(line);
+    }
 }
 
 fn reset(model: &mut Model) {

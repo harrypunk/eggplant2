@@ -186,7 +186,11 @@ mod tests {
         create_buffer(&mut session, "a界b🙂c");
         session.resize_active_view(2, 1);
         for _ in 0..5 {
-            session.move_cursor(CursorMovement::Right).unwrap();
+            session
+                .active_editor()
+                .unwrap()
+                .move_cursor(CursorMovement::Right)
+                .unwrap();
         }
         let snapshot = session.active_snapshot().unwrap();
         let cursor = snapshot.cursor.unwrap();

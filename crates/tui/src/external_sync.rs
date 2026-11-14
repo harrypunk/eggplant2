@@ -109,6 +109,8 @@ mod tests {
         model.editor.enter_insert_mode();
         model
             .editor
+            .active_editor()
+            .unwrap()
             .move_cursor_to(editor::DocumentPosition {
                 line: 0,
                 character: 8,

@@ -54,7 +54,9 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     };
     let viewport_height = model.editor.active_view_height()?;
     let rows = model.page_scroll.rows(viewport_height);
-    let _ = model.editor.scroll_lines(direction, rows);
+    if let Ok(mut editor) = model.editor.active_editor() {
+        let _ = editor.scroll_lines(direction, rows);
+    }
     None
 }
 

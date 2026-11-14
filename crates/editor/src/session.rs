@@ -5,23 +5,17 @@ use std::{
     path::Path,
 };
 
-use helix_core::{
-    RopeSlice, Selection, Transaction, char_idx_at_visual_offset,
-    doc_formatter::TextFormat,
-    graphemes, indent,
-    movement::{self, Direction, Movement},
-    text_annotations::TextAnnotations,
-};
+use helix_core::{Selection, Transaction, graphemes, indent};
 use helix_stdx::rope::RopeSliceExt;
 use helix_view::{
     Document, View,
     editor::{Config, GutterConfig},
     graphics::Rect,
-    view::ViewPosition,
 };
 use thiserror::Error;
 
 use crate::{
+    active_editor::ActiveEditor,
     document::default_syntax_loader,
     open::OpenedDocument,
     save::{SaveCompletion, SaveError, SaveRequest},
@@ -31,16 +25,6 @@ use crate::{
     },
     viewport,
 };
-
-type MoveFn = fn(
-    RopeSlice,
-    helix_core::Range,
-    Direction,
-    usize,
-    Movement,
-    &TextFormat,
-    &mut TextAnnotations,
-) -> helix_core::Range;
 
 /// Eggplant-owned identity for an open buffer.
 ///
@@ -398,6 +382,14 @@ impl EditorSession {
         self.buffers.is_empty()
     }
 
+    /// Borrow the active document/view through the focused editing capability.
+    pub fn active_editor(&mut self) -> Result<ActiveEditor<'_>, EditorError> {
+        let scrolloff = self.scrolloff;
+        self.active_parts()
+            .map(|(document, view)| ActiveEditor::new(document, view, scrolloff))
+            .ok_or(EditorError::NoActiveBuffer)
+    }
+
     pub fn mode(&self) -> EditMode {
         self.mode
     }
@@ -510,155 +502,6 @@ impl EditorSession {
             .with_selection(Selection::point(cursor))
         };
         self.apply_active_transaction(transaction)
-    }
-
-    /// Move the active cursor without extending the selection.
-    pub fn move_cursor(&mut self, movement: CursorMovement) -> Result<(), EditorError> {
-        self.move_cursor_by(movement, 1)
-    }
-
-    /// Move by Helix word boundaries without extending the selection.
-    pub fn move_cursor_word(&mut self, movement: WordMovement) -> Result<(), EditorError> {
-        let scrolloff = self.scrolloff;
-        let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
-        let text = document.text().slice(..);
-        let selection = document.selection(view.id).clone().transform(|range| {
-            let moved = match movement {
-                WordMovement::NextStart => movement::move_next_word_start(text, range, 1),
-                WordMovement::PreviousStart => movement::move_prev_word_start(text, range, 1),
-                WordMovement::NextEnd => movement::move_next_word_end(text, range, 1),
-            };
-            let target = match movement {
-                WordMovement::NextEnd => moved.cursor(text),
-                WordMovement::NextStart | WordMovement::PreviousStart => moved.head,
-            };
-            helix_core::Range::point(target)
-        });
-        document.set_selection(view.id, selection);
-        view.ensure_cursor_in_view(document, scrolloff);
-        Ok(())
-    }
-
-    /// Move the active cursor to a logical document position without extending the selection.
-    pub fn move_cursor_to(&mut self, position: DocumentPosition) -> Result<(), EditorError> {
-        let scrolloff = self.scrolloff;
-        let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
-        let text = document.text();
-        let line = position.line.min(text.len_lines().saturating_sub(1));
-        let line_start = text.line_to_char(line);
-        let line_end = helix_core::line_ending::line_end_char_index(&text.slice(..), line);
-        let target = line_start + position.character.min(line_end.saturating_sub(line_start));
-        document.set_selection(view.id, Selection::point(target));
-        view.ensure_cursor_in_view(document, scrolloff);
-        Ok(())
-    }
-
-    /// Move to a zero-based line's first non-blank character, clamping at the last line.
-    pub fn move_cursor_to_line(&mut self, line: usize) -> Result<(), EditorError> {
-        let position = {
-            let active = self
-                .active_view
-                .as_ref()
-                .ok_or(EditorError::NoActiveBuffer)?;
-            let document = &self
-                .buffers
-                .get(&active.buffer)
-                .ok_or(EditorError::UnknownBuffer(active.buffer))?
-                .document;
-            let line = line.min(document.text().len_lines().saturating_sub(1));
-            let character = document
-                .text()
-                .line(line)
-                .first_non_whitespace_char()
-                .unwrap_or(0);
-            DocumentPosition { line, character }
-        };
-        self.move_cursor_to(position)
-    }
-
-    /// Align the cursor line in the visual viewport without changing document state.
-    pub fn align_cursor_line(&mut self, alignment: ViewAlignment) -> Result<(), EditorError> {
-        let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
-        let alignment = match alignment {
-            ViewAlignment::Top => helix_view::Align::Top,
-            ViewAlignment::Center => helix_view::Align::Center,
-            ViewAlignment::Bottom => helix_view::Align::Bottom,
-        };
-        helix_view::align_view(document, view, alignment);
-        Ok(())
-    }
-
-    /// Move vertically by a feature-computed number of logical lines.
-    pub fn move_cursor_lines(
-        &mut self,
-        direction: VerticalDirection,
-        lines: usize,
-    ) -> Result<(), EditorError> {
-        self.move_cursor_by(direction.into(), lines)
-    }
-
-    /// Scroll the visual viewport immediately, moving the cursor only when needed
-    /// to keep it in the visible area.
-    pub fn scroll_lines(
-        &mut self,
-        direction: VerticalDirection,
-        lines: usize,
-    ) -> Result<(), EditorError> {
-        let scrolloff = self.scrolloff;
-        let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
-        let cursor = document
-            .selection(view.id)
-            .primary()
-            .cursor(document.text().slice(..));
-
-        let view_offset = shifted_view_offset(document, view, direction, lines);
-        document.set_view_offset(view.id, view_offset);
-        if let Some(head) = cursor_correction_after_scroll(
-            document,
-            view,
-            view_offset,
-            cursor,
-            direction,
-            scrolloff,
-        ) {
-            document.set_selection(view.id, Selection::point(head));
-        }
-        Ok(())
-    }
-
-    fn move_cursor_by(
-        &mut self,
-        movement: CursorMovement,
-        count: usize,
-    ) -> Result<(), EditorError> {
-        let scrolloff = self.scrolloff;
-        let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
-        let text = document.text().slice(..);
-        let text_format = document.text_format(view.inner_area(document).width, None);
-        let mut annotations = view.text_annotations(document, None);
-
-        let selection = document.selection(view.id).clone().transform(|range| {
-            let (direction, move_fn): (Direction, MoveFn) = match movement {
-                CursorMovement::Left => (Direction::Backward, movement::move_horizontally),
-                CursorMovement::Right => (Direction::Forward, movement::move_horizontally),
-                CursorMovement::Up => (Direction::Backward, movement::move_vertically),
-                CursorMovement::Down => (Direction::Forward, movement::move_vertically),
-            };
-            move_fn(
-                text,
-                range,
-                direction,
-                count,
-                Movement::Move,
-                &text_format,
-                &mut annotations,
-            )
-        });
-        drop(annotations);
-
-        document.set_selection(view.id, selection);
-        view.ensure_cursor_in_view(document, scrolloff);
-        Ok(())
     }
 
     /// Insert text at each active selection cursor.
@@ -900,68 +743,6 @@ impl EditorSession {
     }
 }
 
-fn shifted_view_offset(
-    document: &Document,
-    view: &View,
-    direction: VerticalDirection,
-    lines: usize,
-) -> ViewPosition {
-    let mut view_offset = document.view_offset(view.id);
-    let lines = isize::try_from(lines).unwrap_or(isize::MAX);
-    let offset = match direction {
-        VerticalDirection::Down => lines,
-        VerticalDirection::Up => lines.saturating_neg(),
-    };
-    let row_offset = isize::try_from(view_offset.vertical_offset)
-        .unwrap_or(isize::MAX)
-        .saturating_add(offset);
-    (view_offset.anchor, view_offset.vertical_offset) =
-        char_at_visual_row(document, view, view_offset.anchor, row_offset);
-    view_offset
-}
-
-fn cursor_correction_after_scroll(
-    document: &Document,
-    view: &View,
-    view_offset: ViewPosition,
-    cursor: usize,
-    direction: VerticalDirection,
-    scrolloff: usize,
-) -> Option<usize> {
-    let height = view.inner_height();
-    let scrolloff = scrolloff.min(height.saturating_sub(1) / 2);
-    let base_offset = isize::try_from(view_offset.vertical_offset).unwrap_or(isize::MAX);
-    match direction {
-        VerticalDirection::Down => {
-            let row_offset =
-                base_offset.saturating_add(isize::try_from(scrolloff).unwrap_or(isize::MAX));
-            let (mut head, off) =
-                char_at_visual_row(document, view, view_offset.anchor, row_offset);
-            head += usize::from(off != 0);
-            (head > cursor).then_some(head)
-        }
-        VerticalDirection::Up => {
-            let last_visible_row = height.saturating_sub(scrolloff).saturating_sub(1);
-            let row_offset =
-                base_offset.saturating_add(isize::try_from(last_visible_row).unwrap_or(isize::MAX));
-            let (head, _) = char_at_visual_row(document, view, view_offset.anchor, row_offset);
-            (head < cursor).then_some(head)
-        }
-    }
-}
-
-fn char_at_visual_row(
-    document: &Document,
-    view: &View,
-    anchor: usize,
-    row_offset: isize,
-) -> (usize, usize) {
-    let text = document.text().slice(..);
-    let text_format = document.text_format(view.inner_area(document).width, None);
-    let annotations = view.text_annotations(document, None);
-    char_idx_at_visual_offset(text, anchor, row_offset, 0, &text_format, &annotations)
-}
-
 impl Default for EditorSession {
     fn default() -> Self {
         Self::new()
@@ -1133,7 +914,7 @@ mod tests {
         assert!(matches!(session.undo(), Err(EditorError::NoActiveBuffer)));
         assert!(matches!(session.redo(), Err(EditorError::NoActiveBuffer)));
         assert!(matches!(
-            session.move_cursor(CursorMovement::Left),
+            session.active_editor(),
             Err(EditorError::NoActiveBuffer)
         ));
     }
@@ -1185,17 +966,41 @@ mod tests {
         create_buffer(&mut session, "ab");
         assert_eq!(active_cursor(&mut session), 0);
 
-        session.move_cursor(CursorMovement::Right).unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .move_cursor(CursorMovement::Right)
+            .unwrap();
         assert_eq!(active_cursor(&mut session), 1);
-        session.move_cursor(CursorMovement::Right).unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .move_cursor(CursorMovement::Right)
+            .unwrap();
         assert_eq!(active_cursor(&mut session), 2);
-        session.move_cursor(CursorMovement::Right).unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .move_cursor(CursorMovement::Right)
+            .unwrap();
         assert_eq!(active_cursor(&mut session), 2);
 
-        session.move_cursor(CursorMovement::Left).unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .move_cursor(CursorMovement::Left)
+            .unwrap();
         assert_eq!(active_cursor(&mut session), 1);
-        session.move_cursor(CursorMovement::Left).unwrap();
-        session.move_cursor(CursorMovement::Left).unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .move_cursor(CursorMovement::Left)
+            .unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .move_cursor(CursorMovement::Left)
+            .unwrap();
         assert_eq!(active_cursor(&mut session), 0);
         assert!(!session.active_is_modified());
     }
@@ -1208,6 +1013,8 @@ mod tests {
         assert_eq!(session.active_view_width(), Some(20));
 
         session
+            .active_editor()
+            .unwrap()
             .move_cursor_to(DocumentPosition {
                 line: 1,
                 character: 3,
@@ -1219,6 +1026,8 @@ mod tests {
         assert!(snapshot.cursor.is_some());
 
         session
+            .active_editor()
+            .unwrap()
             .move_cursor_to(DocumentPosition {
                 line: 100,
                 character: 100,
@@ -1238,6 +1047,8 @@ mod tests {
         create_buffer(&mut session, "  hé");
         session.resize_active_view(20, 3);
         session
+            .active_editor()
+            .unwrap()
             .move_cursor_to(DocumentPosition {
                 line: 0,
                 character: 2,
@@ -1272,6 +1083,8 @@ mod tests {
         create_buffer(&mut simple, " hello");
         simple.resize_active_view(20, 4);
         simple
+            .active_editor()
+            .unwrap()
             .move_cursor_to_line_boundary(LineBoundary::End)
             .unwrap();
         assert_eq!(active_cursor(&mut simple), 5);
@@ -1282,20 +1095,36 @@ mod tests {
         session.resize_active_view(20, 4);
 
         session
+            .active_editor()
+            .unwrap()
             .move_cursor_to_line_boundary(LineBoundary::End)
             .unwrap();
         assert_eq!(active_cursor(&mut session), 3);
         session
+            .active_editor()
+            .unwrap()
             .move_cursor_to_line_boundary(LineBoundary::Start)
             .unwrap();
         assert_eq!(active_cursor(&mut session), 0);
-        session.move_cursor_to_line(1).unwrap();
         session
+            .active_editor()
+            .unwrap()
+            .move_cursor_to_line(1)
+            .unwrap();
+        session
+            .active_editor()
+            .unwrap()
             .move_cursor_to_line_boundary(LineBoundary::End)
             .unwrap();
         assert_eq!(session.active_snapshot().unwrap().cursor.unwrap().column, 0);
-        session.move_cursor_to_line(2).unwrap();
         session
+            .active_editor()
+            .unwrap()
+            .move_cursor_to_line(2)
+            .unwrap();
+        session
+            .active_editor()
+            .unwrap()
             .move_cursor_to_line_boundary(LineBoundary::End)
             .unwrap();
         assert_eq!(active_cursor(&mut session), 9);
@@ -1304,7 +1133,11 @@ mod tests {
         let mut empty = EditorSession::new();
         create_buffer(&mut empty, "");
         for boundary in [LineBoundary::Start, LineBoundary::End] {
-            empty.move_cursor_to_line_boundary(boundary).unwrap();
+            empty
+                .active_editor()
+                .unwrap()
+                .move_cursor_to_line_boundary(boundary)
+                .unwrap();
             assert_eq!(active_cursor(&mut empty), 0);
         }
     }
@@ -1322,7 +1155,11 @@ mod tests {
         let mut above = EditorSession::new();
         create_buffer(&mut above, "first\n    second");
         above.resize_active_view(20, 4);
-        above.move_cursor_to_line(1).unwrap();
+        above
+            .active_editor()
+            .unwrap()
+            .move_cursor_to_line(1)
+            .unwrap();
         above.open_line(OpenLineDirection::Above).unwrap();
         let snapshot = above.active_snapshot().unwrap();
         assert_eq!(snapshot.text.lines[1].text, "\t");
@@ -1352,13 +1189,25 @@ mod tests {
         create_buffer(&mut session, "  first\n\n\tsecond");
         session.resize_active_view(20, 4);
 
-        session.move_cursor_to_line(0).unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .move_cursor_to_line(0)
+            .unwrap();
         assert_eq!(session.active_snapshot().unwrap().cursor.unwrap().column, 2);
-        session.move_cursor_to_line(1).unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .move_cursor_to_line(1)
+            .unwrap();
         let snapshot = session.active_snapshot().unwrap();
         assert_eq!(snapshot.text.first_line + snapshot.cursor.unwrap().row, 1);
         assert_eq!(snapshot.cursor.unwrap().column, 0);
-        session.move_cursor_to_line(100).unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .move_cursor_to_line(100)
+            .unwrap();
         let snapshot = session.active_snapshot().unwrap();
         assert_eq!(snapshot.text.first_line + snapshot.cursor.unwrap().row, 2);
         assert_eq!(snapshot.cursor.unwrap().column, 4);
@@ -1374,26 +1223,50 @@ mod tests {
         let mut session = EditorSession::new();
         let id = create_buffer(&mut session, &text);
         session.resize_active_view(30, 6);
-        session.move_cursor_to_line(10).unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .move_cursor_to_line(10)
+            .unwrap();
         let revision = session.buffer_version(id);
 
-        session.align_cursor_line(ViewAlignment::Top).unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .align_cursor_line(ViewAlignment::Top)
+            .unwrap();
         let snapshot = session.active_snapshot().unwrap();
         assert_eq!(snapshot.text.first_line, 10);
         assert_eq!(snapshot.cursor.unwrap().row, 0);
-        session.align_cursor_line(ViewAlignment::Bottom).unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .align_cursor_line(ViewAlignment::Bottom)
+            .unwrap();
         let snapshot = session.active_snapshot().unwrap();
         assert_eq!(snapshot.text.first_line, 5);
         assert_eq!(snapshot.cursor.unwrap().row, 5);
-        session.align_cursor_line(ViewAlignment::Center).unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .align_cursor_line(ViewAlignment::Center)
+            .unwrap();
         let snapshot = session.active_snapshot().unwrap();
         assert_eq!(snapshot.text.first_line, 8);
         assert_eq!(snapshot.cursor.unwrap().row, 2);
         assert_eq!(session.buffer_version(id), revision);
         assert!(!session.active_is_modified());
 
-        session.move_cursor_to_line(0).unwrap();
-        session.align_cursor_line(ViewAlignment::Top).unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .move_cursor_to_line(0)
+            .unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .align_cursor_line(ViewAlignment::Top)
+            .unwrap();
         assert_eq!(session.active_snapshot().unwrap().text.first_line, 0);
     }
 
@@ -1403,31 +1276,57 @@ mod tests {
         create_buffer(&mut session, "hello world élan test");
         session.resize_active_view(30, 4);
 
-        session.move_cursor_word(WordMovement::NextEnd).unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .move_cursor_word(WordMovement::NextEnd)
+            .unwrap();
         assert_eq!(active_cursor(&mut session), 4);
         session
+            .active_editor()
+            .unwrap()
             .move_cursor_word(WordMovement::PreviousStart)
             .unwrap();
         assert_eq!(active_cursor(&mut session), 0);
-        session.move_cursor_word(WordMovement::NextStart).unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .move_cursor_word(WordMovement::NextStart)
+            .unwrap();
         assert_eq!(active_cursor(&mut session), 6);
-        session.move_cursor_word(WordMovement::NextStart).unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .move_cursor_word(WordMovement::NextStart)
+            .unwrap();
         assert_eq!(active_cursor(&mut session), 12);
-        session.move_cursor_word(WordMovement::NextEnd).unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .move_cursor_word(WordMovement::NextEnd)
+            .unwrap();
         assert_eq!(active_cursor(&mut session), 15);
         session
+            .active_editor()
+            .unwrap()
             .move_cursor_word(WordMovement::PreviousStart)
             .unwrap();
         assert_eq!(active_cursor(&mut session), 12);
         session
+            .active_editor()
+            .unwrap()
             .move_cursor_word(WordMovement::PreviousStart)
             .unwrap();
         assert_eq!(active_cursor(&mut session), 6);
         session
+            .active_editor()
+            .unwrap()
             .move_cursor_word(WordMovement::PreviousStart)
             .unwrap();
         assert_eq!(active_cursor(&mut session), 0);
         session
+            .active_editor()
+            .unwrap()
             .move_cursor_word(WordMovement::PreviousStart)
             .unwrap();
         assert_eq!(active_cursor(&mut session), 0);
@@ -1440,7 +1339,11 @@ mod tests {
             WordMovement::PreviousStart,
             WordMovement::NextEnd,
         ] {
-            empty.move_cursor_word(movement).unwrap();
+            empty
+                .active_editor()
+                .unwrap()
+                .move_cursor_word(movement)
+                .unwrap();
             assert_eq!(active_cursor(&mut empty), 0);
         }
     }
@@ -1453,17 +1356,37 @@ mod tests {
         document.set_selection(view.id, Selection::point(3));
         assert_eq!(active_cursor(&mut session), 3);
 
-        session.move_cursor(CursorMovement::Down).unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .move_cursor(CursorMovement::Down)
+            .unwrap();
         // Helix uses the end-of-line position when the target line is shorter.
         assert_eq!(active_cursor(&mut session), 6);
-        session.move_cursor(CursorMovement::Down).unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .move_cursor(CursorMovement::Down)
+            .unwrap();
         assert_eq!(active_cursor(&mut session), 10);
-        session.move_cursor(CursorMovement::Down).unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .move_cursor(CursorMovement::Down)
+            .unwrap();
         assert_eq!(active_cursor(&mut session), 10);
 
-        session.move_cursor(CursorMovement::Up).unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .move_cursor(CursorMovement::Up)
+            .unwrap();
         assert_eq!(active_cursor(&mut session), 6);
-        session.move_cursor(CursorMovement::Up).unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .move_cursor(CursorMovement::Up)
+            .unwrap();
         assert_eq!(active_cursor(&mut session), 3);
     }
 
@@ -1479,16 +1402,26 @@ mod tests {
         assert_eq!(session.active_view_height(), Some(4));
 
         session
+            .active_editor()
+            .unwrap()
             .move_cursor_lines(VerticalDirection::Down, 5)
             .unwrap();
         assert_eq!(active_cursor(&mut session), 10);
-        session.move_cursor_lines(VerticalDirection::Up, 2).unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .move_cursor_lines(VerticalDirection::Up, 2)
+            .unwrap();
         assert_eq!(active_cursor(&mut session), 6);
         session
+            .active_editor()
+            .unwrap()
             .move_cursor_lines(VerticalDirection::Up, 100)
             .unwrap();
         assert_eq!(active_cursor(&mut session), 0);
         session
+            .active_editor()
+            .unwrap()
             .move_cursor_lines(VerticalDirection::Down, 100)
             .unwrap();
         assert_eq!(active_cursor(&mut session), text.len() - 2);
@@ -1507,7 +1440,11 @@ mod tests {
         view.area = Rect::new(0, 0, 20, 4);
 
         for _ in 0..6 {
-            session.move_cursor(CursorMovement::Down).unwrap();
+            session
+                .active_editor()
+                .unwrap()
+                .move_cursor(CursorMovement::Down)
+                .unwrap();
         }
 
         let (document, view) = active_parts(&mut session);
@@ -1607,7 +1544,11 @@ mod tests {
         session.resize_active_view(20, 4);
 
         for _ in 0..6 {
-            session.move_cursor(CursorMovement::Down).unwrap();
+            session
+                .active_editor()
+                .unwrap()
+                .move_cursor(CursorMovement::Down)
+                .unwrap();
         }
 
         let snapshot = session.active_snapshot().unwrap();
@@ -1626,6 +1567,8 @@ mod tests {
         let id = open_file(&mut session, &path);
         session.resize_active_view(20, 2);
         session
+            .active_editor()
+            .unwrap()
             .move_cursor_to(DocumentPosition {
                 line: 1,
                 character: 1,

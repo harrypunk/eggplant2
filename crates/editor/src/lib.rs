@@ -1,5 +1,6 @@
 //! Eggplant's editor core and Helix adapter.
 
+mod active_editor;
 mod document;
 mod open;
 mod preview;
@@ -8,6 +9,7 @@ mod session;
 mod snapshot;
 mod viewport;
 
+pub use active_editor::ActiveEditor;
 pub use document::{DocumentFactory, OpenDocumentError, read_text_file};
 pub use open::{DocumentOpenCompletion, DocumentOpenRequest, OpenedDocument};
 pub use preview::{preview_document, preview_document_at};

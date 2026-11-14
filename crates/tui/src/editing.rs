@@ -88,17 +88,23 @@ fn open_line(model: &mut Model, direction: OpenLineDirection) -> Option<Effect> 
 }
 
 fn move_cursor(model: &mut Model, movement: CursorMovement) -> Option<Effect> {
-    let _ = model.editor.move_cursor(movement);
+    if let Ok(mut editor) = model.editor.active_editor() {
+        let _ = editor.move_cursor(movement);
+    }
     None
 }
 
 fn move_line_boundary(model: &mut Model, boundary: LineBoundary) -> Option<Effect> {
-    let _ = model.editor.move_cursor_to_line_boundary(boundary);
+    if let Ok(mut editor) = model.editor.active_editor() {
+        let _ = editor.move_cursor_to_line_boundary(boundary);
+    }
     None
 }
 
 fn move_word(model: &mut Model, movement: WordMovement) -> Option<Effect> {
-    let _ = model.editor.move_cursor_word(movement);
+    if let Ok(mut editor) = model.editor.active_editor() {
+        let _ = editor.move_cursor_word(movement);
+    }
     None
 }
 
@@ -387,7 +393,12 @@ mod tests {
         model.context_stack.push(Context::AppNormal);
         open_file(&mut model, &path);
         for _ in 0..5 {
-            model.editor.move_cursor(CursorMovement::Right).unwrap();
+            model
+                .editor
+                .active_editor()
+                .unwrap()
+                .move_cursor(CursorMovement::Right)
+                .unwrap();
         }
         let manager = MessageManager::default();
         manager.update(

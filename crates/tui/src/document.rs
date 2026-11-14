@@ -72,10 +72,14 @@ pub(crate) fn finish_open_file(
     };
     model.status = None;
     buffer::reveal_buffer(model, id);
-    if let Some(position) = position
-        && let Err(error) = model.editor.move_cursor_to(position)
-    {
-        model.status = Some(StatusMessage::error(error.to_string()));
+    if let Some(position) = position {
+        let result = model
+            .editor
+            .active_editor()
+            .and_then(|mut editor| editor.move_cursor_to(position));
+        if let Err(error) = result {
+            model.status = Some(StatusMessage::error(error.to_string()));
+        }
     }
     Some(id)
 }
