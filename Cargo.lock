@@ -2845,6 +2845,7 @@ dependencies = [
  "color-eyre",
  "crossterm",
  "editor",
+ "grep-matcher",
  "grep-regex",
  "grep-searcher",
  "helix-core",

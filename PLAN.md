@@ -232,7 +232,7 @@ Start with a two-character, Leap-style jump limited to the active buffer's visib
 #### M7.3 — Current-buffer live grep
 
 - [x] Use the pinned LAN ripgrep `grep-regex`/`grep-searcher` crates so current and future project search share the same matching/searching foundation.
-- [x] Open a picker-style extension with `Space s c`; provide a shared text input with cursor, smart-case regex results, and match-centered context preview.
+- [x] Open a picker-style extension with `Space s c`; provide a shared text input with cursor, smart-case regex results, match-centered syntax-highlighted context preview, yellow match blocks, and a selected preview-line style.
 - [x] Search an immutable active-buffer text snapshot in a revisioned blocking effect and return results through typed `FeatureCompletion` routing.
 - [x] Reject stale query and document revisions; support Up/Down selection, Enter to jump to the match line, and Escape to cancel without movement.
 - [x] Test smart case, Unicode, invalid regexes, stale completions, preview context, and the leader/search/selection/jump workflow.

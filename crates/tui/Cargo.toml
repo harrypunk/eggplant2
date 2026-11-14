@@ -9,6 +9,7 @@ crossterm = "0.29.0"
 editor.workspace = true
 helix-core = { git = "http://git.z.lan/fork/helix", rev = "079a789e8cb08ead67f19e1971a1b7438b37354b" }
 helix-view = { git = "http://git.z.lan/fork/helix", rev = "079a789e8cb08ead67f19e1971a1b7438b37354b" }
+grep-matcher = { git = "http://git.z.lan/fork/ripgrep", rev = "7525479a9576f1ca4c2d04339d78e47ff5ae9b05" }
 grep-regex = { git = "http://git.z.lan/fork/ripgrep", rev = "7525479a9576f1ca4c2d04339d78e47ff5ae9b05" }
 grep-searcher = { git = "http://git.z.lan/fork/ripgrep", rev = "7525479a9576f1ca4c2d04339d78e47ff5ae9b05" }
 ignore = "0.4"

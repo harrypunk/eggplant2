@@ -31,7 +31,7 @@ Overlay layer:
 | Editor | `buffer tabs = Length(1)`, `editing area = Fill(1)`; line-number gutter = document digits + one space, text = `Fill(1)` |
 | Key-hints overlay | Bottom-right of `main`; content-sized vertical list with borders, above the status bar |
 | File-picker overlay | Centered in `main`, maximum 160×36; left query/results and right preview in equal columns. Preview snapshots cover the maximum 34 inner rows and smaller layouts clip them. |
-| Buffer-grep overlay | Same picker geometry and input cursor as the file picker; left regex/results and right match-centered buffer context. |
+| Buffer-grep overlay | Same picker geometry and input cursor as the file picker; left regex/results and right match-centered buffer context with current syntax highlights, yellow match blocks, and selected-line styling. |
 
 All layout groups use `Flex::Start`. Hidden nodes remain in the layout tree and use zero width, so they do not reduce the editor's fill area.
 

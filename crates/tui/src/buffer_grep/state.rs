@@ -1,17 +1,19 @@
-use std::sync::Arc;
+use std::{ops::Range, sync::Arc};
 
-use editor::{BufferId, BufferTextSnapshot, LineSnapshot, TextViewSnapshot};
+use editor::{BufferId, BufferTextSnapshot, TextViewSnapshot};
 
 use super::BufferGrepRequest;
 use crate::data_object::Visibility;
 
-const PREVIEW_HEIGHT: usize = 34;
+pub(crate) const PREVIEW_HEIGHT: usize = 34;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GrepMatch {
     /// Zero-based document line.
     pub line: usize,
     pub text: String,
+    /// UTF-8 byte ranges of every non-overlapping match on this line.
+    pub match_ranges: Vec<Range<usize>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -109,7 +111,6 @@ impl BufferGrepState {
                 self.status = SearchStatus::Failed(error);
             }
         }
-        self.update_preview();
         true
     }
 
@@ -119,7 +120,6 @@ impl BufferGrepState {
         }
         let selected = self.selected.unwrap_or(0);
         self.selected = Some((selected + 1).min(self.results.len() - 1));
-        self.update_preview();
     }
 
     pub fn select_previous(&mut self) {
@@ -127,7 +127,6 @@ impl BufferGrepState {
             return;
         }
         self.selected = Some(self.selected.unwrap_or(0).saturating_sub(1));
-        self.update_preview();
     }
 
     pub fn selected_match(&self) -> Option<&GrepMatch> {
@@ -152,38 +151,6 @@ impl BufferGrepState {
             self.query_revision,
         ))
     }
-
-    pub(crate) fn update_preview(&mut self) {
-        self.preview = self
-            .source
-            .as_ref()
-            .and_then(|source| preview_for(source, self.selected_match()));
-    }
-}
-
-fn preview_for(
-    source: &BufferTextSnapshot,
-    selected: Option<&GrepMatch>,
-) -> Option<TextViewSnapshot> {
-    let selected = selected?;
-    let lines = source.text.lines().collect::<Vec<_>>();
-    let line_count = lines.len();
-    let first_line = selected
-        .line
-        .saturating_sub(PREVIEW_HEIGHT / 2)
-        .min(line_count.saturating_sub(PREVIEW_HEIGHT));
-    let lines = lines
-        .into_iter()
-        .skip(first_line)
-        .take(PREVIEW_HEIGHT)
-        .map(|line| LineSnapshot::plain(line.to_string()))
-        .collect();
-    Some(TextViewSnapshot {
-        first_line,
-        line_count,
-        lines,
-        horizontal_offset: 0,
-    })
 }
 
 #[cfg(test)]
@@ -217,6 +184,7 @@ mod tests {
             Ok(vec![GrepMatch {
                 line: 0,
                 text: "hello".to_string(),
+                match_ranges: vec![std::ops::Range { start: 1, end: 4 }],
             }])
         };
 
@@ -229,31 +197,5 @@ mod tests {
         ));
         assert!(state.complete(current_query, identity, Some(identity), result()));
         assert_eq!(state.results.len(), 1);
-    }
-
-    #[test]
-    fn preview_centers_the_selected_match_in_source_context() {
-        let text = (0..100)
-            .map(|line| line.to_string())
-            .collect::<Vec<_>>()
-            .join("\n");
-        let source = BufferTextSnapshot {
-            buffer_id: buffer_id(),
-            revision: 0,
-            text,
-        };
-        let preview = preview_for(
-            &source,
-            Some(&GrepMatch {
-                line: 50,
-                text: "50".to_string(),
-            }),
-        )
-        .unwrap();
-
-        assert_eq!(preview.first_line, 33);
-        assert_eq!(preview.lines.len(), PREVIEW_HEIGHT);
-        assert_eq!(preview.line_count, 100);
-        assert_eq!(preview.lines[17].text, "50");
     }
 }

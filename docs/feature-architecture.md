@@ -269,7 +269,7 @@ Implemented M7.1: `page_scroll.rs` registers `page_scroll_down`/`page_scroll_up`
 
 Implemented M7.2: `buffer_jump/` owns the `Space c j` workflow, smart-case two-character matching over visible snapshot lines, stable one-key labels for up to 26 matches and two-key labels above that, cancellation/backspace, and final cursor movement. `TextInputRegistry` replaces feature-specific character messages for Insert mode, the file picker, and jump. `UiRegistry` editor overlays receive the existing snapshot and resolved text rectangle for dimming/labels without render-time scanning. The editor core exposes only generic `DocumentPosition` navigation and viewport width; it contains no jump policy.
 
-Implemented M7.3: `buffer_grep/` owns the `Space s c` workflow, ripgrep smart-case regex searching over an immutable `BufferTextSnapshot`, query/document revision checks, result selection, match-centered previews, and jump-to-line acceptance. Its blocking request returns a typed `FeatureCompletion`, so central messages/runtime contain no buffer-grep dispatch. Shared picker layout and `TextInput` provide the file-picker-style geometry and cursor.
+Implemented M7.3: `buffer_grep/` owns the `Space s c` workflow, ripgrep smart-case regex searching over an immutable `BufferTextSnapshot`, query/document revision checks, result selection, match-centered previews with current Helix syntax highlights, yellow match blocks in results/context, selected preview-line styling, and jump-to-line acceptance. Its blocking request returns a typed `FeatureCompletion`, so central messages/runtime contain no buffer-grep dispatch. Shared picker layout and `TextInput` provide the file-picker-style geometry and cursor.
 
 ## 12. Testing strategy
 

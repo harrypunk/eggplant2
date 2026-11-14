@@ -124,7 +124,18 @@ pub(crate) fn text_view_snapshot(document: &Document, view: &View) -> TextViewSn
     let first_line = document
         .text()
         .char_to_line(offset.anchor.min(document.text().len_chars()));
-    let end_line = (first_line + view.inner_height()).min(document.text().len_lines());
+    let mut snapshot = text_view_snapshot_at(document, first_line, view.inner_height());
+    snapshot.horizontal_offset = offset.horizontal_offset;
+    snapshot
+}
+
+/// Project an arbitrary logical-line range with the document's current syntax highlights.
+pub(crate) fn text_view_snapshot_at(
+    document: &Document,
+    first_line: usize,
+    height: usize,
+) -> TextViewSnapshot {
+    let end_line = (first_line + height).min(document.text().len_lines());
     let lines = (first_line..end_line)
         .map(|line| {
             LineSnapshot::plain(
@@ -142,7 +153,7 @@ pub(crate) fn text_view_snapshot(document: &Document, view: &View) -> TextViewSn
         first_line,
         line_count: document.text().len_lines(),
         lines: highlighted_lines(document, first_line, end_line, lines),
-        horizontal_offset: offset.horizontal_offset,
+        horizontal_offset: 0,
     }
 }
 

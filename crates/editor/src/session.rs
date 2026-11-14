@@ -23,7 +23,7 @@ use crate::{
     save::{SaveCompletion, SaveError, SaveRequest},
     snapshot::{
         BufferInfo, BufferTextSnapshot, CursorPosition, DirtyState, EditorSnapshot,
-        text_view_snapshot,
+        TextViewSnapshot, text_view_snapshot, text_view_snapshot_at,
     },
     viewport,
 };
@@ -332,6 +332,15 @@ impl EditorSession {
             revision,
             text,
         })
+    }
+
+    /// Project a match-centered active-buffer range with current syntax highlights.
+    pub fn active_preview_at_line(&self, line: usize, height: usize) -> Option<TextViewSnapshot> {
+        let active = self.active_view.as_ref()?;
+        let document = &self.buffers.get(&active.buffer)?.document;
+        let max_first_line = document.text().len_lines().saturating_sub(height.max(1));
+        let first_line = line.saturating_sub(height / 2).min(max_first_line);
+        Some(text_view_snapshot_at(document, first_line, height))
     }
 
     pub fn buffer_count(&self) -> usize {
@@ -874,6 +883,30 @@ mod tests {
         assert_ne!(second.revision, first.revision);
         assert_eq!(session.active_revision(), Some((id, second.revision)));
         assert_eq!(first.text, "hello");
+    }
+
+    #[test]
+    fn active_previews_center_lines_and_retain_current_syntax() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("main.rs");
+        std::fs::write(&path, "fn main() {}\nprintln!(\"hello\");").unwrap();
+        let mut session = EditorSession::new();
+        open_file(&mut session, &path);
+
+        let preview = session.active_preview_at_line(0, 2).unwrap();
+
+        assert_eq!(preview.first_line, 0);
+        assert_eq!(preview.lines.len(), 2);
+        assert!(preview.lines[0].highlights.iter().any(|span| {
+            !span.highlights.is_empty() && span.start_byte == 0 && span.end_byte == 2
+        }));
+        assert!(
+            session
+                .active_preview_at_line(0, 0)
+                .unwrap()
+                .lines
+                .is_empty()
+        );
     }
 
     #[test]
