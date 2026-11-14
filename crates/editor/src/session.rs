@@ -16,6 +16,7 @@ use helix_view::{
     Document, View,
     editor::{Config, GutterConfig},
     graphics::Rect,
+    view::ViewPosition,
 };
 use thiserror::Error;
 
@@ -407,80 +408,23 @@ impl EditorSession {
     ) -> Result<(), EditorError> {
         let scrolloff = self.scrolloff;
         let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
-        let mut view_offset = document.view_offset(view.id);
         let cursor = document
             .selection(view.id)
             .primary()
             .cursor(document.text().slice(..));
-        let height = view.inner_height();
-        let scrolloff = scrolloff.min(height.saturating_sub(1) / 2);
-        let offset = isize::try_from(lines).unwrap_or(isize::MAX);
-        let offset = match direction {
-            VerticalDirection::Down => offset,
-            VerticalDirection::Up => offset.saturating_neg(),
-        };
 
-        let text = document.text().slice(..);
-        let viewport = view.inner_area(document);
-        let text_format = document.text_format(viewport.width, None);
-        let annotations = view.text_annotations(document, None);
-        (view_offset.anchor, view_offset.vertical_offset) = char_idx_at_visual_offset(
-            text,
-            view_offset.anchor,
-            isize::try_from(view_offset.vertical_offset)
-                .unwrap_or(isize::MAX)
-                .saturating_add(offset),
-            0,
-            &text_format,
-            &annotations,
-        );
-        drop(annotations);
+        let view_offset = shifted_view_offset(document, view, direction, lines);
         document.set_view_offset(view.id, view_offset);
-        let annotations = view.text_annotations(document, None);
-
-        let text = document.text().slice(..);
-        let mut head;
-        match direction {
-            VerticalDirection::Down => {
-                let off;
-                (head, off) = char_idx_at_visual_offset(
-                    text,
-                    view_offset.anchor,
-                    isize::try_from(view_offset.vertical_offset)
-                        .unwrap_or(isize::MAX)
-                        .saturating_add(scrolloff as isize),
-                    0,
-                    &text_format,
-                    &annotations,
-                );
-                head += usize::from(off != 0);
-                if head <= cursor {
-                    return Ok(());
-                }
-            }
-            VerticalDirection::Up => {
-                head =
-                    char_idx_at_visual_offset(
-                        text,
-                        view_offset.anchor,
-                        isize::try_from(view_offset.vertical_offset)
-                            .unwrap_or(isize::MAX)
-                            .saturating_add(
-                                height.saturating_sub(scrolloff).saturating_sub(1) as isize
-                            ),
-                        0,
-                        &text_format,
-                        &annotations,
-                    )
-                    .0;
-                if head >= cursor {
-                    return Ok(());
-                }
-            }
+        if let Some(head) = cursor_correction_after_scroll(
+            document,
+            view,
+            view_offset,
+            cursor,
+            direction,
+            scrolloff,
+        ) {
+            document.set_selection(view.id, Selection::point(head));
         }
-
-        drop(annotations);
-        document.set_selection(view.id, Selection::point(head));
         Ok(())
     }
 
@@ -702,6 +646,68 @@ impl EditorSession {
             .or_else(|| self.buffers.first_key_value())
             .map(|(&id, _)| id)
     }
+}
+
+fn shifted_view_offset(
+    document: &Document,
+    view: &View,
+    direction: VerticalDirection,
+    lines: usize,
+) -> ViewPosition {
+    let mut view_offset = document.view_offset(view.id);
+    let lines = isize::try_from(lines).unwrap_or(isize::MAX);
+    let offset = match direction {
+        VerticalDirection::Down => lines,
+        VerticalDirection::Up => lines.saturating_neg(),
+    };
+    let row_offset = isize::try_from(view_offset.vertical_offset)
+        .unwrap_or(isize::MAX)
+        .saturating_add(offset);
+    (view_offset.anchor, view_offset.vertical_offset) =
+        char_at_visual_row(document, view, view_offset.anchor, row_offset);
+    view_offset
+}
+
+fn cursor_correction_after_scroll(
+    document: &Document,
+    view: &View,
+    view_offset: ViewPosition,
+    cursor: usize,
+    direction: VerticalDirection,
+    scrolloff: usize,
+) -> Option<usize> {
+    let height = view.inner_height();
+    let scrolloff = scrolloff.min(height.saturating_sub(1) / 2);
+    let base_offset = isize::try_from(view_offset.vertical_offset).unwrap_or(isize::MAX);
+    match direction {
+        VerticalDirection::Down => {
+            let row_offset =
+                base_offset.saturating_add(isize::try_from(scrolloff).unwrap_or(isize::MAX));
+            let (mut head, off) =
+                char_at_visual_row(document, view, view_offset.anchor, row_offset);
+            head += usize::from(off != 0);
+            (head > cursor).then_some(head)
+        }
+        VerticalDirection::Up => {
+            let last_visible_row = height.saturating_sub(scrolloff).saturating_sub(1);
+            let row_offset =
+                base_offset.saturating_add(isize::try_from(last_visible_row).unwrap_or(isize::MAX));
+            let (head, _) = char_at_visual_row(document, view, view_offset.anchor, row_offset);
+            (head < cursor).then_some(head)
+        }
+    }
+}
+
+fn char_at_visual_row(
+    document: &Document,
+    view: &View,
+    anchor: usize,
+    row_offset: isize,
+) -> (usize, usize) {
+    let text = document.text().slice(..);
+    let text_format = document.text_format(view.inner_area(document).width, None);
+    let annotations = view.text_annotations(document, None);
+    char_idx_at_visual_offset(text, anchor, row_offset, 0, &text_format, &annotations)
 }
 
 impl Default for EditorSession {
