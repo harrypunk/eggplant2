@@ -105,12 +105,10 @@ pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
 }
 
 fn open(model: &mut Model) {
-    if !matches!(
-        model.context_stack.last(),
-        Some(Context::AppNormal | Context::Explorer)
-    ) {
+    // Only Normal or Explorer may open grep; another modal keeps its input context.
+    let Some(Context::AppNormal | Context::Explorer) = model.context_stack.last() else {
         return;
-    }
+    };
     let Some(source) = model.editor.active_text_snapshot() else {
         model.status = Some(StatusMessage::info("No active buffer"));
         return;
