@@ -33,6 +33,8 @@ pub mod data_object {
 
     use editor::{BufferId, DocumentOpenCompletion, EditorSession, SaveCompletion};
 
+    use crate::manager::effect::FeatureCompletion;
+
     use crate::{
         buffer_jump::BufferJumpState,
         command_menu::CommandMenuState,
@@ -221,10 +223,11 @@ pub mod data_object {
         AgentChatDialog,
     }
 
-    #[derive(Debug, Clone)]
+    #[derive(Debug)]
     pub enum Message {
         CommandMenuKey(crossterm::event::KeyCode),
         InvokeCommand(CommandId),
+        FeatureCompletion(FeatureCompletion),
         TextInput(char),
         SaveFinished(SaveCompletion),
         FileOpened(DocumentOpenCompletion),

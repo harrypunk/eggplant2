@@ -234,7 +234,7 @@ Implemented: resolved bindings emit `InvokeCommand(CommandId)`, and `MessageMana
 
 Migrate scanning, filtering, preview, and open completions to registered effects. This proves scheduling, revisions, completion routing, and interaction with the document-open capability.
 
-Implemented: `FeatureEffect` is a feature-owned effect object with default blocking-pool execution and completion-message delivery. `FilePickerRequest` implements it, so the runtime no longer has a picker-specific effect arm. Scan/filter/preview revisions and completion behavior are unchanged, and an async channel test covers execution. Save and document-open effects remain compatibility variants for the later shell migration.
+Implemented: `FeatureEffect` is a feature-owned effect object with default blocking-pool execution and completion-message delivery. `FeatureCompletion` routes typed worker results to their owner through one generic shell arm, without per-feature completion messages. `FilePickerRequest` implements it, so the runtime no longer has a picker-specific effect arm. Scan/filter/preview revisions and completion behavior are unchanged, and an async channel test covers execution. Save and document-open effects remain compatibility variants for the later shell migration.
 
 ### M6.4 — Remaining shell decomposition
 

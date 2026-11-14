@@ -47,6 +47,7 @@ impl MessageManager {
                 };
             }
             Message::InvokeCommand(id) => return self.invoke_command(model, id),
+            Message::FeatureCompletion(completion) => return completion.update(model),
             Message::TextInput(character) => return self.text_input.handle(model, character),
             Message::SaveFinished(completion) => {
                 return lifecycle::finish_save(model, completion);
@@ -90,7 +91,7 @@ impl MessageManager {
             return None;
         };
         match &command.handler {
-            CommandHandler::Message(message) => self.update(model, message.clone()),
+            CommandHandler::Message(message) => self.update(model, message()),
             CommandHandler::Feature(handler) => handler(model, id),
         }
     }

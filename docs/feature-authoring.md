@@ -63,12 +63,19 @@ Implement `FeatureEffect::perform` to return a completion `Message`. The default
 ```rust
 impl FeatureEffect for ExampleEffect {
     fn perform(self: Box<Self>) -> Message {
-        Message::InvokeCommand(CommandId("example.complete"))
+        Message::FeatureCompletion(FeatureCompletion::new(ExampleCompletion))
+    }
+}
+
+impl Completion for ExampleCompletion {
+    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
+        // Apply the typed result through the owning feature's normal update path.
+        None
     }
 }
 ```
 
-Return the request from update with `Effect::feature(request)`.
+Return the request from update with `Effect::feature(request)`. `FeatureCompletion` carries a typed result back to its owner through one generic shell arm; do not add a feature-specific completion message or `MessageManager` match arm.
 
 Override `execute` only when the work needs different scheduling, such as async save or main-thread construction of non-`Send` Helix values. Preserve request IDs, buffer IDs, and revisions so stale completions cannot replace newer state. The runtime must not gain a feature-specific effect arm.
 

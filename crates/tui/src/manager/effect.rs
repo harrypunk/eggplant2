@@ -1,7 +1,30 @@
 use editor::{DocumentOpenRequest, SaveRequest};
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::data_object::Message;
+use crate::data_object::{Message, Model};
+
+/// Typed worker result routed back to its owning feature on the main thread.
+pub trait Completion: Send + 'static {
+    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect>;
+}
+
+pub struct FeatureCompletion(Box<dyn Completion>);
+
+impl std::fmt::Debug for FeatureCompletion {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("FeatureCompletion(..)")
+    }
+}
+
+impl FeatureCompletion {
+    pub fn new(completion: impl Completion) -> Self {
+        Self(Box::new(completion))
+    }
+
+    pub fn update(self, model: &mut Model) -> Option<Effect> {
+        self.0.update(model)
+    }
+}
 
 /// Feature-owned background work. New effects implement `perform` and inherit
 /// blocking execution unless they require different scheduling semantics.

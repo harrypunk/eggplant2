@@ -8,7 +8,7 @@ use crate::{
     data_object::{CommandId, Message, Model, StatusMessage, Visibility},
     manager::{
         command_registry::{Command, CommandRegistry},
-        effect::{Effect, FeatureEffect},
+        effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
     },
     ui::{OverlayContribution, OverlayKind, OverlayPlacement, UiRegistry},
 };
@@ -37,11 +37,6 @@ pub fn register(commands: &mut CommandRegistry, ui: &mut UiRegistry) -> color_ey
         "increment example",
         handle_command,
     ))?;
-    commands.register(Command::feature(
-        CommandId("example.complete"),
-        "complete example",
-        handle_command,
-    ))?;
     ui.register_overlay("example", overlay)
 }
 
@@ -51,11 +46,6 @@ fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
             model.example_feature.pending += 1;
             model.example_feature.visibility = Visibility::Displayed;
             Some(Effect::feature(ExampleEffect))
-        }
-        "example.complete" => {
-            model.example_feature.completed += 1;
-            model.example_feature.visibility = Visibility::Hidden;
-            None
         }
         _ => {
             model.status = Some(StatusMessage::error(format!(
@@ -67,11 +57,21 @@ fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     }
 }
 
+struct ExampleCompletion;
+
+impl Completion for ExampleCompletion {
+    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
+        model.example_feature.completed += 1;
+        model.example_feature.visibility = Visibility::Hidden;
+        None
+    }
+}
+
 struct ExampleEffect;
 
 impl FeatureEffect for ExampleEffect {
     fn perform(self: Box<Self>) -> Message {
-        Message::InvokeCommand(CommandId("example.complete"))
+        Message::FeatureCompletion(FeatureCompletion::new(ExampleCompletion))
     }
 }
 

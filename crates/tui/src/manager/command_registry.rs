@@ -12,7 +12,7 @@ pub type FeatureHandler = fn(&mut Model, CommandId) -> Option<Effect>;
 
 #[derive(Debug, Clone)]
 pub enum CommandHandler {
-    Message(Message),
+    Message(fn() -> Message),
     Feature(FeatureHandler),
 }
 
@@ -26,7 +26,7 @@ pub struct Command {
 }
 
 impl Command {
-    pub fn new(id: CommandId, description: &'static str, message: Message) -> Self {
+    pub fn new(id: CommandId, description: &'static str, message: fn() -> Message) -> Self {
         Self {
             id,
             description,
@@ -192,11 +192,9 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
             "previous entry",
             crate::explorer::handle_command,
         ),
-        Command::new(
-            CommandId("open_selected"),
-            "open selected",
-            Message::OpenSelected,
-        ),
+        Command::new(CommandId("open_selected"), "open selected", || {
+            Message::OpenSelected
+        }),
         Command::feature(
             CommandId("explorer_fold"),
             "fold folder",
@@ -287,8 +285,10 @@ mod tests {
     #[test]
     fn rejects_duplicate_command_ids() {
         let error = CommandRegistry::from_commands([
-            Command::new(CommandId("test.command"), "first", Message::FocusLost),
-            Command::new(CommandId("test.command"), "second", Message::Resize(1, 1)),
+            Command::new(CommandId("test.command"), "first", || Message::FocusLost),
+            Command::new(CommandId("test.command"), "second", || {
+                Message::Resize(1, 1)
+            }),
         ])
         .unwrap_err();
 
