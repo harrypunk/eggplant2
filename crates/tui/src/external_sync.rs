@@ -116,7 +116,12 @@ mod tests {
                 character: 8,
             })
             .unwrap();
-        model.editor.insert_text(" local").unwrap();
+        model
+            .editor
+            .active_editor()
+            .unwrap()
+            .insert_text(" local")
+            .unwrap();
         model.editor.enter_normal_mode();
         std::fs::write(&path, "new external").unwrap();
         change_file(&mut model, &path);

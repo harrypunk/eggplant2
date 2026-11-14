@@ -5,8 +5,6 @@ use std::{
     path::Path,
 };
 
-use helix_core::{Selection, Transaction, graphemes, indent};
-use helix_stdx::rope::RopeSliceExt;
 use helix_view::{
     Document, View,
     editor::{Config, GutterConfig},
@@ -16,7 +14,6 @@ use thiserror::Error;
 
 use crate::{
     active_editor::ActiveEditor,
-    document::default_syntax_loader,
     open::OpenedDocument,
     save::{SaveCompletion, SaveError, SaveRequest},
     snapshot::{
@@ -409,163 +406,6 @@ impl EditorSession {
         self.mode = EditMode::Normal;
     }
 
-    /// Position the cursor for an Insert-mode variant without changing text.
-    pub fn move_cursor_to_insert(&mut self, position: InsertPosition) -> Result<(), EditorError> {
-        let scrolloff = self.scrolloff;
-        let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
-        let text = document.text().slice(..);
-        let cursor = document.selection(view.id).primary().cursor(text);
-        let line = text.char_to_line(cursor);
-        let line_end = helix_core::line_ending::line_end_char_index(&text, line);
-        let target = match position {
-            InsertPosition::AfterCursor => {
-                graphemes::next_grapheme_boundary(text, cursor).min(line_end)
-            }
-            InsertPosition::LineEnd => line_end,
-            InsertPosition::FirstNonBlank => text
-                .line(line)
-                .first_non_whitespace_char()
-                .map_or(text.line_to_char(line), |character| {
-                    text.line_to_char(line) + character
-                }),
-        };
-        document.set_selection(view.id, Selection::point(target));
-        view.ensure_cursor_in_view(document, scrolloff);
-        Ok(())
-    }
-
-    /// Move to the current line's start or final grapheme without changing text.
-    pub fn move_cursor_to_line_boundary(
-        &mut self,
-        boundary: LineBoundary,
-    ) -> Result<(), EditorError> {
-        let scrolloff = self.scrolloff;
-        let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
-        let text = document.text().slice(..);
-        let cursor = document.selection(view.id).primary().cursor(text);
-        let line = text.char_to_line(cursor);
-        let line_start = text.line_to_char(line);
-        let line_end = helix_core::line_ending::line_end_char_index(&text, line);
-        let target = match boundary {
-            LineBoundary::Start => line_start,
-            LineBoundary::End if line_end == line_start => line_start,
-            LineBoundary::End => graphemes::prev_grapheme_boundary(text, line_end),
-        };
-        document.set_selection(view.id, Selection::point(target));
-        view.ensure_cursor_in_view(document, scrolloff);
-        Ok(())
-    }
-
-    /// Open an indented line below or above the cursor through one transaction.
-    pub fn open_line(&mut self, direction: OpenLineDirection) -> Result<(), EditorError> {
-        let transaction = {
-            let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
-            let text = document.text().slice(..);
-            let cursor = document.selection(view.id).primary().cursor(text);
-            let current_line = text.char_to_line(cursor);
-            let new_line = match direction {
-                OpenLineDirection::Below => current_line + 1,
-                OpenLineDirection::Above => current_line,
-            };
-            let previous_line = new_line.saturating_sub(1);
-            let insert_at = match new_line {
-                0 => 0,
-                _ => helix_core::line_ending::line_end_char_index(&text, previous_line),
-            };
-            let loader = default_syntax_loader();
-            let loader = loader.load();
-            let indent = indent::indent_for_newline(
-                &loader,
-                document.syntax(),
-                &helix_core::syntax::config::IndentationHeuristic::default(),
-                &document.indent_style,
-                document.tab_width(),
-                text,
-                previous_line,
-                insert_at,
-                current_line,
-            );
-            let line_ending = document.line_ending.as_str();
-            let inserted = match (direction, new_line) {
-                (OpenLineDirection::Above, 0) => format!("{indent}{line_ending}"),
-                _ => format!("{line_ending}{indent}"),
-            };
-            let indent_len = indent.chars().count();
-            let cursor = match (direction, new_line) {
-                (OpenLineDirection::Above, 0) => insert_at + indent_len,
-                _ => insert_at + line_ending.chars().count() + indent_len,
-            };
-            Transaction::change(
-                document.text(),
-                [(insert_at, insert_at, Some(inserted.into()))].into_iter(),
-            )
-            .with_selection(Selection::point(cursor))
-        };
-        self.apply_active_transaction(transaction)
-    }
-
-    /// Insert text at each active selection cursor.
-    pub fn insert_text(&mut self, text: &str) -> Result<(), EditorError> {
-        if text.is_empty() {
-            return Ok(());
-        }
-
-        let transaction = {
-            let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
-            let document_text = document.text().slice(..);
-            Transaction::change_by_and_with_selection(
-                document.text(),
-                document.selection(view.id),
-                |range| {
-                    let cursor = range.cursor(document_text);
-                    ((cursor, cursor, Some(text.into())), None)
-                },
-            )
-        };
-
-        self.apply_active_transaction(transaction)
-    }
-
-    /// Delete the grapheme before each active selection cursor.
-    pub fn backspace(&mut self) -> Result<(), EditorError> {
-        let transaction = {
-            let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
-            let document_text = document.text().slice(..);
-            Transaction::delete_by_and_with_selection(
-                document.text(),
-                document.selection(view.id),
-                |range| {
-                    let cursor = range.cursor(document_text);
-                    (
-                        (
-                            graphemes::prev_grapheme_boundary(document_text, cursor),
-                            cursor,
-                        ),
-                        None,
-                    )
-                },
-            )
-        };
-
-        self.apply_active_transaction(transaction)
-    }
-
-    pub fn undo(&mut self) -> Result<bool, EditorError> {
-        let scrolloff = self.scrolloff;
-        let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
-        let changed = document.undo(view);
-        view.ensure_cursor_in_view(document, scrolloff);
-        Ok(changed)
-    }
-
-    pub fn redo(&mut self) -> Result<bool, EditorError> {
-        let scrolloff = self.scrolloff;
-        let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
-        let changed = document.redo(view);
-        view.ensure_cursor_in_view(document, scrolloff);
-        Ok(changed)
-    }
-
     /// Apply a prepared external reload if the buffer has not changed since scheduling.
     /// Returns `false` for a stale completion and `true` after applying the document state.
     pub fn complete_external_reload(
@@ -661,14 +501,6 @@ impl EditorSession {
             .document
             .set_last_saved_revision(saved.revision, saved.save_time);
         Ok(saved.revision)
-    }
-
-    fn apply_active_transaction(&mut self, transaction: Transaction) -> Result<(), EditorError> {
-        let scrolloff = self.scrolloff;
-        let (document, view) = self.active_parts().ok_or(EditorError::NoActiveBuffer)?;
-        document.apply(&transaction, view.id);
-        view.ensure_cursor_in_view(document, scrolloff);
-        Ok(())
     }
 
     fn active_parts(&mut self) -> Option<(&mut Document, &mut View)> {
@@ -806,7 +638,7 @@ mod tests {
         let (document, view) = active_parts(session);
         let end = document.text().len_chars();
         document.set_selection(view.id, Selection::point(end));
-        session.insert_text(text).unwrap();
+        session.active_editor().unwrap().insert_text(text).unwrap();
         session.enter_normal_mode();
     }
 
@@ -904,16 +736,6 @@ mod tests {
         let mut session = EditorSession::new();
 
         assert!(matches!(
-            session.insert_text("text"),
-            Err(EditorError::NoActiveBuffer)
-        ));
-        assert!(matches!(
-            session.backspace(),
-            Err(EditorError::NoActiveBuffer)
-        ));
-        assert!(matches!(session.undo(), Err(EditorError::NoActiveBuffer)));
-        assert!(matches!(session.redo(), Err(EditorError::NoActiveBuffer)));
-        assert!(matches!(
             session.active_editor(),
             Err(EditorError::NoActiveBuffer)
         ));
@@ -928,7 +750,7 @@ mod tests {
         assert_eq!(first.buffer_id, id);
         assert_eq!(first.text, "hello");
 
-        session.insert_text("!").unwrap();
+        session.active_editor().unwrap().insert_text("!").unwrap();
         let second = session.active_text_snapshot().unwrap();
         assert_eq!(second.text, "!hello");
         assert_ne!(second.revision, first.revision);
@@ -1056,14 +878,20 @@ mod tests {
             .unwrap();
 
         session
+            .active_editor()
+            .unwrap()
             .move_cursor_to_insert(InsertPosition::AfterCursor)
             .unwrap();
         assert_eq!(active_cursor(&mut session), 3);
         session
+            .active_editor()
+            .unwrap()
             .move_cursor_to_insert(InsertPosition::LineEnd)
             .unwrap();
         assert_eq!(active_cursor(&mut session), 4);
         session
+            .active_editor()
+            .unwrap()
             .move_cursor_to_insert(InsertPosition::FirstNonBlank)
             .unwrap();
         assert_eq!(active_cursor(&mut session), 2);
@@ -1072,6 +900,8 @@ mod tests {
         let mut grapheme = EditorSession::new();
         create_buffer(&mut grapheme, "👩\u{200d}💻x");
         grapheme
+            .active_editor()
+            .unwrap()
             .move_cursor_to_insert(InsertPosition::AfterCursor)
             .unwrap();
         assert_eq!(active_cursor(&mut grapheme), 3);
@@ -1148,7 +978,11 @@ mod tests {
         create_buffer(&mut session, "    first\nsecond");
         session.resize_active_view(20, 4);
 
-        session.open_line(OpenLineDirection::Below).unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .open_line(OpenLineDirection::Below)
+            .unwrap();
         assert_eq!(session.active_snapshot().unwrap().text.lines[1].text, "\t");
         assert_eq!(session.active_snapshot().unwrap().cursor.unwrap().column, 4);
 
@@ -1160,7 +994,11 @@ mod tests {
             .unwrap()
             .move_cursor_to_line(1)
             .unwrap();
-        above.open_line(OpenLineDirection::Above).unwrap();
+        above
+            .active_editor()
+            .unwrap()
+            .open_line(OpenLineDirection::Above)
+            .unwrap();
         let snapshot = above.active_snapshot().unwrap();
         assert_eq!(snapshot.text.lines[1].text, "\t");
         assert_eq!(snapshot.text.first_line + snapshot.cursor.unwrap().row, 1);
@@ -1169,7 +1007,11 @@ mod tests {
         let mut empty = EditorSession::new();
         create_buffer(&mut empty, "");
         empty.resize_active_view(20, 4);
-        empty.open_line(OpenLineDirection::Below).unwrap();
+        empty
+            .active_editor()
+            .unwrap()
+            .open_line(OpenLineDirection::Below)
+            .unwrap();
         let snapshot = empty.active_snapshot().unwrap();
         assert_eq!(snapshot.text.line_count, 2);
         assert_eq!(snapshot.text.first_line + snapshot.cursor.unwrap().row, 1);
@@ -1177,7 +1019,11 @@ mod tests {
         let mut empty_above = EditorSession::new();
         create_buffer(&mut empty_above, "");
         empty_above.resize_active_view(20, 4);
-        empty_above.open_line(OpenLineDirection::Above).unwrap();
+        empty_above
+            .active_editor()
+            .unwrap()
+            .open_line(OpenLineDirection::Above)
+            .unwrap();
         let snapshot = empty_above.active_snapshot().unwrap();
         assert_eq!(snapshot.text.line_count, 2);
         assert_eq!(snapshot.text.first_line + snapshot.cursor.unwrap().row, 0);
@@ -1460,8 +1306,12 @@ mod tests {
         let (document, view) = active_parts(&mut session);
         document.set_selection(view.id, Selection::point(5));
 
-        session.insert_text(", world").unwrap();
-        session.backspace().unwrap();
+        session
+            .active_editor()
+            .unwrap()
+            .insert_text(", world")
+            .unwrap();
+        session.active_editor().unwrap().backspace().unwrap();
 
         assert_eq!(session.buffers[&id].document.text(), "hello, worl");
         assert!(session.active_is_modified());
@@ -1476,10 +1326,10 @@ mod tests {
             let end = document.text().len_chars();
             document.set_selection(view.id, Selection::point(end));
 
-            session.backspace().unwrap();
+            session.active_editor().unwrap().backspace().unwrap();
             assert_eq!(session.buffers[&id].document.text(), "");
 
-            session.backspace().unwrap();
+            session.active_editor().unwrap().backspace().unwrap();
             assert_eq!(session.buffers[&id].document.text(), "");
         }
     }
@@ -1491,15 +1341,15 @@ mod tests {
         session.enter_insert_mode();
         let (document, view) = active_parts(&mut session);
         document.set_selection(view.id, Selection::point(1));
-        session.insert_text("b").unwrap();
-        session.insert_text("c").unwrap();
+        session.active_editor().unwrap().insert_text("b").unwrap();
+        session.active_editor().unwrap().insert_text("c").unwrap();
         session.enter_normal_mode();
 
         assert_eq!(session.buffers[&id].document.text(), "abc");
-        assert!(session.undo().unwrap());
+        assert!(session.active_editor().unwrap().undo().unwrap());
         assert_eq!(session.buffers[&id].document.text(), "a");
         assert!(!session.active_is_modified());
-        assert!(session.redo().unwrap());
+        assert!(session.active_editor().unwrap().redo().unwrap());
         assert_eq!(session.buffers[&id].document.text(), "abc");
         assert!(session.active_is_modified());
     }
@@ -1621,7 +1471,7 @@ mod tests {
         let mut session = EditorSession::new();
         let id = open_file(&mut session, &path);
         let expected_version = session.buffer_version(id).unwrap();
-        session.insert_text("!").unwrap();
+        session.active_editor().unwrap().insert_text("!").unwrap();
         std::fs::write(&path, "external").unwrap();
         let result = DocumentOpenRequest::new(DocumentFactory::new(), &path)
             .perform()
@@ -1735,7 +1585,7 @@ mod tests {
         let mut session = EditorSession::new();
         let id = open_file(&mut session, &path);
         session.enter_insert_mode();
-        session.insert_text("new").unwrap();
+        session.active_editor().unwrap().insert_text("new").unwrap();
         session.enter_normal_mode();
 
         let completion = session.save_buffer(id).unwrap().perform().await;

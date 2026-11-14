@@ -148,7 +148,12 @@ mod tests {
         let mut model = Model::default();
         open_file(&mut model, &path);
         model.editor.enter_insert_mode();
-        model.editor.insert_text("b").unwrap();
+        model
+            .editor
+            .active_editor()
+            .unwrap()
+            .insert_text("b")
+            .unwrap();
         model.editor.enter_normal_mode();
 
         let request =
@@ -169,7 +174,12 @@ mod tests {
         let mut model = Model::default();
         open_file(&mut model, &path);
         model.editor.enter_insert_mode();
-        model.editor.insert_text("b").unwrap();
+        model
+            .editor
+            .active_editor()
+            .unwrap()
+            .insert_text("b")
+            .unwrap();
         model.editor.enter_normal_mode();
 
         let request = expect_save(manager.update(
@@ -191,7 +201,12 @@ mod tests {
         let id = open_file(&mut model, &path);
         model.context_stack.push(Context::AppNormal);
         model.editor.enter_insert_mode();
-        model.editor.insert_text("local ").unwrap();
+        model
+            .editor
+            .active_editor()
+            .unwrap()
+            .insert_text("local ")
+            .unwrap();
         model.editor.enter_normal_mode();
         let mut permissions = std::fs::metadata(&path).unwrap().permissions();
         permissions.set_readonly(true);

@@ -63,7 +63,7 @@ mod tests {
         let mut session = EditorSession::new();
         session.insert_document(factory.open(&first_path).unwrap());
         session.enter_insert_mode();
-        session.insert_text("!").unwrap();
+        session.active_editor().unwrap().insert_text("!").unwrap();
         session.enter_normal_mode();
         session.insert_document(factory.open(&second_path).unwrap());
         let snapshot = session.active_snapshot().unwrap();

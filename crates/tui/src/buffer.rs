@@ -120,7 +120,12 @@ mod tests {
         let mut model = Model::default();
         let first = open_file(&mut model, &first_path);
         model.editor.enter_insert_mode();
-        model.editor.insert_text("!").unwrap();
+        model
+            .editor
+            .active_editor()
+            .unwrap()
+            .insert_text("!")
+            .unwrap();
         model.editor.enter_normal_mode();
         let second = open_file(&mut model, &second_path);
         model.editor.activate_buffer(first).unwrap();

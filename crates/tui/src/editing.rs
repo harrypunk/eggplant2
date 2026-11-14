@@ -32,20 +32,35 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         "move_previous_word_start" => move_word(model, WordMovement::PreviousStart),
         "move_next_word_end" => move_word(model, WordMovement::NextEnd),
         "backspace" => {
-            if model.editor.backspace().is_ok() {
+            if model
+                .editor
+                .active_editor()
+                .and_then(|mut editor| editor.backspace())
+                .is_ok()
+            {
                 return buffer::auto_save_active(model);
             }
             None
         }
         "insert_newline" => insert(model, "\n"),
         "undo" => {
-            if model.editor.undo().unwrap_or(false) {
+            if model
+                .editor
+                .active_editor()
+                .and_then(|mut editor| editor.undo())
+                .unwrap_or(false)
+            {
                 return buffer::auto_save_active(model);
             }
             None
         }
         "redo" => {
-            if model.editor.redo().unwrap_or(false) {
+            if model
+                .editor
+                .active_editor()
+                .and_then(|mut editor| editor.redo())
+                .unwrap_or(false)
+            {
                 return buffer::auto_save_active(model);
             }
             None
@@ -73,14 +88,24 @@ fn enter_insert(model: &mut Model) -> Option<Effect> {
 }
 
 fn enter_insert_at(model: &mut Model, position: InsertPosition) -> Option<Effect> {
-    if model.editor.move_cursor_to_insert(position).is_ok() {
+    if model
+        .editor
+        .active_editor()
+        .and_then(|mut editor| editor.move_cursor_to_insert(position))
+        .is_ok()
+    {
         enter_insert(model);
     }
     None
 }
 
 fn open_line(model: &mut Model, direction: OpenLineDirection) -> Option<Effect> {
-    if model.editor.open_line(direction).is_ok() {
+    if model
+        .editor
+        .active_editor()
+        .and_then(|mut editor| editor.open_line(direction))
+        .is_ok()
+    {
         enter_insert(model);
         return buffer::auto_save_active(model);
     }
@@ -109,7 +134,12 @@ fn move_word(model: &mut Model, movement: WordMovement) -> Option<Effect> {
 }
 
 fn insert(model: &mut Model, text: &str) -> Option<Effect> {
-    if model.editor.insert_text(text).is_ok() {
+    if model
+        .editor
+        .active_editor()
+        .and_then(|mut editor| editor.insert_text(text))
+        .is_ok()
+    {
         return buffer::auto_save_active(model);
     }
     None

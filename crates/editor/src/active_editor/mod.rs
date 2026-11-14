@@ -1,3 +1,4 @@
+mod editing;
 mod navigation;
 mod viewport;
 
