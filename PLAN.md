@@ -1,6 +1,6 @@
 # Eggplant first-edition plan
 
-Last updated: 2026-11-13
+Last updated: 2026-11-14
 Current baseline: implemented first-edition feature set in final hardening
 
 ## Purpose
@@ -205,6 +205,8 @@ This is not a promise that new code requires zero wiring. A new feature may be r
 ## Third edition: core editing workflows
 
 ### Milestone 7: Editing workflows, buffer/project grep, and external buffer sync
+
+**Status: complete (2026-11-14).**
 
 **Goal:** deliver frequently used editing features through M6's command/effect/UI contribution boundaries. Finish M6 before starting these slices; no dynamic-theme or third-party-plugin work is a prerequisite.
 
