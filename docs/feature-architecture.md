@@ -297,6 +297,8 @@ Implemented M8.2: `view_align` registers `view_align_start`/`view_align_cancel` 
 
 Implemented M8.3: the editing feature registers `a`/`A`/`I` and `o`/`O` commands. `move_cursor_to_insert` and `open_line` are the only core capabilities; Insert context, auto-save, and history policy remain in the existing editing/buffer paths. Open-line and typed content share one undoable Insert session.
 
+Implemented M8.4: `move_line_start`/`move_line_end` bind Normal `0`/`$` through the editing feature. `EditorSession::move_cursor_to_line_boundary` provides grapheme-safe boundaries without text changes. Direct-key precedence keeps `0` available as a digit inside active line-jump counts.
+
 Eggplant intentionally supports one cursor/selection only. Only `gg`/`G` accept counts; existing `w`/`b`/`e` and all other motions are uncounted. Visual selection is the intended workflow for larger ranges instead of adding a broader text-object motion catalog. Beyond the M8.5–M8.7 slices, M8 does not introduce general Visual operators, macros, named/register-selection workflows, multi-cursor behavior, or full Vim/Helix compatibility.
 
 ## 12. Testing strategy

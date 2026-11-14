@@ -159,6 +159,16 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
             crate::editing::handle_command,
         ),
         Command::feature(
+            CommandId("move_line_start"),
+            "move to line start",
+            crate::editing::handle_command,
+        ),
+        Command::feature(
+            CommandId("move_line_end"),
+            "move to line end",
+            crate::editing::handle_command,
+        ),
+        Command::feature(
             CommandId("move_next_word_start"),
             "move to next word start",
             crate::editing::handle_command,

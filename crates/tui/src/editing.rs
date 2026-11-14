@@ -1,4 +1,4 @@
-use editor::{CursorMovement, InsertPosition, OpenLineDirection, WordMovement};
+use editor::{CursorMovement, InsertPosition, LineBoundary, OpenLineDirection, WordMovement};
 
 use crate::{
     buffer,
@@ -26,6 +26,8 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         "move_right" => move_cursor(model, CursorMovement::Right),
         "move_up" => move_cursor(model, CursorMovement::Up),
         "move_down" => move_cursor(model, CursorMovement::Down),
+        "move_line_start" => move_line_boundary(model, LineBoundary::Start),
+        "move_line_end" => move_line_boundary(model, LineBoundary::End),
         "move_next_word_start" => move_word(model, WordMovement::NextStart),
         "move_previous_word_start" => move_word(model, WordMovement::PreviousStart),
         "move_next_word_end" => move_word(model, WordMovement::NextEnd),
@@ -87,6 +89,11 @@ fn open_line(model: &mut Model, direction: OpenLineDirection) -> Option<Effect> 
 
 fn move_cursor(model: &mut Model, movement: CursorMovement) -> Option<Effect> {
     let _ = model.editor.move_cursor(movement);
+    None
+}
+
+fn move_line_boundary(model: &mut Model, boundary: LineBoundary) -> Option<Effect> {
+    let _ = model.editor.move_cursor_to_line_boundary(boundary);
     None
 }
 
@@ -253,6 +260,45 @@ mod tests {
                 .column,
             6
         );
+    }
+
+    #[test]
+    fn line_boundary_commands_move_without_changing_text() {
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+        create_buffer(&mut model, " hello");
+        let manager = MessageManager::default();
+        manager.update(&mut model, Message::Resize(120, 4));
+
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("move_line_end")),
+        );
+        assert_eq!(
+            model
+                .editor
+                .active_snapshot()
+                .unwrap()
+                .cursor
+                .unwrap()
+                .column,
+            5
+        );
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("move_line_start")),
+        );
+        assert_eq!(
+            model
+                .editor
+                .active_snapshot()
+                .unwrap()
+                .cursor
+                .unwrap()
+                .column,
+            0
+        );
+        assert!(!model.editor.active_is_modified());
     }
 
     #[test]

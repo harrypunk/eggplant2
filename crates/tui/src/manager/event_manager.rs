@@ -50,7 +50,24 @@ impl EventManager {
                 }
                 self.keymap
                     .get_binding(ctx)
-                    .and_then(|bindings| bindings.resolve(KeyChord::new(key.code, key.modifiers)))
+                    .and_then(|bindings| {
+                        let chord = KeyChord::new(key.code, key.modifiers);
+                        bindings.resolve(chord).or_else(|| {
+                            // Terminals disagree about SHIFT metadata for symbols such as `$`.
+                            match key.code {
+                                KeyCode::Char(character)
+                                    if !character.is_alphabetic()
+                                        && key.modifiers.contains(KeyModifiers::SHIFT) =>
+                                {
+                                    bindings.resolve(KeyChord::new(
+                                        key.code,
+                                        key.modifiers & !KeyModifiers::SHIFT,
+                                    ))
+                                }
+                                _ => None,
+                            }
+                        })
+                    })
                     .map(Message::InvokeCommand)
                     .or_else(|| self.unbound_key_message(ctx, key))
             }
@@ -237,6 +254,32 @@ mod tests {
                 Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
             ));
         }
+    }
+
+    #[test]
+    fn line_boundary_bindings_do_not_consume_count_digits() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+
+        for (character, modifiers, command) in [
+            ('0', KeyModifiers::NONE, "move_line_start"),
+            ('$', KeyModifiers::NONE, "move_line_end"),
+            ('$', KeyModifiers::SHIFT, "move_line_end"),
+        ] {
+            let event = Event::Key(KeyEvent::new(KeyCode::Char(character), modifiers));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+
+        model.context_stack.push(Context::LineJump);
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('0'), KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::TextInput('0'))
+        ));
     }
 
     #[test]

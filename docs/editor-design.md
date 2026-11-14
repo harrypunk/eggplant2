@@ -208,6 +208,12 @@ Normal `a`, `A`, and `I` position the cursor after the current grapheme, at line
 
 `o`/`O` use `EditorSession::open_line` to insert a newline below/above with `indent_for_newline`, set the new cursor, and enter Insert. Helix's current indentation heuristic and detected indent style are retained, without comment continuation or multi-selection commands. The open-line transaction and subsequent typing share one Insert history group, so one undo removes the whole accepted edit. Auto-save follows the existing policy when leaving Insert; no manual Save path is added.
 
+### Line-boundary motions (M8.4)
+
+Normal `0` and `$` use `move_line_start`/`move_line_end` and `EditorSession::move_cursor_to_line_boundary`. `0` targets column zero. `$` targets the final grapheme before the line ending, with empty lines safely at column zero. These are cursor-only motions with normal viewport following and no document/revision/save changes.
+
+The direct Normal `0` binding takes precedence over unbound text input. An active line-jump count has no `0` binding, so `0` continues the count as intended. M8.5 will reuse the same core boundary operation with selection extension.
+
 ### Delete/change commands planned for M8.6
 
 | Input | Context | Planned behavior |

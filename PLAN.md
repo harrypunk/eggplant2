@@ -309,10 +309,12 @@ Implement and review M7.1, M7.2, M7.3, M7.4, M7.5, and M7.6 independently. If te
 
 #### M8.4 — Line start/end with `0`/`$`
 
-- [ ] `0` moves to column zero and `$` moves to the final grapheme before the line ending; empty lines use column zero.
-- [ ] Keep these as cursor-only Normal-mode motions with existing viewport following and no text/revision/dirty-state changes.
-- [ ] Keep count parsing unambiguous: `0` invokes line start when no count is active, while digits after a count has started continue that count.
-- [ ] Reuse the same motions to extend the selection after M8.5; test empty/blank lines, Unicode/graphemes, first/last lines, and count interaction.
+**Status: complete (2026-11-14).**
+
+- [x] `0` moves to column zero and `$` moves to the final grapheme before the line ending; empty lines use column zero.
+- [x] Keep these as cursor-only Normal-mode motions with existing viewport following and no text/revision/dirty-state changes.
+- [x] Keep count parsing unambiguous: `0` invokes line start when no count is active, while digits after a count has started continue that count.
+- [x] Reuse the same motions to extend the selection after M8.5; test empty/blank lines, Unicode/graphemes, first/last lines, and count interaction.
 
 #### M8.5 — Characterwise Visual selection
 

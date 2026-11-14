@@ -1268,6 +1268,15 @@ mod tests {
 
     #[test]
     fn line_boundaries_target_column_zero_and_the_final_grapheme() {
+        let mut simple = EditorSession::new();
+        create_buffer(&mut simple, " hello");
+        simple.resize_active_view(20, 4);
+        simple
+            .move_cursor_to_line_boundary(LineBoundary::End)
+            .unwrap();
+        assert_eq!(active_cursor(&mut simple), 5);
+        assert_eq!(simple.active_snapshot().unwrap().cursor.unwrap().column, 5);
+
         let mut session = EditorSession::new();
         create_buffer(&mut session, "  hé\n\n👩\u{200d}💻x");
         session.resize_active_view(20, 4);
