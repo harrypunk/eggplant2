@@ -303,6 +303,8 @@ Implemented M8.4: `move_line_start`/`move_line_end` bind Normal `0`/`$` through 
 
 Implemented M8.5: `v`/Escape switch Normal and characterwise Visual through the editing feature. `ActiveEditor` derives Move/Extend from session mode and shares all existing motion paths. `EditMode::Visual`, per-line snapshot ranges, and `TextView` selection styling provide mode and visual feedback while preserving one cursor/selection.
 
+Implemented M8.6: `change` owns Visual `x`/`d`/`c`, Normal `x`, pending `dd`/`cc`, and status cleanup. `ActiveEditor` supplies single-selection delete/change transactions. Normal deletes commit history immediately; change commands commit on Insert exit. Auto-save and undo paths are shared, with no general operator grammar.
+
 Eggplant intentionally supports one cursor/selection only. Only `gg`/`G` accept counts; existing `w`/`b`/`e` and all other motions are uncounted. Visual selection is the intended workflow for larger ranges instead of adding a broader text-object motion catalog. Beyond the M8.5–M8.7 slices, M8 does not introduce general Visual operators, macros, named/register-selection workflows, multi-cursor behavior, or full Vim/Helix compatibility.
 
 ## 12. Testing strategy

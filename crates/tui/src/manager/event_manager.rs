@@ -257,6 +257,37 @@ mod tests {
     }
 
     #[test]
+    fn routes_delete_change_commands_and_pending_cancellation() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+        for (character, command) in [
+            ('x', "delete_grapheme"),
+            ('d', "delete_line_pending"),
+            ('c', "change_line_pending"),
+        ] {
+            let event = Event::Key(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+
+        model.context_stack.push(Context::EditorChange);
+        let event = Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::InvokeCommand(CommandId("change_cancel")))
+        ));
+        model.context_stack.push(Context::EditorVisual);
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::InvokeCommand(CommandId("delete_selection_d")))
+        ));
+    }
+
+    #[test]
     fn routes_visual_entry_motion_and_exit() {
         let manager = event_manager();
         let mut model = Model::default();

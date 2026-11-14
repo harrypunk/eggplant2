@@ -740,6 +740,104 @@ fn backspace_removes_the_whole_grapheme() {
 }
 
 #[test]
+fn delete_grapheme_and_visual_selection_use_single_transactions() {
+    let mut session = EditorSession::new();
+    create_buffer(&mut session, "a👩\u{200d}💻b");
+    session
+        .active_editor()
+        .unwrap()
+        .move_cursor_to(DocumentPosition {
+            line: 0,
+            character: 1,
+        })
+        .unwrap();
+    session
+        .active_editor()
+        .unwrap()
+        .delete_grapheme_forward()
+        .unwrap();
+    assert_eq!(
+        session.buffers[&session.active_buffer().unwrap()]
+            .document
+            .text(),
+        "ab"
+    );
+
+    let mut visual = EditorSession::new();
+    let id = create_buffer(&mut visual, "hello world");
+    visual.enter_visual_mode();
+    visual
+        .active_editor()
+        .unwrap()
+        .move_cursor(CursorMovement::Right)
+        .unwrap();
+    visual
+        .active_editor()
+        .unwrap()
+        .move_cursor(CursorMovement::Right)
+        .unwrap();
+    visual.active_editor().unwrap().delete_selection().unwrap();
+    assert_eq!(visual.buffers[&id].document.text(), "lo world");
+    assert!(visual.active_editor().unwrap().undo().unwrap());
+    assert_eq!(visual.buffers[&id].document.text(), "hello world");
+}
+
+#[test]
+fn delete_current_line_handles_first_last_and_only_lines() {
+    let mut session = EditorSession::new();
+    let id = create_buffer(&mut session, "first\nsecond\nthird");
+    session
+        .active_editor()
+        .unwrap()
+        .move_cursor_to_line(1)
+        .unwrap();
+    session
+        .active_editor()
+        .unwrap()
+        .delete_current_line()
+        .unwrap();
+    assert_eq!(session.buffers[&id].document.text(), "first\nthird");
+    session
+        .active_editor()
+        .unwrap()
+        .move_cursor_to_line(1)
+        .unwrap();
+    session
+        .active_editor()
+        .unwrap()
+        .delete_current_line()
+        .unwrap();
+    assert_eq!(session.buffers[&id].document.text(), "first");
+    session
+        .active_editor()
+        .unwrap()
+        .delete_current_line()
+        .unwrap();
+    assert_eq!(session.buffers[&id].document.text(), "");
+    assert!(session.active_editor().unwrap().undo().unwrap());
+    assert_eq!(session.buffers[&id].document.text(), "first");
+}
+
+#[test]
+fn change_current_line_preserves_indentation_and_is_undoable() {
+    let mut session = EditorSession::new();
+    let id = create_buffer(&mut session, "    first\nsecond");
+    session.resize_active_view(20, 4);
+
+    session
+        .active_editor()
+        .unwrap()
+        .change_current_line()
+        .unwrap();
+    assert_eq!(session.buffers[&id].document.text(), "    \nsecond");
+    assert_eq!(session.active_snapshot().unwrap().cursor.unwrap().column, 4);
+    session.enter_insert_mode();
+    session.enter_normal_mode();
+    assert!(session.active_editor().unwrap().undo().unwrap());
+    assert_eq!(session.buffers[&id].document.text(), "    first\nsecond");
+}
+
+#[test]
 fn undo_and_redo_restore_an_insert_session() {
     let mut session = EditorSession::new();
     let id = create_buffer(&mut session, "a");

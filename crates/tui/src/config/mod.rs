@@ -87,6 +87,9 @@ impl Default for Config {
                         ("page_scroll_down", "ctrl-f"),
                         ("page_scroll_up", "ctrl-u"),
                         ("view_align_start", "z"),
+                        ("delete_grapheme", "x"),
+                        ("delete_line_pending", "d"),
+                        ("change_line_pending", "c"),
                     ],
                 ),
                 keymap_context(
@@ -114,6 +117,9 @@ impl Default for Config {
                         ("move_next_word_end", "e"),
                         ("move_line_start", "0"),
                         ("move_line_end", "$"),
+                        ("delete_selection_x", "x"),
+                        ("delete_selection_d", "d"),
+                        ("change_selection", "c"),
                     ],
                 ),
                 keymap_context(
@@ -180,6 +186,7 @@ impl Default for Config {
                 ),
                 keymap_context("line_jump", [("line_jump_cancel", "esc")]),
                 keymap_context("view_align", [("view_align_cancel", "esc")]),
+                keymap_context("change", [("change_cancel", "esc")]),
             ]),
         }
     }

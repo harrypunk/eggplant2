@@ -328,11 +328,13 @@ Implement and review M7.1, M7.2, M7.3, M7.4, M7.5, and M7.6 independently. If te
 
 #### M8.6 — Delete/change with `x`/`d`/`dd`/`c`/`cc`
 
-- [ ] In Visual mode, `x` and `d` delete the characterwise selection, while `c` deletes it and enters Insert mode at the selection start.
-- [ ] In Normal mode, `x` deletes the grapheme under the cursor, `dd` deletes the current line, and `cc` clears the current line and enters Insert mode using the established indentation policy.
-- [ ] Normal `d` and `c` wait specifically for the second `d`/`c`; show the pending key through M8.1's transient status display and clear it on completion, Escape, or invalid input. Do not add general operator-motion combinations such as `dw` or `cw`.
-- [ ] Route every deletion/change through the existing transaction, undo/redo, dirty-revision, viewport, and auto-save paths. Each command is one undoable edit; M8.7 centralizes register/clipboard synchronization rather than duplicating it in each command.
-- [ ] Test empty documents, empty selections, Unicode/graphemes, first/last lines, line-ending boundaries, pending-key cancellation, Insert entry, undo/redo, and auto-save.
+**Status: complete (2026-11-14).**
+
+- [x] In Visual mode, `x` and `d` delete the characterwise selection, while `c` deletes it and enters Insert mode at the selection start.
+- [x] In Normal mode, `x` deletes the grapheme under the cursor, `dd` deletes the current line, and `cc` clears the current line and enters Insert mode using the established indentation policy.
+- [x] Normal `d` and `c` wait specifically for the second `d`/`c`; show the pending key through M8.1's transient status display and clear it on completion, Escape, or invalid input. Do not add general operator-motion combinations such as `dw` or `cw`.
+- [x] Route every deletion/change through the existing transaction, undo/redo, dirty-revision, viewport, and auto-save paths. Each command is one undoable edit; M8.7 centralizes register/clipboard synchronization rather than duplicating it in each command.
+- [x] Test empty documents, empty selections, Unicode/graphemes, first/last lines, line-ending boundaries, pending-key cancellation, Insert entry, undo/redo, and auto-save.
 
 #### M8.7 — Yank and automatic system clipboard synchronization
 

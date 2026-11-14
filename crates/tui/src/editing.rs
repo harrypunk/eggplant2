@@ -95,7 +95,7 @@ fn enter_visual(model: &mut Model) -> Option<Effect> {
     None
 }
 
-fn enter_insert(model: &mut Model) -> Option<Effect> {
+pub(crate) fn enter_insert(model: &mut Model) -> Option<Effect> {
     if model.editor.active_buffer().is_some() {
         model.context_stack.push(Context::EditorInput);
         model.editor.enter_insert_mode();

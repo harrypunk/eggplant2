@@ -1,6 +1,7 @@
 pub mod buffer;
 pub mod buffer_grep;
 pub mod buffer_jump;
+pub mod change;
 pub mod command_menu;
 pub mod component;
 pub mod config;
@@ -47,6 +48,7 @@ pub mod data_object {
     use crate::{
         buffer_grep::BufferGrepState,
         buffer_jump::BufferJumpState,
+        change::ChangeState,
         command_menu::CommandMenuState,
         explorer::ExplorerState,
         file_picker::{FileEntry, FilePickerState, PreviewState},
@@ -146,6 +148,7 @@ pub mod data_object {
         pub theme_picker: ThemePickerState,
         pub page_scroll: PageScrollState,
         pub line_jump: LineJumpState,
+        pub change: ChangeState,
         pub buffer_jump: BufferJumpState,
         pub buffer_grep: BufferGrepState,
         pub project_grep: ProjectGrepState,
@@ -173,6 +176,7 @@ pub mod data_object {
                 theme_picker: ThemePickerState::default(),
                 page_scroll: PageScrollState::default(),
                 line_jump: LineJumpState::default(),
+                change: ChangeState::default(),
                 buffer_jump: BufferJumpState::default(),
                 buffer_grep: BufferGrepState::default(),
                 project_grep: ProjectGrepState::default(),
@@ -286,6 +290,7 @@ pub mod data_object {
         VCS,
         EditorInput,
         EditorVisual,
+        EditorChange,
         Explorer,
         FilePicker,
         ThemePicker,

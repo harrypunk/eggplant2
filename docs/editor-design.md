@@ -226,7 +226,7 @@ Normal `v` enters Visual mode with a characterwise selection at the current grap
 
 `EditorSession::enter_normal_mode` collapses the selection at the moving cursor without changing text. `EditMode::Visual` renders as `VISUAL` in the status bar. Active snapshots project only the primary selection into per-line UTF-8 ranges, and `TextView` applies the existing selection style after syntax rendering with Unicode/horizontal clipping. Eggplant still exposes exactly one cursor/selection and no multi-cursor behavior.
 
-### Delete/change commands planned for M8.6
+### Delete/change commands (M8.6)
 
 | Input | Context | Planned behavior |
 | --- | --- | --- |
@@ -236,7 +236,7 @@ Normal `v` enters Visual mode with a characterwise selection at the current grap
 | `dd` | Normal | Delete the current line. |
 | `cc` | Normal | Clear the current line and enter Insert using the established indentation policy. |
 
-Normal `d`/`c` wait only for the matching second key and use the shared transient pending-input display. M8 does not add general operator-motion combinations. Every accepted command is one transaction through the existing undo/redo, dirty-revision, viewport, and auto-save paths. Deleted text has no implicit clipboard/register destination, and all commands operate on the single cursor/selection.
+Normal `d`/`c` wait only for the matching second key and use the shared transient pending-input display. M8 does not add general operator-motion combinations. Every accepted command is one transaction through the existing undo/redo, dirty-revision, viewport, and auto-save paths. Normal deletes commit history immediately; Visual `c` and `cc` commit when their Insert session ends, preserving one-step undo. Clipboard/register synchronization is centralized separately in M8.7, and all commands operate on the single cursor/selection.
 
 ### Yank and clipboard synchronization planned for M8.7
 

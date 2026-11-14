@@ -125,6 +125,68 @@ impl ActiveEditor<'_> {
         Ok(())
     }
 
+    /// Delete the grapheme under the primary cursor.
+    pub fn delete_grapheme_forward(&mut self) -> Result<(), EditorError> {
+        let text = self.document.text().slice(..);
+        let cursor = self.document.selection(self.view.id).primary().cursor(text);
+        self.delete_range(
+            cursor,
+            graphemes::next_grapheme_boundary(text, cursor),
+            cursor,
+        );
+        self.commit_history();
+        Ok(())
+    }
+
+    /// Delete the primary characterwise selection and leave the cursor at its start.
+    pub fn delete_selection(&mut self) -> Result<(), EditorError> {
+        let range = self.document.selection(self.view.id).primary();
+        self.delete_range(range.from(), range.to(), range.from());
+        self.commit_history();
+        Ok(())
+    }
+
+    /// Delete the primary selection for a following Insert session.
+    pub fn change_selection(&mut self) -> Result<(), EditorError> {
+        let range = self.document.selection(self.view.id).primary();
+        self.delete_range(range.from(), range.to(), range.from());
+        Ok(())
+    }
+
+    /// Delete the current line, including its line-ending relationship to neighbors.
+    pub fn delete_current_line(&mut self) -> Result<(), EditorError> {
+        let text = self.document.text().slice(..);
+        let cursor = self.document.selection(self.view.id).primary().cursor(text);
+        let line = text.char_to_line(cursor);
+        let line_start = text.line_to_char(line);
+        let line_end = helix_core::line_ending::line_end_char_index(&text, line);
+        let (start, end) = if line + 1 < text.len_lines() {
+            (line_start, text.line_to_char(line + 1))
+        } else if line > 0 {
+            (line_start - self.document.line_ending.len_chars(), line_end)
+        } else {
+            (line_start, line_end)
+        };
+        self.delete_range(start, end, start);
+        self.commit_history();
+        Ok(())
+    }
+
+    /// Clear the current line for change while preserving existing indentation.
+    pub fn change_current_line(&mut self) -> Result<(), EditorError> {
+        let text = self.document.text().slice(..);
+        let cursor = self.document.selection(self.view.id).primary().cursor(text);
+        let line = text.char_to_line(cursor);
+        let line_start = text.line_to_char(line);
+        let line_end = helix_core::line_ending::line_end_char_index(&text, line);
+        let content_start = text
+            .line(line)
+            .first_non_whitespace_char()
+            .map_or(line_start, |character| line_start + character);
+        self.delete_range(content_start, line_end, content_start);
+        Ok(())
+    }
+
     pub fn undo(&mut self) -> Result<bool, EditorError> {
         let changed = self.document.undo(self.view);
         self.ensure_cursor_in_view();
@@ -135,6 +197,19 @@ impl ActiveEditor<'_> {
         let changed = self.document.redo(self.view);
         self.ensure_cursor_in_view();
         Ok(changed)
+    }
+
+    fn delete_range(&mut self, start: usize, end: usize, cursor: usize) {
+        if start == end {
+            return;
+        }
+        let transaction = Transaction::delete(self.document.text(), [(start, end)].into_iter())
+            .with_selection(Selection::point(cursor));
+        self.apply_transaction(transaction);
+    }
+
+    fn commit_history(&mut self) {
+        self.document.append_changes_to_history(self.view);
     }
 
     fn apply_transaction(&mut self, transaction: Transaction) {
