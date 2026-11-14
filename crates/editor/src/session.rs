@@ -12,6 +12,7 @@ use helix_core::{
     movement::{self, Direction, Movement},
     text_annotations::TextAnnotations,
 };
+use helix_stdx::rope::RopeSliceExt;
 use helix_view::{
     Document, View,
     editor::{Config, GutterConfig},
@@ -428,6 +429,29 @@ impl EditorSession {
         document.set_selection(view.id, Selection::point(target));
         view.ensure_cursor_in_view(document, scrolloff);
         Ok(())
+    }
+
+    /// Move to a zero-based line's first non-blank character, clamping at the last line.
+    pub fn move_cursor_to_line(&mut self, line: usize) -> Result<(), EditorError> {
+        let position = {
+            let active = self
+                .active_view
+                .as_ref()
+                .ok_or(EditorError::NoActiveBuffer)?;
+            let document = &self
+                .buffers
+                .get(&active.buffer)
+                .ok_or(EditorError::UnknownBuffer(active.buffer))?
+                .document;
+            let line = line.min(document.text().len_lines().saturating_sub(1));
+            let character = document
+                .text()
+                .line(line)
+                .first_non_whitespace_char()
+                .unwrap_or(0);
+            DocumentPosition { line, character }
+        };
+        self.move_cursor_to(position)
     }
 
     /// Move vertically by a feature-computed number of logical lines.
@@ -1072,6 +1096,25 @@ mod tests {
         };
         assert_eq!(active_cursor(&mut session), document_end);
         assert!(session.active_snapshot().unwrap().cursor.is_some());
+    }
+
+    #[test]
+    fn line_navigation_targets_first_nonblank_and_clamps_boundaries() {
+        let mut session = EditorSession::new();
+        create_buffer(&mut session, "  first\n\n\tsecond");
+        session.resize_active_view(20, 4);
+
+        session.move_cursor_to_line(0).unwrap();
+        assert_eq!(session.active_snapshot().unwrap().cursor.unwrap().column, 2);
+        session.move_cursor_to_line(1).unwrap();
+        let snapshot = session.active_snapshot().unwrap();
+        assert_eq!(snapshot.text.first_line + snapshot.cursor.unwrap().row, 1);
+        assert_eq!(snapshot.cursor.unwrap().column, 0);
+        session.move_cursor_to_line(100).unwrap();
+        let snapshot = session.active_snapshot().unwrap();
+        assert_eq!(snapshot.text.first_line + snapshot.cursor.unwrap().row, 2);
+        assert_eq!(snapshot.cursor.unwrap().column, 4);
+        assert!(!session.active_is_modified());
     }
 
     #[test]
