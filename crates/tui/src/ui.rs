@@ -5,7 +5,7 @@ use editor::EditorSnapshot;
 use ratatui::{
     Frame,
     buffer::Buffer,
-    layout::{Constraint, Flex, Layout, Rect, Size},
+    layout::{Constraint, Flex, Layout, Position, Rect, Size},
 };
 
 use crate::{
@@ -17,6 +17,7 @@ use crate::{
 };
 
 pub type RenderContribution = fn(&Model, &mut Frame, Rect);
+pub type OverlayCursor = fn(&Model, Rect) -> Option<Position>;
 pub type OverlayProvider = fn(&Model) -> Option<OverlayContribution>;
 pub type EditorOverlayRender = fn(&Model, &EditorSnapshot, Rect, &mut Buffer);
 pub type EditorOverlayProvider = fn(&Model) -> Option<EditorOverlayContribution>;
@@ -67,6 +68,7 @@ pub struct OverlayContribution {
     pub kind: OverlayKind,
     pub placement: OverlayPlacement,
     pub render: RenderContribution,
+    pub cursor: Option<OverlayCursor>,
 }
 
 impl OverlayContribution {
@@ -81,7 +83,13 @@ impl OverlayContribution {
             kind,
             placement,
             render,
+            cursor: None,
         }
+    }
+
+    pub fn with_cursor(mut self, cursor: OverlayCursor) -> Self {
+        self.cursor = Some(cursor);
+        self
     }
 
     pub fn area(self, main: Rect, frame: Rect) -> Rect {

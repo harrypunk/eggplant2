@@ -5,5 +5,6 @@ pub mod file_picker;
 pub mod key_hints;
 pub mod popup;
 pub mod status_bar;
+pub mod text_input;
 pub mod text_view;
 pub mod tools_panel;

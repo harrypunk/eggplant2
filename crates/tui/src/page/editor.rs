@@ -65,9 +65,14 @@ impl Editor {
             (overlay.render)(model, frame, area);
         });
 
-        cursor
+        let overlay_cursor = overlays.last().and_then(|overlay| {
+            overlay
+                .cursor
+                .and_then(|cursor| cursor(model, overlay.area(areas.main, frame.area())))
+        });
+        overlay_cursor
+            .or_else(|| cursor.filter(|_| overlays.is_empty() && editor_overlays.is_empty()))
             .into_iter()
-            .filter(|_| overlays.is_empty() && editor_overlays.is_empty())
             .for_each(|cursor| frame.set_cursor_position(cursor));
     }
 }
@@ -278,12 +283,13 @@ mod tests {
     }
 
     #[test]
-    fn shows_centered_file_picker_and_hides_editor_cursor() {
+    fn shows_file_picker_and_places_cursor_after_query() {
         let backend = TestBackend::new(100, 10);
         let mut terminal = Terminal::new(backend).unwrap();
         let mut model = Model::default();
         create_buffer(&mut model, "hello");
         model.file_picker.visibility = Visibility::Displayed;
+        model.file_picker.query = "hello".to_string();
         let page = Editor::default();
 
         terminal.draw(|frame| page.view(&model, frame)).unwrap();
@@ -298,7 +304,8 @@ mod tests {
         assert!(content.contains("Files"));
         assert!(!content.contains("Search"));
         assert!(!content.contains("Preview"));
-        assert!(!terminal.backend().cursor_visible());
+        assert!(terminal.backend().cursor_visible());
+        terminal.backend_mut().assert_cursor_position((8, 3));
     }
 
     #[test]

@@ -44,6 +44,7 @@ All layout groups use `Flex::Start`. Hidden nodes remain in the layout tree and 
 - `KeyHints` owns list presentation and intrinsic size; the page owns bottom-right popup placement.
 - `FilePicker` composes the query, ranked result list, and preview inside `Popup`; it never performs filesystem I/O during rendering.
 - `Editor::content_area` excludes tabs, and `TextView::text_area` excludes the line-number gutter. Together they are the shared text calculation for viewport sizing and cursor coordinates. `EditorBuffer` and picker previews both delegate rendering to `TextView`, including semantic syntax styles resolved through the shared built-in theme.
+- `TextInput` owns single-line horizontal scrolling and end-of-value cursor coordinates. The file picker derives its input rectangle from the same layout used for rendering, and the topmost overlay publishes that cursor to the terminal.
 - Add future panels as explicit layout regions rather than embedding them inside unrelated components.
 - Keep layout calculations in shared Flex layouts so changes do not require hard-coded offsets.
 - Update this file and layout tests whenever the hierarchy or constraints change.

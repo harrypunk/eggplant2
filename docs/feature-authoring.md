@@ -81,7 +81,7 @@ Choose the smallest suitable contribution:
 - `register_overlay(id, provider)` for conditional popup content.
 - `register_editor_overlay(id, provider)` for decorations over the active editor's visible text. The renderer receives the existing snapshot and resolved text rectangle; it must not rescan the document or mutate state.
 
-An overlay provider returns `None` while hidden and an `OverlayContribution` while visible. The contribution includes a semantic kind, placement, and render function. The shell computes all rectangles, orders hints before modals, and suppresses the editor cursor whenever an overlay is present.
+An overlay provider returns `None` while hidden and an `OverlayContribution` while visible. The contribution includes a semantic kind, placement, and render function. The shell computes all rectangles, orders hints before modals, and suppresses the editor cursor whenever an overlay is present. An input overlay can use `with_cursor` to provide its own terminal cursor; only the topmost overlay may do so. Use the shared `TextInput` component for bordered single-line input, Unicode display-width calculation, and horizontal cursor-following.
 
 Components receive resolved state/style props and do not:
 

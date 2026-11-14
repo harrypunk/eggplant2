@@ -246,7 +246,7 @@ Implemented slices: `buffer.rs` owns next/previous commands plus shared dirty-sa
 
 After two concrete popup examples exist, replace remaining page feature conditionals with explicit panel/popup/status contributions. Keep modal precedence and cursor policy shell-owned.
 
-Implemented: `UiRegistry` registers panel/status renderers and overlay providers at the composition root. Overlay contributions contain semantic kind, placement, and a render function; the page computes all rectangles, renders hints before modals, and suppresses the cursor whenever an overlay is present. File picker, theme picker, and command-menu hints use providers, while duplicate panel/status slots and overlay IDs fail during registration.
+Implemented: `UiRegistry` registers panel/status renderers and overlay providers at the composition root. Overlay contributions contain semantic kind, placement, and a render function; the page computes all rectangles, renders hints before modals, and suppresses the editor cursor whenever an overlay is present. The topmost overlay may instead publish its own cursor through `with_cursor`; the file picker uses this with the shared Unicode-aware `TextInput` component. File picker, theme picker, and command-menu hints use providers, while duplicate panel/status slots and overlay IDs fail during registration.
 
 ### M6.6 — Architecture proof and author guide
 

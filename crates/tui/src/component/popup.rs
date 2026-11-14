@@ -28,6 +28,10 @@ impl<'a, W> Popup<'a, W> {
     }
 }
 
+pub fn content_area(area: Rect) -> Rect {
+    Block::bordered().inner(area)
+}
+
 impl<W: Widget> Widget for Popup<'_, W> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let surface = self.styles.popup_surface();
@@ -35,7 +39,7 @@ impl<W: Widget> Widget for Popup<'_, W> {
             .border_style(surface.patch(self.styles.border))
             .style(surface)
             .title(self.title);
-        let inner = block.inner(area);
+        let inner = content_area(area);
 
         Clear.render(area, buf);
         block.render(area, buf);

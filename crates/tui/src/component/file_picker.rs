@@ -1,12 +1,16 @@
 use ratatui::{
     Frame,
     buffer::Buffer,
-    layout::{Constraint, Flex, Layout, Rect},
+    layout::{Constraint, Flex, Layout, Position, Rect},
     text::Line,
     widgets::{Block, Paragraph, Widget},
 };
 
-use super::{popup::Popup, text_view::TextView};
+use super::{
+    popup::{self, Popup},
+    text_input::TextInput,
+    text_view::TextView,
+};
 use crate::{
     data_object::{Model, Visibility},
     file_picker::{FileCollectionState, FilePickerState, PreviewState},
@@ -24,6 +28,11 @@ pub struct FilePicker<'a> {
 impl<'a> FilePicker<'a> {
     pub fn new(state: &'a FilePickerState, theme: &'a Theme) -> Self {
         Self { state, theme }
+    }
+
+    pub fn cursor_position(self, area: Rect) -> Option<Position> {
+        let input = FilePickerContent::areas(popup::content_area(area)).input;
+        TextInput::new(&self.state.query, self.theme.ui()).cursor_position(input)
     }
 }
 
@@ -46,18 +55,43 @@ struct FilePickerContent<'a> {
     theme: &'a Theme,
 }
 
+struct ContentAreas {
+    input: Rect,
+    results: Rect,
+    preview: Rect,
+}
+
+impl FilePickerContent<'_> {
+    fn areas(area: Rect) -> ContentAreas {
+        let [left, preview] = Layout::horizontal([Constraint::Ratio(1, 2), Constraint::Fill(1)])
+            .flex(Flex::Start)
+            .areas(area);
+        let [input, results] = Layout::vertical([Constraint::Length(3), Constraint::Fill(1)])
+            .flex(Flex::Start)
+            .areas(left);
+        ContentAreas {
+            input,
+            results,
+            preview,
+        }
+    }
+}
+
 pub fn overlay(model: &Model) -> Option<OverlayContribution> {
     match model.file_picker.visibility {
-        Visibility::Displayed => Some(OverlayContribution::new(
-            "file_picker",
-            OverlayKind::Modal,
-            OverlayPlacement::MainPanel {
-                max_width: 160,
-                max_height: 36,
-                margin: 2,
-            },
-            render_overlay,
-        )),
+        Visibility::Displayed => Some(
+            OverlayContribution::new(
+                "file_picker",
+                OverlayKind::Modal,
+                OverlayPlacement::MainPanel {
+                    max_width: 160,
+                    max_height: 36,
+                    margin: 2,
+                },
+                render_overlay,
+            )
+            .with_cursor(cursor_overlay),
+        ),
         Visibility::Hidden => None,
     }
 }
@@ -66,29 +100,22 @@ fn render_overlay(model: &Model, frame: &mut Frame, area: Rect) {
     frame.render_widget(FilePicker::new(&model.file_picker, &model.theme), area);
 }
 
+fn cursor_overlay(model: &Model, area: Rect) -> Option<Position> {
+    FilePicker::new(&model.file_picker, &model.theme).cursor_position(area)
+}
+
 impl Widget for FilePickerContent<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let [left, preview_area] =
-            Layout::horizontal([Constraint::Ratio(1, 2), Constraint::Fill(1)])
-                .flex(Flex::Start)
-                .areas(area);
-        let [input_area, results_area] =
-            Layout::vertical([Constraint::Length(3), Constraint::Fill(1)])
-                .flex(Flex::Start)
-                .areas(left);
-
+        let areas = Self::areas(area);
         let surface = self.theme.ui().popup_surface();
         let border = surface.patch(self.theme.ui().border);
-        Paragraph::new(self.state.query.as_str())
-            .style(surface)
-            .block(Block::bordered().style(surface).border_style(border))
-            .render(input_area, buf);
+        TextInput::new(&self.state.query, self.theme.ui()).render(areas.input, buf);
         Paragraph::new(result_lines(self.state, self.theme.ui()))
             .style(surface)
-            .render(results_area, buf);
+            .render(areas.results, buf);
         let preview_block = Block::bordered().style(surface).border_style(border);
-        let preview_inner = preview_block.inner(preview_area);
-        preview_block.render(preview_area, buf);
+        let preview_inner = preview_block.inner(areas.preview);
+        preview_block.render(areas.preview, buf);
         match &self.state.preview {
             PreviewState::Text(snapshot) => {
                 TextView::new(snapshot, self.theme).render(preview_inner, buf)
