@@ -1,7 +1,7 @@
 # Eggplant first-edition plan
 
 Last updated: 2026-11-14
-Current baseline: implemented first-edition feature set in final hardening
+Current baseline: Milestone 7 complete; Milestone 8 planned
 
 ## Purpose
 
@@ -273,14 +273,77 @@ Start with a two-character, Leap-style jump limited to the active buffer's visib
 
 Implement and review M7.1, M7.2, M7.3, M7.4, M7.5, and M7.6 independently. If text-object semantics require a larger selection-model change, stop and document it before adding operators or visual-mode behavior.
 
+### Milestone 8: Common editing workflows
+
+**Status: planned.**
+
+**Goal:** add frequent navigation and insert workflows through the existing editor/session, command, input-context, and status/UI boundaries. Keep the implementation Vim-inspired, not a general Vim compatibility project.
+
+#### M8.1 — Counted `gg`/`G` and visible pending input
+
+- [ ] Support `gg` to the first line and `G` to the last line; an optional count selects that one-based line for either command.
+- [ ] Accept counts beginning with `1`–`9` and continuing with any digit. Only `gg`/`G` accept a count: forms such as `3w`, `2j`, and counted operators are unsupported. Keep existing word motions limited to the common, uncounted `w`/`b`/`e`; do not add a general count/operator grammar.
+- [ ] Move to the target line's first non-blank character, falling back to column zero for blank lines, clamp out-of-range lines to document boundaries, and keep the cursor visible.
+- [ ] Show the active count and pending `g` prefix in the status bar as transient input, separate from persistent save/error messages. Clear it on completion, Escape, or an invalid sequence; invalid input must not edit or move unexpectedly.
+- [ ] Test empty/single-line documents, blank lines, Unicode, repeated digits, out-of-range counts, cancellation, invalid keys, viewport scrolling, and status cleanup.
+
+#### M8.2 — `zz`/`zt`/`zb` viewport alignment
+
+- [ ] `zz` centers the cursor line, `zt` aligns it to the top, and `zb` aligns it to the bottom of the visible editor viewport.
+- [ ] Reuse the shared Helix visual-viewport policy; change only the viewport while preserving the cursor, selection, text, revision, and dirty/save state.
+- [ ] Reuse M8.1's transient pending-input display for `z`, with the same completion/Escape/invalid-key cleanup.
+- [ ] Clamp alignment at document start/end and test short documents, first/last lines, narrow/empty viewports, Unicode/visual rows, and resize.
+
+#### M8.3 — Common insert variants
+
+- [ ] Keep existing `i`; add `a` after the current grapheme, `A` at line end, and `I` at the first non-blank character of the current line.
+- [ ] Add `o`/`O` to insert an indented empty line below/above the current line and enter Insert mode. Use Helix's indentation/transaction primitives where useful and keep behavior predictable on blank or empty lines.
+- [ ] Route open-line edits through the existing transaction, dirty-revision, auto-save, and undo paths; subsequent typing remains in the same Insert session/history group.
+- [ ] Test empty documents, blank lines, first/last lines, Unicode/grapheme boundaries, indentation, undo/redo, and auto-save without adding a manual Save workflow.
+
+#### M8.4 — Line start/end with `0`/`$`
+
+- [ ] `0` moves to column zero and `$` moves to the final grapheme before the line ending; empty lines use column zero.
+- [ ] Keep these as cursor-only Normal-mode motions with existing viewport following and no text/revision/dirty-state changes.
+- [ ] Keep count parsing unambiguous: `0` invokes line start when no count is active, while digits after a count has started continue that count.
+- [ ] Reuse the same motions to extend the selection after M8.5; test empty/blank lines, Unicode/graphemes, first/last lines, and count interaction.
+
+#### M8.5 — Characterwise Visual selection
+
+- [ ] Add `v` in Normal mode to start a characterwise selection anchored at the current cursor. Existing movement commands extend the primary selection while in Visual mode.
+- [ ] Render the selection with the existing theme selection style, show `VISUAL` in the status bar, and keep the moving cursor visible in both selection directions.
+- [ ] Escape returns to Normal mode and collapses the selection at the current cursor without changing text. Reuse existing movement adapters with explicit move/extend behavior rather than duplicating motion rules.
+- [ ] Test empty documents, Unicode/graphemes, forward/backward selection, direction reversal, line crossings, viewport scrolling, mode display, and cancellation.
+- [ ] Use Visual mode for selections larger than the supported word/line motions instead of expanding the text-object motion catalog. Keep Visual-mode operators, clipboard/register integration, and other selection grammars for separate slices.
+
+#### M8.6 — Delete/change with `x`/`d`/`dd`/`c`/`cc`
+
+- [ ] In Visual mode, `x` and `d` delete the characterwise selection, while `c` deletes it and enters Insert mode at the selection start.
+- [ ] In Normal mode, `x` deletes the grapheme under the cursor, `dd` deletes the current line, and `cc` clears the current line and enters Insert mode using the established indentation policy.
+- [ ] Normal `d` and `c` wait specifically for the second `d`/`c`; show the pending key through M8.1's transient status display and clear it on completion, Escape, or invalid input. Do not add general operator-motion combinations such as `dw` or `cw`.
+- [ ] Route every deletion/change through the existing transaction, undo/redo, dirty-revision, viewport, and auto-save paths. Each command is one undoable edit; M8.7 centralizes register/clipboard synchronization rather than duplicating it in each command.
+- [ ] Test empty documents, empty selections, Unicode/graphemes, first/last lines, line-ending boundaries, pending-key cancellation, Insert entry, undo/redo, and auto-save.
+
+#### M8.7 — Yank and automatic system clipboard synchronization
+
+- [ ] Add Visual `y` to yank the characterwise selection and return to Normal mode, and Normal `yy` to yank the current line including its line-ending semantics. Pending Normal `y` uses the shared transient status display and cancellation rules.
+- [ ] Maintain one automatic unnamed register for Visual/Normal yanks and accepted M8.6 deletes/changes. Users never select a register or manage a low-level clipboard command.
+- [ ] Mirror the unnamed register to the system clipboard through a shared background-capability adapter, reusing Helix clipboard support where practical. Clipboard failure leaves the internal register successful and reports a concise non-blocking status; it must not change text or interrupt the workflow.
+- [ ] Yanks never modify text, dirty state, or revision and therefore do not trigger auto-save. Test visual/line yanks, delete/change register updates, pending-key cancellation, Unicode, empty selections, and clipboard-unavailable fallback.
+- [ ] Keep paste commands, named/register selection, macros, and register UIs as separate work.
+
+### Milestone 8 review rule
+
+Implement and review M8.1–M8.7 independently. Update the current keymap table only as each binding becomes available. Eggplant exposes exactly one cursor and one selection; Helix's internal multi-selection support must not be used to create user-facing multi-cursor behavior. Counts are accepted only by `gg`/`G`; existing `w`/`b`/`e` and all other motions are uncounted. General operator-motion grammar, macros, named/register-selection workflows, additional text-object motion catalogs, and complete Vim/Helix compatibility remain outside M8.
+
 ## TBD — much later editions
 
 - Dynamic Helix-compatible user themes and broader visual style/theming expansion. Existing built-in themes and semantic style boundaries remain unchanged.
 - Third-party plugin/extension hosts. Do not add a native Rust dynamic-library ABI or unrestricted in-process third-party code; evaluate versioned, capability-based WebAssembly or out-of-process hosting only if justified by real requirements and stable internal contracts.
 - AI agent execution/chat and automated editing.
 - LSP, DAP, formatting, and code actions.
-- Full Vim or Helix command compatibility, Visual mode, macros, and registers.
-- Split views and multiple cursors as user-facing features.
+- Full Vim or Helix command compatibility, general Visual-mode operator grammar, macros, and named/register-selection workflows.
+- Split views as a user-facing feature.
 - Soft-wrap visual rendering and advanced annotations.
 - Remote workspaces and non-Linux support.
 
@@ -288,6 +351,7 @@ Implement and review M7.1, M7.2, M7.3, M7.4, M7.5, and M7.6 independently. If te
 
 - Implement one reviewable milestone or vertical slice at a time; stop for review between steps.
 - Keep Helix behind the editor adapter and Ratatui out of document/editing state.
+- Expose exactly one cursor/selection; multi-cursor features are intentionally unsupported.
 - Keep one terminal owner and one application event/update loop.
 - Route file I/O, timers, and future AI work through explicit messages/effects.
 - Require `cargo test --workspace`, Clippy with warnings denied, formatting, and `git diff --check` before milestone commits.

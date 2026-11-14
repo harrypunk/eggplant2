@@ -188,7 +188,25 @@ All mutations go through the editor command API so undo, dirty tracking, viewpor
 
 Normal mode supports `w` for next word start, `b` for previous word start, and `e` for next word end. These are cursor-only motions: `EditorSession::move_cursor_word` uses Helix's Unicode-aware word primitives, then collapses the result to a cursor point instead of exposing Helix's selection-oriented motion. `e` uses the resulting block-cursor edge so it lands on the final character. Helix's boundary policy, including line-ending boundaries, is retained rather than reimplemented as Vim compatibility. These motions never modify text.
 
-Visual mode, counts, operators, inner/around objects, and a broader Vim/Helix grammar remain out of scope. Future text objects need a separate documented selection model before implementation.
+Only M8.1's `gg`/`G` accept counts; existing word motions and all other motions are uncounted. Operators, inner/around objects, and a broader Vim/Helix grammar remain outside the word-motion slice. Visual selection is the intended workflow for larger ranges instead of adding more text-object motions. M8.5 plans characterwise Visual selection by reusing these motions with explicit move/extend behavior. Eggplant exposes exactly one cursor/selection and intentionally does not support user-facing multi-cursor behavior.
+
+### Delete/change commands planned for M8.6
+
+| Input | Context | Planned behavior |
+| --- | --- | --- |
+| `x` | Normal | Delete the grapheme under the cursor. |
+| `x` / `d` | Visual | Delete the characterwise selection. |
+| `c` | Visual | Delete the selection and enter Insert at its start. |
+| `dd` | Normal | Delete the current line. |
+| `cc` | Normal | Clear the current line and enter Insert using the established indentation policy. |
+
+Normal `d`/`c` wait only for the matching second key and use the shared transient pending-input display. M8 does not add general operator-motion combinations. Every accepted command is one transaction through the existing undo/redo, dirty-revision, viewport, and auto-save paths. Deleted text has no implicit clipboard/register destination, and all commands operate on the single cursor/selection.
+
+### Yank and clipboard synchronization planned for M8.7
+
+Visual `y` yanks the characterwise selection and returns to Normal; Normal `yy` yanks the current line, with pending `y` shown through the shared transient status input. One automatic unnamed register stores yanks and accepted M8.6 deletes/changes, so users never select a register or run a clipboard command.
+
+A shared background-capability adapter mirrors the unnamed register to the system clipboard, reusing Helix clipboard support where practical. System clipboard failure leaves the internal register intact and reports a concise non-blocking status. Yanks never change text, revision, or dirty state and do not trigger auto-save. Paste commands, named registers, and register UIs remain separate work.
 
 ### Update and rendering responsibilities
 

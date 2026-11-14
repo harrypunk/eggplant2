@@ -279,6 +279,20 @@ Implemented M7.5: `file_watcher.rs` owns `notify` setup and forwards file update
 
 Implemented M7.6: the editing feature registers `move_next_word_start`, `move_previous_word_start`, and `move_next_word_end` with Normal `w`/`b`/`e`. `EditorSession::move_cursor_word` adapts Helix's word motions and collapses them to cursor points, retaining Unicode/boundary behavior without edits or a new selection mode.
 
+### M8 — Common editing workflows after M7
+
+Planned vertical slices, detailed in `PLAN.md`:
+
+1. **Counted line jumps:** `[count]gg`/`[count]G`, with transient count/prefix display and explicit cancellation/cleanup.
+2. **Viewport alignment:** `zz`/`zt`/`zb` through shared visual-viewport primitives without changing cursor or document state.
+3. **Insert variants:** `a`/`A`/`I` and `o`/`O` through existing Insert, transaction, history, and auto-save paths.
+4. **Line boundaries:** `0`/`$` with unambiguous count parsing and reusable move/extend behavior.
+5. **Characterwise Visual selection:** `v`, existing motions with explicit extend semantics, visible selection/mode styling, and Escape cleanup.
+6. **Delete/change commands:** Visual `x`/`d`/`c`, Normal `x`, and Normal `dd`/`cc` through existing transaction/history/auto-save paths, with pending `d`/`c` display and no general operator grammar.
+7. **Yank and clipboard sync:** Visual `y` and Normal `yy`, one automatic unnamed register shared with delete/change commands, and best-effort system clipboard mirroring without blocking editing.
+
+Eggplant intentionally supports one cursor/selection only. Only `gg`/`G` accept counts; existing `w`/`b`/`e` and all other motions are uncounted. Visual selection is the intended workflow for larger ranges instead of adding a broader text-object motion catalog. Beyond the M8.5–M8.7 slices, M8 does not introduce general Visual operators, macros, named/register-selection workflows, multi-cursor behavior, or full Vim/Helix compatibility.
+
 ## 12. Testing strategy
 
 - Keep all first-edition behavior and smoke tests as characterization coverage.
