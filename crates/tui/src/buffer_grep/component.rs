@@ -1,18 +1,16 @@
-use editor::TextViewSnapshot;
 use ratatui::{
     Frame,
     buffer::Buffer,
     layout::{Position, Rect},
-    style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Paragraph, Widget},
 };
-use unicode_width::UnicodeWidthStr;
 
 use crate::{
     component::{
         picker,
         popup::{self, Popup},
+        search_highlight::{highlighted_spans, match_highlight, style_preview},
         text_input::TextInput,
         text_view::TextView,
     },
@@ -21,7 +19,7 @@ use crate::{
     ui::{OverlayContribution, OverlayKind, OverlayPlacement},
 };
 
-use super::{BufferGrepState, GrepMatch, SearchStatus};
+use super::{BufferGrepState, SearchStatus};
 
 #[derive(Debug, Clone, Copy)]
 pub struct BufferGrep<'a> {
@@ -102,7 +100,17 @@ impl Widget for BufferGrepContent<'_> {
         match &self.state.preview {
             Some(snapshot) => {
                 TextView::new(snapshot, self.theme).render(preview_inner, buf);
-                style_preview(self.state, snapshot, preview_inner, buf, self.theme.ui());
+                style_preview(
+                    snapshot,
+                    self.state.selected_match().map(|result| result.line),
+                    self.state
+                        .results
+                        .iter()
+                        .map(|result| (result.line, result.match_ranges.as_slice())),
+                    preview_inner,
+                    buf,
+                    self.theme.ui(),
+                );
             }
             None => Paragraph::new("No match selected")
                 .style(surface)
@@ -147,136 +155,14 @@ fn result_lines(state: &BufferGrepState, styles: &UiTheme) -> Vec<Line<'static>>
         .collect()
 }
 
-fn style_preview(
-    state: &BufferGrepState,
-    snapshot: &TextViewSnapshot,
-    area: Rect,
-    buffer: &mut Buffer,
-    styles: &UiTheme,
-) {
-    let selected = state
-        .selected_match()
-        .and_then(|result| result.line.checked_sub(snapshot.first_line))
-        .filter(|row| *row < snapshot.lines.len())
-        .and_then(|row| u16::try_from(row).ok())
-        .filter(|row| *row < area.height)
-        .map(|row| {
-            (
-                Rect::new(area.x, area.y + row, area.width, 1),
-                styles.selection,
-            )
-        });
-    let text_area = TextView::text_area(area, snapshot);
-    let matches = state
-        .results
-        .iter()
-        .flat_map(|result| result_match_areas(result, snapshot, text_area));
-
-    selected
-        .into_iter()
-        .chain(matches.map(|area| (area, match_highlight())))
-        .for_each(|(area, style)| buffer.set_style(area, style));
-}
-
-fn result_match_areas<'a>(
-    result: &'a GrepMatch,
-    snapshot: &'a TextViewSnapshot,
-    text_area: Rect,
-) -> impl Iterator<Item = Rect> + 'a {
-    let line = result
-        .line
-        .checked_sub(snapshot.first_line)
-        .and_then(|row| snapshot.lines.get(row).map(|line| (row, line)));
-    result.match_ranges.iter().filter_map(move |range| {
-        let (row, line) = line?;
-        preview_match_area(text_area, row, &line.text, range)
-    })
-}
-
-fn preview_match_area(
-    text_area: Rect,
-    row: usize,
-    text: &str,
-    range: &std::ops::Range<usize>,
-) -> Option<Rect> {
-    let row = u16::try_from(row)
-        .ok()
-        .filter(|row| *row < text_area.height)?;
-    if !valid_range(text, range) {
-        return None;
-    }
-    let start = UnicodeWidthStr::width(&text[..range.start]);
-    let end = UnicodeWidthStr::width(&text[..range.end]);
-    let viewport_width = usize::from(text_area.width);
-    if start >= viewport_width || end <= start {
-        return None;
-    }
-    Some(Rect::new(
-        text_area.x + u16::try_from(start).ok()?,
-        text_area.y + row,
-        u16::try_from(end.min(viewport_width) - start).ok()?,
-        1,
-    ))
-}
-
-fn match_highlight() -> Style {
-    Style::new()
-        .fg(Color::Black)
-        .bg(Color::Yellow)
-        .add_modifier(Modifier::BOLD)
-}
-
-fn highlighted_spans(
-    text: &str,
-    ranges: &[std::ops::Range<usize>],
-    base: Style,
-    highlight: Style,
-) -> Vec<Span<'static>> {
-    let ranges = ranges.iter().filter(|range| valid_range(text, range)).fold(
-        Vec::<std::ops::Range<usize>>::new(),
-        |mut ranges, range| {
-            if ranges.last().is_none_or(|last| last.end <= range.start) {
-                ranges.push(range.clone());
-            }
-            ranges
-        },
-    );
-    let trailing_offset = ranges.last().map_or(0, |range| range.end);
-    let spans = std::iter::once(0)
-        .chain(ranges.iter().map(|range| range.end))
-        .zip(&ranges)
-        .flat_map(|(offset, range)| {
-            [
-                (offset < range.start)
-                    .then(|| Span::styled(text[offset..range.start].to_string(), base)),
-                (range.start < range.end)
-                    .then(|| Span::styled(text[range.start..range.end].to_string(), highlight)),
-            ]
-            .into_iter()
-            .flatten()
-        })
-        .chain(
-            (trailing_offset < text.len())
-                .then(|| Span::styled(text[trailing_offset..].to_string(), base)),
-        )
-        .collect::<Vec<_>>();
-    match spans.is_empty() {
-        true => vec![Span::styled(text.to_string(), base)],
-        false => spans,
-    }
-}
-
-fn valid_range(text: &str, range: &std::ops::Range<usize>) -> bool {
-    range.start <= range.end
-        && range.end <= text.len()
-        && text.is_char_boundary(range.start)
-        && text.is_char_boundary(range.end)
-}
-
 #[cfg(test)]
 mod tests {
     use editor::DocumentFactory;
-    use ratatui::{Terminal, backend::TestBackend, style::Color};
+    use ratatui::{
+        Terminal,
+        backend::TestBackend,
+        style::{Color, Modifier},
+    };
 
     use super::*;
     use crate::buffer_grep::{GrepMatch, refresh_preview};
