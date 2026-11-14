@@ -33,7 +33,9 @@ pub mod data_object {
         path::{Path, PathBuf},
     };
 
-    use editor::{BufferId, DocumentOpenCompletion, EditorSession, SaveCompletion};
+    use editor::{
+        BufferId, DocumentOpenCompletion, DocumentPosition, EditorSession, SaveCompletion,
+    };
 
     use crate::manager::effect::FeatureCompletion;
 
@@ -85,6 +87,12 @@ pub mod data_object {
         Right,
     }
 
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct OpenLocation {
+        pub path: PathBuf,
+        pub position: Option<DocumentPosition>,
+    }
+
     /// Central application state used by the Elm-style message/update/view loop.
     ///
     /// `Model` composes state from each domain rather than duplicating its data:
@@ -123,7 +131,7 @@ pub mod data_object {
 
         // Transient feedback, popup, and save-dependent workflows.
         pub status: Option<StatusMessage>,
-        pub opening_file: Option<PathBuf>,
+        pub opening_file: Option<OpenLocation>,
         pub deferred_action: Option<DeferredAction>,
         pub command_menu: CommandMenuState,
         pub file_picker: FilePickerState,

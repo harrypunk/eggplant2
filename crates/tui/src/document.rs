@@ -1,10 +1,12 @@
 use std::path::Path;
 
-use editor::{BufferId, DocumentFactory, DocumentOpenCompletion, DocumentOpenRequest};
+use editor::{
+    BufferId, DocumentFactory, DocumentOpenCompletion, DocumentOpenRequest, DocumentPosition,
+};
 
 use crate::{
     buffer,
-    data_object::{Model, StatusMessage},
+    data_object::{Model, OpenLocation, StatusMessage},
     manager::effect::Effect,
 };
 
@@ -14,7 +16,20 @@ pub(crate) fn open_file(
     model: &mut Model,
     path: &Path,
 ) -> Option<Effect> {
-    model.opening_file = Some(path.to_path_buf());
+    open_file_at(documents, model, path, None)
+}
+
+/// Open a document and optionally move its cursor after the normal safe insertion flow.
+pub(crate) fn open_file_at(
+    documents: &DocumentFactory,
+    model: &mut Model,
+    path: &Path,
+    position: Option<DocumentPosition>,
+) -> Option<Effect> {
+    model.opening_file = Some(OpenLocation {
+        path: path.to_path_buf(),
+        position,
+    });
     Some(Effect::OpenDocument(DocumentOpenRequest::new(
         documents.clone(),
         path,
@@ -27,10 +42,19 @@ pub(crate) fn finish_open_file(
     model: &mut Model,
     completion: DocumentOpenCompletion,
 ) -> Option<BufferId> {
-    if model.opening_file.as_deref() != Some(completion.path()) {
+    if model
+        .opening_file
+        .as_ref()
+        .map(|location| location.path.as_path())
+        != Some(completion.path())
+    {
         return None;
     }
     let path = completion.path().to_path_buf();
+    let position = model
+        .opening_file
+        .as_ref()
+        .and_then(|location| location.position);
     model.opening_file = None;
     let opened = match completion.into_result() {
         Ok(opened) => opened,
@@ -48,6 +72,11 @@ pub(crate) fn finish_open_file(
     };
     model.status = None;
     buffer::reveal_buffer(model, id);
+    if let Some(position) = position
+        && let Err(error) = model.editor.move_cursor_to(position)
+    {
+        model.status = Some(StatusMessage::error(error.to_string()));
+    }
     Some(id)
 }
 
@@ -100,6 +129,33 @@ mod tests {
     }
 
     #[test]
+    fn open_at_position_moves_the_cursor_after_safe_insertion() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("note.txt");
+        std::fs::write(&path, "zero\none").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        model.editor.resize_active_view(80, 10);
+
+        let effect = open_file_at(
+            &DocumentFactory::new(),
+            &mut model,
+            &path,
+            Some(DocumentPosition {
+                line: 1,
+                character: 0,
+            }),
+        );
+        let Some(Effect::OpenDocument(request)) = effect else {
+            panic!("expected an open-document effect");
+        };
+        assert!(finish_open_file(&mut model, request.perform()).is_some());
+
+        let snapshot = model.editor.active_snapshot().unwrap();
+        assert_eq!(snapshot.cursor.unwrap().row, 1);
+        assert_eq!(snapshot.cursor.unwrap().column, 0);
+    }
+
+    #[test]
     fn stale_open_completion_does_not_replace_the_latest_request() {
         let directory = tempfile::tempdir().unwrap();
         let first = directory.path().join("first.txt");
@@ -119,7 +175,13 @@ mod tests {
 
         assert!(finish_open_file(&mut model, first_completion).is_none());
         assert!(model.editor.is_empty());
-        assert_eq!(model.opening_file, Some(second.clone()));
+        assert_eq!(
+            model.opening_file,
+            Some(OpenLocation {
+                path: second.clone(),
+                position: None,
+            })
+        );
         assert!(finish_open_file(&mut model, second_completion).is_some());
 
         assert_eq!(model.editor.buffer_count(), 1);
