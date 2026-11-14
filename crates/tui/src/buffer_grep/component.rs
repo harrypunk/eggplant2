@@ -21,7 +21,7 @@ use crate::{
     ui::{OverlayContribution, OverlayKind, OverlayPlacement},
 };
 
-use super::{BufferGrepState, SearchStatus};
+use super::{BufferGrepState, GrepMatch, SearchStatus};
 
 #[derive(Debug, Clone, Copy)]
 pub struct BufferGrep<'a> {
@@ -154,62 +154,69 @@ fn style_preview(
     buffer: &mut Buffer,
     styles: &UiTheme,
 ) {
-    if let Some(row) = state
+    let selected = state
         .selected_match()
         .and_then(|result| result.line.checked_sub(snapshot.first_line))
         .filter(|row| *row < snapshot.lines.len())
-    {
-        let Ok(row) = u16::try_from(row) else {
-            return;
-        };
-        if row < area.height {
-            buffer.set_style(
+        .and_then(|row| u16::try_from(row).ok())
+        .filter(|row| *row < area.height)
+        .map(|row| {
+            (
                 Rect::new(area.x, area.y + row, area.width, 1),
                 styles.selection,
-            );
-        }
-    }
-
-    let text_area = TextView::text_area(area, snapshot);
-    state.results.iter().for_each(|result| {
-        let Some(row) = result.line.checked_sub(snapshot.first_line) else {
-            return;
-        };
-        let Some(line) = snapshot.lines.get(row) else {
-            return;
-        };
-        let Ok(row) = u16::try_from(row) else {
-            return;
-        };
-        if row >= text_area.height {
-            return;
-        }
-        result.match_ranges.iter().for_each(|range| {
-            if range.start > range.end
-                || range.end > line.text.len()
-                || !line.text.is_char_boundary(range.start)
-                || !line.text.is_char_boundary(range.end)
-            {
-                return;
-            }
-            let start = UnicodeWidthStr::width(&line.text[..range.start]);
-            let end = UnicodeWidthStr::width(&line.text[..range.end]);
-            let viewport_width = usize::from(text_area.width);
-            if start >= viewport_width || end <= start {
-                return;
-            }
-            let width = end.min(viewport_width) - start;
-            buffer.set_style(
-                Rect::new(
-                    text_area.x + start as u16,
-                    text_area.y + row,
-                    width as u16,
-                    1,
-                ),
-                match_highlight(),
-            );
+            )
         });
-    });
+    let text_area = TextView::text_area(area, snapshot);
+    let matches = state
+        .results
+        .iter()
+        .flat_map(|result| result_match_areas(result, snapshot, text_area));
+
+    selected
+        .into_iter()
+        .chain(matches.map(|area| (area, match_highlight())))
+        .for_each(|(area, style)| buffer.set_style(area, style));
+}
+
+fn result_match_areas<'a>(
+    result: &'a GrepMatch,
+    snapshot: &'a TextViewSnapshot,
+    text_area: Rect,
+) -> impl Iterator<Item = Rect> + 'a {
+    let line = result
+        .line
+        .checked_sub(snapshot.first_line)
+        .and_then(|row| snapshot.lines.get(row).map(|line| (row, line)));
+    result.match_ranges.iter().filter_map(move |range| {
+        let (row, line) = line?;
+        preview_match_area(text_area, row, &line.text, range)
+    })
+}
+
+fn preview_match_area(
+    text_area: Rect,
+    row: usize,
+    text: &str,
+    range: &std::ops::Range<usize>,
+) -> Option<Rect> {
+    let row = u16::try_from(row)
+        .ok()
+        .filter(|row| *row < text_area.height)?;
+    if !valid_range(text, range) {
+        return None;
+    }
+    let start = UnicodeWidthStr::width(&text[..range.start]);
+    let end = UnicodeWidthStr::width(&text[..range.end]);
+    let viewport_width = usize::from(text_area.width);
+    if start >= viewport_width || end <= start {
+        return None;
+    }
+    Some(Rect::new(
+        text_area.x + u16::try_from(start).ok()?,
+        text_area.y + row,
+        u16::try_from(end.min(viewport_width) - start).ok()?,
+        1,
+    ))
 }
 
 fn match_highlight() -> Style {
@@ -225,35 +232,45 @@ fn highlighted_spans(
     base: Style,
     highlight: Style,
 ) -> Vec<Span<'static>> {
-    let mut spans = Vec::new();
-    let mut offset = 0;
-    for range in ranges {
-        if range.start < offset
-            || range.start > range.end
-            || range.end > text.len()
-            || !text.is_char_boundary(range.start)
-            || !text.is_char_boundary(range.end)
-        {
-            continue;
-        }
-        if offset < range.start {
-            spans.push(Span::styled(text[offset..range.start].to_string(), base));
-        }
-        if range.start < range.end {
-            spans.push(Span::styled(
-                text[range.start..range.end].to_string(),
-                highlight,
-            ));
-        }
-        offset = range.end;
+    let ranges = ranges.iter().filter(|range| valid_range(text, range)).fold(
+        Vec::<std::ops::Range<usize>>::new(),
+        |mut ranges, range| {
+            if ranges.last().is_none_or(|last| last.end <= range.start) {
+                ranges.push(range.clone());
+            }
+            ranges
+        },
+    );
+    let trailing_offset = ranges.last().map_or(0, |range| range.end);
+    let spans = std::iter::once(0)
+        .chain(ranges.iter().map(|range| range.end))
+        .zip(&ranges)
+        .flat_map(|(offset, range)| {
+            [
+                (offset < range.start)
+                    .then(|| Span::styled(text[offset..range.start].to_string(), base)),
+                (range.start < range.end)
+                    .then(|| Span::styled(text[range.start..range.end].to_string(), highlight)),
+            ]
+            .into_iter()
+            .flatten()
+        })
+        .chain(
+            (trailing_offset < text.len())
+                .then(|| Span::styled(text[trailing_offset..].to_string(), base)),
+        )
+        .collect::<Vec<_>>();
+    match spans.is_empty() {
+        true => vec![Span::styled(text.to_string(), base)],
+        false => spans,
     }
-    if offset < text.len() {
-        spans.push(Span::styled(text[offset..].to_string(), base));
-    }
-    if spans.is_empty() {
-        spans.push(Span::styled(text.to_string(), base));
-    }
-    spans
+}
+
+fn valid_range(text: &str, range: &std::ops::Range<usize>) -> bool {
+    range.start <= range.end
+        && range.end <= text.len()
+        && text.is_char_boundary(range.start)
+        && text.is_char_boundary(range.end)
 }
 
 #[cfg(test)]
