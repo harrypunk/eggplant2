@@ -21,7 +21,10 @@ use thiserror::Error;
 
 use crate::{
     save::{SaveCompletion, SaveError, SaveRequest},
-    snapshot::{BufferInfo, CursorPosition, DirtyState, EditorSnapshot, text_view_snapshot},
+    snapshot::{
+        BufferInfo, BufferTextSnapshot, CursorPosition, DirtyState, EditorSnapshot,
+        text_view_snapshot,
+    },
     viewport,
 };
 
@@ -310,6 +313,24 @@ impl EditorSession {
             modified: DirtyState::from(document.is_modified()),
             text,
             cursor,
+        })
+    }
+
+    /// Return the active buffer identity and document version, which changes on every edit.
+    pub fn active_revision(&self) -> Option<(BufferId, i32)> {
+        let active = self.active_view.as_ref()?;
+        let document = &self.buffers.get(&active.buffer)?.document;
+        Some((active.buffer, document.version()))
+    }
+
+    /// Clone active text into an owned snapshot suitable for background search.
+    pub fn active_text_snapshot(&self) -> Option<BufferTextSnapshot> {
+        let (buffer_id, revision) = self.active_revision()?;
+        let text = self.buffers.get(&buffer_id)?.document.text().to_string();
+        Some(BufferTextSnapshot {
+            buffer_id,
+            revision,
+            text,
         })
     }
 
@@ -836,6 +857,23 @@ mod tests {
             session.move_cursor(CursorMovement::Left),
             Err(EditorError::NoActiveBuffer)
         ));
+    }
+
+    #[test]
+    fn buffer_text_snapshots_are_owned_and_revisioned() {
+        let mut session = EditorSession::new();
+        assert!(session.active_text_snapshot().is_none());
+        let id = create_buffer(&mut session, "hello");
+        let first = session.active_text_snapshot().unwrap();
+        assert_eq!(first.buffer_id, id);
+        assert_eq!(first.text, "hello");
+
+        session.insert_text("!").unwrap();
+        let second = session.active_text_snapshot().unwrap();
+        assert_eq!(second.text, "!hello");
+        assert_ne!(second.revision, first.revision);
+        assert_eq!(session.active_revision(), Some((id, second.revision)));
+        assert_eq!(first.text, "hello");
     }
 
     #[test]

@@ -87,6 +87,14 @@ impl TextViewSnapshot {
     }
 }
 
+/// Owned text and revision for background work against one buffer version.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BufferTextSnapshot {
+    pub buffer_id: BufferId,
+    pub revision: i32,
+    pub text: String,
+}
+
 /// Filename-only buffer summary used by tabs and other buffer lists.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BufferInfo {

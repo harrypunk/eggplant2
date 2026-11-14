@@ -17,8 +17,8 @@ pub use session::{
     VerticalDirection,
 };
 pub use snapshot::{
-    BufferInfo, CursorPosition, DirtyState, EditorSnapshot, HighlightSpan, LineSnapshot,
-    TextViewSnapshot,
+    BufferInfo, BufferTextSnapshot, CursorPosition, DirtyState, EditorSnapshot, HighlightSpan,
+    LineSnapshot, TextViewSnapshot,
 };
 
 #[cfg(test)]
