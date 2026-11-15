@@ -7,7 +7,10 @@ use ratatui::{
 };
 
 use crate::{
-    component::popup::Popup,
+    component::{
+        picker,
+        popup::{self, Popup},
+    },
     data_object::{Model, Visibility},
     theme::{Theme, ThemeName},
     theme_picker::ThemePickerState,
@@ -72,6 +75,10 @@ impl Widget for ThemePicker<'_> {
                 Line::styled(format!("{marker} {}", name.as_str()), style)
             })
             .collect::<Vec<_>>();
+        let selected = ThemeName::ALL
+            .iter()
+            .position(|name| *name == self.state.selected());
+        let lines = picker::visible_lines(lines, selected, popup::content_area(area).height);
         Popup::new(
             "Theme",
             Paragraph::new(lines).style(surface),
@@ -110,5 +117,28 @@ mod tests {
         assert!(content.contains("  default"));
         assert!(content.contains("> tokyonight"));
         assert!(content.contains("  catppuccin_mocha"));
+    }
+
+    #[test]
+    fn keeps_the_selected_theme_visible_in_a_small_terminal() {
+        let mut state = ThemePickerState::default();
+        state.open(ThemeName::CatppuccinMocha);
+        let theme = Theme::default();
+        let backend = TestBackend::new(28, 3);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal
+            .draw(|frame| frame.render_widget(ThemePicker::new(&state, &theme), frame.area()))
+            .unwrap();
+
+        let content = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(content.contains("> catppuccin_mocha"));
+        assert!(!content.contains("  default"));
     }
 }

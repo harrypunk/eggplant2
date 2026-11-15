@@ -63,7 +63,7 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | Project grep | Next / previous result | `Down` / `Ctrl-N`; `Up` / `Ctrl-P` |
 | Project grep | Open match / close | `Enter` / `Esc` |
 
-File/theme pickers and both live-grep lists wrap from first to last and last to first. Ctrl-N/Ctrl-P are built-in aliases for the configured Down/Up navigation actions; an explicit Ctrl-N/Ctrl-P binding in the same context takes priority.
+File/theme pickers and both live-grep lists wrap from first to last and last to first. Their rendered list window follows the selection so the selected row remains visible, including after wraparound and in small terminals. Ctrl-N/Ctrl-P are built-in aliases for the configured Down/Up navigation actions; an explicit Ctrl-N/Ctrl-P binding in the same context takes priority.
 
 Custom `[keymap]` entries merge with defaults by context and action, so only overrides need to be specified. Built-in Space leader sequences are not configured in TOML. Explicit unbinding is not implemented.
 

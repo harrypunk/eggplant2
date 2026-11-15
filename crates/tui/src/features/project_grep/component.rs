@@ -90,7 +90,12 @@ impl Widget for ProjectGrepContent<'_> {
         let surface = self.theme.ui().popup_surface();
         let border = surface.patch(self.theme.ui().border);
         TextInput::new(&self.state.query, self.theme.ui()).render(areas.input, buf);
-        Paragraph::new(result_lines(self.state, self.theme.ui()))
+        let results = picker::visible_lines(
+            result_lines(self.state, self.theme.ui()),
+            self.state.selected,
+            areas.results.height,
+        );
+        Paragraph::new(results)
             .style(surface)
             .render(areas.results, buf);
 
@@ -165,6 +170,8 @@ fn result_lines(state: &ProjectGrepState, styles: &UiTheme) -> Vec<Line<'static>
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use editor::{DocumentFactory, preview_document_at};
     use ratatui::{
         Terminal,
@@ -222,5 +229,38 @@ mod tests {
                 .count()
                 >= 8
         );
+    }
+
+    #[test]
+    fn scrolls_the_selected_result_into_view() {
+        let mut state = ProjectGrepState::default();
+        state.status = SearchStatus::Ready;
+        state.results = (0..30)
+            .map(|index| ProjectGrepResult {
+                path: PathBuf::from(format!("file-{index:02}.rs")),
+                display: format!("file-{index:02}.rs"),
+                line: index,
+                text: format!("match-{index:02}"),
+                match_ranges: Vec::new(),
+            })
+            .collect();
+        state.selected = Some(29);
+        let theme = Theme::default();
+        let backend = TestBackend::new(80, 12);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal
+            .draw(|frame| frame.render_widget(ProjectGrep::new(&state, &theme), frame.area()))
+            .unwrap();
+
+        let content = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(content.contains("file-29.rs:30"));
+        assert!(!content.contains("file-00.rs"));
     }
 }
