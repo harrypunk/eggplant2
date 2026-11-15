@@ -188,6 +188,8 @@ pub mod data_object {
     pub enum DeferredAction {
         Quit,
         CloseBuffer(BufferId),
+        CloseOthers(BufferId),
+        CloseRight(BufferId),
     }
 
     /// A workspace whose root is fixed after startup.
