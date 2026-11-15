@@ -198,6 +198,7 @@ Input is context-aware: overlays handle input first, followed by the focused fea
 | --- | --- |
 | Quit | `Space q q` |
 | Next / previous buffer | `Space b n` / `Space b p` |
+| Close current buffer | `Space b c` |
 | Show/hide explorer | `Space e` |
 | Find/open a file | `Space Space` or `Space f f` |
 | Select a theme | `Space u t` |

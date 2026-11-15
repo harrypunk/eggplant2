@@ -78,6 +78,11 @@ const BUFFER_CONTEXT: CommandMenuContext = CommandMenuContext {
             description: "previous buffer",
             target: CommandMenuTarget::Action(CommandId("previous_buffer")),
         },
+        CommandMenuItem {
+            key: 'c',
+            description: "close buffer",
+            target: CommandMenuTarget::Action(CommandId("close_buffer")),
+        },
     ],
 };
 
@@ -251,6 +256,13 @@ mod tests {
             CommandMenuOutcome::Action(CommandId("next_buffer"))
         );
         assert!(!menu.is_active());
+
+        menu.handle_key(KeyCode::Char(' '));
+        menu.handle_key(KeyCode::Char('b'));
+        assert_eq!(
+            menu.handle_key(KeyCode::Char('c')),
+            CommandMenuOutcome::Action(CommandId("close_buffer"))
+        );
 
         menu.handle_key(KeyCode::Char(' '));
         menu.handle_key(KeyCode::Char('c'));
