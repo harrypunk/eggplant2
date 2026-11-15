@@ -370,10 +370,10 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 #### M9.1 — Branch discovery and status-bar display
 
-- [ ] Use `helix-vcs` HEAD lookup for the fixed workspace and replace the status-bar placeholder with the branch name.
-- [ ] Handle detached HEAD, unborn branches, non-repositories, and backend discovery failures.
-- [ ] Preserve the last known value while a refresh is running and ignore stale completions.
-- [ ] Test normal/detached/unborn repositories, non-repositories, refresh coalescing, and stale results without blocking the UI.
+- [x] Use `helix-vcs` HEAD lookup for the fixed workspace and replace the status-bar placeholder with the branch name.
+- [x] Handle detached HEAD, unborn branches, non-repositories, and backend discovery failures.
+- [x] Preserve the last known value while a refresh is running and ignore stale completions.
+- [x] Test normal/detached/unborn repositories, non-repositories, refresh coalescing, and stale results without blocking the UI.
 
 #### M9.2 — Changed-file model and read-only panel
 

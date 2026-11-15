@@ -12,5 +12,6 @@ pub mod line_jump;
 pub mod page_scroll;
 pub mod project_grep;
 pub mod theme_picker;
+pub mod vcs;
 pub mod view_align;
 pub mod yank;

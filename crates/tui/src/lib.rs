@@ -18,7 +18,7 @@ pub use shell::{buffer, command_menu, focus, lifecycle};
 
 pub use features::{
     buffer_grep, buffer_jump, buffer_navigation, change, editing, explorer, external_sync,
-    file_picker, line_jump, page_scroll, project_grep, theme_picker, view_align, yank,
+    file_picker, line_jump, page_scroll, project_grep, theme_picker, vcs, view_align, yank,
 };
 
 #[cfg(test)]
@@ -52,6 +52,7 @@ pub mod data_object {
         theme::Theme,
         theme_picker::ThemePickerState,
         tools::ToolsPanelState,
+        vcs::VcsState,
         yank::YankState,
     };
 
@@ -150,6 +151,7 @@ pub mod data_object {
         pub buffer_navigation: BufferNavigationState,
         pub buffer_grep: BufferGrepState,
         pub project_grep: ProjectGrepState,
+        pub vcs: VcsState,
         #[cfg(test)]
         pub example_feature: crate::test_utils::ExampleFeatureState,
     }
@@ -181,6 +183,7 @@ pub mod data_object {
                 buffer_navigation: BufferNavigationState::default(),
                 buffer_grep: BufferGrepState::default(),
                 project_grep: ProjectGrepState::default(),
+                vcs: VcsState::default(),
                 #[cfg(test)]
                 example_feature: crate::test_utils::ExampleFeatureState::default(),
             }

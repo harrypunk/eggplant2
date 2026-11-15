@@ -49,6 +49,7 @@ One registration per feature is allowed and desirable. “Open for extension” 
 | Effect scheduling and completion delivery | Shell runtime |
 | Documents, buffers, revisions, editing, viewport, and save invariants | Editor core and editor feature adapter |
 | Workspace root and shared filesystem acceptance rules | Shell/editor capabilities |
+| Git discovery/HEAD operations and Gitoxide/Helix VCS types | `vcs` crate |
 | Feature-specific state, messages, updates, effects, components, and tests | Each feature |
 
 Within the editor crate, `EditorSession` owns buffer lifecycle, mode, snapshots, and persistence/reload coordination. `ActiveEditor` is the narrow active-document capability for navigation, viewport, and editing operations; its focused modules prevent the session from becoming a god object as features grow.
@@ -310,6 +311,8 @@ Implemented M8.6: `change` owns Visual `x`/`d`/`c`, Normal `x`, pending `dd`/`cc
 Implemented M8.7: `yank` owns Visual `y`, Normal pending `yy`, and Escape cleanup. `RegisterState` stores the automatic unnamed register shared with M8.6 and mirrors it through a cloned Helix `ClipboardProvider` in a blocking effect. Clipboard failure is non-blocking, yanks do not edit/save, and generic `Effect::Batch` supports register-plus-save work.
 
 Implemented common buffer navigation: `features/buffer_navigation.rs` owns only `]b`/`[b` prefix state, its input context, registration, and cancellation. Accepted sequences delegate to the existing `next_buffer`/`previous_buffer` commands, preserving save-before-switch and explorer reveal without duplicating buffer lifecycle policy or adding a general bracket/unimpaired grammar.
+
+Implemented M9.1: the new `vcs` crate isolates `helix-vcs`/Gitoxide behind owned Git HEAD labels. `features/vcs/` owns refresh state, duplicate suppression, background requests, and stale-result rejection; the runtime schedules initial discovery and the status bar renders only the resulting branch/detached label. Reduced-trust discovery and neutral non-repository/unborn states keep failures non-blocking.
 
 Eggplant intentionally supports one cursor/selection only. Only `gg`/`G` accept counts; existing `w`/`b`/`e` and all other motions are uncounted. Visual selection is the intended workflow for larger ranges instead of adding a broader text-object motion catalog. Beyond the M8.5–M8.7 slices, M8 does not introduce general Visual operators, macros, named/register-selection workflows, multi-cursor behavior, or full Vim/Helix compatibility.
 

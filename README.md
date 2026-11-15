@@ -66,13 +66,14 @@ This boundary means Eggplant intentionally implements its own small command set.
 
 ## Workspace boundaries
 
-The workspace has three logical responsibilities provided by two crates: `editor` and `tui`, with application coordination currently inside `tui`.
+The workspace separates editing, application/terminal coordination, and version control into `editor`, `tui`, and `vcs`, with application coordination currently inside `tui`.
 
 ```text
 crates/
-├── app/       # Application state, explorer, messages, effects, and input routing
+├── app/       # Logical application state, explorer, messages, effects, and input routing
 ├── editor/    # Eggplant-owned editing model and narrow Helix adapter
-└── tui/       # Binary, terminal runtime, Ratatui pages, and widgets
+├── tui/       # Binary, terminal runtime, Ratatui pages, and widgets
+└── vcs/       # Narrow Git capability with private Helix/Gitoxide types
 ```
 
 Application state currently lives in `tui`. Avoid adding more crates until a real dependency or testing boundary requires them.
@@ -105,6 +106,10 @@ Owns editing state and exposes a narrow API to the application:
 Do not re-export broad Helix APIs throughout the application. Keep Helix types inside the adapter where practical so upstream changes do not spread into the explorer, widgets, or future AI tools.
 
 Ratatui and Crossterm types do not belong in this crate.
+
+### `vcs`
+
+Owns narrow version-control operations and returns owned, backend-neutral values for application features. Helix VCS, Gitoxide, and repository-specific types stay private to this crate; TUI state and rendering do not depend on them. Callers schedule potentially blocking operations through background effects.
 
 ### `tui`
 

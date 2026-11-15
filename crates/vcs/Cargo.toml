@@ -1,0 +1,10 @@
+[package]
+name = "vcs"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+helix-vcs = { git = "http://git.z.lan/fork/helix", rev = "079a789e8cb08ead67f19e1971a1b7438b37354b", features = ["git"] }
+
+[dev-dependencies]
+tempfile = "3.27"

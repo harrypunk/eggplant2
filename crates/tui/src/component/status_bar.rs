@@ -6,18 +6,20 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Paragraph, Widget},
 };
+use unicode_width::UnicodeWidthStr;
 
 use crate::{
     data_object::{StatusKind, StatusMessage},
     theme::UiTheme,
 };
 
-const VCS_PLACEHOLDER: &str = " -- ";
+const MAX_VCS_WIDTH: u16 = 24;
 const CLOCK_WIDTH: u16 = 6;
 
 #[derive(Debug, Clone, Copy)]
 pub struct StatusBar<'a> {
     mode: EditMode,
+    vcs: &'a str,
     file_path: &'a str,
     time: &'a str,
     message: Option<&'a StatusMessage>,
@@ -28,6 +30,7 @@ pub struct StatusBar<'a> {
 impl<'a> StatusBar<'a> {
     pub fn new(
         mode: EditMode,
+        vcs: &'a str,
         file_path: &'a str,
         time: &'a str,
         message: Option<&'a StatusMessage>,
@@ -36,6 +39,7 @@ impl<'a> StatusBar<'a> {
     ) -> Self {
         Self {
             mode,
+            vcs,
             file_path,
             time,
             message,
@@ -57,9 +61,11 @@ impl Widget for StatusBar<'_> {
         let pending_width = self
             .pending_input
             .map_or(0, |pending| pending.len() as u16 + 1);
+        let vcs = format!(" {} ", self.vcs);
+        let vcs_width = (vcs.width() as u16).min(MAX_VCS_WIDTH);
         let [mode_area, vcs_area, path_area, pending_area, time_area] = Layout::horizontal([
             Constraint::Length(mode.len() as u16 + 2),
-            Constraint::Length(VCS_PLACEHOLDER.len() as u16),
+            Constraint::Length(vcs_width),
             Constraint::Fill(1),
             Constraint::Length(pending_width),
             Constraint::Length(CLOCK_WIDTH),
@@ -75,7 +81,7 @@ impl Widget for StatusBar<'_> {
                 .add_modifier(Modifier::BOLD),
         ))
         .render(mode_area, buf);
-        Paragraph::new(Span::styled(VCS_PLACEHOLDER, self.styles.muted)).render(vcs_area, buf);
+        Paragraph::new(Span::styled(vcs, self.styles.muted)).render(vcs_area, buf);
 
         let mut middle = vec![Span::styled(
             format!(" {}", self.file_path),
@@ -130,7 +136,7 @@ mod tests {
             terminal
                 .draw(|frame| {
                     frame.render_widget(
-                        StatusBar::new(mode, "", "14:05", None, None, theme.ui()),
+                        StatusBar::new(mode, "--", "", "14:05", None, None, theme.ui()),
                         frame.area(),
                     )
                 })
@@ -157,6 +163,7 @@ mod tests {
                 frame.render_widget(
                     StatusBar::new(
                         EditMode::Normal,
+                        "main",
                         "src/main.rs",
                         "14:05",
                         None,
@@ -176,8 +183,8 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
         assert_eq!(&content[0..8], " NORMAL ");
-        assert_eq!(&content[8..12], VCS_PLACEHOLDER);
-        assert!(content[12..54].starts_with(" src/main.rs"));
+        assert_eq!(&content[8..14], " main ");
+        assert!(content[14..54].starts_with(" src/main.rs"));
         assert_eq!(&content[54..60], " 14:05");
     }
 
@@ -190,7 +197,15 @@ mod tests {
         terminal
             .draw(|frame| {
                 frame.render_widget(
-                    StatusBar::new(EditMode::Normal, "", "14:05", None, Some("12g"), theme.ui()),
+                    StatusBar::new(
+                        EditMode::Normal,
+                        "--",
+                        "",
+                        "14:05",
+                        None,
+                        Some("12g"),
+                        theme.ui(),
+                    ),
                     frame.area(),
                 )
             })
@@ -218,6 +233,7 @@ mod tests {
                 frame.render_widget(
                     StatusBar::new(
                         EditMode::Normal,
+                        "--",
                         "",
                         "14:05",
                         Some(&message),

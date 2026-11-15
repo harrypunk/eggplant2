@@ -9,3 +9,4 @@ edition = "2024"
 [workspace.dependencies]
 editor = { path = "crates/editor" }
 tui = { path = "crates/tui" }
+vcs = { path = "crates/vcs" }
