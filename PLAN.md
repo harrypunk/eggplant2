@@ -1,6 +1,6 @@
 # Eggplant first-edition plan
 
-Last updated: 2026-11-14
+Last updated: 2026-11-15
 Current baseline: Milestone 8 complete
 
 ## Purpose
@@ -69,7 +69,7 @@ The complete context/action/binding table lives in [Key input, sequences, and hi
 
 - Tools panel is hidden and remains a placeholder for future agent/search/file-info panels.
 - No new-file or Save As workflow.
-- No soft-wrap rendering, LSP, or split views.
+- No soft-wrap rendering, VCS/LSP integration, or split views.
 - Explicit keymap unbinding and advanced rule editing are not implemented; custom entries otherwise merge with defaults.
 
 ## Roadmap
@@ -351,12 +351,116 @@ Implement and review M7.1, M7.2, M7.3, M7.4, M7.5, and M7.6 independently. If te
 
 Implement and review M8.1–M8.7 independently. Update the current keymap table only as each binding becomes available. Eggplant exposes exactly one cursor and one selection; Helix's internal multi-selection support must not be used to create user-facing multi-cursor behavior. Counts are accepted only by `gg`/`G`; existing `w`/`b`/`e` and all other motions are uncounted. General operator-motion grammar, macros, named/register-selection workflows, additional text-object motion catalogs, and complete Vim/Helix compatibility remain outside M8.
 
+### Milestone 9: Common Git workflows
+
+**Status: planned.**
+
+**Goal:** support common Git diffs, changed files, history, commits, and fast-forward-only merges through one focused `features/vcs/` extension and a narrow Git capability. Reuse `helix-vcs` and its optional Gitoxide backend rather than adding another VCS implementation or a Jujutsu adapter. Keep Git policy outside `EditorSession`, which retains buffer, text, revision, and persistence ownership.
+
+#### Shared constraints
+
+- Enable and evaluate `helix-vcs/git` for HEAD lookup, changed-file enumeration, and diff-base loading. Reuse `DiffHandle` for in-memory buffer diffs and the same Gitoxide dependency for operations outside `helix-vcs`'s API; do not add Git CLI, `libgit2`, or a second VCS library.
+- `helix-vcs` does not expose history, commit, or merge orchestration. Spike the corresponding Gitoxide APIs before each write slice. If an operation cannot be implemented with clear, safe semantics, stop and narrow scope rather than emulating Git incorrectly.
+- Run repository work in background feature effects with request generations. Rendering and input handling never wait for Git, and stale results cannot overwrite newer workspace/buffer state.
+- Keep discovery within the fixed workspace policy. Non-repository workspaces and unavailable backends produce a neutral status rather than repeated errors.
+- Coalesce refreshes after startup, saves, repository operations, and relevant external changes; never spawn repository work per render or keystroke.
+- Reads are non-destructive. Commits and fast-forward merges run only through explicit user commands with clear targets and validation—never automatically after editing or saving.
+- Before repository mutations, save modified file-backed buffers and wait for in-flight saves. Refuse unsafe dirty-worktree operations. After a successful mutation, reload affected clean buffers through existing revision-aware paths and report any conflict without overwriting local edits.
+- Keep scope to ordinary Git repositories. Jujutsu, staging-area editing, merge commits, rebase, conflict resolution, push/pull/fetch, remotes/credentials, hooks/signing, submodules, and destructive reset/discard workflows are outside this milestone.
+
+#### M9.1 — Branch discovery and status-bar display
+
+- [ ] Use `helix-vcs` HEAD lookup for the fixed workspace and replace the status-bar placeholder with the branch name.
+- [ ] Handle detached HEAD, unborn branches, non-repositories, and backend discovery failures.
+- [ ] Preserve the last known value while a refresh is running and ignore stale completions.
+- [ ] Test normal/detached/unborn repositories, non-repositories, refresh coalescing, and stale results without blocking the UI.
+
+#### M9.2 — Changed-file model and read-only panel
+
+- [ ] Adapt `helix-vcs` changed-file enumeration into a feature-owned model, including staged, modified, untracked, and conflicted states where the backend exposes them.
+- [ ] Add a read-only VCS panel using existing registration and panel boundaries.
+- [ ] Open selected paths through the existing safe document-opening and explorer-reveal path.
+- [ ] Test path handling, unusual filenames, empty status, panel navigation, and safe file opening.
+
+#### M9.3 — Active-buffer diff gutter and diff view
+
+- [ ] Load the active file's `HEAD` content in the background and compare it with the current in-memory buffer, not only the saved working-tree file.
+- [ ] Reuse `Document::set_diff_base`/`DiffHandle` and project line changes through editor snapshots without exposing Helix VCS types to widgets.
+- [ ] Add a read-only diff view for a selected changed file or commit, using existing text/preview rendering where practical.
+- [ ] Handle untracked files, non-repositories, buffer switches, edits during diff work, external updates, and stale completions.
+
+#### M9.4 — Commit history
+
+- [ ] Read a bounded commit log through the shared Gitoxide backend and show it in a scrollable history panel.
+- [ ] Display commit ID, author/date summary, and subject; open a selected commit's read-only diff without changing the working tree or current branch.
+- [ ] Keep history pagination/loading off the UI thread and reject stale responses after workspace or repository changes.
+- [ ] Test empty repositories, multi-parent history, bounded loading, non-UTF-8 summaries, and diff navigation.
+
+#### M9.5 — Explicit commit
+
+- [ ] Commit only explicitly selected/staged changes with a user-entered message; never silently include unrelated or untracked files. The first slice may support only already-staged changes rather than adding an index editor.
+- [ ] Validate the repository/index state, required author identity, non-empty message, and presence of staged changes before writing.
+- [ ] Use one explicit Gitoxide commit operation and surface failures without changing buffers or reporting false success. Do not claim hook/signing compatibility in this slice.
+- [ ] Refresh HEAD, changed files, history, and diff state after success; test clean completion, empty staging/message, missing identity, concurrent repository changes, and stale completions.
+
+#### M9.6 — Fast-forward-only merge
+
+- [ ] Allow an explicit local or existing remote-tracking target and first verify that the current branch can advance strictly by fast-forward. No fetch is performed implicitly.
+- [ ] Require a clean validated worktree/index and refuse non-fast-forward histories, conflicts, detached/unborn states without clear semantics, or any unsafe local-change condition.
+- [ ] Advance the ref/index/worktree through the narrow backend operation; do not create merge commits or attempt conflict resolution.
+- [ ] Refresh/reload repository and open-buffer state after success, and leave the repository untouched on validation or operation failure. Test fast-forward, already-up-to-date, divergent, dirty-worktree, detached-HEAD, and external-change cases.
+
+**Exit criteria:** users can inspect branch/status, changed files, active-buffer and commit diffs, and bounded history; explicitly commit staged changes; and perform safe fast-forward-only merges. All operations reuse the Helix/Gitoxide stack, preserve editing and persistence invariants, and leave ordinary editing usable when Git is unavailable. Unsupported operations fail closed with concise feedback.
+
+### Milestone 10: Minimal opt-in LSP
+
+**Status: planned.**
+
+**Goal:** provide useful language-server diagnostics and navigation with user-installed servers, explicit configuration, and bounded process/resource use. Start with one configured server, such as `rust-analyzer`, rather than enabling every language configuration at once.
+
+#### Shared constraints
+
+- LSP is disabled unless explicitly enabled and configured for a language. Do not bundle language servers, Node.js, Python, downloaders, or automatic installation frameworks.
+- Add a focused `features/lsp/` extension and a narrow client capability around the already-compiled `helix-lsp` pieces where practical. Do not adopt `helix-view::Editor` or move LSP orchestration into `EditorSession`.
+- Share at most one process per workspace/server, not one per buffer. Cap restart behavior and result sizes, and shut down every child process during application cleanup.
+- Use asynchronous protocol work and typed completions. Associate requests with canonical paths, `BufferId`, document revisions, and request generations so stale responses cannot affect current state.
+- Missing executables, server failures, and unsupported capabilities must leave normal editing available with concise non-blocking feedback.
+- Use a small fake server for lifecycle/protocol tests; workspace tests must not require `rust-analyzer` or another external server to be installed.
+
+#### M10.1 — Client lifecycle and document synchronization
+
+- [ ] Implement initialize/initialized and shutdown/exit for one explicitly configured server.
+- [ ] Implement `didOpen`, `didChange`, `didSave`, and `didClose`, respecting negotiated synchronization and position-encoding behavior.
+- [ ] Share a server across compatible buffers and reject stale work after buffer closure or workspace changes.
+- [ ] Test startup, missing executable, server crash, bounded restart, revision ordering, buffer close, and clean application shutdown.
+
+#### M10.2 — Diagnostics and navigation to results
+
+- [ ] Store diagnostics by buffer identity and generation, converting positions with the server's negotiated encoding.
+- [ ] Show error/warning counts and a diagnostics list; render editor annotations through feature contributions rather than LSP policy in `EditorSession`.
+- [ ] Jump to diagnostics through generic document navigation while tolerating eventually consistent server positions.
+- [ ] Test stale diagnostics, Unicode positions, closed buffers, empty diagnostics, and small viewports.
+
+#### M10.3 — Definition and references
+
+- [ ] Add definition and references requests for servers that support them.
+- [ ] Reuse picker UI for multiple results and `document::open_file_at` for safe result acceptance.
+- [ ] Reject stale responses and preserve editor state on cancellation, empty results, or request failure.
+
+**Exit criteria:** one explicitly configured external server can synchronize buffers, publish usable diagnostics, and answer definition/reference requests without blocking editing or weakening save/revision invariants. With LSP disabled or unavailable, Eggplant has no LSP processes and retains its current behavior.
+
+**Deferred LSP scope:** completion, hover, rename, formatting, code actions, workspace edits, and multi-server orchestration require separate reviewable slices. DAP/debugging remains outside this roadmap until a concrete need justifies it.
+
+### Build-footprint note
+
+`helix-vcs`, `helix-lsp`, and `helix-dap` are currently mandatory transitive dependencies of `helix-view`; compilation does not mean Eggplant initializes those integrations. The VCS crate's optional `git`/`gix` feature is not currently enabled; M9 enables it and reuses that same Gitoxide dependency for operations not exposed by `helix-vcs`, rather than introducing another VCS implementation. Removing LSP/DAP code from builds would require feature-gating or splitting `helix-view` in the fork/upstream and is separate from the runtime-lightweight M9/M10 work. Do not add Eggplant feature flags that misleadingly claim to remove these transitive dependencies.
+
 ## TBD — much later editions
 
 - Dynamic Helix-compatible user themes and broader visual style/theming expansion. Existing built-in themes and semantic style boundaries remain unchanged.
 - Third-party plugin/extension hosts. Do not add a native Rust dynamic-library ABI or unrestricted in-process third-party code; evaluate versioned, capability-based WebAssembly or out-of-process hosting only if justified by real requirements and stable internal contracts.
 - AI agent execution/chat and automated editing.
-- LSP, DAP, formatting, and code actions.
+- DAP/debugging, completion, hover, rename, formatting, code actions, and workspace edits.
 - Full Vim or Helix command compatibility, general Visual-mode operator grammar, macros, and named/register-selection workflows.
 - Split views as a user-facing feature.
 - Soft-wrap visual rendering and advanced annotations.
