@@ -119,6 +119,25 @@ fn closing_active_buffer_selects_next_or_empty_state() {
 }
 
 #[test]
+fn closing_multiple_buffers_is_atomic() {
+    let mut session = EditorSession::new();
+    let first = create_buffer(&mut session, "first");
+    let second = create_buffer(&mut session, "second");
+    let third = create_buffer(&mut session, "third");
+    session.activate_buffer(second).unwrap();
+    session.close_buffers(&[first, third]).unwrap();
+    assert_eq!(session.buffer_count(), 1);
+    assert_eq!(session.active_buffer(), Some(second));
+
+    let mut dirty = EditorSession::new();
+    let first = create_buffer(&mut dirty, "first");
+    let second = create_buffer(&mut dirty, "second");
+    dirty.active_editor().unwrap().insert_text("!").unwrap();
+    assert!(dirty.close_buffers(&[first, second]).is_err());
+    assert_eq!(dirty.buffer_count(), 2);
+}
+
+#[test]
 fn rejects_closing_modified_buffer() {
     let mut session = EditorSession::new();
     let id = create_buffer(&mut session, "hello");

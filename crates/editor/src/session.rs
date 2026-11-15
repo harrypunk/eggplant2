@@ -224,6 +224,31 @@ impl EditorSession {
     /// Closing the active buffer selects the next buffer by ID, wrapping to the
     /// first buffer. Closing the last buffer restores the empty editor state.
     pub fn close_buffer(&mut self, id: BufferId) -> Result<(), EditorError> {
+        self.ensure_buffer_closeable(id)?;
+
+        self.buffers.remove(&id);
+        if self.active_buffer() == Some(id) {
+            self.active_view = None;
+            if let Some(next_id) = self.buffer_after(id) {
+                self.retarget_active_view(next_id);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Atomically close clean, non-saving buffers after validating every target.
+    pub fn close_buffers(&mut self, ids: &[BufferId]) -> Result<(), EditorError> {
+        for &id in ids {
+            self.ensure_buffer_closeable(id)?;
+        }
+        for &id in ids {
+            self.close_buffer(id)?;
+        }
+        Ok(())
+    }
+
+    fn ensure_buffer_closeable(&self, id: BufferId) -> Result<(), EditorError> {
         let buffer = self
             .buffers
             .get(&id)
@@ -234,15 +259,6 @@ impl EditorSession {
         if buffer.document.is_modified() {
             return Err(EditorError::BufferModified(id));
         }
-
-        self.buffers.remove(&id);
-        if self.active_buffer() == Some(id) {
-            self.active_view = None;
-            if let Some(next_id) = self.buffer_after(id) {
-                self.retarget_active_view(next_id);
-            }
-        }
-
         Ok(())
     }
 
