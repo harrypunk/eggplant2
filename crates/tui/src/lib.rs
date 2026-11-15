@@ -1,35 +1,28 @@
 pub mod buffer;
-pub mod buffer_grep;
-pub mod buffer_jump;
-pub mod change;
 pub mod command_menu;
 pub mod component;
 pub mod config;
 pub mod document;
-pub mod editing;
-pub mod explorer;
-pub mod external_sync;
-pub mod file_picker;
+pub mod features;
 pub mod file_watcher;
 mod filesystem;
 pub mod focus;
 pub mod lifecycle;
-pub mod line_jump;
 pub mod manager;
 pub mod page;
-pub mod page_scroll;
-pub mod project_grep;
 pub mod register;
 pub mod runtime;
 pub mod search;
 pub mod startup;
 pub mod terminal;
 pub mod theme;
-pub mod theme_picker;
 pub mod tools;
 pub mod ui;
-pub mod view_align;
-pub mod yank;
+
+pub use features::{
+    buffer_grep, buffer_jump, change, editing, explorer, external_sync, file_picker, line_jump,
+    page_scroll, project_grep, theme_picker, view_align, yank,
+};
 
 #[cfg(test)]
 mod test_utils;
