@@ -249,15 +249,36 @@ fn render_tools_panel(model: &Model, frame: &mut Frame, area: Rect) {
 }
 
 fn render_status(model: &Model, frame: &mut Frame, area: Rect) {
+    let file_path = active_file_path(model);
+    let time = chrono::Local::now().format("%H:%M").to_string();
     frame.render_widget(
         StatusBar::new(
             model.editor.mode(),
+            &file_path,
+            &time,
             model.status.as_ref(),
             model.pending_input.as_deref(),
             model.theme.ui(),
         ),
         area,
     );
+}
+
+fn active_file_path(model: &Model) -> String {
+    let Some(path) = model
+        .editor
+        .active_buffer()
+        .and_then(|id| model.editor.buffer_path(id))
+    else {
+        return String::new();
+    };
+    model
+        .workspace
+        .as_ref()
+        .and_then(|workspace| path.strip_prefix(workspace.root()).ok())
+        .unwrap_or(path)
+        .to_string_lossy()
+        .into_owned()
 }
 
 fn command_menu_overlay(model: &Model) -> Option<OverlayContribution> {
@@ -323,6 +344,31 @@ fn main_panel_area(area: Rect, max_width: u16, max_height: u16, margin: u16) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        data_object::Workspace,
+        test_utils::{create_buffer, open_file},
+    };
+
+    #[test]
+    fn status_path_is_project_relative_when_possible() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("src");
+        std::fs::create_dir(&source).unwrap();
+        let path = source.join("main.rs");
+        std::fs::write(&path, "fn main() {}\n").unwrap();
+        let mut model = Model::default();
+        open_file(&mut model, &path);
+        model.workspace = Some(Workspace::new(directory.path().to_path_buf()));
+        assert_eq!(active_file_path(&model), "src/main.rs");
+
+        model.workspace = None;
+        assert_eq!(active_file_path(&model), path.to_string_lossy());
+
+        let mut untitled = Model::default();
+        assert_eq!(active_file_path(&untitled), "");
+        create_buffer(&mut untitled, "text");
+        assert_eq!(active_file_path(&untitled), "");
+    }
 
     #[test]
     fn rejects_duplicate_contribution_slots_and_overlay_ids() {

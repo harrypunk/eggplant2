@@ -176,7 +176,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        data_object::{Message, StatusKind},
+        data_object::Message,
         manager::message_manager::MessageManager,
         test_utils::{create_buffer, open_file},
     };
@@ -580,6 +580,6 @@ mod tests {
 
         assert_eq!(std::fs::read_to_string(path).unwrap(), "hello!");
         assert!(!model.editor.active_is_modified());
-        assert_eq!(model.status.unwrap().kind, StatusKind::Info);
+        assert_eq!(model.status, None);
     }
 }

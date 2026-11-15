@@ -23,7 +23,7 @@ cargo run -p tui -- "$workdir"
 1. **Explorer/open:** select `a.txt` with the arrows or `j`/`k`, then press Enter. Confirm that it opens and becomes selected in the explorer.
 2. **Edit/auto-save:** press `i`, insert `A`, then press Escape. Confirm that `a.txt` now starts with `Afirst`.
 3. **Switch synchronization:** open `b.txt`, then use `Space b p` and `Space b n`. Confirm that the active tab and explorer selection stay synchronized in both directions.
-4. **Resize:** make the terminal narrow and short, then enlarge it. Confirm that content clips without a panic and that the cursor never appears outside the editor.
+4. **Resize/status bar:** make the terminal narrow and short, then enlarge it. Confirm that content clips without a panic and that the cursor never appears outside the editor. Confirm the full-width status bar shows mode, the ` -- ` VCS placeholder, a project-relative file path, and a right-aligned local `HH:MM` clock; the path should receive the remaining width.
 5. **Popups:** open `Space Space` (or `Space f f`), `Space u t`, and the leader hints. Confirm that the file picker places its input cursor after the query, including after a long Unicode query, while non-input overlays hide the cursor. Escape must close each popup.
 6. **Theme:** use `Space u t`, Down/Up, and Enter to apply each built-in theme. Escape on a later visit must preserve the applied theme.
 7. **Visible-buffer jump:** open a buffer containing `hello`, then press `Space c j`, type `el`, and enter the displayed label for `e`. Confirm that only visible matches receive labels, other text dims, and the cursor lands on `e`. Restart and confirm that Escape cancels without moving the cursor.

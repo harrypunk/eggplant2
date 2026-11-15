@@ -31,8 +31,6 @@ pub(crate) fn finish_save(model: &mut Model, completion: SaveCompletion) -> Opti
         model.status = Some(StatusMessage::error(error.to_string()));
         return None;
     }
-    model.status = Some(StatusMessage::info("Saved"));
-
     match model.deferred_action {
         Some(DeferredAction::Quit) => finish_quit(model),
         Some(DeferredAction::CloseBuffer(id)) => finish_close(model, id),
