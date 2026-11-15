@@ -50,18 +50,20 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | Explorer | Refresh tree | `r` |
 | Explorer | Show/hide ignored entries | `Shift-I` |
 | File picker | Edit query | Printable input / `Backspace` |
-| File picker | Select | `Down` / `Up` |
+| File picker | Next / previous result | `Down` / `Ctrl-N`; `Up` / `Ctrl-P` |
 | File picker | Open / close | `Enter` / `Esc` |
-| Theme picker | Select | `Down` / `Up` |
+| Theme picker | Next / previous theme | `Down` / `Ctrl-N`; `Up` / `Ctrl-P` |
 | Theme picker | Apply / close | `Enter` / `Esc` |
 | Buffer jump | Enter smart-case two-character pattern, then label | Printable input |
 | Buffer jump | Edit input / cancel | `Backspace` / `Esc` |
 | Buffer grep | Edit smart-case regex | Printable input / `Backspace` |
-| Buffer grep | Select | `Down` / `Up` |
+| Buffer grep | Next / previous result | `Down` / `Ctrl-N`; `Up` / `Ctrl-P` |
 | Buffer grep | Jump to match / close | `Enter` / `Esc` |
 | Project grep | Edit smart-case regex | Printable input / `Backspace` |
-| Project grep | Select | `Down` / `Up` |
+| Project grep | Next / previous result | `Down` / `Ctrl-N`; `Up` / `Ctrl-P` |
 | Project grep | Open match / close | `Enter` / `Esc` |
+
+File/theme pickers and both live-grep lists wrap from first to last and last to first. Ctrl-N/Ctrl-P are built-in aliases for the configured Down/Up navigation actions; an explicit Ctrl-N/Ctrl-P binding in the same context takes priority.
 
 Custom `[keymap]` entries merge with defaults by context and action, so only overrides need to be specified. Built-in Space leader sequences are not configured in TOML. Explicit unbinding is not implemented.
 

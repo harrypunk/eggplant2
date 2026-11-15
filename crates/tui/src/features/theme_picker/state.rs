@@ -32,12 +32,13 @@ impl ThemePickerState {
 
     pub fn select_next(&mut self) {
         let selected = Self::selected_index(self.selected);
-        self.selected = ThemeName::ALL[(selected + 1).min(ThemeName::ALL.len() - 1)];
+        self.selected = ThemeName::ALL[(selected + 1) % ThemeName::ALL.len()];
     }
 
     pub fn select_previous(&mut self) {
         let selected = Self::selected_index(self.selected);
-        self.selected = ThemeName::ALL[selected.saturating_sub(1)];
+        self.selected =
+            ThemeName::ALL[(selected + ThemeName::ALL.len() - 1) % ThemeName::ALL.len()];
     }
 
     fn selected_index(selected: ThemeName) -> usize {
@@ -53,7 +54,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn opens_on_the_active_theme_and_clamps_navigation() {
+    fn opens_on_the_active_theme_and_wraps_navigation() {
         let mut picker = ThemePickerState::default();
         picker.open(ThemeName::TokyoNight);
         assert_eq!(picker.visibility, Visibility::Displayed);
@@ -62,13 +63,15 @@ mod tests {
         picker.select_next();
         assert_eq!(picker.selected(), ThemeName::CatppuccinMocha);
         picker.select_next();
+        assert_eq!(picker.selected(), ThemeName::Default);
+        picker.select_previous();
         assert_eq!(picker.selected(), ThemeName::CatppuccinMocha);
         picker.select_previous();
         assert_eq!(picker.selected(), ThemeName::TokyoNight);
         picker.select_previous();
         assert_eq!(picker.selected(), ThemeName::Default);
         picker.select_previous();
-        assert_eq!(picker.selected(), ThemeName::Default);
+        assert_eq!(picker.selected(), ThemeName::CatppuccinMocha);
 
         picker.close();
         assert_eq!(picker.visibility, Visibility::Hidden);

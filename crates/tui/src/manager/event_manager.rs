@@ -52,21 +52,27 @@ impl EventManager {
                     .get_binding(ctx)
                     .and_then(|bindings| {
                         let chord = KeyChord::new(key.code, key.modifiers);
-                        bindings.resolve(chord).or_else(|| {
-                            // Terminals disagree about SHIFT metadata for symbols such as `$`.
-                            match key.code {
-                                KeyCode::Char(character)
-                                    if !character.is_alphabetic()
-                                        && key.modifiers.contains(KeyModifiers::SHIFT) =>
-                                {
-                                    bindings.resolve(KeyChord::new(
-                                        key.code,
-                                        key.modifiers & !KeyModifiers::SHIFT,
-                                    ))
+                        bindings
+                            .resolve(chord)
+                            .or_else(|| {
+                                menu_navigation_alias(ctx, key)
+                                    .and_then(|alias| bindings.resolve(alias))
+                            })
+                            .or_else(|| {
+                                // Terminals disagree about SHIFT metadata for symbols such as `$`.
+                                match key.code {
+                                    KeyCode::Char(character)
+                                        if !character.is_alphabetic()
+                                            && key.modifiers.contains(KeyModifiers::SHIFT) =>
+                                    {
+                                        bindings.resolve(KeyChord::new(
+                                            key.code,
+                                            key.modifiers & !KeyModifiers::SHIFT,
+                                        ))
+                                    }
+                                    _ => None,
                                 }
-                                _ => None,
-                            }
-                        })
+                            })
                     })
                     .map(Message::InvokeCommand)
                     .or_else(|| self.unbound_key_message(ctx, key))
@@ -95,6 +101,23 @@ impl EventManager {
             _ => None,
         }
     }
+}
+
+fn menu_navigation_alias(context: &Context, key: KeyEvent) -> Option<KeyChord> {
+    if key.modifiers != KeyModifiers::CONTROL
+        || !matches!(
+            context,
+            Context::FilePicker | Context::ThemePicker | Context::BufferGrep | Context::ProjectGrep
+        )
+    {
+        return None;
+    }
+    let code = match key.code {
+        KeyCode::Char('n') => KeyCode::Down,
+        KeyCode::Char('p') => KeyCode::Up,
+        _ => return None,
+    };
+    Some(KeyChord::new(code, KeyModifiers::NONE))
 }
 
 #[cfg(test)]
@@ -151,6 +174,36 @@ mod tests {
             manager.translate(event, &model),
             Some(Message::InvokeCommand(CommandId("file_picker_next")))
         ));
+        for (character, command) in [('n', "file_picker_next"), ('p', "file_picker_previous")] {
+            let event = Event::Key(KeyEvent::new(
+                KeyCode::Char(character),
+                KeyModifiers::CONTROL,
+            ));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+    }
+
+    #[test]
+    fn explicit_ctrl_binding_overrides_menu_navigation_alias() {
+        let mut config = Config::default();
+        config
+            .keymap
+            .get_mut("file_picker")
+            .unwrap()
+            .insert("close_file_picker".to_string(), "ctrl-n".to_string());
+        let keymap = Registry::from_config(&config.keymap, &CommandRegistry::default()).unwrap();
+        let manager = EventManager::new(&config, keymap, TextInputRegistry::builtin());
+        let mut model = Model::default();
+        model.context_stack.push(Context::FilePicker);
+
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::InvokeCommand(CommandId("close_file_picker")))
+        ));
     }
 
     #[test]
@@ -169,6 +222,16 @@ mod tests {
             translate(KeyCode::Up),
             Some(Message::InvokeCommand(CommandId("theme_picker_previous")))
         ));
+        for (character, command) in [('n', "theme_picker_next"), ('p', "theme_picker_previous")] {
+            let event = Event::Key(KeyEvent::new(
+                KeyCode::Char(character),
+                KeyModifiers::CONTROL,
+            ));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
         assert!(matches!(
             translate(KeyCode::Enter),
             Some(Message::InvokeCommand(CommandId("apply_theme")))
@@ -217,13 +280,23 @@ mod tests {
             manager.translate(event, &model),
             Some(Message::TextInput('e'))
         ));
-        for (key, command) in [
-            (KeyCode::Down, "buffer_grep_next"),
-            (KeyCode::Up, "buffer_grep_previous"),
-            (KeyCode::Enter, "buffer_grep_accept"),
-            (KeyCode::Esc, "buffer_grep_close"),
+        for (key, modifiers, command) in [
+            (KeyCode::Down, KeyModifiers::NONE, "buffer_grep_next"),
+            (
+                KeyCode::Char('n'),
+                KeyModifiers::CONTROL,
+                "buffer_grep_next",
+            ),
+            (KeyCode::Up, KeyModifiers::NONE, "buffer_grep_previous"),
+            (
+                KeyCode::Char('p'),
+                KeyModifiers::CONTROL,
+                "buffer_grep_previous",
+            ),
+            (KeyCode::Enter, KeyModifiers::NONE, "buffer_grep_accept"),
+            (KeyCode::Esc, KeyModifiers::NONE, "buffer_grep_close"),
         ] {
-            let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+            let event = Event::Key(KeyEvent::new(key, modifiers));
             assert!(matches!(
                 manager.translate(event, &model),
                 Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
@@ -242,13 +315,23 @@ mod tests {
             manager.translate(event, &model),
             Some(Message::TextInput('e'))
         ));
-        for (key, command) in [
-            (KeyCode::Down, "project_grep_next"),
-            (KeyCode::Up, "project_grep_previous"),
-            (KeyCode::Enter, "project_grep_accept"),
-            (KeyCode::Esc, "project_grep_close"),
+        for (key, modifiers, command) in [
+            (KeyCode::Down, KeyModifiers::NONE, "project_grep_next"),
+            (
+                KeyCode::Char('n'),
+                KeyModifiers::CONTROL,
+                "project_grep_next",
+            ),
+            (KeyCode::Up, KeyModifiers::NONE, "project_grep_previous"),
+            (
+                KeyCode::Char('p'),
+                KeyModifiers::CONTROL,
+                "project_grep_previous",
+            ),
+            (KeyCode::Enter, KeyModifiers::NONE, "project_grep_accept"),
+            (KeyCode::Esc, KeyModifiers::NONE, "project_grep_close"),
         ] {
-            let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+            let event = Event::Key(KeyEvent::new(key, modifiers));
             assert!(matches!(
                 manager.translate(event, &model),
                 Some(Message::InvokeCommand(actual)) if actual == CommandId(command)

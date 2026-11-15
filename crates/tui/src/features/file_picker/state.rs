@@ -176,7 +176,7 @@ impl FilePickerState {
             return None;
         }
         let selected = self.selected.unwrap_or(0);
-        self.selected = Some((selected + 1).min(self.results.len() - 1));
+        self.selected = Some((selected + 1) % self.results.len());
         self.start_preview()
     }
 
@@ -184,7 +184,8 @@ impl FilePickerState {
         if self.results.is_empty() {
             return None;
         }
-        self.selected = Some(self.selected.unwrap_or(0).saturating_sub(1));
+        self.selected =
+            Some((self.selected.unwrap_or(0) + self.results.len() - 1) % self.results.len());
         self.start_preview()
     }
 
@@ -414,6 +415,25 @@ mod tests {
 
         assert!(state.select_previous().is_none());
         assert_eq!(state.preview, PreviewState::Text(first_snapshot));
+    }
+
+    #[test]
+    fn selection_wraps_and_empty_results_are_noops() {
+        let mut state = FilePickerState {
+            visibility: Visibility::Displayed,
+            results: vec![entry("first.txt"), entry("second.txt"), entry("third.txt")],
+            selected: Some(0),
+            ..FilePickerState::default()
+        };
+
+        assert!(state.select_previous().is_some());
+        assert_eq!(state.selected_entry().unwrap().display, "third.txt");
+        assert!(state.select_next().is_some());
+        assert_eq!(state.selected_entry().unwrap().display, "first.txt");
+
+        let mut empty = FilePickerState::default();
+        assert!(empty.select_next().is_none());
+        assert!(empty.select_previous().is_none());
     }
 
     #[test]

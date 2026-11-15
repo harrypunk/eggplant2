@@ -112,14 +112,15 @@ impl BufferGrepState {
             return;
         }
         let selected = self.selected.unwrap_or(0);
-        self.selected = Some((selected + 1).min(self.results.len() - 1));
+        self.selected = Some((selected + 1) % self.results.len());
     }
 
     pub fn select_previous(&mut self) {
         if self.results.is_empty() {
             return;
         }
-        self.selected = Some(self.selected.unwrap_or(0).saturating_sub(1));
+        self.selected =
+            Some((self.selected.unwrap_or(0) + self.results.len() - 1) % self.results.len());
     }
 
     pub fn selected_match(&self) -> Option<&GrepMatch> {
@@ -190,5 +191,29 @@ mod tests {
         ));
         assert!(state.complete(current_query, identity, Some(identity), result()));
         assert_eq!(state.results.len(), 1);
+    }
+
+    #[test]
+    fn selection_wraps_and_empty_results_are_noops() {
+        let result = |text: &str| GrepMatch {
+            line: 0,
+            text: text.to_string(),
+            match_ranges: Vec::new(),
+        };
+        let mut state = BufferGrepState {
+            results: vec![result("first"), result("second"), result("third")],
+            selected: Some(0),
+            ..BufferGrepState::default()
+        };
+
+        state.select_previous();
+        assert_eq!(state.selected_match().unwrap().text, "third");
+        state.select_next();
+        assert_eq!(state.selected_match().unwrap().text, "first");
+
+        let mut empty = BufferGrepState::default();
+        empty.select_next();
+        empty.select_previous();
+        assert_eq!(empty.selected, None);
     }
 }

@@ -119,7 +119,7 @@ impl ProjectGrepState {
             return None;
         }
         let selected = self.selected.unwrap_or(0);
-        self.selected = Some((selected + 1).min(self.results.len() - 1));
+        self.selected = Some((selected + 1) % self.results.len());
         self.start_preview()
     }
 
@@ -127,7 +127,8 @@ impl ProjectGrepState {
         if self.results.is_empty() {
             return None;
         }
-        self.selected = Some(self.selected.unwrap_or(0).saturating_sub(1));
+        self.selected =
+            Some((self.selected.unwrap_or(0) + self.results.len() - 1) % self.results.len());
         self.start_preview()
     }
 
@@ -236,5 +237,31 @@ mod tests {
             stale_preview,
             Ok(TextViewSnapshot::plain(Vec::new()))
         ));
+    }
+
+    #[test]
+    fn selection_wraps_and_empty_results_are_noops() {
+        let result = |display: &str| ProjectGrepResult {
+            path: PathBuf::from(display),
+            display: display.to_string(),
+            line: 0,
+            text: display.to_string(),
+            match_ranges: Vec::new(),
+        };
+        let mut state = ProjectGrepState {
+            visibility: Visibility::Displayed,
+            results: vec![result("first"), result("second"), result("third")],
+            selected: Some(0),
+            ..ProjectGrepState::default()
+        };
+
+        assert!(state.select_previous().is_some());
+        assert_eq!(state.results[state.selected.unwrap()].display, "third");
+        assert!(state.select_next().is_some());
+        assert_eq!(state.results[state.selected.unwrap()].display, "first");
+
+        let mut empty = ProjectGrepState::default();
+        assert!(empty.select_next().is_none());
+        assert!(empty.select_previous().is_none());
     }
 }
