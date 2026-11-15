@@ -32,12 +32,12 @@ impl Widget for BufferTabs<'_> {
                 DirtyState::Dirty => " *",
                 DirtyState::Clean => "",
             };
-            format!("{}{modified}", buffer.name)
+            format!(" {}{modified} ", buffer.name)
         });
 
         Tabs::new(titles)
             .select(selected)
-            .divider("|")
+            .divider(" ")
             .style(self.styles.base)
             .highlight_style(self.styles.base.patch(self.styles.selection))
             .render(area, buf);
@@ -82,8 +82,9 @@ mod tests {
             .iter()
             .map(|cell| cell.symbol())
             .collect::<String>();
-        assert!(content.contains("first.txt *"));
-        assert!(content.contains("second.txt"));
+        assert!(content.contains(" first.txt * "));
+        assert!(content.contains(" second.txt "));
+        assert!(!content.contains('|'));
         assert!(!content.contains(directory.path().to_str().unwrap()));
     }
 }
