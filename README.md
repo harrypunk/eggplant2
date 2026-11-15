@@ -199,7 +199,7 @@ Input is context-aware: overlays handle input first, followed by the focused fea
 | Quit | `Space q q` |
 | Next / previous buffer | `Space b n` / `Space b p` |
 | Show/hide explorer | `Space e` |
-| Find/open a file | `Space f f` |
+| Find/open a file | `Space Space` or `Space f f` |
 | Select a theme | `Space u t` |
 | Jump in the visible buffer | `Space c j`, two characters, then a label |
 | Search the current file | `Space s c` |

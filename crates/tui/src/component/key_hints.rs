@@ -26,7 +26,10 @@ impl<'a> KeyHints<'a> {
             .map(|item| {
                 Line::from(vec![
                     Span::styled(
-                        item.key.to_string(),
+                        match item.key {
+                            ' ' => "Space".to_string(),
+                            character => character.to_string(),
+                        },
                         styles.popup_surface().patch(styles.key_hint),
                     ),
                     Span::raw(" "),
@@ -79,9 +82,10 @@ mod tests {
         let theme = Theme::default();
         let hints = KeyHints::new(&menu, theme.ui());
 
-        assert_eq!(hints.lines.len(), 7);
-        assert_eq!(hints.size().height, 9);
-        assert_eq!(hints.size().width, 16);
+        assert_eq!(hints.lines.len(), 8);
+        assert_eq!(hints.size().height, 10);
+        assert_eq!(hints.size().width, 17);
+        assert_eq!(hints.lines[0].spans[0].content.as_ref(), "Space");
     }
 
     #[test]

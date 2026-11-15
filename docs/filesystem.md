@@ -19,7 +19,7 @@ No component reads a directory or file during rendering. No worker mutates `Mode
 ## Picker data flow
 
 ```text
-Space f f
+Space Space (or Space f f)
    │
    ▼
 CommandAction::OpenFilePicker → Message::OpenFilePicker

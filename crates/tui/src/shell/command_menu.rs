@@ -110,6 +110,7 @@ static SEARCH_CONTEXT: CommandMenuContext = CommandMenuContext::new(
 const ROOT_CONTEXT: CommandMenuContext = CommandMenuContext {
     title: "Leader",
     items: &[
+        CommandMenuItem::action(' ', "find file", CommandId("open_file_picker")),
         CommandMenuItem {
             key: 'q',
             description: "quit",
@@ -293,6 +294,12 @@ mod tests {
         assert_eq!(menu.context_title(), "Leader > files");
         assert_eq!(
             menu.handle_key(KeyCode::Char('f')),
+            CommandMenuOutcome::Action(CommandId("open_file_picker"))
+        );
+
+        menu.handle_key(KeyCode::Char(' '));
+        assert_eq!(
+            menu.handle_key(KeyCode::Char(' ')),
             CommandMenuOutcome::Action(CommandId("open_file_picker"))
         );
 

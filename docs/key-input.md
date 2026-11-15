@@ -9,7 +9,7 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | Normal / Explorer | Quit | `Space q q` |
 | Normal / Explorer | Next / previous buffer | `Space b n` / `Space b p` |
 | Normal / Explorer | Show/hide explorer | `Space e` |
-| Normal / Explorer | Find/open a file | `Space f f` |
+| Normal / Explorer | Find/open a file | `Space Space` or `Space f f` |
 | Normal / Explorer | Select a UI theme | `Space u t` |
 | Normal / Explorer | Jump in the visible buffer | `Space c j` |
 | Normal / Explorer | Search the current file | `Space s c` |
