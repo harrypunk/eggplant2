@@ -97,7 +97,9 @@ pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
     let pending = model.change.pending;
     match (pending, character) {
         (Some(PendingChange::Delete), 'd') => return delete_line(model),
+        (Some(PendingChange::Delete), 'w') => return delete_word(model),
         (Some(PendingChange::Change), 'c') => return change_line(model),
+        (Some(PendingChange::Change), 'w') => return change_word(model),
         (Some(_), _) => reset(model),
         (None, _) => {}
     }
@@ -192,6 +194,39 @@ fn change_line(model: &mut Model) -> Option<Effect> {
     register
 }
 
+fn delete_word(model: &mut Model) -> Option<Effect> {
+    let text = match model.editor.active_editor() {
+        Ok(editor) => editor.current_word_text(),
+        Err(_) => {
+            reset(model);
+            return None;
+        }
+    };
+    reset(model);
+    let register = model.register.record(text);
+    if let Ok(mut editor) = model.editor.active_editor() {
+        let _ = editor.delete_word();
+    }
+    Effect::combine(register, buffer::auto_save_active(model))
+}
+
+fn change_word(model: &mut Model) -> Option<Effect> {
+    let text = match model.editor.active_editor() {
+        Ok(editor) => editor.current_word_text(),
+        Err(_) => {
+            reset(model);
+            return None;
+        }
+    };
+    reset(model);
+    let register = model.register.record(text);
+    if let Ok(mut editor) = model.editor.active_editor() {
+        let _ = editor.change_word();
+    }
+    editing::enter_insert(model);
+    register
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -245,6 +280,53 @@ mod tests {
         );
 
         assert_eq!(model.pending_input, None);
+    }
+
+    #[test]
+    fn dw_and_cw_capture_the_word_and_preserve_undo_behavior() {
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+        create_buffer(&mut model, "héllo world");
+        let manager = MessageManager::default();
+        manager.update(&mut model, Message::Resize(80, 10));
+
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("delete_line_pending")),
+        );
+        manager.update(&mut model, Message::TextInput('w'));
+        assert_eq!(
+            model.editor.active_snapshot().unwrap().text.lines[0].text,
+            "world"
+        );
+        assert_eq!(model.register.unnamed(), "héllo ");
+        assert_eq!(model.editor.mode(), editor::EditMode::Normal);
+        assert_eq!(model.pending_input, None);
+        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+
+        manager.update(&mut model, Message::InvokeCommand(CommandId("undo")));
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("change_line_pending")),
+        );
+        manager.update(&mut model, Message::TextInput('w'));
+        assert_eq!(model.editor.mode(), editor::EditMode::Insert);
+        assert_eq!(model.register.unnamed(), "héllo ");
+        manager.update(&mut model, Message::TextInput('!'));
+        assert_eq!(
+            model.editor.active_snapshot().unwrap().text.lines[0].text,
+            "!world"
+        );
+
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("exit_insert_mode")),
+        );
+        manager.update(&mut model, Message::InvokeCommand(CommandId("undo")));
+        assert_eq!(
+            model.editor.active_snapshot().unwrap().text.lines[0].text,
+            "héllo world"
+        );
     }
 
     #[test]

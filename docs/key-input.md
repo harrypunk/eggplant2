@@ -26,7 +26,8 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | Normal | Line start / line end | `0` / `$` |
 | Normal | Start characterwise / linewise Visual selection | `v` / `V` |
 | Visual | Extend selection with existing movement keys / return to Normal | `h`/`j`/`k`/`l`, `w`/`b`/`e`, `0`/`$`, `[count]gg`/`G` / `Esc` |
-| Normal | Delete grapheme / line / change line | `x` / `dd` / `cc` |
+| Normal | Delete grapheme / line / word | `x` / `dd` / `dw` |
+| Normal | Change line / word and enter Insert | `cc` / `cw` |
 | Visual | Delete selection / change selection | `x` or `d` / `c` |
 | Pending delete/change | Cancel | `Esc` |
 | Normal | Yank current line | `yy` |

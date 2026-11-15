@@ -802,6 +802,60 @@ fn delete_grapheme_and_visual_selection_use_single_transactions() {
 }
 
 #[test]
+fn delete_and_change_word_use_the_next_word_start_and_one_undo_step() {
+    let mut delete = EditorSession::new();
+    let delete_id = create_buffer(&mut delete, "héllo world");
+    assert_eq!(
+        delete.active_editor().unwrap().current_word_text(),
+        "héllo "
+    );
+    delete.active_editor().unwrap().delete_word().unwrap();
+    assert_eq!(delete.buffers[&delete_id].document.text(), "world");
+    assert_eq!(active_cursor(&mut delete), 0);
+    assert!(delete.active_editor().unwrap().undo().unwrap());
+    assert_eq!(delete.buffers[&delete_id].document.text(), "héllo world");
+
+    let mut change = EditorSession::new();
+    let change_id = create_buffer(&mut change, "one two");
+    change.active_editor().unwrap().change_word().unwrap();
+    assert_eq!(change.buffers[&change_id].document.text(), "two");
+    change.enter_insert_mode();
+    change
+        .active_editor()
+        .unwrap()
+        .insert_text("three ")
+        .unwrap();
+    change.enter_normal_mode();
+    assert_eq!(change.buffers[&change_id].document.text(), "three two");
+    assert!(change.active_editor().unwrap().undo().unwrap());
+    assert_eq!(change.buffers[&change_id].document.text(), "one two");
+}
+
+#[test]
+fn word_deletion_handles_final_words_and_empty_or_exhausted_documents() {
+    let mut session = EditorSession::new();
+    let id = create_buffer(&mut session, "first\nlast");
+    session.active_editor().unwrap().delete_word().unwrap();
+    assert_eq!(session.buffers[&id].document.text(), "\nlast");
+    session
+        .active_editor()
+        .unwrap()
+        .move_cursor_to_line(1)
+        .unwrap();
+    session.active_editor().unwrap().delete_word().unwrap();
+    assert_eq!(session.buffers[&id].document.text(), "\n");
+    session.active_editor().unwrap().delete_word().unwrap();
+    assert_eq!(session.buffers[&id].document.text(), "\n");
+
+    let mut empty = EditorSession::new();
+    let empty_id = create_buffer(&mut empty, "");
+    assert_eq!(empty.active_editor().unwrap().current_word_text(), "");
+    empty.active_editor().unwrap().change_word().unwrap();
+    assert_eq!(empty.buffers[&empty_id].document.text(), "");
+    assert!(!empty.active_is_modified());
+}
+
+#[test]
 fn delete_current_line_handles_first_last_and_only_lines() {
     let mut session = EditorSession::new();
     let id = create_buffer(&mut session, "first\nsecond\nthird");

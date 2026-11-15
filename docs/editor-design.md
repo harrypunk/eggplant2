@@ -236,9 +236,11 @@ Normal `v` enters Visual mode with a characterwise selection at the current grap
 | `x` / `d` | Visual | Delete the characterwise selection. |
 | `c` | Visual | Delete the selection and enter Insert at its start. |
 | `dd` | Normal | Delete the current line. |
+| `dw` | Normal | Delete from the cursor to the existing next-word-start boundary. |
 | `cc` | Normal | Clear the current line and enter Insert using the established indentation policy. |
+| `cw` | Normal | Delete from the cursor to the next word start and enter Insert. |
 
-Normal `d`/`c` wait only for the matching second key and use the shared transient pending-input display. M8 does not add general operator-motion combinations. Every accepted command is one transaction through the existing undo/redo, dirty-revision, viewport, and auto-save paths. Normal deletes commit history immediately; Visual `c` and `cc` commit when their Insert session ends, preserving one-step undo. Clipboard/register synchronization is centralized separately in M8.7, and all commands operate on the single cursor/selection.
+Normal `d`/`c` accept only the matching second key or `w` and use the shared transient pending-input display. `dw`/`cw` reuse Helix's existing next-word-start primitive for both register capture and their one deletion transaction; no other operator-motion combinations or general operator grammar are added. Every accepted command uses the existing undo/redo, dirty-revision, viewport, and auto-save paths. Normal deletes commit history immediately; Visual `c`, `cc`, and `cw` commit when their Insert session ends, preserving one-step undo. Clipboard/register synchronization is centralized separately in M8.7, and all commands operate on the single cursor/selection.
 
 ### Yank and clipboard synchronization (M8.7)
 

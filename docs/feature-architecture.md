@@ -292,7 +292,7 @@ Vertical slices, detailed in `PLAN.md`:
 3. **Insert variants:** `a`/`A`/`I` and `o`/`O` through existing Insert, transaction, history, and auto-save paths.
 4. **Line boundaries:** `0`/`$` with unambiguous count parsing and reusable move/extend behavior.
 5. **Characterwise Visual selection:** `v`, existing motions with explicit extend semantics, visible selection/mode styling, and Escape cleanup.
-6. **Delete/change commands:** Visual `x`/`d`/`c`, Normal `x`, and Normal `dd`/`cc` through existing transaction/history/auto-save paths, with pending `d`/`c` display and no general operator grammar.
+6. **Delete/change commands:** Visual `x`/`d`/`c`, Normal `x`, and Normal `dd`/`cc` plus the specific `dw`/`cw` pairs through existing transaction/history/auto-save paths, with pending `d`/`c` display and no general operator grammar.
 7. **Yank and clipboard sync:** Visual `y` and Normal `yy`, one automatic unnamed register shared with delete/change commands, and best-effort system clipboard mirroring without blocking editing.
 
 Implemented M8.1: `line_jump` owns the count/`g` state machine and registers text input plus Escape cancellation. `ActiveEditor::move_cursor_to_line` provides clamped first-nonblank navigation. `Model.pending_input` gives the status bar a feature-neutral transient display that preserves persistent messages and can be reused by later M8 prefixes.
@@ -305,7 +305,7 @@ Implemented M8.4: `move_line_start`/`move_line_end` bind Normal `0`/`$` through 
 
 Implemented M8.5: `v`/`V` and Escape switch Normal, characterwise Visual, and linewise Visual through the editing feature. `ActiveEditor` derives Move/Extend/ExtendLines from session mode and shares all existing motion paths. `EditMode::VisualLine` uses `V-LINE`; per-line snapshot ranges and `TextView` selection styling provide visual feedback while preserving one cursor/selection. Existing Visual delete/change/yank commands work on both selection kinds.
 
-Implemented M8.6: `change` owns Visual `x`/`d`/`c`, Normal `x`, pending `dd`/`cc`, and status cleanup. `ActiveEditor` supplies single-selection delete/change transactions. Normal deletes commit history immediately; change commands commit on Insert exit. Auto-save and undo paths are shared, with no general operator grammar.
+Implemented M8.6: `change` owns Visual `x`/`d`/`c`, Normal `x`, pending `dd`/`cc` and the specific `dw`/`cw` pairs, and status cleanup. `ActiveEditor` supplies single-selection delete/change transactions and shared cursor-to-next-word-start capture. Normal deletes commit history immediately; change commands commit on Insert exit. Auto-save, register, and undo paths are shared, with no general operator grammar.
 
 Implemented M8.7: `yank` owns Visual `y`, Normal pending `yy`, and Escape cleanup. `RegisterState` stores the automatic unnamed register shared with M8.6 and mirrors it through a cloned Helix `ClipboardProvider` in a blocking effect. Clipboard failure is non-blocking, yanks do not edit/save, and generic `Effect::Batch` supports register-plus-save work.
 

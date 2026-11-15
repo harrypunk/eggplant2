@@ -327,13 +327,13 @@ Implement and review M7.1, M7.2, M7.3, M7.4, M7.5, and M7.6 independently. If te
 - [x] Test empty documents, Unicode/graphemes, forward/backward selection, direction reversal, line crossings, viewport scrolling, mode display, and cancellation.
 - [x] Use Visual mode for selections larger than the supported word/line motions instead of expanding the text-object motion catalog. Keep Visual-mode operators, clipboard/register integration, and other selection grammars for separate slices.
 
-#### M8.6 — Delete/change with `x`/`d`/`dd`/`c`/`cc`
+#### M8.6 — Delete/change with `x`/`d`/`dd`/`dw`/`c`/`cc`/`cw`
 
-**Status: complete (2026-11-14).**
+**Status: complete (2026-11-15).**
 
 - [x] In Visual mode, `x` and `d` delete the characterwise selection, while `c` deletes it and enters Insert mode at the selection start.
-- [x] In Normal mode, `x` deletes the grapheme under the cursor, `dd` deletes the current line, and `cc` clears the current line and enters Insert mode using the established indentation policy.
-- [x] Normal `d` and `c` wait specifically for the second `d`/`c`; show the pending key through M8.1's transient status display and clear it on completion, Escape, or invalid input. Do not add general operator-motion combinations such as `dw` or `cw`.
+- [x] In Normal mode, `x` deletes the grapheme under the cursor, `dd` deletes the current line, and `cc` clears the current line and enters Insert mode using the established indentation policy. `dw`/`cw` delete from the cursor to the existing next-word-start boundary, with `cw` entering Insert.
+- [x] Normal `d` and `c` wait specifically for the matching second `d`/`c` or `w`; show the pending key through M8.1's transient status display and clear it on completion, Escape, or invalid input. Do not add any other operator-motion combinations or a general operator grammar.
 - [x] Route every deletion/change through the existing transaction, undo/redo, dirty-revision, viewport, and auto-save paths. Each command is one undoable edit; M8.7 centralizes register/clipboard synchronization rather than duplicating it in each command.
 - [x] Test empty documents, empty selections, Unicode/graphemes, first/last lines, line-ending boundaries, pending-key cancellation, Insert entry, undo/redo, and auto-save.
 

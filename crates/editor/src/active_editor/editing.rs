@@ -153,6 +153,21 @@ impl ActiveEditor<'_> {
         Ok(())
     }
 
+    /// Delete from the cursor to the next word start.
+    pub fn delete_word(&mut self) -> Result<(), EditorError> {
+        let (start, end) = self.word_range();
+        self.delete_range(start, end, start);
+        self.commit_history();
+        Ok(())
+    }
+
+    /// Delete from the cursor to the next word start for a following Insert session.
+    pub fn change_word(&mut self) -> Result<(), EditorError> {
+        let (start, end) = self.word_range();
+        self.delete_range(start, end, start);
+        Ok(())
+    }
+
     /// Delete the current line, including its line-ending relationship to neighbors.
     pub fn delete_current_line(&mut self) -> Result<(), EditorError> {
         let text = self.document.text().slice(..);

@@ -215,7 +215,7 @@ Input is context-aware: overlays handle input first, followed by the focused fea
 | Insert variants | `i` / `a` / `A` / `I` / `o` / `O` |
 | Line start / end | `0` / `$` |
 | Start Visual selection (characters / lines) / return to Normal | `v` / `V` / `Esc` |
-| Delete/change | `x`, `dd`, `cc`; Visual `x`/`d`/`c` |
+| Delete/change | `x`, `dd`, `dw`, `cc`, `cw`; Visual `x`/`d`/`c` |
 | Yank selection / current line | Visual `y` / `yy` |
 
 See [Key input, sequences, and hints](docs/key-input.md) for the complete editing, explorer, and popup keymap table. Page-scroll uses `[features.page_scroll] step` (default `75%`).

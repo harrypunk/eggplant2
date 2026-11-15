@@ -48,6 +48,20 @@ impl ActiveEditor<'_> {
             .to_string()
     }
 
+    /// Read from the cursor to the next word start.
+    pub fn current_word_text(&self) -> String {
+        let (start, end) = self.word_range();
+        self.document.text().slice(start..end).to_string()
+    }
+
+    pub(super) fn word_range(&self) -> (usize, usize) {
+        let text = self.document.text().slice(..);
+        let range = self.document.selection(self.view.id).primary();
+        let cursor = range.cursor(text);
+        let end = helix_core::movement::move_next_word_start(text, range, 1).head;
+        (cursor, end)
+    }
+
     /// Read the current line, including an existing line ending.
     pub fn current_line_text(&self) -> String {
         let text = self.document.text().slice(..);
