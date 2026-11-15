@@ -21,6 +21,7 @@ The running first-edition application supports workspace exploration, multiple f
 | Editing style | Vim-inspired and customized for simplicity; not Helix's selection-first UI or full Vim compatibility. |
 | First release | File explorer plus basic open/edit/save workflows. |
 | Persistence | Always auto-save after editing and before close/quit; no manual Save command or debounce settings. Clean open buffers reload when external tools change their files. |
+| Workspace sync | The explorer refreshes on external create/delete/rename events while preserving selection where possible. |
 | Initial platform | Linux. Keep platform-specific terminal code isolated, but do not design for other platforms yet. |
 | Deferred features | LSP, DAP, advanced syntax UI, full Helix command compatibility, macros, plugins, and agent execution. |
 

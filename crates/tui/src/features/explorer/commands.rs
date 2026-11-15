@@ -57,6 +57,20 @@ fn refresh(model: &mut Model) {
     }
 }
 
+/// Refresh the tree after an external create/delete/rename without clearing unrelated status.
+pub(crate) fn refresh_changed(model: &mut Model, path: &Path) {
+    let Some(workspace) = &model.workspace else {
+        return;
+    };
+    let root = workspace.root().to_path_buf();
+    if path.strip_prefix(&root).is_err() {
+        return;
+    }
+    if let Err(error) = model.explorer.reload(&root) {
+        report_error(model, "failed to refresh", &root, error);
+    }
+}
+
 fn toggle_ignored_files(model: &mut Model) {
     let Some(workspace) = &model.workspace else {
         return;

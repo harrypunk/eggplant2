@@ -22,12 +22,13 @@ pub fn start(
             let Ok(event) = result else {
                 return;
             };
-            if !is_file_update(&event.kind) {
+            if !is_file_change(&event.kind) {
                 return;
             }
+            let structure = is_structure_change(&event.kind);
             event.paths.into_iter().for_each(|path| {
                 let path = std::fs::canonicalize(&path).unwrap_or(path);
-                let _ = sender.send(Message::ExternalFileChanged(path));
+                let _ = sender.send(Message::ExternalFileChanged { path, structure });
             });
         },
         notify::Config::default(),
@@ -36,10 +37,20 @@ pub fn start(
     Ok(Some(FileWatcher { _watcher: watcher }))
 }
 
-fn is_file_update(kind: &EventKind) -> bool {
+fn is_file_change(kind: &EventKind) -> bool {
     matches!(
         kind,
-        EventKind::Any | EventKind::Create(_) | EventKind::Modify(_)
+        EventKind::Any | EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
+    )
+}
+
+fn is_structure_change(kind: &EventKind) -> bool {
+    matches!(
+        kind,
+        EventKind::Any
+            | EventKind::Create(_)
+            | EventKind::Remove(_)
+            | EventKind::Modify(notify::event::ModifyKind::Name(_))
     )
 }
 
@@ -48,19 +59,32 @@ mod tests {
     use super::*;
 
     #[test]
-    fn only_updates_and_creation_trigger_reload_checks() {
-        assert!(is_file_update(&EventKind::Any));
-        assert!(is_file_update(&EventKind::Create(
+    fn content_and_structure_events_share_one_watcher() {
+        assert!(is_file_change(&EventKind::Any));
+        assert!(is_file_change(&EventKind::Create(
             notify::event::CreateKind::Any
         )));
-        assert!(is_file_update(&EventKind::Modify(
+        assert!(is_file_change(&EventKind::Modify(
             notify::event::ModifyKind::Any
         )));
-        assert!(!is_file_update(&EventKind::Remove(
+        assert!(is_file_change(&EventKind::Remove(
             notify::event::RemoveKind::Any
         )));
-        assert!(!is_file_update(&EventKind::Access(
+        assert!(!is_file_change(&EventKind::Access(
             notify::event::AccessKind::Any
+        )));
+
+        assert!(is_structure_change(&EventKind::Create(
+            notify::event::CreateKind::Any
+        )));
+        assert!(is_structure_change(&EventKind::Remove(
+            notify::event::RemoveKind::Any
+        )));
+        assert!(is_structure_change(&EventKind::Modify(
+            notify::event::ModifyKind::Name(notify::event::RenameMode::Any)
+        )));
+        assert!(!is_structure_change(&EventKind::Modify(
+            notify::event::ModifyKind::Any
         )));
     }
 }

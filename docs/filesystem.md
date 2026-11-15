@@ -72,7 +72,7 @@ Project results retain relative path, zero-based line, text, and match ranges. O
 
 ## External buffer synchronization
 
-A `notify` watcher covers the fixed workspace, or the initial file's parent when no workspace is open. Create/modify events become `ExternalFileChanged` messages; paths without an open buffer are ignored. Dirty buffers and in-progress saves remain untouched, while clean buffers schedule the same background `DocumentOpenRequest` used by normal opens.
+A `notify` watcher covers the fixed workspace, or the initial file's parent when no workspace is open. Create/modify/remove events become `ExternalFileChanged` messages. The explorer consumes only structural create/delete/rename events and reloads visible entries without clearing unrelated status or losing a still-present selected path. Content-only changes do not rescan the tree. Dirty buffers and in-progress saves remain untouched, while clean buffers schedule the same background `DocumentOpenRequest` used by normal opens. Missing paths never erase an open buffer.
 
 The reload completion carries the expected Helix document version. Stale completions are ignored. Existing files apply a Helix diff, append history, preserve cursor/view state, update syntax, and become clean without invoking another save. Missing files and read/UTF-8 failures leave the existing buffer intact. No manual reload command or reload queue is introduced.
 

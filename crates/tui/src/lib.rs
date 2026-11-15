@@ -260,7 +260,10 @@ pub mod data_object {
         SaveFinished(SaveCompletion),
         FileOpened(DocumentOpenCompletion),
         FocusLost,
-        ExternalFileChanged(PathBuf),
+        ExternalFileChanged {
+            path: PathBuf,
+            structure: bool,
+        },
         Resize(u16, u16),
         OpenSelected,
         FileScanFinished {

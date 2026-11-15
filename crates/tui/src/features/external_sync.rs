@@ -8,7 +8,13 @@ use crate::{
 };
 
 /// Schedule a background read for a changed open file without touching local edits/saves.
-pub fn file_changed(model: &mut Model, path: &Path) -> Option<Effect> {
+pub fn file_changed(model: &mut Model, path: &Path, structure: bool) -> Option<Effect> {
+    if structure {
+        crate::explorer::refresh_changed(model, path);
+    }
+    if !path.exists() {
+        return None;
+    }
     let id = model.editor.buffer_by_path(path)?;
     if model.editor.is_saving(id) {
         return None;
@@ -83,10 +89,86 @@ mod tests {
     };
 
     fn change_file(model: &mut Model, path: &Path) {
-        let Some(Effect::Feature(request)) = file_changed(model, path) else {
+        let Some(Effect::Feature(request)) = file_changed(model, path, false) else {
             return;
         };
         MessageManager::default().update(model, request.perform());
+    }
+
+    #[test]
+    fn structural_events_refresh_explorer_and_preserve_selection() {
+        let directory = tempfile::tempdir().unwrap();
+        let first = directory.path().join("a.txt");
+        let selected = directory.path().join("b.txt");
+        std::fs::write(&first, "a").unwrap();
+        std::fs::write(&selected, "b").unwrap();
+        let mut model =
+            crate::startup::initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let manager = MessageManager::default();
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(crate::data_object::CommandId("explorer_next")),
+        );
+
+        let created = directory.path().join("c.txt");
+        std::fs::write(&created, "c").unwrap();
+        manager.update(
+            &mut model,
+            Message::ExternalFileChanged {
+                path: created.clone(),
+                structure: true,
+            },
+        );
+        assert!(
+            model
+                .explorer
+                .entries
+                .iter()
+                .any(|entry| entry.path == created)
+        );
+        assert_eq!(model.explorer.selected_entry().unwrap().path, selected);
+
+        std::fs::remove_file(&first).unwrap();
+        manager.update(
+            &mut model,
+            Message::ExternalFileChanged {
+                path: first.clone(),
+                structure: true,
+            },
+        );
+        assert!(
+            !model
+                .explorer
+                .entries
+                .iter()
+                .any(|entry| entry.path == first)
+        );
+        assert_eq!(model.explorer.selected_entry().unwrap().path, selected);
+
+        let renamed = directory.path().join("d.txt");
+        std::fs::rename(&created, &renamed).unwrap();
+        manager.update(
+            &mut model,
+            Message::ExternalFileChanged {
+                path: renamed.clone(),
+                structure: true,
+            },
+        );
+        assert!(
+            model
+                .explorer
+                .entries
+                .iter()
+                .any(|entry| entry.path == renamed)
+        );
+        assert!(
+            !model
+                .explorer
+                .entries
+                .iter()
+                .any(|entry| entry.path == created)
+        );
+        assert_eq!(model.explorer.selected_entry().unwrap().path, selected);
     }
 
     #[test]
