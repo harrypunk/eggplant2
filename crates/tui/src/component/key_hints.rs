@@ -97,7 +97,7 @@ mod tests {
         let hints = KeyHints::new(&menu, theme.ui());
 
         assert_eq!(hints.title, "Leader > buffer");
-        assert_eq!(hints.size().width, 19);
+        assert_eq!(hints.size().width, 17);
 
         let mut menu = CommandMenuState::default();
         menu.handle_key(KeyCode::Char(' '));

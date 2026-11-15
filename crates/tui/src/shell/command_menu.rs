@@ -70,17 +70,17 @@ const BUFFER_CONTEXT: CommandMenuContext = CommandMenuContext {
     items: &[
         CommandMenuItem {
             key: 'n',
-            description: "next buffer",
+            description: "next",
             target: CommandMenuTarget::Action(CommandId("next_buffer")),
         },
         CommandMenuItem {
             key: 'p',
-            description: "previous buffer",
+            description: "previous",
             target: CommandMenuTarget::Action(CommandId("previous_buffer")),
         },
         CommandMenuItem {
             key: 'c',
-            description: "close buffer",
+            description: "close",
             target: CommandMenuTarget::Action(CommandId("close_buffer")),
         },
     ],
