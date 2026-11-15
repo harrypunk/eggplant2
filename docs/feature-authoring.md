@@ -2,6 +2,16 @@
 
 Use this guide when adding an internal Eggplant feature through the M6 contribution contracts. It describes the current APIs; it is not an external-plugin ABI.
 
+## Current module layout
+
+- `features/`: user-facing workflows, their state, input/commands, effects, UI, and tests.
+- `capabilities/`: shared document opening, filesystem traversal, file watching, search, and register/clipboard services.
+- `shell/`: buffer switching, command menu, focus, and lifecycle coordination.
+- `component/`, `manager/`, and `page/`: reusable rendering, input/effect registries, and shell layout.
+- Root `lib.rs` re-exports module groups so existing `crate::feature_name` paths remain stable.
+
+A feature should live under `features/` and depend on narrow capabilities, not add domain logic to `shell/` or shared components. Put genuinely reusable services under `capabilities/` only when they have a real consumer.
+
 ## 1. Start with the feature boundary
 
 Before writing code, identify:
