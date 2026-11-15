@@ -21,7 +21,7 @@ cargo run -p tui -- "$workdir"
 ## Interactive checks
 
 1. **Explorer/open:** select `a.txt` with the arrows or `j`/`k`, then press Enter. Confirm that it opens and becomes selected in the explorer.
-2. **Edit/auto-save:** press `i`, insert `A`, then press Escape. Confirm that `a.txt` now starts with `Afirst`.
+2. **Edit/auto-save/cursor:** press `i`, insert `A`, then press Escape. Confirm that `a.txt` now starts with `Afirst`. The terminal cursor should be a steady bar in Insert mode and a steady block after returning to Normal; Visual modes retain the block.
 3. **Switch synchronization:** open `b.txt`, then use `Space b p` and `Space b n`. Confirm that the active tab and explorer selection stay synchronized in both directions.
 4. **Resize/status bar:** make the terminal narrow and short, then enlarge it. Confirm that content clips without a panic and that the cursor never appears outside the editor. Confirm the full-width status bar shows mode, the ` -- ` VCS placeholder, a project-relative file path, and a right-aligned local `HH:MM` clock; the path should receive the remaining width.
 5. **Popups:** open `Space Space` (or `Space f f`), `Space u t`, and the leader hints. Confirm that the file picker places its input cursor after the query, including after a long Unicode query, while non-input overlays hide the cursor. Escape must close each popup.
@@ -45,7 +45,7 @@ cargo run -p tui -- "$workdir"
 
 - For a save failure, make a file readonly before editing and quitting. The application must remain open with the dirty buffer and an error instead of exiting or overwriting the file.
 - For an external modification, edit the same file with another process before Eggplant saves. Eggplant must report the conflict without overwriting either version.
-- Review `crates/tui/src/terminal.rs`: initialization cleans up partial failures, normal restoration attempts both alternate-screen exit and raw-mode disable even if the first operation fails, and the panic hook ignores cleanup errors before delegating to the original hook. A panic during cleanup must not cause a second panic.
+- Review `crates/tui/src/terminal.rs`: initialization cleans up partial failures, normal restoration attempts cursor-shape reset, alternate-screen exit, and raw-mode disable even if an earlier operation fails, and the panic hook ignores cleanup errors before delegating to the original hook. A panic during cleanup must not cause a second panic.
 
 If a development build ever panics inside a real terminal, the expected result is the same shell/terminal restoration as normal exit. Report any reproduction that leaves the terminal in raw mode or the alternate screen.
 

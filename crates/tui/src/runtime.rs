@@ -1,4 +1,9 @@
-use ratatui::{DefaultTerminal, backend::Backend as _};
+use editor::EditMode;
+use ratatui::{
+    DefaultTerminal,
+    backend::Backend as _,
+    crossterm::{ExecutableCommand, cursor::SetCursorStyle},
+};
 
 use crate::{
     config::Config,
@@ -53,6 +58,9 @@ pub fn run(
         }
 
         terminal.draw(|frame| editor_page.view(&model, frame))?;
+        terminal
+            .backend_mut()
+            .execute(cursor_style(model.editor.mode()))?;
 
         if let Some(message) = event_manager.next_message(&model)? {
             apply_message(&mut model, &message_manager, message, &message_sender);
@@ -60,6 +68,13 @@ pub fn run(
     }
 
     Ok(())
+}
+
+fn cursor_style(mode: EditMode) -> SetCursorStyle {
+    match mode {
+        EditMode::Insert => SetCursorStyle::SteadyBar,
+        EditMode::Normal | EditMode::Visual | EditMode::VisualLine => SetCursorStyle::SteadyBlock,
+    }
 }
 
 fn apply_message(
@@ -93,6 +108,19 @@ fn apply_effect(effect: Effect, sender: &tokio::sync::mpsc::UnboundedSender<Mess
             effects
                 .into_iter()
                 .for_each(|effect| apply_effect(effect, sender));
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn insert_uses_a_bar_and_other_editor_modes_use_a_block() {
+        assert_eq!(cursor_style(EditMode::Insert), SetCursorStyle::SteadyBar);
+        for mode in [EditMode::Normal, EditMode::Visual, EditMode::VisualLine] {
+            assert_eq!(cursor_style(mode), SetCursorStyle::SteadyBlock);
         }
     }
 }

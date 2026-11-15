@@ -5,6 +5,7 @@ use ratatui::{
     backend::CrosstermBackend,
     crossterm::{
         ExecutableCommand,
+        cursor::SetCursorStyle,
         terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
     },
 };
@@ -25,9 +26,13 @@ pub fn init_terminal() -> color_eyre::Result<DefaultTerminal> {
 }
 
 pub fn restore_terminal() -> color_eyre::Result<()> {
-    // Always attempt both operations, even if leaving the alternate screen fails.
+    // Always attempt every cleanup operation, even if an earlier one fails.
+    let cursor_result = stdout()
+        .execute(SetCursorStyle::DefaultUserShape)
+        .map(|_| ());
     let leave_result = stdout().execute(LeaveAlternateScreen).map(|_| ());
     let raw_mode_result = disable_raw_mode();
+    cursor_result?;
     leave_result?;
     raw_mode_result?;
     Ok(())
