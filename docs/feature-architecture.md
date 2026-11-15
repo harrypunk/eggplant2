@@ -303,7 +303,7 @@ Implemented M8.3: the editing feature registers `a`/`A`/`I` and `o`/`O` commands
 
 Implemented M8.4: `move_line_start`/`move_line_end` bind Normal `0`/`$` through the editing feature. `ActiveEditor::move_cursor_to_line_boundary` provides grapheme-safe boundaries without text changes. Direct-key precedence keeps `0` available as a digit inside active line-jump counts.
 
-Implemented M8.5: `v`/Escape switch Normal and characterwise Visual through the editing feature. `ActiveEditor` derives Move/Extend from session mode and shares all existing motion paths. `EditMode::Visual`, per-line snapshot ranges, and `TextView` selection styling provide mode and visual feedback while preserving one cursor/selection.
+Implemented M8.5: `v`/`V` and Escape switch Normal, characterwise Visual, and linewise Visual through the editing feature. `ActiveEditor` derives Move/Extend/ExtendLines from session mode and shares all existing motion paths. `EditMode::VisualLine` uses `V-LINE`; per-line snapshot ranges and `TextView` selection styling provide visual feedback while preserving one cursor/selection. Existing Visual delete/change/yank commands work on both selection kinds.
 
 Implemented M8.6: `change` owns Visual `x`/`d`/`c`, Normal `x`, pending `dd`/`cc`, and status cleanup. `ActiveEditor` supplies single-selection delete/change transactions. Normal deletes commit history immediately; change commands commit on Insert exit. Auto-save and undo paths are shared, with no general operator grammar.
 

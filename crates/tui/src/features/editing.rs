@@ -10,6 +10,7 @@ use crate::{
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     match id.as_str() {
         "enter_visual_mode" => enter_visual(model),
+        "enter_visual_line_mode" => enter_visual_line(model),
         "exit_visual_mode" => {
             model
                 .context_stack
@@ -91,6 +92,14 @@ fn enter_visual(model: &mut Model) -> Option<Effect> {
     if model.editor.active_buffer().is_some() {
         model.context_stack.push(Context::EditorVisual);
         model.editor.enter_visual_mode();
+    }
+    None
+}
+
+fn enter_visual_line(model: &mut Model) -> Option<Effect> {
+    if model.editor.active_buffer().is_some() {
+        model.context_stack.push(Context::EditorVisual);
+        model.editor.enter_visual_line_mode();
     }
     None
 }
@@ -378,6 +387,46 @@ mod tests {
                 .contains("hello world\n")
         );
         assert_eq!(model.editor.mode(), EditMode::Visual);
+        assert!(!model.editor.active_is_modified());
+    }
+
+    #[test]
+    fn visual_line_mode_selects_whole_lines_and_escape_preserves_text() {
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+        create_buffer(&mut model, "first\nsecond\nthird");
+        let manager = MessageManager::default();
+        manager.update(&mut model, Message::Resize(80, 10));
+
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("enter_visual_line_mode")),
+        );
+        manager.update(&mut model, Message::InvokeCommand(CommandId("move_down")));
+
+        assert_eq!(model.editor.mode(), EditMode::VisualLine);
+        assert_eq!(
+            model.editor.active_editor().unwrap().selected_text(),
+            "first\nsecond\n"
+        );
+        assert_eq!(
+            model.editor.active_snapshot().unwrap().text.lines[0].selection,
+            Some(0..5)
+        );
+        assert_eq!(
+            model.editor.active_snapshot().unwrap().text.lines[1].selection,
+            Some(0..6)
+        );
+
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("exit_visual_mode")),
+        );
+        assert_eq!(model.editor.mode(), EditMode::Normal);
+        assert_eq!(
+            model.editor.active_snapshot().unwrap().text.lines[0].text,
+            "first"
+        );
         assert!(!model.editor.active_is_modified());
     }
 

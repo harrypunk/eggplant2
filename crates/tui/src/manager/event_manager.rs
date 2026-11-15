@@ -322,6 +322,11 @@ mod tests {
             manager.translate(event, &model),
             Some(Message::InvokeCommand(CommandId("enter_visual_mode")))
         ));
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('V'), KeyModifiers::SHIFT));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::InvokeCommand(CommandId("enter_visual_line_mode")))
+        ));
 
         model.context_stack.push(Context::EditorVisual);
         let event = Event::Key(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE));

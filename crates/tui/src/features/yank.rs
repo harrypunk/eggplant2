@@ -166,4 +166,26 @@ mod tests {
         assert_eq!(model.pending_input, None);
         assert!(!model.editor.active_is_modified());
     }
+
+    #[test]
+    fn linewise_visual_yank_includes_selected_line_endings() {
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+        create_buffer(&mut model, "first\nsecond\nthird");
+        let manager = MessageManager::default();
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("enter_visual_line_mode")),
+        );
+        manager.update(&mut model, Message::InvokeCommand(CommandId("move_down")));
+
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("yank_selection")),
+        );
+
+        assert_eq!(model.register.unnamed(), "first\nsecond\n");
+        assert_eq!(model.editor.mode(), editor::EditMode::Normal);
+        assert!(!model.editor.active_is_modified());
+    }
 }

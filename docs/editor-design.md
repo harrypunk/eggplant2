@@ -224,7 +224,9 @@ The direct Normal `0` binding takes precedence over unbound text input. An activ
 
 Normal `v` enters Visual mode with a characterwise selection at the current grapheme. `ActiveEditor` receives `SelectionBehavior::Move` in Normal/Insert and `Extend` in Visual, so existing directional, word, line-boundary, and counted line-jump commands share one motion path. Helix's `put_cursor` controls forward/backward selection edges and reversal; no second Visual navigation implementation exists.
 
-`EditorSession::enter_normal_mode` collapses the selection at the moving cursor without changing text. `EditMode::Visual` renders as `VISUAL` in the status bar. Active snapshots project only the primary selection into per-line UTF-8 ranges, and `TextView` applies the existing selection style after syntax rendering with Unicode/horizontal clipping. Eggplant still exposes exactly one cursor/selection and no multi-cursor behavior.
+`V` enters linewise Visual mode with the full current line, including an existing line ending. `SelectionBehavior::ExtendLines` maps every moving target back to whole-line ranges while preserving the original anchor line, including direction reversal. The status bar shows `V-LINE`. Existing Visual delete/change/yank commands operate on those line selections without a separate operator implementation.
+
+`EditorSession::enter_normal_mode` collapses either Visual variant at the moving cursor without changing text. `VISUAL`/`V-LINE` appear in the status bar. Active snapshots project only the primary selection into per-line UTF-8 ranges, excluding non-printable line-ending cells, and `TextView` applies the existing selection style after syntax rendering with Unicode/horizontal clipping. Eggplant still exposes exactly one cursor/selection and no multi-cursor behavior.
 
 ### Delete/change commands (M8.6)
 

@@ -11,7 +11,7 @@ use crate::session::{
     CursorMovement, DocumentPosition, EditorError, LineBoundary, VerticalDirection, WordMovement,
 };
 
-use super::ActiveEditor;
+use super::{ActiveEditor, SelectionBehavior};
 
 type MoveFn = fn(
     RopeSlice,
@@ -127,6 +127,7 @@ impl ActiveEditor<'_> {
             .text_format(self.view.inner_area(self.document).width, None);
         let mut annotations = self.view.text_annotations(self.document, None);
         let movement_behavior = self.movement();
+        let selection_behavior = self.selection_behavior;
 
         let selection = self
             .document
@@ -139,7 +140,7 @@ impl ActiveEditor<'_> {
                     CursorMovement::Up => (Direction::Backward, movement::move_vertically),
                     CursorMovement::Down => (Direction::Forward, movement::move_vertically),
                 };
-                move_fn(
+                let moved = move_fn(
                     text,
                     range,
                     direction,
@@ -147,7 +148,13 @@ impl ActiveEditor<'_> {
                     movement_behavior,
                     &text_format,
                     &mut annotations,
-                )
+                );
+                match selection_behavior {
+                    SelectionBehavior::ExtendLines => {
+                        self.put_line_cursor(text, range, moved.cursor(text))
+                    }
+                    SelectionBehavior::Move | SelectionBehavior::Extend => moved,
+                }
             });
         drop(annotations);
 

@@ -13,6 +13,21 @@ impl ActiveEditor<'_> {
             .set_selection(self.view.id, Selection::single(cursor, end));
     }
 
+    /// Start a linewise selection covering the current line and any existing line ending.
+    pub fn start_line_selection(&mut self) {
+        let text = self.document.text().slice(..);
+        let cursor = self.document.selection(self.view.id).primary().cursor(text);
+        let line = text.char_to_line(cursor);
+        let start = text.line_to_char(line);
+        let end = if line + 1 < text.len_lines() {
+            text.line_to_char(line + 1)
+        } else {
+            helix_core::line_ending::line_end_char_index(&text, line)
+        };
+        self.document
+            .set_selection(self.view.id, Selection::single(start, end));
+    }
+
     /// Collapse the primary selection to its moving cursor edge.
     pub fn collapse_selection(&mut self) {
         let text = self.document.text().slice(..);

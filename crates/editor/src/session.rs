@@ -42,6 +42,7 @@ pub enum EditMode {
     Normal,
     Insert,
     Visual,
+    VisualLine,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -339,7 +340,7 @@ impl EditorSession {
         let document = &self.buffers.get(&active.buffer)?.document;
         let view = &active.view;
         let mut text = text_view_snapshot(document, view);
-        if self.mode == EditMode::Visual {
+        if matches!(self.mode, EditMode::Visual | EditMode::VisualLine) {
             apply_selection_snapshot(&mut text, document, view);
         }
         let cursor = document
@@ -404,6 +405,7 @@ impl EditorSession {
         let scrolloff = self.scrolloff;
         let selection_behavior = match self.mode {
             EditMode::Visual => SelectionBehavior::Extend,
+            EditMode::VisualLine => SelectionBehavior::ExtendLines,
             EditMode::Normal | EditMode::Insert => SelectionBehavior::Move,
         };
         self.active_parts()
@@ -432,8 +434,17 @@ impl EditorSession {
         }
     }
 
+    pub fn enter_visual_line_mode(&mut self) {
+        if self.active_view.is_some() {
+            if let Ok(mut editor) = self.active_editor() {
+                editor.start_line_selection();
+            }
+            self.mode = EditMode::VisualLine;
+        }
+    }
+
     pub fn enter_normal_mode(&mut self) {
-        if self.mode == EditMode::Visual
+        if matches!(self.mode, EditMode::Visual | EditMode::VisualLine)
             && let Ok(mut editor) = self.active_editor()
         {
             editor.collapse_selection();

@@ -940,6 +940,59 @@ fn visual_selection_is_safe_for_empty_or_missing_buffers() {
 }
 
 #[test]
+fn visual_line_selection_extends_and_reverses_whole_lines() {
+    let mut session = EditorSession::new();
+    let id = create_buffer(&mut session, "first\nsecond\nthird");
+    session.resize_active_view(20, 4);
+
+    session.enter_visual_line_mode();
+    assert_eq!(session.mode(), EditMode::VisualLine);
+    assert_eq!(session.active_editor().unwrap().selected_text(), "first\n");
+    session
+        .active_editor()
+        .unwrap()
+        .move_cursor(CursorMovement::Down)
+        .unwrap();
+    assert_eq!(
+        session.active_editor().unwrap().selected_text(),
+        "first\nsecond\n"
+    );
+    session
+        .active_editor()
+        .unwrap()
+        .move_cursor(CursorMovement::Up)
+        .unwrap();
+    assert_eq!(session.active_editor().unwrap().selected_text(), "first\n");
+    session
+        .active_editor()
+        .unwrap()
+        .move_cursor_to_line(2)
+        .unwrap();
+    assert_eq!(
+        session.active_editor().unwrap().selected_text(),
+        "first\nsecond\nthird"
+    );
+
+    session.enter_normal_mode();
+    assert!(!session.buffers[&id].document.is_modified());
+}
+
+#[test]
+fn visual_line_selection_is_safe_for_an_empty_document() {
+    let mut session = EditorSession::new();
+    create_buffer(&mut session, "");
+    session.resize_active_view(20, 4);
+    session.enter_visual_line_mode();
+    session
+        .active_editor()
+        .unwrap()
+        .move_cursor(CursorMovement::Down)
+        .unwrap();
+    assert_eq!(session.active_editor().unwrap().selected_text(), "");
+    session.enter_normal_mode();
+}
+
+#[test]
 fn first_buffer_uses_size_received_while_empty() {
     let mut session = EditorSession::new();
     session.resize_active_view(20, 4);

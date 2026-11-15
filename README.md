@@ -214,7 +214,7 @@ Input is context-aware: overlays handle input first, followed by the focused fea
 | Center / top / bottom cursor line | `zz` / `zt` / `zb` |
 | Insert variants | `i` / `a` / `A` / `I` / `o` / `O` |
 | Line start / end | `0` / `$` |
-| Start Visual selection / return to Normal | `v` / `Esc` |
+| Start Visual selection (characters / lines) / return to Normal | `v` / `V` / `Esc` |
 | Delete/change | `x`, `dd`, `cc`; Visual `x`/`d`/`c` |
 | Yank selection / current line | Visual `y` / `yy` |
 

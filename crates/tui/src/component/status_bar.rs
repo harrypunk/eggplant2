@@ -41,6 +41,7 @@ impl Widget for StatusBar<'_> {
             EditMode::Normal => ("NORMAL", self.styles.status_normal),
             EditMode::Insert => ("INSERT", self.styles.status_insert),
             EditMode::Visual => ("VISUAL", self.styles.selection),
+            EditMode::VisualLine => ("V-LINE", self.styles.selection),
         };
         let mut spans = vec![Span::styled(
             format!(" {mode}"),
@@ -75,8 +76,19 @@ mod tests {
     #[test]
     fn renders_current_mode() {
         let theme = Theme::default();
-        for mode in [EditMode::Normal, EditMode::Insert, EditMode::Visual] {
-            let backend = TestBackend::new(7, 1);
+        for mode in [
+            EditMode::Normal,
+            EditMode::Insert,
+            EditMode::Visual,
+            EditMode::VisualLine,
+        ] {
+            let expected = match mode {
+                EditMode::Normal => " NORMAL",
+                EditMode::Insert => " INSERT",
+                EditMode::Visual => " VISUAL",
+                EditMode::VisualLine => " V-LINE",
+            };
+            let backend = TestBackend::new(expected.len() as u16, 1);
             let mut terminal = Terminal::new(backend).unwrap();
 
             terminal
@@ -84,12 +96,6 @@ mod tests {
                     frame.render_widget(StatusBar::new(mode, None, None, theme.ui()), frame.area())
                 })
                 .unwrap();
-
-            let expected = match mode {
-                EditMode::Normal => " NORMAL",
-                EditMode::Insert => " INSERT",
-                EditMode::Visual => " VISUAL",
-            };
             let content = terminal
                 .backend()
                 .buffer()

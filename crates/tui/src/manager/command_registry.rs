@@ -111,6 +111,11 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
             crate::editing::handle_command,
         ),
         Command::feature(
+            CommandId("enter_visual_line_mode"),
+            "enter linewise Visual mode",
+            crate::editing::handle_command,
+        ),
+        Command::feature(
             CommandId("exit_visual_mode"),
             "leave Visual mode",
             crate::editing::handle_command,

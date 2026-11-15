@@ -316,11 +316,12 @@ Implement and review M7.1, M7.2, M7.3, M7.4, M7.5, and M7.6 independently. If te
 - [x] Keep count parsing unambiguous: `0` invokes line start when no count is active, while digits after a count has started continue that count.
 - [x] Reuse the same motions to extend the selection after M8.5; test empty/blank lines, Unicode/graphemes, first/last lines, and count interaction.
 
-#### M8.5 — Characterwise Visual selection
+#### M8.5 — Characterwise and linewise Visual selection
 
 **Status: complete (2026-11-14).**
 
 - [x] Add `v` in Normal mode to start a characterwise selection anchored at the current cursor. Existing movement commands extend the primary selection while in Visual mode.
+- [x] Add `V` for linewise Visual selection, covering the current line and any existing line ending. Existing motions extend whole target lines in either direction without changing text.
 - [x] Render the selection with the existing theme selection style, show `VISUAL` in the status bar, and keep the moving cursor visible in both selection directions.
 - [x] Escape returns to Normal mode and collapses the selection at the current cursor without changing text. Reuse existing movement adapters with explicit move/extend behavior rather than duplicating motion rules.
 - [x] Test empty documents, Unicode/graphemes, forward/backward selection, direction reversal, line crossings, viewport scrolling, mode display, and cancellation.

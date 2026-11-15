@@ -10,6 +10,7 @@ use helix_view::{Document, View};
 pub(crate) enum SelectionBehavior {
     Move,
     Extend,
+    ExtendLines,
 }
 
 /// Focused capability for operations on the active document and its view.
@@ -46,15 +47,36 @@ impl<'a> ActiveEditor<'a> {
     pub(crate) fn movement(&self) -> helix_core::movement::Movement {
         match self.selection_behavior {
             SelectionBehavior::Move => helix_core::movement::Movement::Move,
-            SelectionBehavior::Extend => helix_core::movement::Movement::Extend,
+            SelectionBehavior::Extend | SelectionBehavior::ExtendLines => {
+                helix_core::movement::Movement::Extend
+            }
         }
     }
 
     pub(crate) fn put_cursor(&self, text: RopeSlice, range: Range, target: usize) -> Range {
-        range.put_cursor(
-            text,
-            target,
-            self.selection_behavior == SelectionBehavior::Extend,
-        )
+        match self.selection_behavior {
+            SelectionBehavior::Move => range.put_cursor(text, target, false),
+            SelectionBehavior::Extend => range.put_cursor(text, target, true),
+            SelectionBehavior::ExtendLines => self.put_line_cursor(text, range, target),
+        }
+    }
+
+    fn put_line_cursor(&self, text: RopeSlice, range: Range, target: usize) -> Range {
+        let anchor_line = text.char_to_line(range.anchor);
+        let target_line = text.char_to_line(target);
+        let anchor_start = text.line_to_char(anchor_line);
+        let anchor_end = line_end_with_ending(text, anchor_line);
+        match target_line >= anchor_line {
+            true => Range::new(anchor_start, line_end_with_ending(text, target_line)),
+            false => Range::new(text.line_to_char(target_line), anchor_end),
+        }
+    }
+}
+
+fn line_end_with_ending(text: RopeSlice, line: usize) -> usize {
+    if line + 1 < text.len_lines() {
+        text.line_to_char(line + 1)
+    } else {
+        helix_core::line_ending::line_end_char_index(&text, line)
     }
 }

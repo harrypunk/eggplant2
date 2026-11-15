@@ -64,6 +64,7 @@ impl Default for Config {
                     [
                         ("enter_insert_mode", "i"),
                         ("enter_visual_mode", "v"),
+                        ("enter_visual_line_mode", "shift-v"),
                         ("insert_after_cursor", "a"),
                         ("insert_at_line_end", "shift-a"),
                         ("insert_at_first_nonblank", "shift-i"),
