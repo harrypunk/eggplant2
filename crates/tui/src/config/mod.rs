@@ -194,6 +194,10 @@ impl Default for Config {
                 keymap_context("view_align", [("view_align_cancel", "esc")]),
                 keymap_context("change", [("change_cancel", "esc")]),
                 keymap_context("yank", [("yank_cancel", "esc")]),
+                keymap_context(
+                    "vcs",
+                    [("close_vcs_page", "esc"), ("close_vcs_page_q", "q")],
+                ),
             ]),
         }
     }

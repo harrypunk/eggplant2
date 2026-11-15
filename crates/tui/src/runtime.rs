@@ -7,14 +7,14 @@ use ratatui::{
 
 use crate::{
     config::Config,
-    data_object::{Message, Model, RunningState},
+    data_object::{AppPage, Message, Model, RunningState},
     file_watcher,
     manager::{
         command_registry::CommandRegistry, effect::Effect, event_manager::EventManager,
         keyboard_input_registry::Registry, message_manager::MessageManager,
         text_input_registry::TextInputRegistry,
     },
-    page::editor::Editor,
+    page::{editor::Editor, vcs::Vcs},
     ui::UiRegistry,
 };
 
@@ -30,7 +30,8 @@ pub fn run(
 ) -> color_eyre::Result<()> {
     let event_manager = EventManager::new(config, keymap, text_input.clone());
     let message_manager = MessageManager::new(commands, text_input);
-    let editor_page = Editor::new(ui);
+    let editor_page = Editor::new(ui.clone());
+    let vcs_page = Vcs::new(ui);
     let (message_sender, mut message_receiver) = tokio::sync::mpsc::unbounded_channel();
     let watch_root = model
         .workspace
@@ -60,7 +61,10 @@ pub fn run(
             apply_message(&mut model, &message_manager, message, &message_sender);
         }
 
-        terminal.draw(|frame| editor_page.view(&model, frame))?;
+        terminal.draw(|frame| match model.active_page {
+            AppPage::Editor => editor_page.view(&model, frame),
+            AppPage::Vcs => vcs_page.view(&model, frame),
+        })?;
         terminal
             .backend_mut()
             .execute(cursor_style(model.editor.mode()))?;

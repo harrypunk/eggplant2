@@ -212,6 +212,7 @@ Input is context-aware: overlays handle input first, followed by the focused fea
 | Jump in the visible buffer | `Space c j`, two characters, then a label |
 | Search the current file | `Space s c` |
 | Search the project | `Space s p` |
+| Open Git history / close Git page | `Space g g` / `q` or `Esc` |
 | Scroll down / up | `Ctrl-F` / `Ctrl-U` |
 | Focus left / right | `Ctrl-H` / `Ctrl-L` |
 | First line / line N | `gg` / `[count]gg` |

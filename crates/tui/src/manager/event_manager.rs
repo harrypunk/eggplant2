@@ -279,6 +279,24 @@ mod tests {
     }
 
     #[test]
+    fn routes_vcs_page_close_keys() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::VCS);
+
+        for (key, command) in [
+            (KeyCode::Esc, "close_vcs_page"),
+            (KeyCode::Char('q'), "close_vcs_page_q"),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+    }
+
+    #[test]
     fn routes_buffer_jump_text_and_commands_in_its_context() {
         let manager = event_manager();
         let mut model = Model::default();

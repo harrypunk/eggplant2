@@ -391,10 +391,11 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 #### M9.4 — Commit history
 
-- [ ] Read a bounded commit log through the shared Gitoxide backend and show it in a scrollable history panel.
-- [ ] Display commit ID, author/date summary, and subject; open a selected commit's read-only diff without changing the working tree or current branch.
-- [ ] Keep history pagination/loading off the UI thread and reject stale responses after workspace or repository changes.
-- [ ] Test empty repositories, multi-parent history, bounded loading, non-UTF-8 summaries, and diff navigation.
+- [x] Read a bounded newest-first commit log through the shared Gitoxide backend and show short IDs and one-line subjects on the full-screen `Space g g` Git page.
+- [x] Keep initial history loading off the UI thread and reject stale responses after workspace or repository changes.
+- [ ] Add history scrolling and bounded pagination/loading for larger repositories.
+- [ ] Display author/date summaries and open a selected commit's read-only diff without changing the working tree or current branch.
+- [ ] Complete multi-parent, non-UTF-8 summary, pagination, and diff-navigation tests alongside those features.
 
 #### M9.5 — Explicit commit
 

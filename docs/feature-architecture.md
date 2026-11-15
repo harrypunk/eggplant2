@@ -314,6 +314,8 @@ Implemented common buffer navigation: `features/buffer_navigation.rs` owns only 
 
 Implemented M9.1: the new `vcs` crate isolates `helix-vcs`/Gitoxide behind owned Git HEAD labels. `features/vcs/` owns refresh state, duplicate suppression, background requests, and stale-result rejection; the runtime schedules initial discovery and the status bar renders only the resulting branch/detached label. Reduced-trust discovery and neutral non-repository/unborn states keep failures non-blocking.
 
+Implemented the initial history slice: `Space g g` opens `page/vcs.rs` full-screen through the shell's single `AppPage` switch, with `q`/Escape restoring the previous editor context. The `vcs` crate performs bounded reduced-trust revision walks and returns owned short-ID/subject summaries. Feature-owned loading/error states and revisioned completions feed a Neogit-style `Recent commits` list; no pagination, commit diff, mutation, or Git types in the TUI are included.
+
 Eggplant intentionally supports one cursor/selection only. Only `gg`/`G` accept counts; existing `w`/`b`/`e` and all other motions are uncounted. Visual selection is the intended workflow for larger ranges instead of adding a broader text-object motion catalog. Beyond the M8.5–M8.7 slices, M8 does not introduce general Visual operators, macros, named/register-selection workflows, multi-cursor behavior, or full Vim/Helix compatibility.
 
 ## 12. Testing strategy

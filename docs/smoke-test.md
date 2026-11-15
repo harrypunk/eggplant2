@@ -40,6 +40,7 @@ cargo run -p tui -- "$workdir"
 18. **Yank/clipboard:** verify Visual `y` and Normal `yy`, including pending `y` status and Escape. Confirm that yanks do not change text, deletes/changes update the same register, and an available system clipboard contains the yanked text; clipboard-unavailable environments must preserve the internal register and show non-blocking feedback.
 19. **Save safety:** close a clean buffer with `Space b c`. Make another buffer dirty and close it with the same shortcut; confirm that it saves first. With multiple tabs, verify `Space b o` keeps the active tab and `Space b r` closes only tabs to its right, saving dirty targets before closing. Verify `Space b a` saves and closes every buffer, including the active one, and leaves the empty editor. Finally, make a buffer dirty and quit with `Space q q`; confirm that the application waits for the write and exits with the edited content persisted.
 20. **Terminal restoration after normal exit:** confirm that the shell prompt returns to the original screen, raw-mode input is disabled, and the cursor/keyboard behave normally.
+21. **Git history:** in a repository with multiple commits, press `Space g g`. Confirm a full-screen `Recent commits` page lists short IDs and one-line subjects newest first, with the branch in the heading and the shared status bar. Outside a repository, confirm a concise non-repository message. Press `q` or Escape and confirm the previous editor/explorer context returns.
 
 ## Failure and panic review
 

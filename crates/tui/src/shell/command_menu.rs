@@ -119,6 +119,15 @@ const UI_CONTEXT: CommandMenuContext = CommandMenuContext {
     }],
 };
 
+const GIT_CONTEXT: CommandMenuContext = CommandMenuContext {
+    title: "git",
+    items: &[CommandMenuItem {
+        key: 'g',
+        description: "log",
+        target: CommandMenuTarget::Action(CommandId("open_vcs_page")),
+    }],
+};
+
 static SEARCH_CONTEXT: CommandMenuContext = CommandMenuContext::new(
     "search",
     &[
@@ -151,6 +160,11 @@ const ROOT_CONTEXT: CommandMenuContext = CommandMenuContext {
             key: 'f',
             description: "files",
             target: CommandMenuTarget::Submenu(&FILES_CONTEXT),
+        },
+        CommandMenuItem {
+            key: 'g',
+            description: "git",
+            target: CommandMenuTarget::Submenu(&GIT_CONTEXT),
         },
         CommandMenuItem::submenu('s', "search", &SEARCH_CONTEXT),
         CommandMenuItem {
@@ -335,6 +349,14 @@ mod tests {
         assert_eq!(
             menu.handle_key(KeyCode::Char('f')),
             CommandMenuOutcome::Action(CommandId("open_file_picker"))
+        );
+
+        menu.handle_key(KeyCode::Char(' '));
+        menu.handle_key(KeyCode::Char('g'));
+        assert_eq!(menu.context_title(), "Leader > git");
+        assert_eq!(
+            menu.handle_key(KeyCode::Char('g')),
+            CommandMenuOutcome::Action(CommandId("open_vcs_page"))
         );
 
         menu.handle_key(KeyCode::Char(' '));

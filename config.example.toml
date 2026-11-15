@@ -128,3 +128,7 @@ line_jump_cancel = "esc"
 
 [keymap.view_align]
 view_align_cancel = "esc"
+
+[keymap.vcs]
+close_vcs_page = "esc"
+close_vcs_page_q = "q"

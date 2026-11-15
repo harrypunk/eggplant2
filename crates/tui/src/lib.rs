@@ -118,6 +118,7 @@ pub mod data_object {
     pub struct Model {
         // Application lifecycle.
         pub running_state: RunningState,
+        pub active_page: AppPage,
 
         // Editor-owned document and editing state.
         pub editor: EditorSession,
@@ -160,6 +161,7 @@ pub mod data_object {
         fn default() -> Self {
             Self {
                 running_state: RunningState::Running,
+                active_page: AppPage::Editor,
                 editor: EditorSession::default(),
                 workspace: None,
                 explorer: ExplorerState::default(),
@@ -241,6 +243,13 @@ pub mod data_object {
                 text: text.into(),
             }
         }
+    }
+
+    #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+    pub enum AppPage {
+        #[default]
+        Editor,
+        Vcs,
     }
 
     #[derive(Debug, Default, PartialEq, Eq)]
