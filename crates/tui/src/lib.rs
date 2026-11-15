@@ -1,23 +1,20 @@
-pub mod buffer;
-pub mod command_menu;
+pub mod capabilities;
 pub mod component;
 pub mod config;
-pub mod document;
 pub mod features;
-pub mod file_watcher;
-mod filesystem;
-pub mod focus;
-pub mod lifecycle;
 pub mod manager;
 pub mod page;
-pub mod register;
 pub mod runtime;
-pub mod search;
+pub mod shell;
 pub mod startup;
 pub mod terminal;
 pub mod theme;
 pub mod tools;
 pub mod ui;
+
+pub(crate) use capabilities::filesystem;
+pub use capabilities::{document, file_watcher, register, search};
+pub use shell::{buffer, command_menu, focus, lifecycle};
 
 pub use features::{
     buffer_grep, buffer_jump, change, editing, explorer, external_sync, file_picker, line_jump,
