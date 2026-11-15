@@ -200,6 +200,7 @@ Input is context-aware: overlays handle input first, followed by the focused fea
 | Next / previous buffer | `Space b n` / `Space b p` |
 | Close current buffer | `Space b c` |
 | Close other buffers / buffers to the right | `Space b o` / `Space b r` |
+| Close all buffers | `Space b a` |
 | Show/hide explorer | `Space e` |
 | Find/open a file | `Space Space` or `Space f f` |
 | Select a theme | `Space u t` |

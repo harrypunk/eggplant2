@@ -253,6 +253,11 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
             crate::lifecycle::handle_command,
         ),
         Command::feature(
+            CommandId("close_all_buffers"),
+            "close all buffers",
+            crate::lifecycle::handle_command,
+        ),
+        Command::feature(
             CommandId("next_buffer"),
             "next buffer",
             crate::buffer::handle_command,

@@ -13,6 +13,7 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         "close_buffer" => request_close(model),
         "close_other_buffers" => request_close_group(model, CloseGroup::Others),
         "close_buffers_right" => request_close_group(model, CloseGroup::Right),
+        "close_all_buffers" => request_close_group(model, CloseGroup::All),
         _ => {
             model.status = Some(StatusMessage::error(format!(
                 "unknown lifecycle command `{}`",
@@ -37,6 +38,7 @@ pub(crate) fn finish_save(model: &mut Model, completion: SaveCompletion) -> Opti
         Some(DeferredAction::CloseBuffer(id)) => finish_close(model, id),
         Some(DeferredAction::CloseOthers(id)) => finish_close_group(model, id, CloseGroup::Others),
         Some(DeferredAction::CloseRight(id)) => finish_close_group(model, id, CloseGroup::Right),
+        Some(DeferredAction::CloseAll(id)) => finish_close_group(model, id, CloseGroup::All),
         None => follow_up_save(model, buffer_id),
     }
 }
@@ -77,6 +79,7 @@ fn finish_close(model: &mut Model, id: editor::BufferId) -> Option<Effect> {
 enum CloseGroup {
     Others,
     Right,
+    All,
 }
 
 impl CloseGroup {
@@ -84,6 +87,7 @@ impl CloseGroup {
         match self {
             Self::Others => DeferredAction::CloseOthers(active),
             Self::Right => DeferredAction::CloseRight(active),
+            Self::All => DeferredAction::CloseAll(active),
         }
     }
 }
@@ -97,6 +101,11 @@ fn close_group_targets(
         return Vec::new();
     };
     match group {
+        CloseGroup::All => snapshot
+            .buffers
+            .into_iter()
+            .map(|buffer| buffer.id)
+            .collect(),
         CloseGroup::Others => snapshot
             .buffers
             .into_iter()
@@ -319,6 +328,54 @@ mod tests {
         assert_eq!(model.editor.buffer_count(), 1);
         assert_eq!(model.editor.active_buffer(), Some(second));
         assert_eq!(std::fs::read_to_string(first_path).unwrap(), "!first");
+    }
+
+    #[test]
+    fn close_all_leaves_the_empty_editor_state() {
+        let mut model = Model::default();
+        create_buffer(&mut model, "first");
+        create_buffer(&mut model, "second");
+        let manager = MessageManager::default();
+
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("close_all_buffers")),
+        );
+
+        assert!(model.editor.is_empty());
+        assert_eq!(model.editor.active_buffer(), None);
+        assert!(model.editor.active_snapshot().is_none());
+        assert_eq!(model.deferred_action, None);
+    }
+
+    #[tokio::test]
+    async fn close_all_saves_a_dirty_active_buffer_before_closing() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("note.txt");
+        std::fs::write(&path, "original").unwrap();
+        let mut model = Model::default();
+        let id = open_file(&mut model, &path);
+        model.editor.enter_insert_mode();
+        model
+            .editor
+            .active_editor()
+            .unwrap()
+            .insert_text("!")
+            .unwrap();
+        model.editor.enter_normal_mode();
+        let manager = MessageManager::default();
+
+        let request = expect_save(manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("close_all_buffers")),
+        ));
+        assert_eq!(model.deferred_action, Some(DeferredAction::CloseAll(id)));
+        assert_eq!(model.editor.buffer_count(), 1);
+        let completion = request.perform().await;
+        manager.update(&mut model, Message::SaveFinished(completion));
+
+        assert!(model.editor.is_empty());
+        assert_eq!(std::fs::read_to_string(path).unwrap(), "!original");
     }
 
     #[tokio::test]

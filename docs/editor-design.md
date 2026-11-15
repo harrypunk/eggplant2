@@ -364,7 +364,7 @@ For a core-only first version without soft wrap, a small Eggplant viewport conta
 3. **Edit:** resolve the active buffer through the view and apply a transaction. Never create a document implicitly when no view is active. Content changes auto-save after Normal-mode edits or when leaving Insert.
 4. **Save:** route automatic requests through one stable buffer-ID/revision-aware path. A late completion must not mark newer edits as saved.
 5. **Close:** a dirty file-backed buffer is saved and then closed only after success. An untitled buffer without a path or any failed save cancels closure with an error; there is no silent-discard workflow.
-6. **Close buffer groups:** `Space b o` keeps the active buffer and `Space b r` closes only later tabs. Dirty targets save first, and `EditorSession::close_buffers` validates every target before closing any, so failures cannot leave a partially closed group.
+6. **Close buffer groups:** `Space b o` keeps the active buffer, `Space b r` closes only later tabs, and `Space b a` closes every buffer. Dirty targets save first, and `EditorSession::close_buffers` validates every target before closing any, so failures cannot leave a partially closed group. Close-all includes the active buffer and finishes in the empty-editor state.
 7. **Close last buffer:** remove the active view and render the empty-editor state.
 
 ## 10. Implementation sequence

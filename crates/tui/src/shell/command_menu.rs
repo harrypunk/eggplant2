@@ -93,6 +93,11 @@ const BUFFER_CONTEXT: CommandMenuContext = CommandMenuContext {
             description: "close right",
             target: CommandMenuTarget::Action(CommandId("close_buffers_right")),
         },
+        CommandMenuItem {
+            key: 'a',
+            description: "close all",
+            target: CommandMenuTarget::Action(CommandId("close_all_buffers")),
+        },
     ],
 };
 
@@ -274,7 +279,11 @@ mod tests {
             CommandMenuOutcome::Action(CommandId("close_buffer"))
         );
 
-        for (key, command) in [('o', "close_other_buffers"), ('r', "close_buffers_right")] {
+        for (key, command) in [
+            ('o', "close_other_buffers"),
+            ('r', "close_buffers_right"),
+            ('a', "close_all_buffers"),
+        ] {
             menu.handle_key(KeyCode::Char(' '));
             menu.handle_key(KeyCode::Char('b'));
             assert_eq!(

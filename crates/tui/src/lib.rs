@@ -190,6 +190,7 @@ pub mod data_object {
         CloseBuffer(BufferId),
         CloseOthers(BufferId),
         CloseRight(BufferId),
+        CloseAll(BufferId),
     }
 
     /// A workspace whose root is fixed after startup.
