@@ -197,7 +197,7 @@ Input is context-aware: overlays handle input first, followed by the focused fea
 | Common action | Default binding |
 | --- | --- |
 | Quit | `Space q q` |
-| Next / previous buffer | `Space b n` / `Space b p` |
+| Next / previous buffer | `Space b n` / `Space b p` or `]b` / `[b` |
 | Close current buffer | `Space b c` |
 | Close other buffers / buffers to the right | `Space b o` / `Space b r` |
 | Close all buffers | `Space b a` |

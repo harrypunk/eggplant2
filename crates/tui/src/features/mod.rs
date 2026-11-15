@@ -2,6 +2,7 @@
 
 pub mod buffer_grep;
 pub mod buffer_jump;
+pub mod buffer_navigation;
 pub mod change;
 pub mod editing;
 pub mod explorer;

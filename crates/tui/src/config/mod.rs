@@ -88,6 +88,8 @@ impl Default for Config {
                         ("page_scroll_down", "ctrl-f"),
                         ("page_scroll_up", "ctrl-u"),
                         ("view_align_start", "z"),
+                        ("next_buffer_pending", "]"),
+                        ("previous_buffer_pending", "["),
                         ("delete_grapheme", "x"),
                         ("delete_line_pending", "d"),
                         ("change_line_pending", "c"),
@@ -167,6 +169,7 @@ impl Default for Config {
                         ("buffer_jump_backspace", "backspace"),
                     ],
                 ),
+                keymap_context("buffer_navigation", [("buffer_navigation_cancel", "esc")]),
                 keymap_context(
                     "buffer_grep",
                     [

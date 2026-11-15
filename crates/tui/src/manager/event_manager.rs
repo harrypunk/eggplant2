@@ -247,6 +247,38 @@ mod tests {
     }
 
     #[test]
+    fn routes_bracket_buffer_navigation_and_cancellation() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+
+        for (character, command) in [
+            (']', "next_buffer_pending"),
+            ('[', "previous_buffer_pending"),
+        ] {
+            let event = Event::Key(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+
+        model.context_stack.push(Context::BufferNavigation);
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('b'), KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::TextInput('b'))
+        ));
+        let event = Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::InvokeCommand(CommandId(
+                "buffer_navigation_cancel"
+            )))
+        ));
+    }
+
+    #[test]
     fn routes_buffer_jump_text_and_commands_in_its_context() {
         let manager = event_manager();
         let mut model = Model::default();

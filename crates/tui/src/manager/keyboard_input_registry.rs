@@ -47,7 +47,7 @@ fn parse_context_bindings(
 ) -> color_eyre::Result<ContextBindings> {
     let context = parse_context(context_name).ok_or_else(|| {
         eyre!(
-            "unknown keymap context `{context_name}`; expected normal, editor_input, visual, explorer, file_picker, theme_picker, buffer_jump, buffer_grep, project_grep, line_jump, view_align, change, yank, agent_chat, agent_chat_dialog, or vcs"
+            "unknown keymap context `{context_name}`; expected normal, editor_input, visual, explorer, file_picker, theme_picker, buffer_jump, buffer_navigation, buffer_grep, project_grep, line_jump, view_align, change, yank, agent_chat, agent_chat_dialog, or vcs"
         )
     })?;
 
@@ -103,6 +103,7 @@ fn parse_context(value: &str) -> Option<Context> {
         "file_picker" => Some(Context::FilePicker),
         "theme_picker" => Some(Context::ThemePicker),
         "buffer_jump" => Some(Context::BufferJump),
+        "buffer_navigation" => Some(Context::BufferNavigation),
         "buffer_grep" => Some(Context::BufferGrep),
         "project_grep" => Some(Context::ProjectGrep),
         "line_jump" => Some(Context::LineJump),

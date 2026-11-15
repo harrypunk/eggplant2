@@ -8,6 +8,8 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | --- | --- | --- |
 | Normal / Explorer | Quit | `Space q q` |
 | Normal / Explorer | Next / previous buffer | `Space b n` / `Space b p` |
+| Normal | Next / previous buffer | `]b` / `[b` |
+| Pending buffer navigation | Cancel | `Esc` |
 | Normal / Explorer | Close current buffer | `Space b c` |
 | Normal / Explorer | Close other buffers / buffers to the right | `Space b o` / `Space b r` |
 | Normal / Explorer | Close all buffers | `Space b a` |

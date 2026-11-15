@@ -17,8 +17,8 @@ pub use capabilities::{document, file_watcher, register, search};
 pub use shell::{buffer, command_menu, focus, lifecycle};
 
 pub use features::{
-    buffer_grep, buffer_jump, change, editing, explorer, external_sync, file_picker, line_jump,
-    page_scroll, project_grep, theme_picker, view_align, yank,
+    buffer_grep, buffer_jump, buffer_navigation, change, editing, explorer, external_sync,
+    file_picker, line_jump, page_scroll, project_grep, theme_picker, view_align, yank,
 };
 
 #[cfg(test)]
@@ -40,6 +40,7 @@ pub mod data_object {
     use crate::{
         buffer_grep::BufferGrepState,
         buffer_jump::BufferJumpState,
+        buffer_navigation::BufferNavigationState,
         change::ChangeState,
         command_menu::CommandMenuState,
         explorer::ExplorerState,
@@ -146,6 +147,7 @@ pub mod data_object {
         pub register: RegisterState,
         pub yank: YankState,
         pub buffer_jump: BufferJumpState,
+        pub buffer_navigation: BufferNavigationState,
         pub buffer_grep: BufferGrepState,
         pub project_grep: ProjectGrepState,
         #[cfg(test)]
@@ -176,6 +178,7 @@ pub mod data_object {
                 register: RegisterState::default(),
                 yank: YankState::default(),
                 buffer_jump: BufferJumpState::default(),
+                buffer_navigation: BufferNavigationState::default(),
                 buffer_grep: BufferGrepState::default(),
                 project_grep: ProjectGrepState::default(),
                 #[cfg(test)]
@@ -300,6 +303,7 @@ pub mod data_object {
         FilePicker,
         ThemePicker,
         BufferJump,
+        BufferNavigation,
         BufferGrep,
         ProjectGrep,
         LineJump,

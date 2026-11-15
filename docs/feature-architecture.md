@@ -309,6 +309,8 @@ Implemented M8.6: `change` owns Visual `x`/`d`/`c`, Normal `x`, pending `dd`/`cc
 
 Implemented M8.7: `yank` owns Visual `y`, Normal pending `yy`, and Escape cleanup. `RegisterState` stores the automatic unnamed register shared with M8.6 and mirrors it through a cloned Helix `ClipboardProvider` in a blocking effect. Clipboard failure is non-blocking, yanks do not edit/save, and generic `Effect::Batch` supports register-plus-save work.
 
+Implemented common buffer navigation: `features/buffer_navigation.rs` owns only `]b`/`[b` prefix state, its input context, registration, and cancellation. Accepted sequences delegate to the existing `next_buffer`/`previous_buffer` commands, preserving save-before-switch and explorer reveal without duplicating buffer lifecycle policy or adding a general bracket/unimpaired grammar.
+
 Eggplant intentionally supports one cursor/selection only. Only `gg`/`G` accept counts; existing `w`/`b`/`e` and all other motions are uncounted. Visual selection is the intended workflow for larger ranges instead of adding a broader text-object motion catalog. Beyond the M8.5–M8.7 slices, M8 does not introduce general Visual operators, macros, named/register-selection workflows, multi-cursor behavior, or full Vim/Helix compatibility.
 
 ## 12. Testing strategy
