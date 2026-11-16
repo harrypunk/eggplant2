@@ -15,6 +15,10 @@ use crate::{
     },
 };
 
+pub(crate) mod commit;
+
+use commit::CommitState;
+
 const HISTORY_PAGE_SIZE: usize = 20;
 const DIFF_LIMIT: usize = 200;
 
@@ -58,6 +62,7 @@ pub struct VcsState {
     diff_base_pending: Option<(BufferId, i32)>,
     diff_base_generation: u64,
     pub(crate) notice: Option<String>,
+    pub(crate) commit: CommitState,
     documents: DocumentFactory,
 }
 
@@ -102,6 +107,7 @@ impl Default for VcsState {
             diff_base_pending: None,
             diff_base_generation: 0,
             notice: None,
+            commit: CommitState::default(),
             documents: DocumentFactory::new(),
         }
     }
@@ -279,7 +285,8 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
         ),
     ]
     .into_iter()
-    .try_for_each(|command| commands.register(command))
+    .try_for_each(|command| commands.register(command))?;
+    commit::register_commands(commands)
 }
 
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
@@ -303,7 +310,7 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         "vcs_unstage" => mutate_selected_change(model, false),
         "vcs_toggle_diff" => toggle_diff(model),
         "vcs_discard_placeholder" => placeholder(model, "Discard is not implemented"),
-        "vcs_commit_placeholder" => placeholder(model, "Commit is not implemented"),
+        "vcs_commit_placeholder" => commit::open(model),
         "vcs_help_placeholder" => placeholder(model, "Help is not implemented"),
         _ => {
             model.status = Some(StatusMessage::error(format!(
@@ -1884,7 +1891,6 @@ mod tests {
         let mut model = Model::default();
         for (command, message) in [
             ("vcs_discard_placeholder", "Discard is not implemented"),
-            ("vcs_commit_placeholder", "Commit is not implemented"),
             ("vcs_help_placeholder", "Help is not implemented"),
         ] {
             assert!(handle_command(&mut model, CommandId(command)).is_none());

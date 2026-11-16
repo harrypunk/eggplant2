@@ -22,6 +22,9 @@ impl TextInputRegistry {
             .register(Context::EditorInput, crate::editing::insert_char)
             .expect("editor text input must be unique");
         registry
+            .register(Context::VcsCommitInput, crate::editing::insert_char)
+            .expect("commit-message text input must be unique");
+        registry
             .register(Context::FilePicker, crate::file_picker::insert_char)
             .expect("file-picker text input must be unique");
         crate::buffer_jump::register_text_input(&mut registry)

@@ -1374,6 +1374,22 @@ async fn external_modification_save_failure_does_not_overwrite_either_version() 
 }
 
 #[test]
+fn first_dirty_file_buffer_skips_untitled_documents() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("note.txt");
+    std::fs::write(&path, "original").unwrap();
+    let mut session = EditorSession::new();
+    create_buffer(&mut session, "scratch");
+    append_text(&mut session, " dirty");
+    assert_eq!(session.first_dirty_file_buffer(), None);
+
+    let file = open_file(&mut session, &path);
+    append_text(&mut session, " dirty");
+
+    assert_eq!(session.first_dirty_file_buffer(), Some(file));
+}
+
+#[test]
 fn untitled_buffer_cannot_save_without_a_path() {
     let mut session = EditorSession::new();
     let id = create_buffer(&mut session, "scratch");

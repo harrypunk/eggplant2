@@ -95,6 +95,8 @@ fn parse_context(value: &str) -> Option<Context> {
         "agent_chat_dialog" => Some(Context::AgentChatDialog),
         "vcs" => Some(Context::VCS),
         "vcs_history" => Some(Context::VcsHistory),
+        "vcs_commit" => Some(Context::VcsCommit),
+        "vcs_commit_input" => Some(Context::VcsCommitInput),
         "editor_input" => Some(Context::EditorInput),
         "visual" => Some(Context::EditorVisual),
         "explorer" => Some(Context::Explorer),

@@ -1,13 +1,39 @@
-use editor::{CursorMovement, InsertPosition, LineBoundary, OpenLineDirection, WordMovement};
+use editor::{
+    CursorMovement, EditorSession, InsertPosition, LineBoundary, OpenLineDirection, WordMovement,
+};
 
 use crate::{
     buffer,
-    data_object::{CommandId, Context, Model, StatusMessage},
+    data_object::{AppPage, CommandId, Context, Model, StatusMessage},
     manager::effect::Effect,
 };
 
+fn target_editor(model: &mut Model) -> &mut EditorSession {
+    match model.active_page {
+        AppPage::VcsCommit => &mut model.vcs.commit.editor,
+        _ => &mut model.editor,
+    }
+}
+
+fn input_context(model: &Model) -> Context {
+    match model.active_page {
+        AppPage::VcsCommit => Context::VcsCommitInput,
+        _ => Context::EditorInput,
+    }
+}
+
+fn auto_save_active(model: &mut Model) -> Option<Effect> {
+    match model.active_page {
+        AppPage::VcsCommit => None,
+        _ => buffer::auto_save_active(model),
+    }
+}
+
 /// Editing feature commands, independent of physical keybindings.
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
+    if model.active_page == AppPage::VcsCommit && !model.vcs.commit.is_editing() {
+        return None;
+    }
     match id.as_str() {
         "enter_visual_mode" => enter_visual(model),
         "enter_visual_line_mode" => enter_visual_line(model),
@@ -15,7 +41,7 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
             model
                 .context_stack
                 .pop_if(|context| context == &Context::EditorVisual);
-            model.editor.enter_normal_mode();
+            target_editor(model).enter_normal_mode();
             None
         }
         "enter_insert_mode" => enter_insert(model),
@@ -25,11 +51,10 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         "open_line_below" => open_line(model, OpenLineDirection::Below),
         "open_line_above" => open_line(model, OpenLineDirection::Above),
         "exit_insert_mode" => {
-            model
-                .context_stack
-                .pop_if(|context| context == &Context::EditorInput);
-            model.editor.enter_normal_mode();
-            buffer::auto_save_active(model)
+            let context = input_context(model);
+            model.context_stack.pop_if(|active| *active == context);
+            target_editor(model).enter_normal_mode();
+            auto_save_active(model)
         }
         "move_left" => move_cursor(model, CursorMovement::Left),
         "move_right" => move_cursor(model, CursorMovement::Right),
@@ -41,36 +66,33 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         "move_previous_word_start" => move_word(model, WordMovement::PreviousStart),
         "move_next_word_end" => move_word(model, WordMovement::NextEnd),
         "backspace" => {
-            if model
-                .editor
+            if target_editor(model)
                 .active_editor()
                 .and_then(|mut editor| editor.backspace())
                 .is_ok()
             {
-                return buffer::auto_save_active(model);
+                return auto_save_active(model);
             }
             None
         }
         "insert_newline" => insert(model, "\n"),
         "undo" => {
-            if model
-                .editor
+            if target_editor(model)
                 .active_editor()
                 .and_then(|mut editor| editor.undo())
                 .unwrap_or(false)
             {
-                return buffer::auto_save_active(model);
+                return auto_save_active(model);
             }
             None
         }
         "redo" => {
-            if model
-                .editor
+            if target_editor(model)
                 .active_editor()
                 .and_then(|mut editor| editor.redo())
                 .unwrap_or(false)
             {
-                return buffer::auto_save_active(model);
+                return auto_save_active(model);
             }
             None
         }
@@ -85,36 +107,39 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
 }
 
 pub(crate) fn insert_char(model: &mut Model, character: char) -> Option<Effect> {
+    if model.active_page == AppPage::VcsCommit && !model.vcs.commit.is_editing() {
+        return None;
+    }
     insert(model, &character.to_string())
 }
 
 fn enter_visual(model: &mut Model) -> Option<Effect> {
-    if model.editor.active_buffer().is_some() {
+    if target_editor(model).active_buffer().is_some() {
         model.context_stack.push(Context::EditorVisual);
-        model.editor.enter_visual_mode();
+        target_editor(model).enter_visual_mode();
     }
     None
 }
 
 fn enter_visual_line(model: &mut Model) -> Option<Effect> {
-    if model.editor.active_buffer().is_some() {
+    if target_editor(model).active_buffer().is_some() {
         model.context_stack.push(Context::EditorVisual);
-        model.editor.enter_visual_line_mode();
+        target_editor(model).enter_visual_line_mode();
     }
     None
 }
 
 pub(crate) fn enter_insert(model: &mut Model) -> Option<Effect> {
-    if model.editor.active_buffer().is_some() {
-        model.context_stack.push(Context::EditorInput);
-        model.editor.enter_insert_mode();
+    if target_editor(model).active_buffer().is_some() {
+        let context = input_context(model);
+        model.context_stack.push(context);
+        target_editor(model).enter_insert_mode();
     }
     None
 }
 
 fn enter_insert_at(model: &mut Model, position: InsertPosition) -> Option<Effect> {
-    if model
-        .editor
+    if target_editor(model)
         .active_editor()
         .and_then(|mut editor| editor.move_cursor_to_insert(position))
         .is_ok()
@@ -125,47 +150,45 @@ fn enter_insert_at(model: &mut Model, position: InsertPosition) -> Option<Effect
 }
 
 fn open_line(model: &mut Model, direction: OpenLineDirection) -> Option<Effect> {
-    if model
-        .editor
+    if target_editor(model)
         .active_editor()
         .and_then(|mut editor| editor.open_line(direction))
         .is_ok()
     {
         enter_insert(model);
-        return buffer::auto_save_active(model);
+        return auto_save_active(model);
     }
     None
 }
 
 fn move_cursor(model: &mut Model, movement: CursorMovement) -> Option<Effect> {
-    if let Ok(mut editor) = model.editor.active_editor() {
+    if let Ok(mut editor) = target_editor(model).active_editor() {
         let _ = editor.move_cursor(movement);
     }
     None
 }
 
 fn move_line_boundary(model: &mut Model, boundary: LineBoundary) -> Option<Effect> {
-    if let Ok(mut editor) = model.editor.active_editor() {
+    if let Ok(mut editor) = target_editor(model).active_editor() {
         let _ = editor.move_cursor_to_line_boundary(boundary);
     }
     None
 }
 
 fn move_word(model: &mut Model, movement: WordMovement) -> Option<Effect> {
-    if let Ok(mut editor) = model.editor.active_editor() {
+    if let Ok(mut editor) = target_editor(model).active_editor() {
         let _ = editor.move_cursor_word(movement);
     }
     None
 }
 
 fn insert(model: &mut Model, text: &str) -> Option<Effect> {
-    if model
-        .editor
+    if target_editor(model)
         .active_editor()
         .and_then(|mut editor| editor.insert_text(text))
         .is_ok()
     {
-        return buffer::auto_save_active(model);
+        return auto_save_active(model);
     }
     None
 }

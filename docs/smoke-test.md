@@ -60,13 +60,22 @@ Use a repository containing both staged and unstaged changes, then open the Git 
 - [ ] `s` on an unstaged file moves it to the staged section.
 - [ ] `u` on a staged file returns it to the unstaged section without changing file contents.
 - [ ] Repeated operations preserve a usable selection without a full-page loading flash.
-- [ ] `x`, `c`, and `?` show placeholder notices only and do not mutate the repository.
+- [ ] `x` and `?` show placeholder notices only and do not mutate the repository.
+- [ ] `c` opens the commit-message page when staged changes exist.
 
 ### Inline diffs
 
 - [ ] `Tab` expands and collapses a diff beneath the selected file.
 - [ ] Additions, deletions, and hunk headers use readable theme colors.
 - [ ] Closing and reopening the toggle reuses the cached diff.
+
+### Commit page
+
+- [ ] The header summarizes only staged files; the scratch editor supports multiline messages, Normal/Insert modes, and undo/redo without auto-saving a message file.
+- [ ] `q` in Normal mode closes and preserves the draft; reopening with `c` restores it. `Ctrl-c` explicitly discards it.
+- [ ] Empty messages and empty staging do not start repository work.
+- [ ] `Ctrl-s` saves modified file-backed buffers, waits for saves, and commits exactly the staged content without including unstaged or untracked files.
+- [ ] Backend or save failures preserve the draft. Success clears it, returns to status, and refreshes HEAD, changes, history, and diff indicators.
 
 ### History page
 

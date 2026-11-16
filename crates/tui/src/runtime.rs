@@ -14,7 +14,7 @@ use crate::{
         keyboard_input_registry::Registry, message_manager::MessageManager,
         text_input_registry::TextInputRegistry,
     },
-    page::{editor::Editor, vcs::Vcs, vcs_history::VcsHistory},
+    page::{editor::Editor, vcs::Vcs, vcs_commit::VcsCommit, vcs_history::VcsHistory},
     ui::UiRegistry,
 };
 
@@ -33,6 +33,7 @@ pub fn run(
     let editor_page = Editor::new(ui);
     let vcs_page = Vcs;
     let vcs_history_page = VcsHistory;
+    let vcs_commit_page = VcsCommit;
     let (message_sender, mut message_receiver) = tokio::sync::mpsc::unbounded_channel();
     let watch_root = model
         .workspace
@@ -69,10 +70,13 @@ pub fn run(
             AppPage::Editor => editor_page.view(&model, frame),
             AppPage::Vcs => vcs_page.view(&model, frame),
             AppPage::VcsHistory => vcs_history_page.view(&model, frame),
+            AppPage::VcsCommit => vcs_commit_page.view(&model, frame),
         })?;
-        terminal
-            .backend_mut()
-            .execute(cursor_style(model.editor.mode()))?;
+        let mode = match model.active_page {
+            AppPage::VcsCommit => model.vcs.commit.editor.mode(),
+            _ => model.editor.mode(),
+        };
+        terminal.backend_mut().execute(cursor_style(mode))?;
 
         if let Some(message) = event_manager.next_message(&model)? {
             apply_message(&mut model, &message_manager, message, &message_sender);

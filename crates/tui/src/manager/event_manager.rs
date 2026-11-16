@@ -330,6 +330,61 @@ mod tests {
     }
 
     #[test]
+    fn routes_vcs_commit_page_keys() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::VcsCommit);
+        for (key, modifiers, command) in [
+            (KeyCode::Char('q'), KeyModifiers::NONE, "vcs_commit_close"),
+            (KeyCode::Char('i'), KeyModifiers::NONE, "enter_insert_mode"),
+            (
+                KeyCode::Char('s'),
+                KeyModifiers::CONTROL,
+                "vcs_commit_submit",
+            ),
+            (
+                KeyCode::Char('c'),
+                KeyModifiers::CONTROL,
+                "vcs_commit_discard",
+            ),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, modifiers));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+
+        model.context_stack.push(Context::VcsCommitInput);
+        for (key, modifiers, command) in [
+            (KeyCode::Esc, KeyModifiers::NONE, "exit_insert_mode"),
+            (KeyCode::Enter, KeyModifiers::NONE, "insert_newline"),
+            (KeyCode::Backspace, KeyModifiers::NONE, "backspace"),
+            (
+                KeyCode::Char('s'),
+                KeyModifiers::CONTROL,
+                "vcs_commit_submit",
+            ),
+            (
+                KeyCode::Char('c'),
+                KeyModifiers::CONTROL,
+                "vcs_commit_discard",
+            ),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, modifiers));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::TextInput('x'))
+        ));
+    }
+
+    #[test]
     fn routes_buffer_jump_text_and_commands_in_its_context() {
         let manager = event_manager();
         let mut model = Model::default();

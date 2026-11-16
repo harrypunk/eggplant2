@@ -13,7 +13,7 @@ use crate::{
         effect::Effect,
         text_input_registry::TextInputRegistry,
     },
-    page::editor::editor_content_area,
+    page::{editor::editor_content_area, vcs_commit::message_content_area},
 };
 
 #[derive(Debug)]
@@ -75,6 +75,11 @@ impl MessageManager {
                     model.editor.active_snapshot().as_ref(),
                 );
                 model.editor.resize_active_view(area.width, area.height);
+                let area = message_content_area(
+                    Rect::new(0, 0, width, height),
+                    model.vcs.commit.editor.active_snapshot().as_ref(),
+                );
+                model.vcs.commit.resize_active_view(area.width, area.height);
             }
             _ => {}
         }

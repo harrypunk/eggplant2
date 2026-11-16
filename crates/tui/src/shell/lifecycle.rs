@@ -27,9 +27,14 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
 pub(crate) fn finish_save(model: &mut Model, completion: SaveCompletion) -> Option<Effect> {
     let buffer_id = completion.buffer_id();
     if let Err(error) = model.editor.complete_save(completion) {
+        let error = error.to_string();
         model.deferred_action = None;
-        model.status = Some(StatusMessage::error(error.to_string()));
+        crate::vcs::commit::save_failed(model, &error);
+        model.status = Some(StatusMessage::error(error));
         return None;
+    }
+    if model.vcs.commit.is_waiting_for_save() {
+        return crate::vcs::commit::continue_after_save(model);
     }
     match model.deferred_action {
         Some(DeferredAction::Quit) => finish_quit(model),

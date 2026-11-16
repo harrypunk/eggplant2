@@ -14,14 +14,15 @@ The addon currently provides:
 - Stage/unstage for regular files and deletions.
 - Toggleable inline diffs with caching.
 - Safe file opening through the existing document capability.
+- Explicit commits of already-staged changes with a multiline scratch-message editor.
 
-Discard, commit, and help commands remain placeholders. A separate history page provides bounded commit summaries with short IDs, subjects, authors, and short dates. Toggling a commit lists its changed files inline. Opening the commit shows a right-side detail with full hash, complete message, author/date, and its file list. Each detail file can toggle its own first-parent diff with the same theme colors and cache behavior as file diffs. Merge commits intentionally use the first parent in this slice. Tree changes are filtered to regular blobs so directory objects never render as text, and multi-file commits retain every changed path. History loads 20 commits per page; the header shows a prominent `n load more` hint plus loading and retry feedback.
+Discard and help commands remain placeholders. A separate history page provides bounded commit summaries with short IDs, subjects, authors, and short dates. Toggling a commit lists its changed files inline. Opening the commit shows a right-side detail with full hash, complete message, author/date, and its file list. Each detail file can toggle its own first-parent diff with the same theme colors and cache behavior as file diffs. Merge commits intentionally use the first parent in this slice. Tree changes are filtered to regular blobs so directory objects never render as text, and multi-file commits retain every changed path. History loads 20 commits per page; the header shows a prominent `n load more` hint plus loading and retry feedback.
 
 ## Ownership and dependency direction
 
 - `crates/vcs` owns Helix VCS/Gitoxide interaction and returns owned branch, change, history, and diff values.
-- `features/vcs/` owns request generations, loading/error state, duplicate suppression, operation state, and stale-result rejection.
-- `page/vcs.rs` renders feature state without performing repository work.
+- `features/vcs/` owns request generations, loading/error state, duplicate suppression, operation state, and stale-result rejection. Its commit workflow owns a separate scratch `EditorSession` and the save-before-commit barrier.
+- `page/vcs.rs`, `page/vcs_history.rs`, and `page/vcs_commit.rs` render feature state without performing repository work.
 - `AppPage` and `Context::Vcs` provide shell navigation; closing the page restores the previous editor or explorer context.
 - No Gitoxide types enter application snapshots or Ratatui components.
 
@@ -39,6 +40,8 @@ Selection follows one staged-first order. Empty sections consume no space, and i
 
 Changed files use the existing safe document-opening and explorer-reveal path. Deleted files are not recreated.
 
+The commit page shows a read-only staged-file summary above a multiline scratch editor. It supports ordinary navigation, Insert editing, and undo/redo without file-backed auto-save. Closing with `q` preserves the in-memory draft; `Ctrl-c` explicitly discards it. Submission locks editing until completion, preserves the message on failure, and clears it on success.
+
 ## Mutation behavior
 
 Real stage/unstage operations use filtered worktree-to-blob conversion and locked index writes directly through `gix`; production code does not require an external Git executable.
@@ -51,6 +54,8 @@ Operations:
 - Merge successful changes into the current staged-first model instead of rescanning the repository.
 - Reject conflicts and unsupported file types explicitly.
 - Preserve ready content during background status refreshes.
+
+Explicit `Ctrl-s` submission saves modified file-backed buffers and waits for in-flight saves before committing. The backend holds the index lock, builds a tree from exactly the staged index, validates identity/message/staged changes and repository state, and updates HEAD through Gitoxide with expected-parent protection. Unstaged and untracked content is never added implicitly. Hooks and signing are outside this slice. Success clears the draft and refreshes HEAD, status, history, and diff bases without reloading unchanged worktree files.
 
 ## Diff behavior
 
@@ -73,5 +78,5 @@ The existing gutter displays a vertical `│` for every change, using the theme'
 
 ## Deferred work
 
-- Reviewed discard, commit, and fast-forward-only merge workflows.
+- Reviewed discard and fast-forward-only merge workflows.
 - Conflict resolution, staging of unsupported entry types, and other advanced Git behavior.

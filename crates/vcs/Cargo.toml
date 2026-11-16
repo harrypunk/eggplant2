@@ -5,7 +5,7 @@ edition.workspace = true
 
 [dependencies]
 anyhow = "1"
-gix = { version = "0.85.0", default-features = false, features = ["revision", "sha1"] }
+gix = { version = "0.85.0", default-features = false, features = ["revision", "sha1", "tree-editor"] }
 helix-vcs = { git = "http://git.z.lan/fork/helix", rev = "079a789e8cb08ead67f19e1971a1b7438b37354b", features = ["git"] }
 thiserror = "2"
 

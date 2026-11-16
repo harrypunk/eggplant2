@@ -251,6 +251,7 @@ pub mod data_object {
         Editor,
         Vcs,
         VcsHistory,
+        VcsCommit,
     }
 
     #[derive(Debug, Default, PartialEq, Eq)]
@@ -309,6 +310,8 @@ pub mod data_object {
         AgentChatDialog,
         VCS,
         VcsHistory,
+        VcsCommit,
+        VcsCommitInput,
         EditorInput,
         EditorVisual,
         EditorChange,

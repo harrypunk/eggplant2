@@ -526,6 +526,12 @@ pub enum MutationError {
     Failed(String),
 }
 
+/// Commit exactly the staged index contents with the configured identity.
+pub fn commit(path: &Path, message: &str) -> Result<gix::ObjectId, MutationError> {
+    let repository = open_repository(path).map_err(|_| MutationError::NotRepository)?;
+    commit_inner(repository, message).map_err(|error| MutationError::Failed(error.to_string()))
+}
+
 /// Stage one regular file or deletion with a locked Git index write.
 pub fn stage(path: &Path) -> Result<(), MutationError> {
     let repository = open_repository(path).map_err(|_| MutationError::NotRepository)?;
@@ -536,6 +542,65 @@ pub fn stage(path: &Path) -> Result<(), MutationError> {
 pub fn unstage(path: &Path) -> Result<(), MutationError> {
     let repository = open_repository(path).map_err(|_| MutationError::NotRepository)?;
     unstage_inner(repository, path).map_err(|error| MutationError::Failed(error.to_string()))
+}
+
+fn commit_inner(repository: Repository, message: &str) -> anyhow::Result<ObjectId> {
+    if message.trim().is_empty() {
+        anyhow::bail!("commit message must not be blank");
+    }
+
+    let _index_lock = gix::lock::Marker::acquire_to_hold_resource(
+        repository.index_path(),
+        gix::lock::acquire::Fail::Immediately,
+        None,
+    )?;
+    let index = open_index(&repository)?;
+    if index
+        .entries()
+        .iter()
+        .any(|entry| entry.stage() != Stage::Unconflicted)
+    {
+        anyhow::bail!("conflicted index");
+    }
+    if matches!(repository.state(), Some(gix::state::InProgress::Merge)) {
+        anyhow::bail!("merge in progress");
+    }
+
+    repository
+        .author()
+        .context("author identity is not configured")??;
+    repository
+        .committer()
+        .context("committer identity is not configured")??;
+
+    let parent = repository
+        .head()?
+        .try_into_peeled_id()?
+        .map(|id| id.detach());
+    let parent_tree = match parent {
+        Some(parent) => Some(repository.find_commit(parent)?.tree_id()?.detach()),
+        None => None,
+    };
+
+    let mut editor = repository.empty_tree().edit()?;
+    for entry in index.entries() {
+        if entry.flags.contains(Flags::INTENT_TO_ADD) {
+            continue;
+        }
+        let mode = entry
+            .mode
+            .to_tree_entry_mode()
+            .context("invalid index entry mode")?;
+        editor.upsert(entry.path(&index), mode.kind(), entry.id)?;
+    }
+    let tree = editor.write()?.detach();
+    let previous_tree =
+        parent_tree.unwrap_or_else(|| ObjectId::empty_tree(repository.object_hash()));
+    if tree == previous_tree {
+        anyhow::bail!("no staged changes");
+    }
+
+    Ok(repository.commit("HEAD", message, tree, parent)?.detach())
 }
 
 fn stage_inner(repository: Repository, path: &Path) -> anyhow::Result<()> {
@@ -767,16 +832,31 @@ mod tests {
         assert!(status.success(), "git command failed: {args:?}");
     }
 
-    fn repository() -> tempfile::TempDir {
+    fn configure_identity(root: &Path) {
+        git(root, &["config", "user.name", "Eggplant Test"]);
+        git(root, &["config", "user.email", "eggplant@example.com"]);
+    }
+
+    fn unborn_repository() -> tempfile::TempDir {
         let directory = tempfile::tempdir().unwrap();
         git(
             directory.path(),
             &["init", "--quiet", "--initial-branch=main"],
         );
+        configure_identity(directory.path());
+        directory
+    }
+
+    fn repository() -> tempfile::TempDir {
+        let directory = unborn_repository();
         std::fs::write(directory.path().join("note.txt"), "hello\n").unwrap();
         git(directory.path(), &["add", "note.txt"]);
         git(directory.path(), &["commit", "--quiet", "-m", "initial"]);
         directory
+    }
+
+    fn head_id(root: &Path) -> ObjectId {
+        open_repository(root).unwrap().head_id().unwrap().detach()
     }
 
     #[test]
@@ -1046,6 +1126,168 @@ mod tests {
             .unwrap();
         assert_eq!(entry.kind, ChangeKind::Modified);
         assert!(!entry.staged);
+    }
+
+    #[test]
+    fn commit_writes_only_staged_index_contents() {
+        let repository = repository();
+        let tracked = repository.path().join("note.txt");
+        std::fs::write(&tracked, "staged\n").unwrap();
+        stage(&tracked).unwrap();
+        std::fs::write(&tracked, "worktree\n").unwrap();
+        std::fs::write(repository.path().join("untracked.txt"), "untracked\n").unwrap();
+        let parent = head_id(repository.path());
+
+        let id = commit(repository.path(), "staged only").unwrap();
+
+        let repository_handle = open_repository(repository.path()).unwrap();
+        assert_eq!(repository_handle.head_id().unwrap().detach(), id);
+        let new_commit = repository_handle.find_commit(id).unwrap();
+        assert_eq!(
+            new_commit
+                .parent_ids()
+                .map(|id| id.detach())
+                .collect::<Vec<_>>(),
+            vec![parent]
+        );
+        assert_eq!(new_commit.message_raw_sloppy(), "staged only");
+        let tree = new_commit.tree().unwrap();
+        let note = tree.lookup_entry_by_path("note.txt").unwrap().unwrap();
+        assert_eq!(
+            repository_handle
+                .find_object(note.id().detach())
+                .unwrap()
+                .data,
+            b"staged\n"
+        );
+        assert!(
+            tree.lookup_entry_by_path("untracked.txt")
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(std::fs::read_to_string(tracked).unwrap(), "worktree\n");
+    }
+
+    #[test]
+    fn commit_rejects_blank_messages_without_moving_head() {
+        let repository = repository();
+        let tracked = repository.path().join("note.txt");
+        std::fs::write(&tracked, "staged\n").unwrap();
+        stage(&tracked).unwrap();
+        let parent = head_id(repository.path());
+
+        for message in ["", " \t\n"] {
+            let error = commit(repository.path(), message).unwrap_err();
+            assert!(
+                matches!(&error, MutationError::Failed(message) if message.contains("blank")),
+                "unexpected error: {error}"
+            );
+        }
+        assert_eq!(head_id(repository.path()), parent);
+    }
+
+    #[test]
+    fn commit_rejects_empty_staging_despite_worktree_changes() {
+        let repository = repository();
+        std::fs::write(repository.path().join("note.txt"), "unstaged\n").unwrap();
+        std::fs::write(repository.path().join("untracked.txt"), "untracked\n").unwrap();
+        let parent = head_id(repository.path());
+
+        let error = commit(repository.path(), "nothing staged").unwrap_err();
+
+        assert!(
+            matches!(&error, MutationError::Failed(message) if message.contains("no staged changes")),
+            "unexpected error: {error}"
+        );
+        assert_eq!(head_id(repository.path()), parent);
+        assert_eq!(
+            std::fs::read_to_string(repository.path().join("note.txt")).unwrap(),
+            "unstaged\n"
+        );
+    }
+
+    #[test]
+    fn commit_rejects_missing_author_or_committer_identity() {
+        let repository = repository();
+        let tracked = repository.path().join("note.txt");
+        std::fs::write(&tracked, "staged\n").unwrap();
+        stage(&tracked).unwrap();
+        let parent = head_id(repository.path());
+        git(repository.path(), &["config", "--unset", "user.name"]);
+        git(repository.path(), &["config", "--unset", "user.email"]);
+
+        let isolated = gix::ThreadSafeRepository::open_opts(
+            repository.path().join(".git"),
+            gix::open::Options::isolated(),
+        )
+        .unwrap()
+        .to_thread_local();
+        let error = commit_inner(isolated, "missing author").unwrap_err();
+        assert!(error.to_string().contains("author identity"));
+        assert_eq!(head_id(repository.path()), parent);
+
+        git(
+            repository.path(),
+            &["config", "author.name", "Eggplant Test"],
+        );
+        git(
+            repository.path(),
+            &["config", "author.email", "eggplant@example.com"],
+        );
+        let isolated = gix::ThreadSafeRepository::open_opts(
+            repository.path().join(".git"),
+            gix::open::Options::isolated(),
+        )
+        .unwrap()
+        .to_thread_local();
+        let error = commit_inner(isolated, "missing committer").unwrap_err();
+        assert!(error.to_string().contains("committer identity"));
+        assert_eq!(head_id(repository.path()), parent);
+    }
+
+    #[test]
+    fn commit_creates_an_unborn_root_commit() {
+        let repository = unborn_repository();
+        std::fs::write(repository.path().join("root.txt"), "root\n").unwrap();
+        git(repository.path(), &["add", "root.txt"]);
+
+        let id = commit(repository.path(), "initial root").unwrap();
+
+        let repository_handle = open_repository(repository.path()).unwrap();
+        assert_eq!(repository_handle.head_id().unwrap().detach(), id);
+        let root = repository_handle.find_commit(id).unwrap();
+        assert_eq!(root.parent_ids().count(), 0);
+        assert_eq!(root.message_raw_sloppy(), "initial root");
+        let tree = root.tree().unwrap();
+        let entry = tree.lookup_entry_by_path("root.txt").unwrap().unwrap();
+        assert_eq!(
+            repository_handle
+                .find_object(entry.id().detach())
+                .unwrap()
+                .data,
+            b"root\n"
+        );
+    }
+
+    #[test]
+    fn commit_rejects_a_preheld_index_lock_without_moving_head() {
+        let repository = repository();
+        let tracked = repository.path().join("note.txt");
+        std::fs::write(&tracked, "staged\n").unwrap();
+        stage(&tracked).unwrap();
+        let parent = head_id(repository.path());
+        let index_path = open_repository(repository.path()).unwrap().index_path();
+        let _lock = gix::lock::Marker::acquire_to_hold_resource(
+            index_path,
+            gix::lock::acquire::Fail::Immediately,
+            None,
+        )
+        .unwrap();
+
+        let error = commit(repository.path(), "locked").unwrap_err();
+
+        assert!(matches!(error, MutationError::Failed(_)));
+        assert_eq!(head_id(repository.path()), parent);
     }
 
     #[test]

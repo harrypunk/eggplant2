@@ -327,6 +327,13 @@ impl EditorSession {
             .find_map(|(&id, buffer)| buffer.document.is_modified().then_some(id))
     }
 
+    /// First modified file-backed buffer, excluding unsavable scratch documents.
+    pub fn first_dirty_file_buffer(&self) -> Option<BufferId> {
+        self.buffers.iter().find_map(|(&id, buffer)| {
+            (buffer.document.is_modified() && buffer.document.path().is_some()).then_some(id)
+        })
+    }
+
     pub fn active_view_height(&self) -> Option<usize> {
         self.active_view
             .as_ref()

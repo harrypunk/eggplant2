@@ -401,10 +401,10 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 #### M9.5 — Explicit commit
 
-- [ ] Commit only explicitly selected/staged changes with a user-entered message; never silently include unrelated or untracked files. The first slice may support only already-staged changes rather than adding an index editor.
-- [ ] Validate the repository/index state, required author identity, non-empty message, and presence of staged changes before writing.
-- [ ] Use one explicit Gitoxide commit operation and surface failures without changing buffers or reporting false success. Do not claim hook/signing compatibility in this slice.
-- [ ] Refresh HEAD, changed files, history, and diff state after success; test clean completion, empty staging/message, missing identity, concurrent repository changes, and stale completions.
+- [x] Commit only explicitly selected/staged changes with a user-entered message; never silently include unrelated or untracked files. The first slice supports already-staged changes rather than adding an index editor.
+- [x] Validate the repository/index state, required author identity, non-empty message, and presence of staged changes before writing.
+- [x] Use one explicit Gitoxide commit operation and surface failures without changing buffers or reporting false success. Hooks and signing are not claimed in this slice.
+- [x] Refresh HEAD, changed files, history, and diff state after success; test clean completion, empty staging/message, missing identity, concurrent repository changes, and stale completions.
 
 #### M9.6 — Fast-forward-only merge
 
