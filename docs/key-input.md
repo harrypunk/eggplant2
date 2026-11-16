@@ -19,8 +19,13 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | Normal / Explorer | Jump in the visible buffer | `Space c j` |
 | Normal / Explorer | Search the current file | `Space s c` |
 | Normal / Explorer | Search the project | `Space s p` |
-| Normal / Explorer | Open full-screen Git history | `Space g g` |
+| Normal / Explorer | Open full-screen Git status | `Space g g` |
 | VCS page | Close and return to editor | `q` / `Esc` |
+| VCS page | Select previous / next changed file | `k` / `j` |
+| VCS page | Open selected changed file | `Enter` |
+| VCS page | Stage / unstage selected file | `s` / `u` |
+| VCS page | Toggle inline diff for selected file | `Tab` |
+| VCS page | Placeholder discard / commit / help | `x` / `c` / `?` |
 | Normal / Explorer | Scroll down / up | `Ctrl-F` / `Ctrl-U` |
 | Normal / Explorer | Focus left / right | `Ctrl-H` / `Ctrl-L` |
 | Normal / Explorer | Focus up / down (reserved) | `Ctrl-K` / `Ctrl-J` |

@@ -279,7 +279,7 @@ mod tests {
     }
 
     #[test]
-    fn routes_vcs_page_close_keys() {
+    fn routes_vcs_page_keys() {
         let manager = event_manager();
         let mut model = Model::default();
         model.context_stack.push(Context::VCS);
@@ -287,6 +287,15 @@ mod tests {
         for (key, command) in [
             (KeyCode::Esc, "close_vcs_page"),
             (KeyCode::Char('q'), "close_vcs_page_q"),
+            (KeyCode::Char('j'), "vcs_next_change"),
+            (KeyCode::Char('k'), "vcs_previous_change"),
+            (KeyCode::Enter, "open_vcs_change"),
+            (KeyCode::Char('s'), "vcs_stage"),
+            (KeyCode::Char('u'), "vcs_unstage"),
+            (KeyCode::Tab, "vcs_toggle_diff"),
+            (KeyCode::Char('x'), "vcs_discard_placeholder"),
+            (KeyCode::Char('c'), "vcs_commit_placeholder"),
+            (KeyCode::Char('?'), "vcs_help_placeholder"),
         ] {
             let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
             assert!(matches!(

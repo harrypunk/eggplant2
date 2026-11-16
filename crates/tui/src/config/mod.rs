@@ -196,7 +196,19 @@ impl Default for Config {
                 keymap_context("yank", [("yank_cancel", "esc")]),
                 keymap_context(
                     "vcs",
-                    [("close_vcs_page", "esc"), ("close_vcs_page_q", "q")],
+                    [
+                        ("close_vcs_page", "esc"),
+                        ("close_vcs_page_q", "q"),
+                        ("vcs_next_change", "j"),
+                        ("vcs_previous_change", "k"),
+                        ("open_vcs_change", "enter"),
+                        ("vcs_stage", "s"),
+                        ("vcs_unstage", "u"),
+                        ("vcs_toggle_diff", "tab"),
+                        ("vcs_discard_placeholder", "x"),
+                        ("vcs_commit_placeholder", "c"),
+                        ("vcs_help_placeholder", "?"),
+                    ],
                 ),
             ]),
         }

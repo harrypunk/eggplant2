@@ -1,98 +1,280 @@
 use ratatui::{
     Frame,
-    layout::{Constraint, Flex, Layout},
-    style::Modifier,
+    layout::{Constraint, Flex, Layout, Rect},
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::Paragraph,
 };
 
+use ::vcs::{ChangeKind, FileChange};
+
 use crate::{
+    component::picker,
     data_object::Model,
-    ui::{StatusSlot, UiRegistry},
-    vcs::HistoryState,
+    theme::UiTheme,
+    vcs::{ChangesState, DiffState, HistoryState},
 };
 
-#[derive(Debug)]
-pub struct Vcs {
-    ui: UiRegistry,
-}
+const DIFF_DISPLAY_LIMIT: usize = 6;
 
-impl Default for Vcs {
-    fn default() -> Self {
-        Self::new(UiRegistry::builtin())
-    }
-}
+#[derive(Debug, Default)]
+pub struct Vcs;
 
 impl Vcs {
-    pub fn new(ui: UiRegistry) -> Self {
-        Self { ui }
-    }
-
     pub fn view(&self, model: &Model, frame: &mut Frame) {
-        let [main, status] = Layout::vertical([Constraint::Fill(1), Constraint::Length(1)])
-            .flex(Flex::Start)
-            .areas(frame.area());
+        let [hints_area, head_area, body] = Layout::vertical([
+            Constraint::Length(3),
+            Constraint::Length(2),
+            Constraint::Fill(1),
+        ])
+        .flex(Flex::Start)
+        .areas(frame.area());
         let styles = model.theme.ui();
-        let head = model.vcs.head().unwrap_or("--");
         let heading = styles
             .base
             .patch(styles.key_hint)
             .add_modifier(Modifier::BOLD);
-        let mut lines = vec![
-            Line::styled(format!("Git  {head}"), heading),
-            Line::default(),
-            Line::styled("Recent commits", heading),
-        ];
-        match model.vcs.history() {
-            HistoryState::Idle | HistoryState::Loading => {
-                lines.push(Line::styled("Loading history…", styles.muted));
+
+        let mut hints = vec![Line::styled(
+            "Tab toggle  s stage  u unstage  x discard  c commit  ? help",
+            heading,
+        )];
+        if let Some(notice) = &model.vcs.notice {
+            hints.push(Line::styled(notice.clone(), styles.muted));
+        }
+        frame.render_widget(Paragraph::new(hints).style(styles.base), hints_area);
+        frame.render_widget(
+            Paragraph::new(head_line(model, styles)).style(styles.base),
+            head_area,
+        );
+
+        match model.vcs.changes() {
+            ChangesState::Idle | ChangesState::Loading => {
+                frame.render_widget(
+                    Paragraph::new("Loading changes…").style(styles.base.patch(styles.muted)),
+                    body,
+                );
             }
-            HistoryState::Ready(commits) if commits.is_empty() => {
-                lines.push(Line::styled("No commits", styles.muted));
+            ChangesState::Failed(error) => {
+                frame.render_widget(
+                    Paragraph::new(error.as_str()).style(styles.base.patch(styles.error)),
+                    body,
+                );
             }
-            HistoryState::Ready(commits) => {
-                lines.extend(commits.iter().map(|commit| {
-                    Line::from(vec![
-                        Span::styled(format!("{}  ", commit.id), styles.key_hint),
-                        Span::raw(commit.subject.clone()),
-                    ])
-                }));
+            ChangesState::Ready(changes) if changes.is_empty() => {
+                frame.render_widget(
+                    Paragraph::new("No changes").style(styles.base.patch(styles.muted)),
+                    body,
+                );
             }
-            HistoryState::Failed(error) => {
-                lines.push(Line::styled(error.clone(), styles.error));
+            ChangesState::Ready(_) => {
+                let staged = render_section(model, styles, body, true, frame);
+                let remaining = Rect {
+                    y: body.y.saturating_add(staged),
+                    height: body.height.saturating_sub(staged),
+                    ..body
+                };
+                render_section(model, styles, remaining, false, frame);
             }
         }
-        frame.render_widget(Paragraph::new(lines).style(styles.base), main);
-        self.ui
-            .render_status(StatusSlot::Message, model, frame, status);
     }
+}
+
+fn head_line(model: &Model, styles: &UiTheme) -> Line<'static> {
+    let head = model.vcs.head().unwrap_or("--");
+    match model.vcs.history() {
+        HistoryState::Ready(commits) if !commits.is_empty() => {
+            let commit = &commits[0];
+            Line::from(vec![
+                Span::styled(format!("HEAD {head}  "), styles.key_hint),
+                Span::styled(format!("{}  ", commit.id), styles.key_hint),
+                Span::raw(commit.subject.clone()),
+            ])
+        }
+        HistoryState::Idle | HistoryState::Loading => {
+            Line::styled(format!("HEAD {head}  Loading…"), styles.muted)
+        }
+        HistoryState::Ready(_) | HistoryState::Failed(_) => {
+            Line::styled(format!("HEAD {head}"), styles.key_hint)
+        }
+    }
+}
+
+fn render_section(
+    model: &Model,
+    styles: &UiTheme,
+    area: Rect,
+    staged: bool,
+    frame: &mut Frame,
+) -> u16 {
+    let (lines, selected) = change_lines(model, styles, staged);
+    if lines.is_empty() || area.height == 0 {
+        return 0;
+    }
+    let title = if staged {
+        "Staged files"
+    } else {
+        "Unstaged files"
+    };
+    frame.render_widget(
+        Paragraph::new(title).style(styles.base.patch(styles.key_hint)),
+        Rect { height: 1, ..area },
+    );
+    let content = Rect {
+        y: area.y.saturating_add(1),
+        height: area.height.saturating_sub(1),
+        ..area
+    };
+    let lines = picker::visible_lines(lines, selected, content.height);
+    let rendered = lines.len() as u16;
+    frame.render_widget(Paragraph::new(lines).style(styles.base), content);
+    rendered.saturating_add(1)
+}
+
+fn change_lines(
+    model: &Model,
+    styles: &UiTheme,
+    staged: bool,
+) -> (Vec<Line<'static>>, Option<usize>) {
+    let ChangesState::Ready(changes) = model.vcs.changes() else {
+        return (Vec::new(), None);
+    };
+    let mut lines = Vec::new();
+    let mut selected = None;
+    for (index, change) in changes
+        .iter()
+        .enumerate()
+        .filter(|(_, change)| change.staged == staged)
+    {
+        if model.vcs.selected_change == Some(index) {
+            selected = Some(lines.len());
+        }
+        let is_selected = model.vcs.selected_change == Some(index);
+        let style = if is_selected {
+            styles
+                .base
+                .patch(styles.key_hint)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            styles.base
+        };
+        let marker = if is_selected { "> " } else { "  " };
+        lines.push(Line::styled(
+            format!("{marker}{}", change_text(model, change)),
+            style,
+        ));
+        if model.vcs.expanded_change.as_ref() == Some(&(change.path.clone(), change.staged)) {
+            lines.extend(diff_lines(model, styles));
+        }
+    }
+    (lines, selected)
+}
+
+fn diff_lines(model: &Model, styles: &UiTheme) -> Vec<Line<'static>> {
+    match &model.vcs.diff {
+        DiffState::Idle => Vec::new(),
+        DiffState::Loading => vec![Line::styled(
+            "  Loading diff…",
+            styles.base.patch(styles.muted),
+        )],
+        DiffState::Failed(error) => vec![Line::styled(
+            format!("  {error}"),
+            styles.base.patch(styles.error),
+        )],
+        DiffState::Ready { lines, truncated } => {
+            let mut output = lines
+                .iter()
+                .take(DIFF_DISPLAY_LIMIT)
+                .map(|line| Line::styled(format!("  {line}"), diff_style(styles, line)))
+                .collect::<Vec<_>>();
+            if *truncated || lines.len() > DIFF_DISPLAY_LIMIT {
+                output.push(Line::styled("  …", styles.base.patch(styles.muted)));
+            }
+            output
+        }
+    }
+}
+
+fn diff_style(styles: &UiTheme, line: &str) -> Style {
+    if line.starts_with('+') {
+        styles.base.patch(styles.diff_add)
+    } else if line.starts_with('-') {
+        styles.base.patch(styles.diff_remove)
+    } else if line.starts_with("@@") {
+        styles.base.patch(styles.diff_hunk)
+    } else {
+        styles.base
+    }
+}
+
+fn change_text(model: &Model, change: &FileChange) -> String {
+    let marker = match change.kind {
+        ChangeKind::Added => "A",
+        ChangeKind::Untracked => "?",
+        ChangeKind::Modified => "M",
+        ChangeKind::Conflict => "C",
+        ChangeKind::Deleted => "D",
+        ChangeKind::Renamed => "R",
+    };
+    let path = display_path(model, &change.path);
+    match &change.previous_path {
+        Some(previous) => format!("{marker} {} -> {path}", display_path(model, previous)),
+        None => format!("{marker} {path}"),
+    }
+}
+
+fn display_path(model: &Model, path: &std::path::Path) -> String {
+    model
+        .workspace
+        .as_ref()
+        .and_then(|workspace| path.strip_prefix(workspace.root()).ok())
+        .unwrap_or(path)
+        .to_string_lossy()
+        .into_owned()
 }
 
 #[cfg(test)]
 mod tests {
-    use ratatui::{Terminal, backend::TestBackend};
+    use ratatui::{Terminal, backend::TestBackend, style::Color};
 
     use super::*;
+    use crate::data_object::Workspace;
+
+    fn change(path: &str, kind: ChangeKind, staged: bool) -> FileChange {
+        FileChange {
+            kind,
+            staged,
+            path: std::path::PathBuf::from(format!("/workspace/{path}")),
+            previous_path: None,
+        }
+    }
 
     #[test]
-    fn renders_oneline_history_on_the_full_page() {
-        let mut model = Model::default();
-        model.vcs.history = HistoryState::Ready(vec![
-            ::vcs::CommitSummary {
-                id: "abc1234".to_string(),
-                subject: "second commit".to_string(),
-            },
-            ::vcs::CommitSummary {
-                id: "def5678".to_string(),
-                subject: "initial commit".to_string(),
-            },
-        ]);
-        let backend = TestBackend::new(70, 10);
+    fn renders_dynamic_sections_head_and_inline_diff_without_git_log() {
+        let mut model = Model {
+            workspace: Some(Workspace::new(std::path::PathBuf::from("/workspace"))),
+            ..Model::default()
+        };
+        model.vcs.history = HistoryState::Ready(vec![::vcs::CommitSummary {
+            id: "abc1234".to_string(),
+            subject: "current commit".to_string(),
+        }]);
+        model.vcs.changes =
+            ChangesState::Ready(vec![change("note.rs", ChangeKind::Modified, false)]);
+        model.vcs.selected_change = Some(0);
+        model.vcs.expanded_change = Some((std::path::PathBuf::from("/workspace/note.rs"), false));
+        model.vcs.diff = DiffState::Ready {
+            lines: vec![
+                "@@ -1 +1 @@".to_string(),
+                "-old".to_string(),
+                "+changed".to_string(),
+            ],
+            truncated: false,
+        };
+        let backend = TestBackend::new(80, 14);
         let mut terminal = Terminal::new(backend).unwrap();
 
-        terminal
-            .draw(|frame| Vcs::default().view(&model, frame))
-            .unwrap();
+        terminal.draw(|frame| Vcs.view(&model, frame)).unwrap();
 
         let content = terminal
             .backend()
@@ -101,10 +283,56 @@ mod tests {
             .iter()
             .map(|cell| cell.symbol())
             .collect::<String>();
-        assert!(content.contains("Git"));
-        assert!(content.contains("Recent commits"));
-        assert!(content.contains("abc1234  second commit"));
-        assert!(content.contains("def5678  initial commit"));
-        assert!(!content.contains("NORMAL |"));
+        assert!(content.contains("Tab toggle"));
+        assert!(content.contains("abc1234  current commit"));
+        assert!(!content.contains("Staged files"));
+        assert!(content.contains("Unstaged files"));
+        assert!(content.contains("> M note.rs"));
+        assert!(content.contains("+changed"));
+        assert!(!content.contains("Recent commits"));
+        assert!(!content.contains("NORMAL"));
+        let cells = terminal.backend().buffer().content();
+        assert!(
+            cells
+                .iter()
+                .any(|cell| cell.symbol() == "+" && cell.fg == Color::Green)
+        );
+        assert!(
+            cells
+                .iter()
+                .any(|cell| cell.symbol() == "-" && cell.fg == Color::Red)
+        );
+        assert!(
+            cells
+                .iter()
+                .any(|cell| cell.symbol() == "@" && cell.fg == Color::LightBlue)
+        );
+        assert!(
+            terminal
+                .backend()
+                .buffer()
+                .content()
+                .iter()
+                .all(|cell| cell.bg != Color::White)
+        );
+    }
+
+    #[test]
+    fn empty_state_uses_the_dark_theme_background() {
+        let mut model = Model::default();
+        model.vcs.changes = ChangesState::Ready(Vec::new());
+        let backend = TestBackend::new(60, 10);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal.draw(|frame| Vcs.view(&model, frame)).unwrap();
+
+        assert!(
+            terminal
+                .backend()
+                .buffer()
+                .content()
+                .iter()
+                .all(|cell| cell.bg == Color::Black)
+        );
     }
 }

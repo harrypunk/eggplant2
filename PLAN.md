@@ -359,14 +359,14 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 #### Shared constraints
 
-- Enable and evaluate `helix-vcs/git` for HEAD lookup, changed-file enumeration, and diff-base loading. Reuse `DiffHandle` for in-memory buffer diffs and the same Gitoxide dependency for operations outside `helix-vcs`'s API; do not add Git CLI, `libgit2`, or a second VCS library.
+- Enable and evaluate `helix-vcs/git` for HEAD lookup and diff-base loading, with direct Gitoxide status/history APIs where richer staged/unstaged information is required. Reuse `DiffHandle` for in-memory buffer diffs. Implement index writes and unified diff generation directly with Gitoxide, including filtered worktree-to-blob conversion and locked index writes; do not add `libgit2`, a second VCS library, or a runtime Git CLI dependency.
 - `helix-vcs` does not expose history, commit, or merge orchestration. Spike the corresponding Gitoxide APIs before each write slice. If an operation cannot be implemented with clear, safe semantics, stop and narrow scope rather than emulating Git incorrectly.
 - Run repository work in background feature effects with request generations. Rendering and input handling never wait for Git, and stale results cannot overwrite newer workspace/buffer state.
 - Keep discovery within the fixed workspace policy. Non-repository workspaces and unavailable backends produce a neutral status rather than repeated errors.
 - Coalesce refreshes after startup, saves, repository operations, and relevant external changes; never spawn repository work per render or keystroke.
 - Reads are non-destructive. Commits and fast-forward merges run only through explicit user commands with clear targets and validation—never automatically after editing or saving.
 - Before repository mutations, save modified file-backed buffers and wait for in-flight saves. Refuse unsafe dirty-worktree operations. After a successful mutation, reload affected clean buffers through existing revision-aware paths and report any conflict without overwriting local edits.
-- Keep scope to ordinary Git repositories. Jujutsu, staging-area editing, merge commits, rebase, conflict resolution, push/pull/fetch, remotes/credentials, hooks/signing, submodules, and destructive reset/discard workflows are outside this milestone.
+- Keep scope to ordinary Git repositories. Jujutsu, merge commits, rebase, conflict resolution, push/pull/fetch, remotes/credentials, hooks/signing, submodules, and destructive reset/discard workflows are outside this milestone.
 
 #### M9.1 — Branch discovery and status-bar display
 
@@ -377,23 +377,23 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 #### M9.2 — Changed-file model and read-only panel
 
-- [ ] Adapt `helix-vcs` changed-file enumeration into a feature-owned model, including staged, modified, untracked, and conflicted states where the backend exposes them.
-- [ ] Add a read-only VCS panel using existing registration and panel boundaries.
-- [ ] Open selected paths through the existing safe document-opening and explorer-reveal path.
-- [ ] Test path handling, unusual filenames, empty status, panel navigation, and safe file opening.
+- [x] Adapt Git status into a feature-owned staged/unstaged model, including added, modified, untracked, deleted, renamed, and conflicted states where the backend exposes them.
+- [x] Add dynamic staged/unstaged sections to the Git page, with real `s`/`u` stage/unstage operations, optimistic state updates without a full status rescan, inline `Tab` diffs, and non-mutating placeholders for future discard/commit/help workflows.
+- [x] Open selected paths through the existing safe document-opening and explorer-reveal path.
+- [x] Test path handling, unusual filenames, empty status, panel navigation, and safe file opening.
 
 #### M9.3 — Active-buffer diff gutter and diff view
 
 - [ ] Load the active file's `HEAD` content in the background and compare it with the current in-memory buffer, not only the saved working-tree file.
 - [ ] Reuse `Document::set_diff_base`/`DiffHandle` and project line changes through editor snapshots without exposing Helix VCS types to widgets.
-- [ ] Add a read-only diff view for a selected changed file or commit, using existing text/preview rendering where practical.
+- [x] Add a toggleable inline diff for a selected changed file using HEAD/index/worktree blobs, with bounded output and stale-response protection.
 - [ ] Handle untracked files, non-repositories, buffer switches, edits during diff work, external updates, and stale completions.
 
 #### M9.4 — Commit history
 
-- [x] Read a bounded newest-first commit log through the shared Gitoxide backend and show short IDs and one-line subjects on the full-screen `Space g g` Git page.
+- [x] Read bounded newest-first commits through the shared Gitoxide backend and use the latest short ID and one-line subject as the Git page's HEAD reference.
 - [x] Keep initial history loading off the UI thread and reject stale responses after workspace or repository changes.
-- [ ] Add history scrolling and bounded pagination/loading for larger repositories.
+- [ ] Develop a separate history UI/page with scrolling and bounded pagination/loading for larger repositories.
 - [ ] Display author/date summaries and open a selected commit's read-only diff without changing the working tree or current branch.
 - [ ] Complete multi-parent, non-UTF-8 summary, pagination, and diff-navigation tests alongside those features.
 

@@ -102,12 +102,28 @@ impl Widget for EditorBuffer<'_> {
 #[cfg(test)]
 mod tests {
     use editor::{CursorMovement, DocumentFactory, EditorSession, TextViewSnapshot};
-    use ratatui::{Terminal, backend::TestBackend};
+    use ratatui::{
+        Terminal,
+        backend::TestBackend,
+        style::{Color, Style},
+    };
 
     use super::*;
 
     fn create_buffer(session: &mut EditorSession, text: &str) {
         session.insert_document(DocumentFactory::new().create(text));
+    }
+
+    fn assert_text_lines(terminal: &Terminal<TestBackend>, expected: &[&str]) {
+        let width = terminal.backend().buffer().area.width as usize;
+        let actual = terminal
+            .backend()
+            .buffer()
+            .content()
+            .chunks(width)
+            .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
+            .collect::<Vec<_>>();
+        assert_eq!(actual, expected);
     }
 
     #[test]
@@ -128,9 +144,7 @@ mod tests {
             })
             .unwrap();
 
-        terminal
-            .backend()
-            .assert_buffer_lines(["1 zero    ", "2 one     "]);
+        assert_text_lines(&terminal, &["1 zero    ", "2 one     "]);
     }
 
     #[test]
@@ -153,9 +167,7 @@ mod tests {
             })
             .unwrap();
 
-        terminal
-            .backend()
-            .assert_buffer_lines([" 9 eight  ", "10 nine   "]);
+        assert_text_lines(&terminal, &[" 9 eight  ", "10 nine   "]);
     }
 
     #[test]
@@ -177,7 +189,7 @@ mod tests {
             })
             .unwrap();
 
-        terminal.backend().assert_buffer_lines(["1 cd"]);
+        assert_text_lines(&terminal, &["1 cd"]);
     }
 
     #[test]
@@ -212,7 +224,13 @@ mod tests {
             })
             .unwrap();
 
-        terminal.backend().assert_buffer_lines(["1 b🙂c"]);
+        let mut expected = Buffer::with_lines(["1 b🙂c"]);
+        expected.set_style(
+            Rect::new(0, 0, 6, 1),
+            Style::new().fg(Color::White).bg(Color::Black),
+        );
+        expected[(4, 0)].set_fg(Color::Reset).set_bg(Color::Reset);
+        assert_eq!(terminal.backend().buffer(), &expected);
     }
 
     #[test]
@@ -235,7 +253,7 @@ mod tests {
                 )
             })
             .unwrap();
-        terminal.backend().assert_buffer_lines(["1   "]);
+        assert_text_lines(&terminal, &["1   "]);
 
         session.resize_active_view(0, 0);
         let snapshot = session.active_snapshot().unwrap();

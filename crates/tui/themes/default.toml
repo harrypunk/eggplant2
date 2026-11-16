@@ -15,8 +15,11 @@ variable = {}
 operator = { fg = "light-magenta" }
 
 error = { fg = "red" }
-"ui.background" = {}
-"ui.text" = {}
+"diff.plus" = { fg = "green" }
+"diff.minus" = { fg = "red" }
+"diff.delta" = { fg = "light-blue" }
+"ui.background" = { bg = "black" }
+"ui.text" = { fg = "white" }
 "ui.linenr" = {}
 "ui.menu.selected" = { modifiers = ["reversed"] }
 "ui.popup" = {}

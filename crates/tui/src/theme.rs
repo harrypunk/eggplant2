@@ -106,6 +106,9 @@ pub struct UiTheme {
     pub(crate) border: Style,
     pub(crate) focused_border: Style,
     pub(crate) error: Style,
+    pub(crate) diff_add: Style,
+    pub(crate) diff_remove: Style,
+    pub(crate) diff_hunk: Style,
     pub(crate) key_hint: Style,
     pub(crate) popup: Style,
     pub(crate) status_normal: Style,
@@ -139,6 +142,12 @@ impl UiTheme {
             error: source_style(source, "error")
                 .or_else(|| source_style(source, "diagnostic.error"))
                 .unwrap_or_else(|| Style::new().fg(Color::Red)),
+            diff_add: source_style(source, "diff.plus")
+                .unwrap_or_else(|| Style::new().fg(Color::Green)),
+            diff_remove: source_style(source, "diff.minus")
+                .unwrap_or_else(|| Style::new().fg(Color::Red)),
+            diff_hunk: source_style(source, "diff.delta")
+                .unwrap_or_else(|| Style::new().fg(Color::LightBlue)),
             key_hint: source_style(source, "ui.help")
                 .unwrap_or_default()
                 .add_modifier(Modifier::BOLD),

@@ -30,8 +30,8 @@ pub fn run(
 ) -> color_eyre::Result<()> {
     let event_manager = EventManager::new(config, keymap, text_input.clone());
     let message_manager = MessageManager::new(commands, text_input);
-    let editor_page = Editor::new(ui.clone());
-    let vcs_page = Vcs::new(ui);
+    let editor_page = Editor::new(ui);
+    let vcs_page = Vcs;
     let (message_sender, mut message_receiver) = tokio::sync::mpsc::unbounded_channel();
     let watch_root = model
         .workspace
