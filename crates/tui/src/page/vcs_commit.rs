@@ -95,7 +95,7 @@ fn header_lines(model: &Model) -> Vec<Line<'static>> {
                 .patch(styles.key_hint)
                 .add_modifier(Modifier::BOLD),
         ),
-        Line::styled(summary, styles.base.patch(styles.muted)),
+        Line::styled(summary, styles.base.patch(styles.file_path)),
         Line::styled(
             "Ctrl-s commit  q close  Ctrl-c discard",
             styles.base.patch(styles.action_hint),
@@ -189,5 +189,13 @@ mod tests {
         assert!(content.contains("subject"));
         assert!(content.contains("body"));
         assert!(content.contains("INSERT"));
+        let file_summary = &terminal.backend().buffer()[(0, 1)];
+        assert_eq!(file_summary.symbol(), "M");
+        assert_eq!(
+            file_summary.fg,
+            model.theme.ui().file_path.fg.unwrap(),
+            "staged file names should use the semantic file-path color"
+        );
+        assert!(!file_summary.modifier.contains(Modifier::DIM));
     }
 }

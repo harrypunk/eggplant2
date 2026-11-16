@@ -40,7 +40,7 @@ Selection follows one staged-first order. Empty sections consume no space, and i
 
 Changed files use the existing safe document-opening and explorer-reveal path. Deleted files are not recreated.
 
-The commit page shows a read-only staged-file summary above a multiline scratch editor. It supports ordinary navigation, Insert editing, and undo/redo without file-backed auto-save. Closing with `q` preserves the in-memory draft; `Ctrl-c` explicitly discards it. Submission locks editing until completion, preserves the message on failure, and clears it on success.
+The commit page shows a read-only staged-file summary in the semantic `file_path` color above a multiline scratch editor. It supports ordinary navigation, Insert editing, and undo/redo without file-backed auto-save. Closing with `q` preserves the in-memory draft; `Ctrl-c` explicitly discards it. Submission locks editing until completion, preserves the message on failure, and clears it on success.
 
 ## Mutation behavior
 
