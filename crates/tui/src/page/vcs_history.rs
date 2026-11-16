@@ -12,6 +12,8 @@ use crate::{
     vcs::{CommitDetailsState, DiffState, HistoryState},
 };
 
+const DIFF_DISPLAY_LIMIT: usize = 6;
+
 #[derive(Debug, Default)]
 pub struct VcsHistory;
 
@@ -117,41 +119,51 @@ fn detail_lines(model: &Model) -> Vec<Line<'static>> {
         CommitDetailsState::Idle => Vec::new(),
         CommitDetailsState::Loading => vec![Line::styled("Loading commit…", styles.muted)],
         CommitDetailsState::Failed(error) => vec![Line::styled(error.clone(), styles.error)],
-        CommitDetailsState::Ready(details) => {
-            let mut lines = vec![
-                Line::styled(details.full_id.clone(), styles.key_hint),
-                Line::styled(
-                    format!("{}  {}", details.author, details.date),
-                    styles.base.patch(styles.muted),
-                ),
-                Line::default(),
-            ];
-            lines.extend(
-                details
-                    .message
-                    .lines()
-                    .map(|line| Line::raw(line.to_string())),
-            );
-            lines.push(Line::default());
-            lines.push(Line::styled("Changed files", styles.key_hint));
-            for (index, file) in details.files.iter().enumerate() {
-                let selected = model.vcs.history_detail_selected_file == Some(index);
-                let marker = if selected { ">" } else { " " };
-                lines.push(Line::styled(
-                    format!("{marker} {} {}", change_marker(file.kind), file.path),
-                    if selected {
-                        styles.key_hint
-                    } else {
-                        styles.base
-                    },
-                ));
-                if model.vcs.history_detail_expanded_file.as_ref() == Some(&file.path) {
-                    lines.extend(file_diff_lines(model));
-                }
-            }
-            lines
-        }
+        CommitDetailsState::Ready(details) => [
+            Line::styled(details.full_id.clone(), styles.key_hint),
+            Line::styled(
+                format!("{}  {}", details.author, details.date),
+                styles.base.patch(styles.muted),
+            ),
+            Line::default(),
+        ]
+        .into_iter()
+        .chain(
+            details
+                .message
+                .lines()
+                .map(|line| Line::raw(line.to_string())),
+        )
+        .chain(std::iter::once(Line::default()))
+        .chain(std::iter::once(Line::styled(
+            "Changed files",
+            styles.key_hint,
+        )))
+        .chain(details.files.iter().enumerate().flat_map(|(index, file)| {
+            let row = detail_file_line(model, index, file);
+            let diff = if model.vcs.history_detail_expanded_file.as_ref() == Some(&file.path) {
+                file_diff_lines(model)
+            } else {
+                Vec::new()
+            };
+            std::iter::once(row).chain(diff)
+        }))
+        .collect(),
     }
+}
+
+fn detail_file_line(model: &Model, index: usize, file: &::vcs::CommitFile) -> Line<'static> {
+    let styles = model.theme.ui();
+    let selected = model.vcs.history_detail_selected_file == Some(index);
+    let marker = if selected { ">" } else { " " };
+    Line::styled(
+        format!("{marker} {} {}", change_marker(file.kind), file.path),
+        if selected {
+            styles.key_hint
+        } else {
+            styles.base
+        },
+    )
 }
 
 fn file_diff_lines(model: &Model) -> Vec<Line<'static>> {
@@ -160,17 +172,15 @@ fn file_diff_lines(model: &Model) -> Vec<Line<'static>> {
         DiffState::Idle => Vec::new(),
         DiffState::Loading => vec![Line::styled("  Loading diff…", styles.muted)],
         DiffState::Failed(error) => vec![Line::styled(error.clone(), styles.error)],
-        DiffState::Ready { lines, truncated } => {
-            let mut output = lines
-                .iter()
-                .take(6)
-                .map(|line| Line::styled(format!("  {line}"), diff::line_style(styles, line)))
-                .collect::<Vec<_>>();
-            if *truncated || lines.len() > 6 {
-                output.push(Line::styled("  …", styles.base.patch(styles.muted)));
-            }
-            output
-        }
+        DiffState::Ready { lines, truncated } => lines
+            .iter()
+            .take(DIFF_DISPLAY_LIMIT)
+            .map(|line| Line::styled(format!("  {line}"), diff::line_style(styles, line)))
+            .chain(
+                (*truncated || lines.len() > DIFF_DISPLAY_LIMIT)
+                    .then(|| Line::styled("  …", styles.base.patch(styles.muted))),
+            )
+            .collect(),
     }
 }
 

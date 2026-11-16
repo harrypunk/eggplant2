@@ -21,7 +21,7 @@ use gix::{
         entry::{Flags, Mode, Stage, Stat},
         fs::Metadata as IndexMetadata,
     },
-    object::tree::{EntryKind, EntryMode},
+    object::tree::{EntryKind, EntryMode, diff::ChangeDetached},
     sec::trust::DefaultForLevel as _,
     status::{
         Item as StatusItem,
@@ -491,15 +491,15 @@ fn commit_file_diff_inner(
     ))
 }
 
-fn commit_file(change: gix::object::tree::diff::ChangeDetached) -> Option<CommitFile> {
+fn commit_file(change: ChangeDetached) -> Option<CommitFile> {
     let kind = match &change {
-        gix::object::tree::diff::ChangeDetached::Addition { .. } => ChangeKind::Added,
-        gix::object::tree::diff::ChangeDetached::Deletion { .. } => ChangeKind::Deleted,
-        gix::object::tree::diff::ChangeDetached::Modification { .. } => ChangeKind::Modified,
-        gix::object::tree::diff::ChangeDetached::Rewrite { .. } => ChangeKind::Renamed,
+        ChangeDetached::Addition { .. } => ChangeKind::Added,
+        ChangeDetached::Deletion { .. } => ChangeKind::Deleted,
+        ChangeDetached::Modification { .. } => ChangeKind::Modified,
+        ChangeDetached::Rewrite { .. } => ChangeKind::Renamed,
     };
     let previous_path = match &change {
-        gix::object::tree::diff::ChangeDetached::Rewrite {
+        ChangeDetached::Rewrite {
             source_location, ..
         } => Some(source_location.to_str_lossy().into_owned()),
         _ => None,

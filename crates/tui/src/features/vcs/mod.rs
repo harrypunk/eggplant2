@@ -270,16 +270,16 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         "open_vcs_page" => open_page(model),
         "open_vcs_history" => open_history(model),
         "close_vcs_history" | "close_vcs_history_q" => close_history(model),
-        "vcs_history_next" => select_history(model, true),
-        "vcs_history_previous" => select_history(model, false),
+        "vcs_history_next" => select_history(model, SelectionDirection::Next),
+        "vcs_history_previous" => select_history(model, SelectionDirection::Previous),
         "vcs_history_toggle_diff" => match model.vcs.history_detail {
             CommitDetailsState::Ready(_) => toggle_history_file_diff(model),
             _ => toggle_history_files(model),
         },
         "open_vcs_commit_detail" => open_history_detail(model),
         "close_vcs_page" | "close_vcs_page_q" => close_page(model),
-        "vcs_next_change" => select_change(model, true),
-        "vcs_previous_change" => select_change(model, false),
+        "vcs_next_change" => select_change(model, SelectionDirection::Next),
+        "vcs_previous_change" => select_change(model, SelectionDirection::Previous),
         "open_vcs_change" => open_selected_change(model),
         "vcs_stage" => mutate_selected_change(model, true),
         "vcs_unstage" => mutate_selected_change(model, false),
@@ -342,32 +342,42 @@ fn close_history(model: &mut Model) -> Option<Effect> {
     None
 }
 
-fn select_history(model: &mut Model, forward: bool) -> Option<Effect> {
+#[derive(Clone, Copy)]
+enum SelectionDirection {
+    Next,
+    Previous,
+}
+
+fn select_history(model: &mut Model, direction: SelectionDirection) -> Option<Effect> {
     if let CommitDetailsState::Ready(details) = &model.vcs.history_detail {
-        if details.files.is_empty() {
-            return None;
-        }
-        let selected = model.vcs.history_detail_selected_file.unwrap_or(0);
-        model.vcs.history_detail_selected_file = Some(if forward {
-            (selected + 1) % details.files.len()
-        } else {
-            (selected + details.files.len() - 1) % details.files.len()
-        });
+        model.vcs.history_detail_selected_file = wrapped_index(
+            model.vcs.history_detail_selected_file,
+            details.files.len(),
+            direction,
+        );
         return None;
     }
     let HistoryState::Ready(commits) = &model.vcs.history else {
         return None;
     };
-    if commits.is_empty() {
+    model.vcs.history_selected =
+        wrapped_index(model.vcs.history_selected, commits.len(), direction);
+    None
+}
+
+fn wrapped_index(
+    selected: Option<usize>,
+    len: usize,
+    direction: SelectionDirection,
+) -> Option<usize> {
+    if len == 0 {
         return None;
     }
-    let selected = model.vcs.history_selected.unwrap_or(0);
-    model.vcs.history_selected = Some(if forward {
-        (selected + 1) % commits.len()
-    } else {
-        (selected + commits.len() - 1) % commits.len()
-    });
-    None
+    let selected = selected.unwrap_or(0);
+    Some(match direction {
+        SelectionDirection::Next => (selected + 1) % len,
+        SelectionDirection::Previous => (selected + len - 1) % len,
+    })
 }
 
 fn toggle_history_files(model: &mut Model) -> Option<Effect> {
@@ -465,19 +475,11 @@ fn selected_history_commit(model: &Model) -> Option<CommitSummary> {
     commits.get(model.vcs.history_selected?).cloned()
 }
 
-fn select_change(model: &mut Model, forward: bool) -> Option<Effect> {
+fn select_change(model: &mut Model, direction: SelectionDirection) -> Option<Effect> {
     let ChangesState::Ready(changes) = &model.vcs.changes else {
         return None;
     };
-    if changes.is_empty() {
-        return None;
-    }
-    let selected = model.vcs.selected_change.unwrap_or(0);
-    model.vcs.selected_change = Some(if forward {
-        (selected + 1) % changes.len()
-    } else {
-        (selected + changes.len() - 1) % changes.len()
-    });
+    model.vcs.selected_change = wrapped_index(model.vcs.selected_change, changes.len(), direction);
     None
 }
 
@@ -1316,11 +1318,11 @@ mod tests {
         assert_eq!(model.vcs.changes(), &ChangesState::Ready(changes));
         assert_eq!(model.vcs.selected_change, Some(0));
 
-        select_change(&mut model, true);
+        select_change(&mut model, SelectionDirection::Next);
         assert_eq!(model.vcs.selected_change, Some(1));
-        select_change(&mut model, true);
+        select_change(&mut model, SelectionDirection::Next);
         assert_eq!(model.vcs.selected_change, Some(0));
-        select_change(&mut model, false);
+        select_change(&mut model, SelectionDirection::Previous);
         assert_eq!(model.vcs.selected_change, Some(1));
     }
 
@@ -1543,11 +1545,11 @@ mod tests {
         };
         model.vcs.history = HistoryState::Ready(vec![commit("first"), commit("second")]);
         model.vcs.history_selected = Some(0);
-        select_history(&mut model, true);
+        select_history(&mut model, SelectionDirection::Next);
         assert_eq!(model.vcs.history_selected, Some(1));
-        select_history(&mut model, true);
+        select_history(&mut model, SelectionDirection::Next);
         assert_eq!(model.vcs.history_selected, Some(0));
-        select_history(&mut model, false);
+        select_history(&mut model, SelectionDirection::Previous);
         assert_eq!(model.vcs.history_selected, Some(1));
     }
 

@@ -131,6 +131,11 @@ fn render_section(
     rendered.saturating_add(1)
 }
 
+/// Build one staged/unstaged section and its picker selection.
+///
+/// Each file contributes one row, followed by its diff when expanded. The
+/// returned selection is the selected file's rendered row, while the model's
+/// selection indexes the combined change list.
 fn change_lines(
     model: &Model,
     styles: &UiTheme,
@@ -139,31 +144,28 @@ fn change_lines(
     let ChangesState::Ready(changes) = model.vcs.changes() else {
         return (Vec::new(), None);
     };
-    let selected = changes
+    changes
         .iter()
         .enumerate()
         .filter(|(_, change)| change.staged == staged)
-        .position(|(index, _)| model.vcs.selected_change == Some(index));
-    let lines = changes
-        .iter()
-        .enumerate()
-        .filter(|(_, change)| change.staged == staged)
-        .flat_map(|(index, change)| {
-            let file_line = change_line(model, styles, index, change);
-            let expanded = model
-                .vcs
-                .expanded_change
-                .as_ref()
-                .is_some_and(|(path, staged)| path == &change.path && *staged == change.staged);
-            let diff = if expanded {
-                diff_lines(model, styles)
-            } else {
-                Vec::new()
-            };
-            std::iter::once(file_line).chain(diff)
-        })
-        .collect();
-    (lines, selected)
+        .fold(
+            (Vec::new(), None),
+            |(mut lines, mut selected), (index, change)| {
+                if model.vcs.selected_change == Some(index) {
+                    selected = Some(lines.len());
+                }
+                lines.push(change_line(model, styles, index, change));
+                let expanded = model
+                    .vcs
+                    .expanded_change
+                    .as_ref()
+                    .is_some_and(|(path, staged)| path == &change.path && *staged == change.staged);
+                if expanded {
+                    lines.extend(diff_lines(model, styles));
+                }
+                (lines, selected)
+            },
+        )
 }
 
 fn change_line(
@@ -320,6 +322,26 @@ mod tests {
                 .iter()
                 .all(|cell| cell.bg != Color::White)
         );
+    }
+
+    #[test]
+    fn change_lines_tracks_selection_after_an_expanded_diff() {
+        let mut model = Model::default();
+        model.vcs.changes = ChangesState::Ready(vec![
+            change("first.rs", ChangeKind::Modified, false),
+            change("second.rs", ChangeKind::Modified, false),
+        ]);
+        model.vcs.selected_change = Some(1);
+        model.vcs.expanded_change = Some((std::path::PathBuf::from("/workspace/first.rs"), false));
+        model.vcs.diff = DiffState::Ready {
+            lines: vec!["+first".to_string()],
+            truncated: false,
+        };
+
+        let (lines, selected) = change_lines(&model, model.theme.ui(), false);
+
+        assert_eq!(lines.len(), 3);
+        assert_eq!(selected, Some(2));
     }
 
     #[test]
