@@ -64,8 +64,8 @@ impl MessageManager {
                 file_picker::complete_preview(model, revision, preview);
             }
             Message::FocusLost => return buffer::save_active(model),
-            Message::ExternalFileChanged { path, structure } => {
-                return crate::external_sync::file_changed(model, &path, structure);
+            Message::ExternalFileChanged { path, kind } => {
+                return crate::external_sync::file_changed(model, &path, kind);
             }
             Message::Resize(width, height) => {
                 let area = editor_content_area(

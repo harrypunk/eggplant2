@@ -7,10 +7,17 @@ use crate::{
     manager::effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
 };
 
-/// Schedule a background read for a changed open file without touching local edits/saves.
-pub fn file_changed(model: &mut Model, path: &Path, structure: bool) -> Option<Effect> {
-    if structure {
-        crate::explorer::refresh_changed(model, path);
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ExternalChangeKind {
+    Content,
+    Structure,
+}
+
+/// Coordinate explorer structure updates and clean-buffer reloads for one event.
+pub fn file_changed(model: &mut Model, path: &Path, kind: ExternalChangeKind) -> Option<Effect> {
+    match kind {
+        ExternalChangeKind::Structure => crate::explorer::refresh_changed(model, path),
+        ExternalChangeKind::Content => {}
     }
     if !path.exists() {
         return None;
@@ -90,7 +97,8 @@ mod tests {
     };
 
     fn change_file(model: &mut Model, path: &Path) {
-        let Some(Effect::Feature(request)) = file_changed(model, path, false) else {
+        let Some(Effect::Feature(request)) = file_changed(model, path, ExternalChangeKind::Content)
+        else {
             return;
         };
         MessageManager::default().update(model, request.perform());
@@ -117,7 +125,7 @@ mod tests {
             &mut model,
             Message::ExternalFileChanged {
                 path: created.clone(),
-                structure: true,
+                kind: ExternalChangeKind::Structure,
             },
         );
         assert!(
@@ -134,7 +142,7 @@ mod tests {
             &mut model,
             Message::ExternalFileChanged {
                 path: first.clone(),
-                structure: true,
+                kind: ExternalChangeKind::Structure,
             },
         );
         assert!(
@@ -152,7 +160,7 @@ mod tests {
             &mut model,
             Message::ExternalFileChanged {
                 path: renamed.clone(),
-                structure: true,
+                kind: ExternalChangeKind::Structure,
             },
         );
         assert!(

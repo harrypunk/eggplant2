@@ -3,7 +3,7 @@ use std::path::Path;
 use notify::{EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::data_object::Message;
+use crate::{data_object::Message, external_sync::ExternalChangeKind};
 
 /// Keep the OS watcher alive for the application's runtime scope.
 pub struct FileWatcher {
@@ -25,10 +25,10 @@ pub fn start(
             if !is_file_change(&event.kind) {
                 return;
             }
-            let structure = is_structure_change(&event.kind);
+            let kind = change_kind(&event.kind);
             event.paths.into_iter().for_each(|path| {
                 let path = std::fs::canonicalize(&path).unwrap_or(path);
-                let _ = sender.send(Message::ExternalFileChanged { path, structure });
+                let _ = sender.send(Message::ExternalFileChanged { path, kind });
             });
         },
         notify::Config::default(),
@@ -44,14 +44,14 @@ fn is_file_change(kind: &EventKind) -> bool {
     )
 }
 
-fn is_structure_change(kind: &EventKind) -> bool {
-    matches!(
-        kind,
+fn change_kind(kind: &EventKind) -> ExternalChangeKind {
+    match kind {
         EventKind::Any
-            | EventKind::Create(_)
-            | EventKind::Remove(_)
-            | EventKind::Modify(notify::event::ModifyKind::Name(_))
-    )
+        | EventKind::Create(_)
+        | EventKind::Remove(_)
+        | EventKind::Modify(notify::event::ModifyKind::Name(_)) => ExternalChangeKind::Structure,
+        _ => ExternalChangeKind::Content,
+    }
 }
 
 #[cfg(test)]
@@ -74,17 +74,23 @@ mod tests {
             notify::event::AccessKind::Any
         )));
 
-        assert!(is_structure_change(&EventKind::Create(
-            notify::event::CreateKind::Any
-        )));
-        assert!(is_structure_change(&EventKind::Remove(
-            notify::event::RemoveKind::Any
-        )));
-        assert!(is_structure_change(&EventKind::Modify(
-            notify::event::ModifyKind::Name(notify::event::RenameMode::Any)
-        )));
-        assert!(!is_structure_change(&EventKind::Modify(
-            notify::event::ModifyKind::Any
-        )));
+        assert_eq!(
+            change_kind(&EventKind::Create(notify::event::CreateKind::Any)),
+            ExternalChangeKind::Structure
+        );
+        assert_eq!(
+            change_kind(&EventKind::Remove(notify::event::RemoveKind::Any)),
+            ExternalChangeKind::Structure
+        );
+        assert_eq!(
+            change_kind(&EventKind::Modify(notify::event::ModifyKind::Name(
+                notify::event::RenameMode::Any
+            ))),
+            ExternalChangeKind::Structure
+        );
+        assert_eq!(
+            change_kind(&EventKind::Modify(notify::event::ModifyKind::Any)),
+            ExternalChangeKind::Content
+        );
     }
 }

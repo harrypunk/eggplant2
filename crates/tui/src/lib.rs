@@ -280,7 +280,7 @@ pub mod data_object {
         FocusLost,
         ExternalFileChanged {
             path: PathBuf,
-            structure: bool,
+            kind: crate::external_sync::ExternalChangeKind,
         },
         Resize(u16, u16),
         OpenSelected,
