@@ -40,7 +40,40 @@ cargo run -p tui -- "$workdir"
 18. **Yank/clipboard:** verify Visual `y` and Normal `yy`, including pending `y` status and Escape. Confirm that yanks do not change text, deletes/changes update the same register, and an available system clipboard contains the yanked text; clipboard-unavailable environments must preserve the internal register and show non-blocking feedback.
 19. **Save safety:** close a clean buffer with `Space b c`. Make another buffer dirty and close it with the same shortcut; confirm that it saves first. With multiple tabs, verify `Space b o` keeps the active tab and `Space b r` closes only tabs to its right, saving dirty targets before closing. Verify `Space b a` saves and closes every buffer, including the active one, and leaves the empty editor. Finally, make a buffer dirty and quit with `Space q q`; confirm that the application waits for the write and exits with the edited content persisted.
 20. **Terminal restoration after normal exit:** confirm that the shell prompt returns to the original screen, raw-mode input is disabled, and the cursor/keyboard behave normally.
-21. **Git status:** in a repository with staged and unstaged changes, press `Space g g`. Confirm common key hints and a one-line HEAD reference appear above dynamic staged/unstaged sections, with empty sections hidden, one natural staged-first selection order, and no Git log or editor status bar. Use `j`/`k` to select files (shown with a bold `>` marker, not a reversed background) and Enter to open them safely. Use `s` on an unstaged file and confirm it moves to the staged section; use `u` and confirm it returns without changing file contents. Use `Tab` to expand and collapse an inline diff beneath a file; reopening it should reuse the cached result. With no changed files, confirm the area below HEAD uses the dark theme background. Confirm `x`, `c`, and `?` only show placeholder notices and do not mutate the repository. Outside a repository, confirm a concise message, then press `q` or Escape to return to the previous context.
+
+## Git status checklist
+
+Use a repository containing both staged and unstaged changes, then open the Git page with `Space g g`.
+
+### Layout and navigation
+
+- [ ] Common key hints and a one-line HEAD reference appear above the file sections.
+- [ ] No Git log or editor status bar appears on the page.
+- [ ] Staged files precede unstaged files in one natural selection order.
+- [ ] Empty sections are hidden and consume no space.
+- [ ] `j`/`k` moves selection using a bold `>` marker without a reversed background.
+- [ ] Enter opens the selected file through the normal safe flow.
+- [ ] With no changed files, the area below HEAD uses the dark theme background.
+
+### Stage and unstage
+
+- [ ] `s` on an unstaged file moves it to the staged section.
+- [ ] `u` on a staged file returns it to the unstaged section without changing file contents.
+- [ ] Repeated operations preserve a usable selection without a full-page loading flash.
+- [ ] `x`, `c`, and `?` show placeholder notices only and do not mutate the repository.
+
+### Inline diffs
+
+- [ ] `Tab` expands and collapses a diff beneath the selected file.
+- [ ] Additions, deletions, and hunk headers use readable theme colors.
+- [ ] Closing and reopening the toggle reuses the cached diff.
+
+### Editor gutter and repository states
+
+- [ ] Added, modified, and deleted lines show a colored vertical `│` in the editor gutter against HEAD.
+- [ ] Untracked files use an empty base and show additions appropriately.
+- [ ] Non-repositories remain unmarked and show a concise status message on the Git page.
+- [ ] `q` or Escape returns to the previous editor/explorer context.
 
 ## Failure and panic review
 

@@ -1,4 +1,4 @@
-use editor::{LineSnapshot, TextViewSnapshot};
+use editor::{LineChange, LineSnapshot, TextViewSnapshot};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Flex, Layout, Rect},
@@ -119,9 +119,23 @@ impl Widget for TextView<'_> {
             .lines
             .iter()
             .enumerate()
-            .map(|(index, _)| format!("{:>number_width$} ", self.snapshot.first_line + index + 1))
-            .collect::<Vec<_>>()
-            .join("\n");
+            .map(|(index, line)| {
+                let base = self.theme.ui().base.patch(self.theme.ui().muted);
+                let marker = match line.change {
+                    Some(LineChange::Added) => ("│", self.theme.ui().diff_add),
+                    Some(LineChange::Deleted) => ("│", self.theme.ui().diff_remove),
+                    Some(LineChange::Modified) => ("│", self.theme.ui().diff_hunk),
+                    None => (" ", base),
+                };
+                Line::from(vec![
+                    Span::styled(
+                        format!("{:>number_width$}", self.snapshot.first_line + index + 1),
+                        base,
+                    ),
+                    Span::styled(marker.0, base.patch(marker.1)),
+                ])
+            })
+            .collect::<Vec<_>>();
         let lines = self
             .snapshot
             .lines
@@ -170,6 +184,52 @@ mod tests {
         assert_eq!(line.spans[0].style.fg, Some(Color::Magenta));
         assert!(line.spans[0].style.add_modifier.contains(Modifier::BOLD));
         assert_eq!(line.spans[1].content.as_ref(), " main");
+    }
+
+    #[test]
+    fn renders_diff_markers_with_theme_colors() {
+        let mut snapshot = TextViewSnapshot::plain(vec![
+            "added".to_string(),
+            "modified".to_string(),
+            "deleted".to_string(),
+        ]);
+        snapshot.lines[0].change = Some(LineChange::Added);
+        snapshot.lines[1].change = Some(LineChange::Modified);
+        snapshot.lines[2].change = Some(LineChange::Deleted);
+        let theme = Theme::default();
+        let backend = TestBackend::new(12, 3);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal
+            .draw(|frame| frame.render_widget(TextView::new(&snapshot, &theme), frame.area()))
+            .unwrap();
+
+        let content = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(content.contains("1│"));
+        assert!(content.contains("2│"));
+        assert!(content.contains("3│"));
+        let cells = terminal.backend().buffer().content();
+        assert!(
+            cells
+                .iter()
+                .any(|cell| cell.symbol() == "│" && cell.fg == Color::Green)
+        );
+        assert!(
+            cells
+                .iter()
+                .any(|cell| cell.symbol() == "│" && cell.fg == Color::LightBlue)
+        );
+        assert!(
+            cells
+                .iter()
+                .any(|cell| cell.symbol() == "│" && cell.fg == Color::Red)
+        );
     }
 
     #[test]

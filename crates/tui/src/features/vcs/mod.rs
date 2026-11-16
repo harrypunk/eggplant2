@@ -1,7 +1,10 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::{
+    collections::{HashMap, HashSet},
+    path::PathBuf,
+};
 
 use ::vcs::{ChangeKind, CommitSummary, Diff, FileChange};
-use editor::DocumentFactory;
+use editor::{BufferId, DocumentFactory};
 
 use crate::{
     data_object::{AppPage, CommandId, Context, Message, Model, StatusMessage},
@@ -36,6 +39,8 @@ pub struct VcsState {
     diff_target: Option<PathBuf>,
     diff_revision: u64,
     diff_cache: HashMap<(PathBuf, bool), Diff>,
+    diff_base_loaded: HashSet<BufferId>,
+    diff_base_pending: Option<(BufferId, i32)>,
     pub(crate) notice: Option<String>,
     documents: DocumentFactory,
 }
@@ -62,6 +67,8 @@ impl Default for VcsState {
             diff_target: None,
             diff_revision: 0,
             diff_cache: HashMap::new(),
+            diff_base_loaded: HashSet::new(),
+            diff_base_pending: None,
             notice: None,
             documents: DocumentFactory::new(),
         }
@@ -319,6 +326,39 @@ fn mutate_selected_change(model: &mut Model, stage: bool) -> Option<Effect> {
         target,
         revision: model.vcs.operation_revision,
     }))
+}
+
+/// Load the active buffer's HEAD base once, without blocking the editor.
+pub fn sync_active_buffer(model: &mut Model) -> Option<Effect> {
+    let (buffer_id, revision) = model.editor.active_revision()?;
+    if model.vcs.diff_base_loaded.contains(&buffer_id)
+        || model.vcs.diff_base_pending == Some((buffer_id, revision))
+    {
+        return None;
+    }
+    let path = model.editor.buffer_path(buffer_id)?.to_path_buf();
+    model.vcs.diff_base_pending = Some((buffer_id, revision));
+    Some(Effect::feature(BufferDiffRequest {
+        buffer_id,
+        revision,
+        path,
+    }))
+}
+
+/// Invalidate one externally reloaded buffer and refresh it if active.
+pub fn refresh_buffer_base(model: &mut Model, buffer_id: BufferId) -> Option<Effect> {
+    model.vcs.diff_base_loaded.remove(&buffer_id);
+    if model
+        .vcs
+        .diff_base_pending
+        .is_some_and(|(id, _)| id == buffer_id)
+    {
+        model.vcs.diff_base_pending = None;
+    }
+    if model.editor.active_buffer() == Some(buffer_id) {
+        return sync_active_buffer(model);
+    }
+    None
 }
 
 /// Start one background HEAD lookup, preserving the previous label until completion.
@@ -643,6 +683,48 @@ impl Completion for HistoryCompletion {
     }
 }
 
+struct BufferDiffRequest {
+    buffer_id: BufferId,
+    revision: i32,
+    path: PathBuf,
+}
+
+impl FeatureEffect for BufferDiffRequest {
+    fn perform(self: Box<Self>) -> Message {
+        let result = ::vcs::diff_base(&self.path).map_err(|error| error.to_string());
+        Message::FeatureCompletion(FeatureCompletion::new(BufferDiffCompletion {
+            buffer_id: self.buffer_id,
+            revision: self.revision,
+            result,
+        }))
+    }
+}
+
+struct BufferDiffCompletion {
+    buffer_id: BufferId,
+    revision: i32,
+    result: Result<Option<Vec<u8>>, String>,
+}
+
+impl Completion for BufferDiffCompletion {
+    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
+        if model.vcs.diff_base_pending == Some((self.buffer_id, self.revision)) {
+            model.vcs.diff_base_pending = None;
+        }
+        let Ok(base) = self.result else {
+            return None;
+        };
+        if let Ok(true) = model.editor.set_buffer_diff_base(
+            self.buffer_id,
+            self.revision,
+            base.unwrap_or_default(),
+        ) {
+            model.vcs.diff_base_loaded.insert(self.buffer_id);
+        }
+        None
+    }
+}
+
 struct HeadRequest {
     target: PathBuf,
     revision: u64,
@@ -682,6 +764,7 @@ mod tests {
     use crate::{
         data_object::{Message, Workspace},
         manager::message_manager::MessageManager,
+        test_utils::open_file,
     };
 
     #[test]
@@ -976,6 +1059,31 @@ mod tests {
             Some((selected.path.clone(), selected.staged))
         );
         assert!(matches!(model.vcs.diff, DiffState::Ready { .. }));
+    }
+
+    #[tokio::test]
+    async fn active_buffer_base_is_cached_and_invalidated_on_external_reload() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("note.txt");
+        std::fs::write(&path, "hello\n").unwrap();
+        let mut model = Model::default();
+        let id = open_file(&mut model, &path);
+        let revision = model.editor.buffer_version(id).unwrap();
+
+        assert!(sync_active_buffer(&mut model).is_some());
+        assert!(sync_active_buffer(&mut model).is_none());
+        Box::new(BufferDiffCompletion {
+            buffer_id: id,
+            revision,
+            result: Ok(Some(b"hello\n".to_vec())),
+        })
+        .update(&mut model);
+        assert!(model.vcs.diff_base_loaded.contains(&id));
+        assert!(sync_active_buffer(&mut model).is_none());
+
+        assert!(refresh_buffer_base(&mut model, id).is_some());
+        assert!(!model.vcs.diff_base_loaded.contains(&id));
+        assert_eq!(model.vcs.diff_base_pending, Some((id, revision)));
     }
 
     #[test]

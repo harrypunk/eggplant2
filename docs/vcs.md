@@ -65,6 +65,12 @@ Completed diffs are cached per path and staged state. Closing and reopening a to
 
 Selected file rows use a bold `>` marker rather than the default theme's reversed `ui.menu.selected` background. Empty and loading states apply the explicit dark base background.
 
+## Active-buffer diff gutter
+
+The addon loads the active file's HEAD content in a background effect and applies it through `EditorSession::set_buffer_diff_base`, which rejects stale document revisions. Helix `DiffHandle` tracks subsequent in-memory edits automatically. Editor snapshots expose only `Added`, `Modified`, and `Deleted` line markers, keeping Helix VCS types outside rendering.
+
+The existing gutter displays a vertical `│` for every change, using the theme's addition, hunk, or removal colors without changing its width. The shape is fixed for now; configurable indicator styles can be added later. Untracked files use an empty base, non-repositories remain unmarked, and loaded bases are cached per buffer. Switching/opening buffers requests the active base, while external reloads invalidate it. No external Git process is used.
+
 ## Deferred work
 
 - Separate history UI with scrolling and bounded pagination.

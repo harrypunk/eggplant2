@@ -63,7 +63,8 @@ impl Completion for ExternalReloadCompletion {
             .editor
             .complete_external_reload(self.id, self.expected_version, self.result)
         {
-            Ok(_) => {}
+            Ok(true) => return crate::vcs::refresh_buffer_base(model, self.id),
+            Ok(false) => {}
             Err(EditorError::BufferModified(_)) => report_conflict(model, &self.path),
             Err(EditorError::SaveInProgress(_)) => {}
             Err(error) => model.status = Some(StatusMessage::error(error.to_string())),

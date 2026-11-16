@@ -46,7 +46,10 @@ pub fn run(
                 .map(|path| path.to_path_buf())
         });
     let _file_watcher = file_watcher::start(watch_root.as_deref(), message_sender.clone())?;
-    if let Some(effect) = crate::vcs::refresh(&mut model) {
+    if let Some(effect) = Effect::combine(
+        crate::vcs::refresh(&mut model),
+        crate::vcs::sync_active_buffer(&mut model),
+    ) {
         apply_effect(effect, &message_sender);
     }
 

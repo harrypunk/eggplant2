@@ -8,9 +8,10 @@ anyhow = "1"
 arc-swap = "1.9"
 helix-core = { git = "http://git.z.lan/fork/helix", rev = "079a789e8cb08ead67f19e1971a1b7438b37354b" }
 helix-stdx = { git = "http://git.z.lan/fork/helix", rev = "079a789e8cb08ead67f19e1971a1b7438b37354b" }
+helix-vcs = { git = "http://git.z.lan/fork/helix", rev = "079a789e8cb08ead67f19e1971a1b7438b37354b" }
 helix-view = { git = "http://git.z.lan/fork/helix", rev = "079a789e8cb08ead67f19e1971a1b7438b37354b" }
 thiserror = "2"
 
 [dev-dependencies]
 tempfile = "3.27"
-tokio = { version = "1", features = ["macros", "rt"] }
+tokio = { version = "1", features = ["macros", "rt", "time"] }

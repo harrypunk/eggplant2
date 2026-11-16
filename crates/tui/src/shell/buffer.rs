@@ -37,7 +37,7 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     if let Some(id) = model.editor.active_buffer() {
         reveal_buffer(model, id);
     }
-    effect
+    Effect::combine(effect, crate::vcs::sync_active_buffer(model))
 }
 
 pub(crate) fn auto_save_active(model: &mut Model) -> Option<Effect> {
@@ -104,10 +104,15 @@ mod tests {
     };
 
     fn expect_save(effect: Option<Effect>) -> SaveRequest {
-        let Some(Effect::Save(request)) = effect else {
-            panic!("expected a save effect");
-        };
-        request
+        match effect {
+            Some(Effect::Save(request)) => request,
+            Some(Effect::Batch(effects)) => effects
+                .into_iter()
+                .map(|effect| expect_save(Some(effect)))
+                .next()
+                .expect("expected a save effect"),
+            _ => panic!("expected a save effect"),
+        }
     }
 
     #[tokio::test]

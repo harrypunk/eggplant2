@@ -53,7 +53,7 @@ impl MessageManager {
                 return lifecycle::finish_save(model, completion);
             }
             Message::OpenSelected => return self.open_selected(model),
-            Message::FileOpened(completion) => Self::finish_open_file(model, completion),
+            Message::FileOpened(completion) => return Self::finish_open_file(model, completion),
             Message::FileScanFinished { revision, result } => {
                 return file_picker::complete_scan(model, revision, result);
             }
@@ -113,15 +113,14 @@ impl MessageManager {
         }
     }
 
-    fn finish_open_file(model: &mut Model, completion: DocumentOpenCompletion) {
-        if document::finish_open_file(model, completion).is_none() {
-            return;
-        }
+    fn finish_open_file(model: &mut Model, completion: DocumentOpenCompletion) -> Option<Effect> {
+        document::finish_open_file(model, completion)?;
         match model.file_picker.visibility {
             Visibility::Displayed => file_picker::close(model),
             Visibility::Hidden => {}
         }
         focus::focus_editor(model);
+        crate::vcs::sync_active_buffer(model)
     }
 }
 
@@ -191,13 +190,9 @@ mod tests {
         let second = model.editor.active_buffer().unwrap();
         assert_ne!(first, second);
 
-        assert!(
-            manager
-                .update(
-                    &mut model,
-                    Message::InvokeCommand(crate::data_object::CommandId("previous_buffer"))
-                )
-                .is_none()
+        let _ = manager.update(
+            &mut model,
+            Message::InvokeCommand(crate::data_object::CommandId("previous_buffer")),
         );
         assert_eq!(model.editor.active_buffer(), Some(first));
         manager.update(

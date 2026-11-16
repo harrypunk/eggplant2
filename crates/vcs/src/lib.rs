@@ -53,6 +53,18 @@ pub fn current_head(path: &Path) -> Option<String> {
         .map(|head| head.load().to_string())
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum DiffBaseError {
+    #[error("not a Git repository")]
+    NotRepository,
+}
+
+/// Load a file's HEAD content. Untracked files return `None` for an empty base.
+pub fn diff_base(path: &Path) -> Result<Option<Vec<u8>>, DiffBaseError> {
+    open_repository(path).map_err(|_| DiffBaseError::NotRepository)?;
+    Ok(DiffProviderRegistry::default().get_diff_base(path, false))
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommitSummary {
     pub id: String,
@@ -567,6 +579,25 @@ mod tests {
             &["init", "--quiet", "--initial-branch=main"],
         );
         assert_eq!(current_head(directory.path()), None);
+    }
+
+    #[test]
+    fn diff_base_reads_head_and_marks_untracked_files() {
+        let repository = repository();
+        assert_eq!(
+            diff_base(&repository.path().join("note.txt")).unwrap(),
+            Some(b"hello\n".to_vec())
+        );
+        assert_eq!(
+            diff_base(&repository.path().join("untracked.txt")).unwrap(),
+            None
+        );
+
+        let directory = tempfile::tempdir().unwrap();
+        assert!(matches!(
+            diff_base(&directory.path().join("note.txt")),
+            Err(DiffBaseError::NotRepository)
+        ));
     }
 
     #[test]

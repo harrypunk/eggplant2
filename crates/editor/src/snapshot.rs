@@ -1,6 +1,10 @@
 use std::ops::Range;
 
-use helix_core::syntax::{Highlight, HighlightEvent};
+use helix_core::{
+    RopeSlice, Syntax,
+    syntax::{Highlight, HighlightEvent, Loader},
+};
+use helix_vcs::Hunk;
 use helix_view::{Document, View};
 
 use crate::{
@@ -38,12 +42,20 @@ pub struct HighlightSpan {
     pub highlights: Vec<Highlight>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LineChange {
+    Added,
+    Modified,
+    Deleted,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LineSnapshot {
     pub text: String,
     pub highlights: Vec<HighlightSpan>,
     /// Optional selected UTF-8 byte range within this line.
     pub selection: Option<Range<usize>>,
+    pub change: Option<LineChange>,
 }
 
 impl LineSnapshot {
@@ -52,6 +64,7 @@ impl LineSnapshot {
             text,
             highlights: Vec::new(),
             selection: None,
+            change: None,
         }
     }
 
@@ -139,25 +152,78 @@ pub(crate) fn apply_selection_snapshot(
 ) {
     let text = document.text();
     let selection = document.selection(view.id).primary();
+    let selections = snapshot
+        .lines
+        .iter()
+        .enumerate()
+        .map(|(index, _)| {
+            selected_line_range(
+                text,
+                selection.from(),
+                selection.to(),
+                snapshot.first_line + index,
+            )
+        })
+        .collect::<Vec<_>>();
     snapshot
         .lines
         .iter_mut()
+        .zip(selections)
+        .for_each(|(line, selection)| line.selection = selection);
+}
+
+fn selected_line_range(
+    text: &helix_core::Rope,
+    selection_start: usize,
+    selection_end: usize,
+    document_line: usize,
+) -> Option<Range<usize>> {
+    let line_start = text.line_to_char(document_line);
+    let line_end = helix_core::line_ending::line_end_char_index(&text.slice(..), document_line);
+    let start = selection_start.max(line_start);
+    let end = selection_end.min(line_end);
+    let line_start_byte = text.char_to_byte(line_start);
+    (start < end).then(|| {
+        text.char_to_byte(start) - line_start_byte..text.char_to_byte(end) - line_start_byte
+    })
+}
+
+pub(crate) fn apply_diff_snapshot(snapshot: &mut TextViewSnapshot, document: &Document) {
+    let Some(handle) = document.diff_handle() else {
+        return;
+    };
+    let diff = handle.load();
+    let changes = snapshot
+        .lines
+        .iter()
         .enumerate()
-        .for_each(|(index, line)| {
-            let document_line = snapshot.first_line + index;
-            let line_start = text.line_to_char(document_line);
-            let line_end =
-                helix_core::line_ending::line_end_char_index(&text.slice(..), document_line);
-            let start = selection.from().max(line_start);
-            let end = selection.to().min(line_end);
-            if start < end {
-                let line_start_byte = text.char_to_byte(line_start);
-                line.selection = Some(
-                    text.char_to_byte(start) - line_start_byte
-                        ..text.char_to_byte(end) - line_start_byte,
-                );
-            }
-        });
+        .map(|(index, _)| {
+            u32::try_from(snapshot.first_line + index)
+                .ok()
+                .and_then(|document_line| {
+                    diff.hunk_at(document_line, true)
+                        .and_then(|index| line_change(diff.nth_hunk(index), document_line))
+                })
+        })
+        .collect::<Vec<_>>();
+    snapshot
+        .lines
+        .iter_mut()
+        .zip(changes)
+        .for_each(|(line, change)| line.change = change);
+}
+
+fn line_change(hunk: Hunk, document_line: u32) -> Option<LineChange> {
+    match hunk {
+        _ if hunk.after.contains(&document_line) && hunk.is_pure_insertion() => {
+            Some(LineChange::Added)
+        }
+        _ if hunk.after.contains(&document_line) => Some(LineChange::Modified),
+        _ if hunk.is_pure_removal() && hunk.after.start == document_line => {
+            Some(LineChange::Deleted)
+        }
+        _ => None,
+    }
 }
 
 /// Project an arbitrary logical-line range with the document's current syntax highlights.
@@ -192,7 +258,7 @@ fn highlighted_lines(
     document: &Document,
     first_line: usize,
     end_line: usize,
-    mut lines: Vec<LineSnapshot>,
+    lines: Vec<LineSnapshot>,
 ) -> Vec<LineSnapshot> {
     let Some(syntax) = document.syntax() else {
         return lines;
@@ -206,15 +272,31 @@ fn highlighted_lines(
     };
     let loader = default_syntax_loader();
     let loader = loader.load();
+    highlight_intervals(syntax, source, &loader, range_start, range_end)
+        .into_iter()
+        .filter(|(range, highlights)| !range.is_empty() && !highlights.is_empty())
+        .fold(lines, |mut lines, (range, highlights)| {
+            append_highlight(&mut lines, first_line, text, range, &highlights);
+            lines
+        })
+}
+
+fn highlight_intervals(
+    syntax: &Syntax,
+    source: RopeSlice<'_>,
+    loader: &Loader,
+    range_start: usize,
+    range_end: usize,
+) -> Vec<(Range<usize>, Vec<Highlight>)> {
     let mut highlighter = syntax.highlighter(
         source,
-        &loader,
+        loader,
         u32::try_from(range_start).unwrap_or(u32::MAX)
             ..u32::try_from(range_end).unwrap_or(u32::MAX),
     );
     let mut active = highlighter.active_highlights().collect::<Vec<_>>();
     let mut previous = range_start;
-    let intervals = std::iter::from_fn(|| {
+    std::iter::from_fn(|| {
         if previous >= range_end {
             return None;
         }
@@ -231,14 +313,8 @@ fn highlighted_lines(
         }
         previous = next;
         Some((interval, highlights))
-    });
-
-    intervals
-        .filter(|(range, highlights)| !range.is_empty() && !highlights.is_empty())
-        .for_each(|(range, highlights)| {
-            append_highlight(&mut lines, first_line, text, range, &highlights);
-        });
-    lines
+    })
+    .collect()
 }
 
 fn update_active_highlights(

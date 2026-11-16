@@ -21,7 +21,7 @@ pub use session::{
 };
 pub use snapshot::{
     BufferInfo, BufferTextSnapshot, CursorPosition, DirtyState, EditorSnapshot, HighlightSpan,
-    LineSnapshot, TextViewSnapshot,
+    LineChange, LineSnapshot, TextViewSnapshot,
 };
 
 #[cfg(test)]

@@ -107,10 +107,15 @@ mod tests {
     };
 
     fn expect_save(effect: Option<Effect>) -> SaveRequest {
-        let Some(Effect::Save(request)) = effect else {
-            panic!("expected a save effect");
-        };
-        request
+        match effect {
+            Some(Effect::Save(request)) => request,
+            Some(Effect::Batch(effects)) => effects
+                .into_iter()
+                .map(|effect| expect_save(Some(effect)))
+                .next()
+                .expect("expected a save effect"),
+            _ => panic!("expected a save effect"),
+        }
     }
 
     #[test]

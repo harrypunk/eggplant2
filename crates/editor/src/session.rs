@@ -18,7 +18,8 @@ use crate::{
     save::{SaveCompletion, SaveError, SaveRequest},
     snapshot::{
         BufferInfo, BufferTextSnapshot, CursorPosition, DirtyState, EditorSnapshot,
-        TextViewSnapshot, apply_selection_snapshot, text_view_snapshot, text_view_snapshot_at,
+        TextViewSnapshot, apply_diff_snapshot, apply_selection_snapshot, text_view_snapshot,
+        text_view_snapshot_at,
     },
     viewport,
 };
@@ -276,6 +277,24 @@ impl EditorSession {
         Some(self.buffers.get(&id)?.document.version())
     }
 
+    /// Apply a diff base only if the buffer still has the expected revision.
+    pub fn set_buffer_diff_base(
+        &mut self,
+        id: BufferId,
+        expected_version: i32,
+        base: Vec<u8>,
+    ) -> Result<bool, EditorError> {
+        let buffer = self
+            .buffers
+            .get_mut(&id)
+            .ok_or(EditorError::UnknownBuffer(id))?;
+        if buffer.document.version() != expected_version {
+            return Ok(false);
+        }
+        buffer.document.set_diff_base(base);
+        Ok(true)
+    }
+
     pub fn active_is_modified(&self) -> bool {
         self.active_view
             .as_ref()
@@ -343,6 +362,7 @@ impl EditorSession {
         if matches!(self.mode, EditMode::Visual | EditMode::VisualLine) {
             apply_selection_snapshot(&mut text, document, view);
         }
+        apply_diff_snapshot(&mut text, document);
         let cursor = document
             .selection(view.id)
             .primary()

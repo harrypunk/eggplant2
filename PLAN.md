@@ -384,10 +384,10 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 #### M9.3 — Active-buffer diff gutter and diff view
 
-- [ ] Load the active file's `HEAD` content in the background and compare it with the current in-memory buffer, not only the saved working-tree file.
-- [ ] Reuse `Document::set_diff_base`/`DiffHandle` and project line changes through editor snapshots without exposing Helix VCS types to widgets.
+- [x] Load the active file's `HEAD` content in the background and compare it with the current in-memory buffer, not only the saved working-tree file.
+- [x] Reuse `Document::set_diff_base`/`DiffHandle` and project line changes through editor snapshots without exposing Helix VCS types to widgets.
 - [x] Add a toggleable inline diff for a selected changed file using HEAD/index/worktree blobs, with bounded output and stale-response protection.
-- [ ] Handle untracked files, non-repositories, buffer switches, edits during diff work, external updates, and stale completions.
+- [x] Handle untracked files, non-repositories, buffer switches, edits during diff work, external updates, and stale completions.
 
 #### M9.4 — Commit history
 

@@ -2,7 +2,7 @@ use helix_core::{Selection, Transaction};
 use helix_view::graphics::Rect;
 
 use super::*;
-use crate::{DocumentFactory, DocumentOpenRequest, OpenDocumentError};
+use crate::{DocumentFactory, DocumentOpenRequest, LineChange, OpenDocumentError};
 
 fn create_buffer(session: &mut EditorSession, text: &str) -> BufferId {
     session.insert_document(DocumentFactory::new().create(text))
@@ -928,6 +928,40 @@ fn undo_and_redo_restore_an_insert_session() {
     assert!(session.active_editor().unwrap().redo().unwrap());
     assert_eq!(session.buffers[&id].document.text(), "abc");
     assert!(session.active_is_modified());
+}
+
+#[tokio::test]
+async fn diff_base_projects_line_changes_and_rejects_stale_revisions() {
+    let mut session = EditorSession::new();
+    let id = create_buffer(&mut session, "hello\nworld");
+    session.resize_active_view(20, 4);
+    let version = session.buffer_version(id).unwrap();
+    assert!(
+        session
+            .set_buffer_diff_base(id, version, b"hello\n".to_vec())
+            .unwrap()
+    );
+
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        loop {
+            let snapshot = session.active_snapshot().unwrap();
+            if snapshot.text.lines[1].change == Some(LineChange::Modified) {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+
+    session.enter_insert_mode();
+    session.active_editor().unwrap().insert_text("!").unwrap();
+    session.enter_normal_mode();
+    assert!(
+        !session
+            .set_buffer_diff_base(id, version, b"stale".to_vec())
+            .unwrap()
+    );
 }
 
 #[test]
