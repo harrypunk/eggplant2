@@ -1,0 +1,136 @@
+# Feature composition with React-style interfaces
+
+Eggplant uses Elm's `Model → Message → Update → View → Effect` loop. Pages and components should still feel like React composition: small units with explicit inputs and no hidden side effects. This document describes how to keep features reusable without building a component or dependency-injection framework.
+
+## Mental model
+
+| React concept | Eggplant equivalent |
+| --- | --- |
+| Page | `page/*/mod.rs`: route-level layout and component composition. |
+| Presentational component | A component or page-local type that turns read-only state into Ratatui output. |
+| Hook/capability | A narrow interface such as `EditingTarget`, with page-specific adapters. |
+| Effect description | `Effect`, `FeatureEffect`, and owned completion values. |
+| Context/provider | Explicit adapter construction from `Model`; no hidden global service locator. |
+
+`Model` is the application root, not a required dependency of every reusable operation. Adapters may know about `Model`; reusable command logic should depend only on the capabilities it actually uses.
+
+## 1. Compose pages from layout and components
+
+A page should primarily calculate named regions and render components:
+
+```text
+VcsHistory
+├── VcsHistoryLayout
+├── HistoryList
+└── CommitDetail
+```
+
+Components own their view-model derivation, selection geometry, and presentation rules. They do not run repository work, mutate application state, or construct background tasks. Page-local components belong in the page's directory module; genuinely shared components belong in `component/`.
+
+Use directory roots consistently:
+
+```text
+page/feature/
+├── mod.rs          # page composition and layout
+└── component.rs    # page-local reusable unit
+```
+
+Do not move presentation formatting into backend capabilities merely to shorten a page.
+
+## 2. Program to narrow interfaces
+
+An interface should list the inputs an operation needs, no more. `EditingTarget` is the example:
+
+```rust
+trait EditingTarget {
+    fn session(&mut self) -> &mut EditorSession;
+    fn input_context(&self) -> Context;
+    fn push_context(&mut self, context: Context);
+    fn pop_context(&mut self, context: Context);
+    fn is_editing_enabled(&self) -> bool { true }
+    fn after_edit(&mut self) -> Option<Effect>;
+}
+```
+
+Reusable editing functions accept `&mut impl EditingTarget`, not `&mut Model`. They can move a cursor, insert text, or open a line without knowing which page owns the editor.
+
+Adapters provide concrete policies:
+
+- `MainEditingTarget` selects `model.editor`, uses `EditorInput`, and auto-saves file-backed buffers.
+- `CommitEditingTarget` selects the scratch session, uses `VcsCommitInput`, checks submission state, and performs no message-file save.
+
+The page dispatcher is the only place that needs to select an adapter. Static generics are normally sufficient; avoid `dyn Trait` and global registries unless dynamic behavior is a real requirement.
+
+### Interface design rules
+
+- Extract when at least two consumers need different policies, not merely to make a trait.
+- Include only operations used by the reusable core.
+- Keep domain invariants in their owning crate; an interface must not bypass `EditorSession` invariants.
+- Return data rather than reaching for unrelated model fields.
+- Do not turn every helper or feature into a trait. Narrow structs and pure functions are also interfaces.
+
+## 3. Encapsulate effects as composable policy
+
+Effects are values, not hidden work performed inside rendering or text manipulation. `EditingTarget::after_edit` demonstrates the smallest useful policy hook:
+
+```rust
+fn insert(target: &mut impl EditingTarget, text: &str) -> Option<Effect> {
+    target
+        .session()
+        .active_editor()
+        .and_then(|mut editor| editor.insert_text(text))
+        .ok()?;
+    target.after_edit()
+}
+```
+
+The same operation therefore supports auto-save on the editor page and ephemeral editing on the commit page. The adapter owns persistence policy; the reusable command owns only the text mutation and effect trigger.
+
+Background work follows the same rule:
+
+1. Clone all required inputs into an owned request.
+2. Execute through `FeatureEffect` outside rendering and input handling.
+3. Return a typed completion.
+4. Validate target and revision/generation before applying it.
+5. Compose independent effects with `Effect::combine`; do not use a batch as a completion barrier.
+
+A save-dependent workflow must use an explicit completion state machine, as the commit save barrier does.
+
+## 4. Keep ownership boundaries clear
+
+- `editor` owns document text, cursor, revisions, view geometry, and persistence invariants.
+- Feature state owns workflow state, loading phases, selections, and request generations.
+- Backend capabilities own external systems such as Git and return owned domain values.
+- Adapters select state and policy from `Model`.
+- Pages and components read state and render it.
+- Runtime executes effects and routes completions.
+
+A scratch feature session must not enter the main buffer tabs, save-all workflow, or close/quit persistence policy. Buffer identities from separate sessions must never be mixed.
+
+## 5. Test at both levels
+
+Use a small fake interface for reusable operations. It should verify behavior without constructing `Model`:
+
+- Editing changes the expected session text and contexts.
+- The persistence hook is called exactly when expected.
+- Unavailable targets reject input safely.
+
+Keep integration tests for real adapters:
+
+- Main editing still auto-saves file-backed documents.
+- Commit editing remains ephemeral and respects submission locks.
+- Existing command and rendering behavior does not change.
+
+Selection and viewport tests should use actual rendered rows, including expanded content, rather than assuming a model index equals a visible row.
+
+## Feature review checklist
+
+When reviewing another feature, ask:
+
+1. Does its reusable core need `Model`, or only one state/capability input?
+2. Which policies vary by page: persistence, contexts, availability, targets, or effect execution?
+3. Can those policies be explicit adapter methods instead of page checks in leaf functions?
+4. Are effects owned, revisioned, and independent of rendering?
+5. Does the page mostly compose layout and components?
+6. Can tests use a small fake while real adapters retain integration coverage?
+7. Is the abstraction justified by current consumers? If not, prefer a pure function or narrower struct.

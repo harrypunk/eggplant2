@@ -1,102 +1,23 @@
-use editor::{
-    CursorMovement, EditorSession, InsertPosition, LineBoundary, OpenLineDirection, WordMovement,
-};
+mod target;
+
+use editor::{CursorMovement, InsertPosition, LineBoundary, OpenLineDirection, WordMovement};
 
 use crate::{
-    buffer,
-    data_object::{AppPage, CommandId, Context, Model, StatusMessage},
+    data_object::{AppPage, CommandId, Model, StatusMessage},
     manager::effect::Effect,
 };
 
-fn target_editor(model: &mut Model) -> &mut EditorSession {
-    match model.active_page {
-        AppPage::VcsCommit => &mut model.vcs.commit.editor,
-        _ => &mut model.editor,
-    }
-}
+use self::target::EditingTarget;
 
-fn input_context(model: &Model) -> Context {
-    match model.active_page {
-        AppPage::VcsCommit => Context::VcsCommitInput,
-        _ => Context::EditorInput,
-    }
-}
-
-fn auto_save_active(model: &mut Model) -> Option<Effect> {
-    match model.active_page {
-        AppPage::VcsCommit => None,
-        _ => buffer::auto_save_active(model),
-    }
-}
-
-/// Editing feature commands, independent of physical keybindings.
+/// Dispatch physical-page-independent editing commands through the active adapter.
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    if model.active_page == AppPage::VcsCommit && !model.vcs.commit.is_editing() {
-        return None;
-    }
-    match id.as_str() {
-        "enter_visual_mode" => enter_visual(model),
-        "enter_visual_line_mode" => enter_visual_line(model),
-        "exit_visual_mode" => {
-            model
-                .context_stack
-                .pop_if(|context| context == &Context::EditorVisual);
-            target_editor(model).enter_normal_mode();
-            None
-        }
-        "enter_insert_mode" => enter_insert(model),
-        "insert_after_cursor" => enter_insert_at(model, InsertPosition::AfterCursor),
-        "insert_at_line_end" => enter_insert_at(model, InsertPosition::LineEnd),
-        "insert_at_first_nonblank" => enter_insert_at(model, InsertPosition::FirstNonBlank),
-        "open_line_below" => open_line(model, OpenLineDirection::Below),
-        "open_line_above" => open_line(model, OpenLineDirection::Above),
-        "exit_insert_mode" => {
-            let context = input_context(model);
-            model.context_stack.pop_if(|active| *active == context);
-            target_editor(model).enter_normal_mode();
-            auto_save_active(model)
-        }
-        "move_left" => move_cursor(model, CursorMovement::Left),
-        "move_right" => move_cursor(model, CursorMovement::Right),
-        "move_up" => move_cursor(model, CursorMovement::Up),
-        "move_down" => move_cursor(model, CursorMovement::Down),
-        "move_line_start" => move_line_boundary(model, LineBoundary::Start),
-        "move_line_end" => move_line_boundary(model, LineBoundary::End),
-        "move_next_word_start" => move_word(model, WordMovement::NextStart),
-        "move_previous_word_start" => move_word(model, WordMovement::PreviousStart),
-        "move_next_word_end" => move_word(model, WordMovement::NextEnd),
-        "backspace" => {
-            if target_editor(model)
-                .active_editor()
-                .and_then(|mut editor| editor.backspace())
-                .is_ok()
-            {
-                return auto_save_active(model);
-            }
-            None
-        }
-        "insert_newline" => insert(model, "\n"),
-        "undo" => {
-            if target_editor(model)
-                .active_editor()
-                .and_then(|mut editor| editor.undo())
-                .unwrap_or(false)
-            {
-                return auto_save_active(model);
-            }
-            None
-        }
-        "redo" => {
-            if target_editor(model)
-                .active_editor()
-                .and_then(|mut editor| editor.redo())
-                .unwrap_or(false)
-            {
-                return auto_save_active(model);
-            }
-            None
-        }
-        _ => {
+    let result = match model.active_page {
+        AppPage::VcsCommit => handle_command_with(&mut target::commit_message(model), id),
+        _ => handle_command_with(&mut target::main_editor(model), id),
+    };
+    match result {
+        Ok(effect) => effect,
+        Err(id) => {
             model.status = Some(StatusMessage::error(format!(
                 "unknown editing command `{}`",
                 id.as_str()
@@ -106,100 +27,195 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     }
 }
 
-pub(crate) fn insert_char(model: &mut Model, character: char) -> Option<Effect> {
-    if model.active_page == AppPage::VcsCommit && !model.vcs.commit.is_editing() {
-        return None;
+fn handle_command_with(
+    target: &mut impl EditingTarget,
+    id: CommandId,
+) -> Result<Option<Effect>, CommandId> {
+    if !target.is_editing_enabled() {
+        return Ok(None);
     }
-    insert(model, &character.to_string())
+    let effect = match id.as_str() {
+        "enter_visual_mode" => enter_visual(target),
+        "enter_visual_line_mode" => enter_visual_line(target),
+        "exit_visual_mode" => {
+            let context = target.visual_context();
+            target.pop_context(context);
+            target.session().enter_normal_mode();
+            None
+        }
+        "enter_insert_mode" => enter_insert_with(target),
+        "insert_after_cursor" => enter_insert_at(target, InsertPosition::AfterCursor),
+        "insert_at_line_end" => enter_insert_at(target, InsertPosition::LineEnd),
+        "insert_at_first_nonblank" => enter_insert_at(target, InsertPosition::FirstNonBlank),
+        "open_line_below" => open_line(target, OpenLineDirection::Below),
+        "open_line_above" => open_line(target, OpenLineDirection::Above),
+        "exit_insert_mode" => {
+            let context = target.input_context();
+            target.pop_context(context);
+            target.session().enter_normal_mode();
+            target.after_edit()
+        }
+        "move_left" => move_cursor(target, CursorMovement::Left),
+        "move_right" => move_cursor(target, CursorMovement::Right),
+        "move_up" => move_cursor(target, CursorMovement::Up),
+        "move_down" => move_cursor(target, CursorMovement::Down),
+        "move_line_start" => move_line_boundary(target, LineBoundary::Start),
+        "move_line_end" => move_line_boundary(target, LineBoundary::End),
+        "move_next_word_start" => move_word(target, WordMovement::NextStart),
+        "move_previous_word_start" => move_word(target, WordMovement::PreviousStart),
+        "move_next_word_end" => move_word(target, WordMovement::NextEnd),
+        "backspace" => {
+            if target
+                .session()
+                .active_editor()
+                .and_then(|mut editor| editor.backspace())
+                .is_ok()
+            {
+                return Ok(target.after_edit());
+            }
+            None
+        }
+        "insert_newline" => insert(target, "\n"),
+        "undo" => {
+            if target
+                .session()
+                .active_editor()
+                .and_then(|mut editor| editor.undo())
+                .unwrap_or(false)
+            {
+                return Ok(target.after_edit());
+            }
+            None
+        }
+        "redo" => {
+            if target
+                .session()
+                .active_editor()
+                .and_then(|mut editor| editor.redo())
+                .unwrap_or(false)
+            {
+                return Ok(target.after_edit());
+            }
+            None
+        }
+        _ => return Err(id),
+    };
+    Ok(effect)
 }
 
-fn enter_visual(model: &mut Model) -> Option<Effect> {
-    if target_editor(model).active_buffer().is_some() {
-        model.context_stack.push(Context::EditorVisual);
-        target_editor(model).enter_visual_mode();
+pub(crate) fn insert_char(model: &mut Model, character: char) -> Option<Effect> {
+    match model.active_page {
+        AppPage::VcsCommit => insert_char_with(&mut target::commit_message(model), character),
+        _ => insert_char_with(&mut target::main_editor(model), character),
+    }
+}
+
+fn insert_char_with(target: &mut impl EditingTarget, character: char) -> Option<Effect> {
+    if !target.is_editing_enabled() {
+        return None;
+    }
+    insert(target, &character.to_string())
+}
+
+fn enter_visual(target: &mut impl EditingTarget) -> Option<Effect> {
+    if target.session().active_buffer().is_some() {
+        let context = target.visual_context();
+        target.push_context(context);
+        target.session().enter_visual_mode();
     }
     None
 }
 
-fn enter_visual_line(model: &mut Model) -> Option<Effect> {
-    if target_editor(model).active_buffer().is_some() {
-        model.context_stack.push(Context::EditorVisual);
-        target_editor(model).enter_visual_line_mode();
+fn enter_visual_line(target: &mut impl EditingTarget) -> Option<Effect> {
+    if target.session().active_buffer().is_some() {
+        let context = target.visual_context();
+        target.push_context(context);
+        target.session().enter_visual_line_mode();
     }
     None
 }
 
 pub(crate) fn enter_insert(model: &mut Model) -> Option<Effect> {
-    if target_editor(model).active_buffer().is_some() {
-        let context = input_context(model);
-        model.context_stack.push(context);
-        target_editor(model).enter_insert_mode();
+    match model.active_page {
+        AppPage::VcsCommit => enter_insert_with(&mut target::commit_message(model)),
+        _ => enter_insert_with(&mut target::main_editor(model)),
+    }
+}
+
+fn enter_insert_with(target: &mut impl EditingTarget) -> Option<Effect> {
+    if target.session().active_buffer().is_some() {
+        let context = target.input_context();
+        target.push_context(context);
+        target.session().enter_insert_mode();
     }
     None
 }
 
-fn enter_insert_at(model: &mut Model, position: InsertPosition) -> Option<Effect> {
-    if target_editor(model)
+fn enter_insert_at(target: &mut impl EditingTarget, position: InsertPosition) -> Option<Effect> {
+    if target
+        .session()
         .active_editor()
         .and_then(|mut editor| editor.move_cursor_to_insert(position))
         .is_ok()
     {
-        enter_insert(model);
+        enter_insert_with(target);
     }
     None
 }
 
-fn open_line(model: &mut Model, direction: OpenLineDirection) -> Option<Effect> {
-    if target_editor(model)
+fn open_line(target: &mut impl EditingTarget, direction: OpenLineDirection) -> Option<Effect> {
+    if target
+        .session()
         .active_editor()
         .and_then(|mut editor| editor.open_line(direction))
         .is_ok()
     {
-        enter_insert(model);
-        return auto_save_active(model);
+        enter_insert_with(target);
+        return target.after_edit();
     }
     None
 }
 
-fn move_cursor(model: &mut Model, movement: CursorMovement) -> Option<Effect> {
-    if let Ok(mut editor) = target_editor(model).active_editor() {
+fn move_cursor(target: &mut impl EditingTarget, movement: CursorMovement) -> Option<Effect> {
+    if let Ok(mut editor) = target.session().active_editor() {
         let _ = editor.move_cursor(movement);
     }
     None
 }
 
-fn move_line_boundary(model: &mut Model, boundary: LineBoundary) -> Option<Effect> {
-    if let Ok(mut editor) = target_editor(model).active_editor() {
+fn move_line_boundary(target: &mut impl EditingTarget, boundary: LineBoundary) -> Option<Effect> {
+    if let Ok(mut editor) = target.session().active_editor() {
         let _ = editor.move_cursor_to_line_boundary(boundary);
     }
     None
 }
 
-fn move_word(model: &mut Model, movement: WordMovement) -> Option<Effect> {
-    if let Ok(mut editor) = target_editor(model).active_editor() {
+fn move_word(target: &mut impl EditingTarget, movement: WordMovement) -> Option<Effect> {
+    if let Ok(mut editor) = target.session().active_editor() {
         let _ = editor.move_cursor_word(movement);
     }
     None
 }
 
-fn insert(model: &mut Model, text: &str) -> Option<Effect> {
-    if target_editor(model)
+fn insert(target: &mut impl EditingTarget, text: &str) -> Option<Effect> {
+    if target
+        .session()
         .active_editor()
         .and_then(|mut editor| editor.insert_text(text))
         .is_ok()
     {
-        return auto_save_active(model);
+        return target.after_edit();
     }
     None
 }
 
 #[cfg(test)]
 mod tests {
-    use editor::{EditMode, SaveRequest};
+    use editor::{DocumentFactory, EditMode, EditorSession, SaveRequest};
 
     use super::*;
     use crate::{
-        data_object::Message,
+        data_object::{Context, Message},
         manager::message_manager::MessageManager,
         test_utils::{create_buffer, open_file},
     };
@@ -209,6 +225,55 @@ mod tests {
             panic!("expected a save effect");
         };
         request
+    }
+
+    #[derive(Default)]
+    struct TestTarget {
+        session: EditorSession,
+        contexts: Vec<Context>,
+        after_edits: usize,
+    }
+
+    impl EditingTarget for TestTarget {
+        fn session(&mut self) -> &mut EditorSession {
+            &mut self.session
+        }
+
+        fn input_context(&self) -> Context {
+            Context::EditorInput
+        }
+
+        fn push_context(&mut self, context: Context) {
+            self.contexts.push(context);
+        }
+
+        fn pop_context(&mut self, context: Context) {
+            self.contexts.pop_if(|active| *active == context);
+        }
+
+        fn after_edit(&mut self) -> Option<Effect> {
+            self.after_edits += 1;
+            None
+        }
+    }
+
+    #[test]
+    fn editing_operations_compose_without_the_application_model() {
+        let mut target = TestTarget::default();
+        target
+            .session
+            .insert_document(DocumentFactory::new().create(""));
+
+        assert!(
+            handle_command_with(&mut target, CommandId("enter_insert_mode"))
+                .unwrap()
+                .is_none()
+        );
+        assert!(insert_char_with(&mut target, 'b').is_none());
+
+        assert_eq!(target.session.active_text_snapshot().unwrap().text, "b");
+        assert_eq!(target.contexts, [Context::EditorInput]);
+        assert_eq!(target.after_edits, 1);
     }
 
     #[test]

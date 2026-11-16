@@ -17,6 +17,7 @@ Start with the [project overview](../README.md), then use the focused document f
 ## Feature architecture
 
 - [Feature architecture](feature-architecture.md) — high-level ownership and dependency rules.
+- [Feature composition](feature-composition.md) — React-style interfaces, adapters, reusable components, and effect policies.
 - [Command and effect routing](command-effects.md) — semantic commands and worker completion boundaries.
 - [UI contributions](ui-contributions.md) — panels, overlays, status slots, and cursor policy.
 - [Feature authoring](feature-authoring.md) — registration and testing checklist.
