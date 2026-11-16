@@ -1,3 +1,5 @@
+mod change_section;
+
 use ratatui::{
     Frame,
     layout::{Constraint, Flex, Layout, Rect},
@@ -6,28 +8,21 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph},
 };
 
-use ::vcs::{ChangeKind, FileChange};
-
 use crate::{
-    component::{commit_message, diff, picker},
+    component::commit_message,
     data_object::Model,
     theme::UiTheme,
-    vcs::{ChangesState, DiffState, HistoryState},
+    vcs::{ChangesState, HistoryState},
 };
+
+use self::change_section::ChangeSection;
 
 #[derive(Debug, Default)]
 pub struct Vcs;
 
 impl Vcs {
     pub fn view(&self, model: &Model, frame: &mut Frame) {
-        let [hints_area, head_area, body, help_area] = Layout::vertical([
-            Constraint::Length(3),
-            Constraint::Length(2),
-            Constraint::Fill(1),
-            Constraint::Length(if model.vcs.help_visible { 5 } else { 0 }),
-        ])
-        .flex(Flex::Start)
-        .areas(frame.area());
+        let areas = VcsLayout::new(frame.area(), model.vcs.help_visible);
         let styles = model.theme.ui();
         let heading = styles
             .base
@@ -41,43 +36,72 @@ impl Vcs {
         if let Some(notice) = &model.vcs.notice {
             hints.push(Line::styled(notice.clone(), styles.muted));
         }
-        frame.render_widget(Paragraph::new(hints).style(styles.base), hints_area);
+        frame.render_widget(Paragraph::new(hints).style(styles.base), areas.hints);
         frame.render_widget(
             Paragraph::new(head_line(model, styles)).style(styles.base),
-            head_area,
+            areas.head,
         );
 
         match model.vcs.changes() {
             ChangesState::Idle | ChangesState::Loading => {
                 frame.render_widget(
                     Paragraph::new("Loading changes…").style(styles.base.patch(styles.muted)),
-                    body,
+                    areas.changes,
                 );
             }
             ChangesState::Failed(error) => {
                 frame.render_widget(
                     Paragraph::new(error.as_str()).style(styles.base.patch(styles.error)),
-                    body,
+                    areas.changes,
                 );
             }
             ChangesState::Ready(changes) if changes.is_empty() => {
                 frame.render_widget(
                     Paragraph::new("No changes").style(styles.base.patch(styles.muted)),
-                    body,
+                    areas.changes,
                 );
             }
             ChangesState::Ready(_) => {
-                let staged = render_section(model, styles, body, true, frame);
-                let remaining = Rect {
-                    y: body.y.saturating_add(staged),
-                    height: body.height.saturating_sub(staged),
-                    ..body
-                };
-                render_section(model, styles, remaining, false, frame);
+                let consumed = ChangeSection::staged(model).render(areas.changes, frame);
+                ChangeSection::unstaged(model).render(areas.after_staged(consumed), frame);
             }
         }
         if model.vcs.help_visible {
-            render_help(model, frame, help_area);
+            render_help(model, frame, areas.help);
+        }
+    }
+}
+
+struct VcsLayout {
+    hints: Rect,
+    head: Rect,
+    changes: Rect,
+    help: Rect,
+}
+
+impl VcsLayout {
+    fn new(area: Rect, help_visible: bool) -> Self {
+        let [hints, head, changes, help] = Layout::vertical([
+            Constraint::Length(3),
+            Constraint::Length(2),
+            Constraint::Fill(1),
+            Constraint::Length(if help_visible { 5 } else { 0 }),
+        ])
+        .flex(Flex::Start)
+        .areas(area);
+        Self {
+            hints,
+            head,
+            changes,
+            help,
+        }
+    }
+
+    fn after_staged(&self, consumed: u16) -> Rect {
+        Rect {
+            y: self.changes.y.saturating_add(consumed),
+            height: self.changes.height.saturating_sub(consumed),
+            ..self.changes
         }
     }
 }
@@ -114,144 +138,13 @@ fn head_line(model: &Model, styles: &UiTheme) -> Line<'static> {
     }
 }
 
-fn render_section(
-    model: &Model,
-    styles: &UiTheme,
-    area: Rect,
-    staged: bool,
-    frame: &mut Frame,
-) -> u16 {
-    let (lines, selected) = change_lines(model, styles, staged);
-    if lines.is_empty() || area.height == 0 {
-        return 0;
-    }
-    let title = if staged {
-        "Staged files"
-    } else {
-        "Unstaged files"
-    };
-    frame.render_widget(
-        Paragraph::new(title).style(styles.base.patch(styles.key_hint)),
-        Rect { height: 1, ..area },
-    );
-    let content = Rect {
-        y: area.y.saturating_add(1),
-        height: area.height.saturating_sub(1),
-        ..area
-    };
-    let lines = picker::visible_lines(lines, selected, content.height);
-    let rendered = lines.len() as u16;
-    frame.render_widget(Paragraph::new(lines).style(styles.base), content);
-    rendered.saturating_add(1)
-}
-
-/// Build one staged/unstaged section and its picker selection.
-///
-/// Each file contributes one row, followed by its diff when expanded. The
-/// returned selection is the selected file's rendered row, while the model's
-/// selection indexes the combined change list.
-fn change_lines(
-    model: &Model,
-    styles: &UiTheme,
-    staged: bool,
-) -> (Vec<Line<'static>>, Option<usize>) {
-    let ChangesState::Ready(changes) = model.vcs.changes() else {
-        return (Vec::new(), None);
-    };
-    changes
-        .iter()
-        .enumerate()
-        .filter(|(_, change)| change.staged == staged)
-        .fold(
-            (Vec::new(), None),
-            |(mut lines, mut selected), (index, change)| {
-                if model.vcs.selected_change == Some(index) {
-                    selected = Some(lines.len());
-                }
-                lines.push(change_line(model, styles, index, change));
-                let expanded = model
-                    .vcs
-                    .expanded_change
-                    .as_ref()
-                    .is_some_and(|(path, staged)| path == &change.path && *staged == change.staged);
-                if expanded {
-                    lines.extend(diff_lines(model, styles));
-                }
-                (lines, selected)
-            },
-        )
-}
-
-fn change_line(
-    model: &Model,
-    styles: &UiTheme,
-    index: usize,
-    change: &FileChange,
-) -> Line<'static> {
-    let is_selected = model.vcs.selected_change == Some(index);
-    let style = if is_selected {
-        styles
-            .base
-            .patch(styles.key_hint)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        styles.base
-    };
-    let marker = if is_selected { "> " } else { "  " };
-    Line::styled(format!("{marker}{}", change_text(model, change)), style)
-}
-
-fn diff_lines(model: &Model, styles: &UiTheme) -> Vec<Line<'static>> {
-    match &model.vcs.diff {
-        DiffState::Idle => Vec::new(),
-        DiffState::Loading => vec![Line::styled(
-            "  Loading diff…",
-            styles.base.patch(styles.muted),
-        )],
-        DiffState::Failed(error) => vec![Line::styled(
-            format!("  {error}"),
-            styles.base.patch(styles.error),
-        )],
-        DiffState::Ready { lines, truncated } => lines
-            .iter()
-            .map(|line| Line::styled(format!("  {line}"), diff::line_style(styles, line)))
-            .chain((*truncated).then(|| Line::styled("  …", styles.base.patch(styles.muted))))
-            .collect(),
-    }
-}
-
-fn change_text(model: &Model, change: &FileChange) -> String {
-    let marker = match change.kind {
-        ChangeKind::Added => "A",
-        ChangeKind::Untracked => "?",
-        ChangeKind::Modified => "M",
-        ChangeKind::Conflict => "C",
-        ChangeKind::Deleted => "D",
-        ChangeKind::Renamed => "R",
-    };
-    let path = display_path(model, &change.path);
-    match &change.previous_path {
-        Some(previous) => format!("{marker} {} -> {path}", display_path(model, previous)),
-        None => format!("{marker} {path}"),
-    }
-}
-
-fn display_path(model: &Model, path: &std::path::Path) -> String {
-    model
-        .workspace
-        .as_ref()
-        .and_then(|workspace| path.strip_prefix(workspace.root()).ok())
-        .unwrap_or(path)
-        .to_string_lossy()
-        .into_owned()
-}
-
 #[cfg(test)]
 mod tests {
     use ratatui::{Terminal, backend::TestBackend, style::Color};
 
     use super::*;
-    use crate::{component::relative_time, data_object::Workspace};
+    use crate::{component::relative_time, data_object::Workspace, vcs::DiffState};
+    use ::vcs::{ChangeKind, FileChange};
 
     fn change(path: &str, kind: ChangeKind, staged: bool) -> FileChange {
         FileChange {
@@ -331,40 +224,6 @@ mod tests {
                 .iter()
                 .all(|cell| cell.bg != Color::White)
         );
-    }
-
-    #[test]
-    fn change_lines_tracks_selection_after_an_expanded_diff() {
-        let mut model = Model::default();
-        model.vcs.changes = ChangesState::Ready(vec![
-            change("first.rs", ChangeKind::Modified, false),
-            change("second.rs", ChangeKind::Modified, false),
-        ]);
-        model.vcs.selected_change = Some(1);
-        model.vcs.expanded_change = Some((std::path::PathBuf::from("/workspace/first.rs"), false));
-        model.vcs.diff = DiffState::Ready {
-            lines: vec!["+first".to_string()],
-            truncated: false,
-        };
-
-        let (lines, selected) = change_lines(&model, model.theme.ui(), false);
-
-        assert_eq!(lines.len(), 3);
-        assert_eq!(selected, Some(2));
-    }
-
-    #[test]
-    fn expanded_change_diff_renders_every_loaded_line() {
-        let mut model = Model::default();
-        model.vcs.diff = DiffState::Ready {
-            lines: (0..8).map(|index| format!("+line-{index}")).collect(),
-            truncated: false,
-        };
-
-        let lines = diff_lines(&model, model.theme.ui());
-
-        assert_eq!(lines.len(), 8);
-        assert_eq!(lines[7].to_string(), "  +line-7");
     }
 
     #[test]

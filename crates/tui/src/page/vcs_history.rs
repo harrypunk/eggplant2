@@ -8,7 +8,7 @@ use ratatui::{
 use crate::{
     component::{commit_message, diff, picker},
     data_object::Model,
-    vcs::{CommitDetailsState, DiffState, HistoryMoreState, HistoryState},
+    vcs::{CommitDetailsState, HistoryMoreState, HistoryState},
 };
 
 #[derive(Debug, Default)]
@@ -168,17 +168,7 @@ fn detail_file_line(model: &Model, index: usize, file: &::vcs::CommitFile) -> Li
 }
 
 fn file_diff_lines(model: &Model) -> Vec<Line<'static>> {
-    let styles = model.theme.ui();
-    match &model.vcs.history_detail_diff {
-        DiffState::Idle => Vec::new(),
-        DiffState::Loading => vec![Line::styled("  Loading diff…", styles.muted)],
-        DiffState::Failed(error) => vec![Line::styled(error.clone(), styles.error)],
-        DiffState::Ready { lines, truncated } => lines
-            .iter()
-            .map(|line| Line::styled(format!("  {line}"), diff::line_style(styles, line)))
-            .chain((*truncated).then(|| Line::styled("  …", styles.base.patch(styles.muted))))
-            .collect(),
-    }
+    diff::lines(&model.vcs.history_detail_diff, model.theme.ui())
 }
 
 fn change_marker(kind: ::vcs::ChangeKind) -> &'static str {
@@ -197,7 +187,7 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend, style::Modifier};
 
     use super::*;
-    use crate::component::relative_time;
+    use crate::{component::relative_time, vcs::DiffState};
     use ::vcs::{ChangeKind, CommitDetails, CommitFile};
 
     #[test]
