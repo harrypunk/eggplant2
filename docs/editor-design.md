@@ -70,7 +70,7 @@ This is deliberately smaller than a general window tree. A future split implemen
 
 - If `active_view` exists, its `BufferId` exists in `BufferStore`.
 - Every open buffer has a stable ID independent of display order.
-- Opening an already-open canonical path activates the existing buffer rather than duplicating it. All open commands use the same text-only `DocumentFactory` acceptance path, then reveal the canonical opened path in the explorer by expanding its visible ancestors and selecting it. Next/previous buffer switching performs the same reveal for the newly active file; untitled buffers leave explorer selection unchanged. Normal `]b`/`[b` use the `buffer_navigation` extension's pending-prefix context and delegate to the same switch commands, including save-before-switch and pending-input cleanup.
+- Opening an already-open canonical path activates the existing buffer rather than duplicating it. All open commands use the same text-only `DocumentFactory` acceptance path, then reveal the canonical opened path in the explorer by expanding its visible ancestors and selecting it. Buffer switching performs the same reveal for the newly active file; untitled buffers leave explorer selection unchanged.
 - Only the document adapter owns text, transactions, and history.
 - Only one component owns viewport offsets for the active view.
 - Editor commands never create a buffer implicitly when no document is active.
@@ -105,7 +105,7 @@ Do not duplicate both mechanisms. The spike should establish which adapter owns 
 
 ## 4. Folder-open and empty-editor behavior
 
-Workspace and editor state are independent. The workspace root is fixed after startup. The explorer presents a visible filesystem tree beneath that root; folding or unfolding directories changes only the tree's expansion state, never the workspace root. Root and nested `.gitignore` rules plus built-in `.git`, `node_modules`, and `__pycache__` entries are filtered by default. Explorer-context `Shift-I` toggles between hiding and showing all ignored entries. Ignore filtering happens before producing the flattened tree; unrelated dotfiles remain visible.
+Workspace and editor state are independent. The workspace root is fixed after startup. The explorer presents a visible filesystem tree beneath that root; folding or unfolding directories changes only the tree's expansion state, never the workspace root. Root and nested `.gitignore` rules plus built-in `.git`, `node_modules`, and `__pycache__` entries are filtered by default. The explorer ignore-visibility command toggles between hiding and showing all ignored entries. Ignore filtering happens before producing the flattened tree; unrelated dotfiles remain visible.
 
 ```rust
 struct Model {
@@ -184,7 +184,7 @@ The exact return type can remain small: a single `Option<Effect>` is sufficient 
 
 Normal-mode bindings resolve to semantic commands. In Insert mode, unbound printable input becomes an editor insert command; individual characters should not be configured as keymap actions.
 
-`Ctrl-H/J/K/L` emits directional focus messages in Normal and Explorer contexts. Focus navigation uses logical component relationships and panel visibility, not document cursor coordinates or rendered rectangles. The single-view layout only moves between the editor and explorer horizontally; vertical directions remain no-ops until vertical panes exist. Focus helpers own target availability and input-context transitions.
+Directional focus commands use logical component relationships and panel visibility, not document cursor coordinates or rendered rectangles. The single-view layout only moves between the editor and explorer horizontally; vertical directions remain no-ops until vertical panes exist. Focus helpers own target availability and input-context transitions. Current bindings are centralized in [Key input, sequences, and hints](key-input.md).
 
 Built-in common commands use a Space leader and bottom-right key-hints popup, not the configurable direct-key map. Leader actions feed back into the normal message/update path; they do not have separate command implementations.
 
@@ -192,73 +192,57 @@ All mutations go through the editor command API so undo, dirty tracking, viewpor
 
 ### Word motion semantics
 
-Normal mode supports `w` for next word start, `b` for previous word start, and `e` for next word end. These are cursor-only motions: `ActiveEditor::move_cursor_word` uses Helix's Unicode-aware word primitives, then collapses the result to a cursor point instead of exposing Helix's selection-oriented motion. `e` uses the resulting block-cursor edge so it lands on the final character. Helix's boundary policy, including line-ending boundaries, is retained rather than reimplemented as Vim compatibility. These motions never modify text.
+Word motions are cursor-only operations: `ActiveEditor::move_cursor_word` uses Helix's Unicode-aware word primitives, then collapses the result to a cursor point instead of exposing Helix's selection-oriented motion. Next-word-end uses the resulting block-cursor edge so it lands on the final character. Helix's boundary policy, including line-ending boundaries, is retained rather than reimplemented as Vim compatibility. These motions never modify text.
 
-Only M8.1's `gg`/`G` accept counts; existing word motions and all other motions are uncounted. Operators, inner/around objects, and a broader Vim/Helix grammar remain outside the word-motion slice. Visual selection is the intended workflow for larger ranges instead of adding more text-object motions. M8.5 reuses these motions with explicit move/extend behavior. Eggplant exposes exactly one cursor/selection and intentionally does not support user-facing multi-cursor behavior.
+Only the counted first/last-line commands accept counts; word motions and all other motions are uncounted. Operators, inner/around objects, and a broader Vim/Helix grammar remain outside the word-motion slice. Visual selection is the intended workflow for larger ranges instead of adding more text-object motions. Visual mode reuses these motions with explicit move/extend behavior. Eggplant exposes exactly one cursor/selection and intentionally does not support user-facing multi-cursor behavior. Current bindings are centralized in [Key input, sequences, and hints](key-input.md).
 
 ### Counted line jumps and pending input (M8.1)
 
-Normal `gg` moves to the first line and `G` to the last line. A count beginning with `1`–`9` and continuing with digits selects that one-based line for either command; out-of-range values clamp to the document boundary. Only these commands accept counts. `ActiveEditor::move_cursor_to_line` targets the first non-blank character, falling back to column zero, and uses the existing viewport-following path.
+Uncounted first-line and last-line commands move to the corresponding document boundary. A count beginning with `1`–`9` and continuing with digits selects that one-based line for either command; out-of-range values clamp to the document boundary. Only these commands accept counts. `ActiveEditor::move_cursor_to_line` targets the first non-blank character, falling back to column zero, and uses the existing viewport-following path.
 
-`line_jump` owns the count/prefix state machine through registered text input and `line_jump_cancel`. The status bar renders its derived `Model.pending_input` separately from persistent status messages, so pending counts/`g` do not replace save or error feedback. Completion, Escape, and invalid input clear the pending state without unexpected movement.
+`line_jump` owns the count/prefix state machine through registered text input and `line_jump_cancel`. The status bar renders its derived `Model.pending_input` separately from persistent status messages, so pending counts/prefixes do not replace save or error feedback. Completion, Escape, and invalid input clear the pending state without unexpected movement.
 
 ### Viewport alignment (M8.2)
 
-Normal `zz`, `zt`, and `zb` center, top-align, and bottom-align the cursor line. The `view_align_start` command opens a pending `ViewAlign` context and publishes `z` through `Model.pending_input`; registered text input accepts only the three second keys. Escape and invalid input clear pending state without moving the viewport.
+Viewport-alignment commands center, top-align, or bottom-align the cursor line. Starting alignment opens a pending `ViewAlign` context and publishes the prefix through `Model.pending_input`; registered text input accepts only the three completion keys. Escape and invalid input clear pending state without moving the viewport.
 
 `ActiveEditor::align_cursor_line` maps the feature-neutral `ViewAlignment` enum to `helix_view::align_view`. Helix performs visual-row and document-boundary calculations. Cursor, selection, text, revision, dirty state, and save state remain unchanged, including for empty viewports.
 
 ### Insert variants and open-line editing (M8.3)
 
-Normal `a`, `A`, and `I` position the cursor after the current grapheme, at line end, or at the first non-blank character before entering Insert. `ActiveEditor::move_cursor_to_insert` owns these document positions; the editing feature owns mode/context transitions. Existing `i` is unchanged.
+Insert variants position the cursor after the current grapheme, at line end, or at the first non-blank character before entering Insert. `ActiveEditor::move_cursor_to_insert` owns these document positions; the editing feature owns mode/context transitions.
 
-`o`/`O` use `ActiveEditor::open_line` to insert a newline below/above with `indent_for_newline`, set the new cursor, and enter Insert. Helix's current indentation heuristic and detected indent style are retained, without comment continuation or multi-selection commands. The open-line transaction and subsequent typing share one Insert history group, so one undo removes the whole accepted edit. Auto-save follows the existing policy when leaving Insert; no manual Save path is added.
+Open-line commands use `ActiveEditor::open_line` to insert a newline below/above with `indent_for_newline`, set the new cursor, and enter Insert. Helix's current indentation heuristic and detected indent style are retained, without comment continuation or multi-selection commands. The open-line transaction and subsequent typing share one Insert history group, so one undo removes the whole accepted edit. Auto-save follows the existing policy when leaving Insert; no manual Save path is added.
 
 ### Line-boundary motions (M8.4)
 
-Normal `0` and `$` use `move_line_start`/`move_line_end` and `ActiveEditor::move_cursor_to_line_boundary`. `0` targets column zero. `$` targets the final grapheme before the line ending, with empty lines safely at column zero. These are cursor-only motions with normal viewport following and no document/revision/save changes.
+Line-start and line-end commands use `move_line_start`/`move_line_end` and `ActiveEditor::move_cursor_to_line_boundary`. Line start targets column zero. Line end targets the final grapheme before the line ending, with empty lines safely at column zero. These are cursor-only motions with normal viewport following and no document/revision/save changes.
 
-The direct Normal `0` binding takes precedence over unbound text input. An active line-jump count has no `0` binding, so `0` continues the count as intended. M8.5 will reuse the same core boundary operation with selection extension.
+Direct line-start binding takes precedence over unbound text input. An active line-jump count has no line-start binding, so the zero digit continues the count as intended. Visual mode reuses the same core boundary operation with selection extension.
 
 ### Characterwise Visual selection (M8.5)
 
-Normal `v` enters Visual mode with a characterwise selection at the current grapheme. `ActiveEditor` receives `SelectionBehavior::Move` in Normal/Insert and `Extend` in Visual, so existing directional, word, line-boundary, and counted line-jump commands share one motion path. Helix's `put_cursor` controls forward/backward selection edges and reversal; no second Visual navigation implementation exists.
+Characterwise Visual mode starts with a selection at the current grapheme. `ActiveEditor` receives `SelectionBehavior::Move` in Normal/Insert and `Extend` in Visual, so existing directional, word, line-boundary, and counted line-jump commands share one motion path. Helix's `put_cursor` controls forward/backward selection edges and reversal; no second Visual navigation implementation exists.
 
-`V` enters linewise Visual mode with the full current line, including an existing line ending. `SelectionBehavior::ExtendLines` maps every moving target back to whole-line ranges while preserving the original anchor line, including direction reversal. The status bar shows `V-LINE`. Existing Visual delete/change/yank commands operate on those line selections without a separate operator implementation.
+Linewise Visual mode starts with the full current line, including an existing line ending. `SelectionBehavior::ExtendLines` maps every moving target back to whole-line ranges while preserving the original anchor line, including direction reversal. The status bar distinguishes characterwise and linewise modes. Existing Visual delete/change/yank commands operate on those line selections without a separate operator implementation.
 
 `EditorSession::enter_normal_mode` collapses either Visual variant at the moving cursor without changing text. `VISUAL`/`V-LINE` appear in the status bar. Active snapshots project only the primary selection into per-line UTF-8 ranges, excluding non-printable line-ending cells, and `TextView` applies the existing selection style after syntax rendering with Unicode/horizontal clipping. Eggplant still exposes exactly one cursor/selection and no multi-cursor behavior.
 
 ### Delete/change commands (M8.6)
 
-| Input | Context | Planned behavior |
-| --- | --- | --- |
-| `x` | Normal | Delete the grapheme under the cursor. |
-| `x` / `d` | Visual | Delete the characterwise selection. |
-| `c` | Visual | Delete the selection and enter Insert at its start. |
-| `dd` | Normal | Delete the current line. |
-| `dw` | Normal | Delete from the cursor to the existing next-word-start boundary. |
-| `cc` | Normal | Clear the current line and enter Insert using the established indentation policy. |
-| `cw` | Normal | Delete from the cursor to the next word start and enter Insert. |
+Delete and change commands cover the grapheme under the cursor, the current line, the current Visual selection, and the cursor-to-next-word-start range. Current-line change preserves the established indentation policy, while word-range capture and deletion reuse Helix's next-word-start primitive. No general operator-motion grammar is added; current bindings are centralized in [Key input, sequences, and hints](key-input.md).
 
-Normal `d`/`c` accept only the matching second key or `w` and use the shared transient pending-input display. `dw`/`cw` reuse Helix's existing next-word-start primitive for both register capture and their one deletion transaction; no other operator-motion combinations or general operator grammar are added. Every accepted command uses the existing undo/redo, dirty-revision, viewport, and auto-save paths. Normal deletes commit history immediately; Visual `c`, `cc`, and `cw` commit when their Insert session ends, preserving one-step undo. Clipboard/register synchronization is centralized separately in M8.7, and all commands operate on the single cursor/selection.
+Pending delete/change prefixes use the shared transient pending-input display. Every accepted command uses the existing undo/redo, dirty-revision, viewport, and auto-save paths. Normal deletes commit history immediately; Visual and line/word change commands commit when their Insert session ends, preserving one-step undo. Clipboard/register synchronization is centralized separately, and all commands operate on the single cursor/selection.
 
 ### Yank and clipboard synchronization (M8.7)
 
-Visual `y` yanks the characterwise selection and returns to Normal; Normal `yy` yanks the current line, with pending `y` shown through the shared transient status input. One automatic unnamed register stores yanks and accepted M8.6 deletes/changes, so users never select a register or run a clipboard command.
+Selection yanking returns to Normal mode, while current-line yanking preserves line-ending semantics and uses the shared transient pending input. One automatic unnamed register stores yanks and accepted delete/change operations, so users never select a register or run a clipboard command.
 
 `RegisterState` owns the unnamed register and a cloned Helix `ClipboardProvider`. Clipboard writes run in a blocking feature effect, because Helix's providers may wait on external processes. An unavailable provider leaves the internal register intact and reports a concise non-blocking status. `Effect::combine` lets delete commands run register/clipboard work alongside auto-save; change commands retain save-on-Insert-exit. Yanks never change text, revision, or dirty state and do not trigger auto-save. Paste commands, named registers, and register UIs remain separate work.
 
-### Git status and history (M9)
-
-The `vcs` crate owns all Helix VCS/Gitoxide interaction and returns owned branch and commit-summary values with reduced-trust repository discovery. `features/vcs/` owns request generations, loading/error state, duplicate suppression, and stale-result rejection. No repository types enter `Model` consumers or Ratatui components.
-
-`Space g g` opens `page/vcs.rs` through the shell's `AppPage` switch and pushes `Context::Vcs`; `q`/Escape restores the previous editor or explorer context. The full page starts with common key hints and optional notices, followed by a one-line HEAD reference with the latest short commit ID/subject. Staged and unstaged sections are content-driven and hidden when empty, with one staged-first selection order and inline diffs beneath expanded files; there is no embedded Git log. Changed files use `j`/`k` selection and open through the shared safe document capability on Enter, while deleted files are not recreated.
-
-Real `s`/`u` operations use filtered worktree-to-blob conversion and locked index writes directly through `gix`; no external Git executable is required in production. They run in revisioned background effects, refuse pending-save states, preserve the worktree on unstage, and merge successful changes directly into the current staged-first model instead of rescanning the repository. Background status refreshes preserve ready content rather than replacing it with a loading page. Selected rows use a bold `>` marker rather than the default theme's reversed `ui.menu.selected` background. `Tab` toggles a bounded inline unified diff generated from HEAD/index/worktree blobs. Diff text uses theme-aware `diff.plus`/`diff.minus`/`diff.delta` colors for additions, deletions, and hunk headers, with normal base text for context instead of uniformly dimmed output. Completed diffs are cached per path and staged state, so closing and reopening a toggle does not recompute them; status refreshes and mutations invalidate the cache. `x`, `c`, and `?` remain non-mutating placeholders for future discard/commit/help workflows. Status/HEAD loading remains asynchronous and non-repository/unborn states stay non-blocking. A separate history UI, active-buffer diff gutters, commits, and other mutations are separate slices.
-
 ### Update and rendering responsibilities
 
-Movement, editing, activation, and resize handling update viewport state. Rendering only reads the result and draws visible content. The one-row status bar fills the page width and uses `Flex::Start`: fixed-width edit mode and bounded-width VCS segments, a growing project-relative active-file path (or standalone path) with status messages, a fixed-width pending-key segment immediately before a right-aligned local `HH:MM` clock. The VCS segment displays the current Git branch or abbreviated detached HEAD, falling back to `--` for unavailable/unborn/non-repository states. Editor buffers and independent previews share one viewport policy: Eggplant owns the gutter and statusline, while Helix receives exactly the resolved text dimensions plus its internally required statusline compensation. Cursor placement is suppressed for empty or out-of-bounds text rectangles. After drawing, the runtime applies a steady bar in Insert mode and a steady block in Normal/Visual modes through Crossterm; normal and panic cleanup restore `DefaultUserShape`. Buffer tabs use filename-only `BufferInfo` summaries with space-padded active-background and dirty-marker styling, separated by spaces rather than vertical bars, and occupy the editor's top row. The layout tree is root vertical main/status, main horizontal explorer/editor/tools with display/hidden states, and editor vertical tabs/content. The editor is borderless, and shared Flex layouts allow future panels without component-specific box offsets.
+Movement, editing, activation, and resize handling update viewport state. Rendering only reads the result and draws visible content. The one-row status bar fills the page width and uses `Flex::Start`: fixed-width edit mode and bounded-width optional-addon segments, a growing project-relative active-file path (or standalone path) with status messages, a fixed-width pending-key segment immediately before a right-aligned local `HH:MM` clock. Editor buffers and independent previews share one viewport policy: Eggplant owns the gutter and statusline, while Helix receives exactly the resolved text dimensions plus its internally required statusline compensation. Cursor placement is suppressed for empty or out-of-bounds text rectangles. After drawing, the runtime applies a steady bar in Insert mode and a steady block in Normal/Visual modes through Crossterm; normal and panic cleanup restore `DefaultUserShape`. Buffer tabs use filename-only `BufferInfo` summaries with space-padded active-background and dirty-marker styling, separated by spaces rather than vertical bars, and occupy the editor's top row. The layout tree is root vertical main/status, main horizontal explorer/editor/tools with display/hidden states, and editor vertical tabs/content. The editor is borderless, and shared Flex layouts allow future panels without component-specific box offsets.
 
 Use a shared pure layout calculation when cursor-following needs the editor area before rendering: update derives the area from terminal size and layout state, while Ratatui rendering uses the same calculation. Avoid mutating `View.area` or scroll offsets as a hidden side effect of `Widget::render`.
 
@@ -376,7 +360,7 @@ For a core-only first version without soft wrap, a small Eggplant viewport conta
 3. **Edit:** resolve the active buffer through the view and apply a transaction. Never create a document implicitly when no view is active. Content changes auto-save after Normal-mode edits or when leaving Insert.
 4. **Save:** route automatic requests through one stable buffer-ID/revision-aware path. A late completion must not mark newer edits as saved.
 5. **Close:** a dirty file-backed buffer is saved and then closed only after success. An untitled buffer without a path or any failed save cancels closure with an error; there is no silent-discard workflow.
-6. **Close buffer groups:** `Space b o` keeps the active buffer, `Space b r` closes only later tabs, and `Space b a` closes every buffer. Dirty targets save first, and `EditorSession::close_buffers` validates every target before closing any, so failures cannot leave a partially closed group. Close-all includes the active buffer and finishes in the empty-editor state.
+6. **Close buffer groups:** group-close operations keep the active buffer, close only later tabs, or close every buffer. Dirty targets save first, and `EditorSession::close_buffers` validates every target before closing any, so failures cannot leave a partially closed group. Close-all includes the active buffer and finishes in the empty-editor state.
 7. **Close last buffer:** remove the active view and render the empty-editor state.
 
 ## 10. Implementation sequence

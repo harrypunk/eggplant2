@@ -1,0 +1,73 @@
+# VCS addon
+
+The VCS integration is an **optional user-experience addon**, not a core editor feature. Documents, buffers, editing, and automatic persistence remain fully usable without Git or the VCS page.
+
+For keybindings, see [Key input, sequences, and hints](key-input.md).
+
+## Scope
+
+The addon currently provides:
+
+- Branch or abbreviated detached-HEAD display in the editor status bar.
+- A full-screen status page with common hints and a one-line HEAD reference.
+- Dynamic staged and unstaged file sections.
+- Stage/unstage for regular files and deletions.
+- Toggleable inline diffs with caching.
+- Safe file opening through the existing document capability.
+
+Discard, commit, and help commands remain placeholders. History pagination, commit details, merge workflows, and other advanced repository behavior are separate work.
+
+## Ownership and dependency direction
+
+- `crates/vcs` owns Helix VCS/Gitoxide interaction and returns owned branch, change, history, and diff values.
+- `features/vcs/` owns request generations, loading/error state, duplicate suppression, operation state, and stale-result rejection.
+- `page/vcs.rs` renders feature state without performing repository work.
+- `AppPage` and `Context::Vcs` provide shell navigation; closing the page restores the previous editor or explorer context.
+- No Gitoxide types enter application snapshots or Ratatui components.
+
+Reduced-trust repository discovery and neutral non-repository/unborn states keep failures non-blocking.
+
+## Page model
+
+The status page has three regions:
+
+1. Common key hints and optional notices.
+2. A one-line HEAD reference with the latest short commit ID and subject.
+3. Content-driven staged and unstaged sections, hidden when empty.
+
+Selection follows one staged-first order. Empty sections consume no space, and inline diffs appear directly beneath their expanded file. The embedded Git log was removed; a separate history UI can be developed later.
+
+Changed files use the existing safe document-opening and explorer-reveal path. Deleted files are not recreated.
+
+## Mutation behavior
+
+Real stage/unstage operations use filtered worktree-to-blob conversion and locked index writes directly through `gix`; production code does not require an external Git executable.
+
+Operations:
+
+- Run in revisioned background effects.
+- Refuse pending-save states.
+- Preserve worktree contents when unstaging.
+- Merge successful changes into the current staged-first model instead of rescanning the repository.
+- Reject conflicts and unsupported file types explicitly.
+- Preserve ready content during background status refreshes.
+
+## Diff behavior
+
+The toggle command expands and collapses a bounded unified diff generated from HEAD, index, and worktree blobs:
+
+- Added lines use `diff.plus`.
+- Removed lines use `diff.minus`.
+- Hunk headers use `diff.delta`.
+- Context uses normal base text rather than uniformly dimmed output.
+
+Completed diffs are cached per path and staged state. Closing and reopening a toggle does not recompute them. Status refreshes and mutations invalidate the cache.
+
+Selected file rows use a bold `>` marker rather than the default theme's reversed `ui.menu.selected` background. Empty and loading states apply the explicit dark base background.
+
+## Deferred work
+
+- Separate history UI with scrolling and bounded pagination.
+- Active-buffer diff gutters and commit diff views.
+- Reviewed discard, commit, and fast-forward-only merge workflows.
+- Conflict resolution, staging of unsupported entry types, and other advanced Git behavior.
