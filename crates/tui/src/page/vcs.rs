@@ -15,8 +15,6 @@ use crate::{
     vcs::{ChangesState, DiffState, HistoryState},
 };
 
-const DIFF_DISPLAY_LIMIT: usize = 6;
-
 #[derive(Debug, Default)]
 pub struct Vcs;
 
@@ -218,17 +216,11 @@ fn diff_lines(model: &Model, styles: &UiTheme) -> Vec<Line<'static>> {
             format!("  {error}"),
             styles.base.patch(styles.error),
         )],
-        DiffState::Ready { lines, truncated } => {
-            let mut output = lines
-                .iter()
-                .take(DIFF_DISPLAY_LIMIT)
-                .map(|line| Line::styled(format!("  {line}"), diff::line_style(styles, line)))
-                .collect::<Vec<_>>();
-            if *truncated || lines.len() > DIFF_DISPLAY_LIMIT {
-                output.push(Line::styled("  …", styles.base.patch(styles.muted)));
-            }
-            output
-        }
+        DiffState::Ready { lines, truncated } => lines
+            .iter()
+            .map(|line| Line::styled(format!("  {line}"), diff::line_style(styles, line)))
+            .chain((*truncated).then(|| Line::styled("  …", styles.base.patch(styles.muted))))
+            .collect(),
     }
 }
 
@@ -362,6 +354,20 @@ mod tests {
 
         assert_eq!(lines.len(), 3);
         assert_eq!(selected, Some(2));
+    }
+
+    #[test]
+    fn expanded_change_diff_renders_every_loaded_line() {
+        let mut model = Model::default();
+        model.vcs.diff = DiffState::Ready {
+            lines: (0..8).map(|index| format!("+line-{index}")).collect(),
+            truncated: false,
+        };
+
+        let lines = diff_lines(&model, model.theme.ui());
+
+        assert_eq!(lines.len(), 8);
+        assert_eq!(lines[7].to_string(), "  +line-7");
     }
 
     #[test]

@@ -12,8 +12,6 @@ use crate::{
     vcs::{CommitDetailsState, DiffState, HistoryMoreState, HistoryState},
 };
 
-const DIFF_DISPLAY_LIMIT: usize = 6;
-
 #[derive(Debug, Default)]
 pub struct VcsHistory;
 
@@ -194,12 +192,8 @@ fn file_diff_lines(model: &Model) -> Vec<Line<'static>> {
         DiffState::Failed(error) => vec![Line::styled(error.clone(), styles.error)],
         DiffState::Ready { lines, truncated } => lines
             .iter()
-            .take(DIFF_DISPLAY_LIMIT)
             .map(|line| Line::styled(format!("  {line}"), diff::line_style(styles, line)))
-            .chain(
-                (*truncated || lines.len() > DIFF_DISPLAY_LIMIT)
-                    .then(|| Line::styled("  …", styles.base.patch(styles.muted))),
-            )
+            .chain((*truncated).then(|| Line::styled("  …", styles.base.patch(styles.muted))))
             .collect(),
     }
 }
@@ -276,5 +270,19 @@ mod tests {
             "load-more help should use the accent color"
         );
         assert!(load_more.modifier.contains(Modifier::BOLD));
+    }
+
+    #[test]
+    fn expanded_file_diff_renders_every_loaded_line() {
+        let mut model = Model::default();
+        model.vcs.history_detail_diff = DiffState::Ready {
+            lines: (0..8).map(|index| format!("+line-{index}")).collect(),
+            truncated: false,
+        };
+
+        let lines = file_diff_lines(&model);
+
+        assert_eq!(lines.len(), 8);
+        assert_eq!(lines[7].to_string(), "  +line-7");
     }
 }

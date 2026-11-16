@@ -66,6 +66,8 @@ The toggle command expands and collapses a bounded unified diff generated from H
 - Hunk headers use `diff.delta`.
 - Context uses normal base text rather than uniformly dimmed output.
 
+Expanded diffs render every fetched line. An ellipsis appears only when the backend's 200-line safety limit is reached.
+
 Completed diffs are cached per path and staged state. Closing and reopening a toggle does not recompute them. Status refreshes and mutations invalidate the cache.
 
 Selected file rows use a bold `>` marker rather than the default theme's reversed `ui.menu.selected` background. Empty and loading states apply the explicit dark base background.
