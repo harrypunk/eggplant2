@@ -304,6 +304,16 @@ mod tests {
                 Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
             ));
         }
+        for (key, modifiers, command) in [
+            (KeyCode::Char('s'), KeyModifiers::CONTROL, "vcs_stage_all"),
+            (KeyCode::Char('U'), KeyModifiers::SHIFT, "vcs_unstage_all"),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, modifiers));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
     }
 
     #[test]

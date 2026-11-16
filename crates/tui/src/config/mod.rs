@@ -255,6 +255,8 @@ impl Default for Config {
                         ("open_vcs_change", "enter"),
                         ("vcs_stage", "s"),
                         ("vcs_unstage", "u"),
+                        ("vcs_stage_all", "ctrl-s"),
+                        ("vcs_unstage_all", "shift-u"),
                         ("vcs_toggle_diff", "tab"),
                         ("vcs_discard_placeholder", "x"),
                         ("vcs_commit_placeholder", "c"),

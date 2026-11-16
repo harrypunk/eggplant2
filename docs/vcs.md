@@ -11,12 +11,12 @@ The addon currently provides:
 - Branch or abbreviated detached-HEAD display in the editor status bar.
 - A full-screen status page with common hints and a one-line HEAD reference.
 - Dynamic staged and unstaged file sections.
-- Stage/unstage for regular files and deletions.
+- Stage/unstage for regular files and deletions, plus bulk stage-all/unstage-all operations.
 - Toggleable inline diffs with caching.
 - Safe file opening through the existing document capability.
 - Explicit commits of already-staged changes with a multiline scratch-message editor.
 
-Discard and help commands remain placeholders. A separate history page provides bounded commit summaries with short IDs, subjects, authors, and short dates. Toggling a commit lists its changed files inline. Opening the commit shows a right-side detail with full hash, complete message, author/date, and its file list. Each detail file can toggle its own first-parent diff with the same theme colors and cache behavior as file diffs. Merge commits intentionally use the first parent in this slice. Tree changes are filtered to regular blobs so directory objects never render as text, and multi-file commits retain every changed path. History loads 20 commits per page; the header shows a prominent `n load more` hint plus loading and retry feedback.
+Discard remains a placeholder. A separate history page provides bounded commit summaries with short IDs, subjects, authors, and short dates. Toggling a commit lists its changed files inline. Opening the commit shows a right-side detail with full hash, complete message, author/date, and its file list. Each detail file can toggle its own first-parent diff with the same theme colors and cache behavior as file diffs. Merge commits intentionally use the first parent in this slice. Tree changes are filtered to regular blobs so directory objects never render as text, and multi-file commits retain every changed path. History loads 20 commits per page; the header shows a prominent `n load more` hint plus loading and retry feedback.
 
 ## Ownership and dependency direction
 
@@ -36,7 +36,7 @@ The status page has three regions:
 2. A one-line HEAD reference with the latest short commit ID and subject.
 3. Content-driven staged and unstaged sections, hidden when empty.
 
-Selection follows one staged-first order. Empty sections consume no space, and inline diffs appear directly beneath their expanded file. Commit browsing stays on the separate history page rather than embedding a log in Git status.
+Selection follows one staged-first order. Empty sections consume no space, and inline diffs appear directly beneath their expanded file. `?` toggles a bordered bottom help panel; Escape dismisses only the panel, while `q` retains page-close behavior. Commit browsing stays on the separate history page rather than embedding a log in Git status.
 
 Changed files use the existing safe document-opening and explorer-reveal path. Deleted files are not recreated.
 
@@ -44,7 +44,7 @@ The commit page shows a read-only staged-file summary in the semantic `file_path
 
 ## Mutation behavior
 
-Real stage/unstage operations use filtered worktree-to-blob conversion and locked index writes directly through `gix`; production code does not require an external Git executable.
+Real stage/unstage operations use filtered worktree-to-blob conversion and locked index writes directly through `gix`; production code does not require an external Git executable. Bulk operations validate all targets and use one final index write rather than partially applying a sequence of single-file writes.
 
 Operations:
 

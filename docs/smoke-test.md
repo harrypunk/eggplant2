@@ -59,8 +59,10 @@ Use a repository containing both staged and unstaged changes, then open the Git 
 
 - [ ] `s` on an unstaged file moves it to the staged section.
 - [ ] `u` on a staged file returns it to the unstaged section without changing file contents.
+- [ ] `Ctrl-s` stages every supported unstaged file and deletion. `U` unstages everything without changing worktree contents.
+- [ ] `?` toggles a bordered bottom help panel; Escape dismisses only the panel, while `q` retains its normal page-close behavior.
 - [ ] Repeated operations preserve a usable selection without a full-page loading flash.
-- [ ] `x` and `?` show placeholder notices only and do not mutate the repository.
+- [ ] `x` shows a placeholder notice only and does not mutate the repository.
 - [ ] `c` opens the commit-message page when staged changes exist.
 
 ### Inline diffs

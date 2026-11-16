@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{collections::BTreeSet, path::Path};
 
 use anyhow::Context as _;
 use gix::{
@@ -124,6 +124,10 @@ pub enum ChangesError {
 /// List staged and unstaged files with absolute paths, sorted for deterministic display.
 pub fn changes(path: &Path) -> Result<Vec<FileChange>, ChangesError> {
     let repository = open_repository(path).map_err(|_| ChangesError::NotRepository)?;
+    repository_changes(&repository)
+}
+
+fn repository_changes(repository: &Repository) -> Result<Vec<FileChange>, ChangesError> {
     let workdir = repository
         .workdir()
         .context("working tree not found")
@@ -544,6 +548,18 @@ pub fn unstage(path: &Path) -> Result<(), MutationError> {
     unstage_inner(repository, path).map_err(|error| MutationError::Failed(error.to_string()))
 }
 
+/// Stage all supported unstaged files and deletions with one locked index write.
+pub fn stage_all(path: &Path) -> Result<(), MutationError> {
+    let repository = open_repository(path).map_err(|_| MutationError::NotRepository)?;
+    stage_all_inner(repository).map_err(|error| MutationError::Failed(error.to_string()))
+}
+
+/// Restore every staged index entry from HEAD while leaving the working tree untouched.
+pub fn unstage_all(path: &Path) -> Result<(), MutationError> {
+    let repository = open_repository(path).map_err(|_| MutationError::NotRepository)?;
+    unstage_all_inner(repository).map_err(|error| MutationError::Failed(error.to_string()))
+}
+
 fn commit_inner(repository: Repository, message: &str) -> anyhow::Result<ObjectId> {
     if message.trim().is_empty() {
         anyhow::bail!("commit message must not be blank");
@@ -609,7 +625,7 @@ fn stage_inner(repository: Repository, path: &Path) -> anyhow::Result<()> {
     ensure_unconflicted(&index, relative.as_slice().as_bstr())?;
 
     match path.exists() {
-        true => stage_file(repository, path, &mut index, relative.as_slice().as_bstr())?,
+        true => stage_file(&repository, path, &mut index, relative.as_slice().as_bstr())?,
         false => {
             index.remove_entries(|_, entry_path, _| entry_path == relative.as_slice().as_bstr());
         }
@@ -621,28 +637,75 @@ fn unstage_inner(repository: Repository, path: &Path) -> anyhow::Result<()> {
     let relative = relative_path(&repository, path)?;
     let mut index = open_index(&repository)?;
     ensure_unconflicted(&index, relative.as_slice().as_bstr())?;
-    let head_entry = head_entry(
-        &repository,
-        &gix::path::from_bstr(relative.as_slice().as_bstr()),
-    );
+    restore_index_entry(&repository, &mut index, relative.as_slice().as_bstr());
+    write_index(&mut index)
+}
 
-    match head_entry {
-        Some((id, mode)) => upsert_index_entry(
-            &mut index,
-            relative.as_slice().as_bstr(),
-            id,
-            Mode::from(mode),
-            Stat::default(),
-        ),
-        None => {
-            index.remove_entries(|_, entry_path, _| entry_path == relative.as_slice().as_bstr());
+fn stage_all_inner(repository: Repository) -> anyhow::Result<()> {
+    let mut index = open_index(&repository)?;
+    ensure_index_unconflicted(&index)?;
+    let changes = repository_changes(&repository)?;
+    let mut mutated = false;
+
+    for change in changes.into_iter().filter(|change| !change.staged) {
+        let relative = relative_path(&repository, &change.path)?;
+        let relative = relative.as_slice().as_bstr();
+        if let Some(previous_path) = change.previous_path {
+            let previous = relative_path(&repository, &previous_path)?;
+            index.remove_entries(|_, entry_path, _| entry_path == previous.as_slice().as_bstr());
         }
+        match change.kind {
+            ChangeKind::Conflict => anyhow::bail!("conflicted entries are not supported"),
+            ChangeKind::Deleted => {
+                index.remove_entries(|_, entry_path, _| entry_path == relative);
+            }
+            _ => stage_file(&repository, &change.path, &mut index, relative)?,
+        }
+        mutated = true;
+    }
+
+    match mutated {
+        true => write_index(&mut index),
+        false => Ok(()),
+    }
+}
+
+fn unstage_all_inner(repository: Repository) -> anyhow::Result<()> {
+    let mut index = open_index(&repository)?;
+    ensure_index_unconflicted(&index)?;
+    let mut paths = BTreeSet::new();
+    for change in repository_changes(&repository)?
+        .into_iter()
+        .filter(|change| change.staged)
+    {
+        paths.insert(relative_path(&repository, &change.path)?);
+        if let Some(previous_path) = change.previous_path {
+            paths.insert(relative_path(&repository, &previous_path)?);
+        }
+    }
+    if paths.is_empty() {
+        return Ok(());
+    }
+
+    for relative in paths {
+        restore_index_entry(&repository, &mut index, relative.as_slice().as_bstr());
     }
     write_index(&mut index)
 }
 
+fn restore_index_entry(repository: &Repository, index: &mut IndexFile, relative: &BStr) {
+    match head_entry(repository, &gix::path::from_bstr(relative)) {
+        Some((id, mode)) => {
+            upsert_index_entry(index, relative, id, Mode::from(mode), Stat::default())
+        }
+        None => {
+            index.remove_entries(|_, entry_path, _| entry_path == relative);
+        }
+    }
+}
+
 fn stage_file(
-    repository: Repository,
+    repository: &Repository,
     path: &Path,
     index: &mut IndexFile,
     relative: &BStr,
@@ -703,6 +766,17 @@ fn ensure_unconflicted(index: &IndexState, path: &BStr) -> anyhow::Result<()> {
             .into_iter()
             .any(|idx| index.entry(idx).stage() != Stage::Unconflicted)
     }) {
+        anyhow::bail!("conflicted entries are not supported");
+    }
+    Ok(())
+}
+
+fn ensure_index_unconflicted(index: &IndexState) -> anyhow::Result<()> {
+    if index
+        .entries()
+        .iter()
+        .any(|entry| entry.stage() != Stage::Unconflicted)
+    {
         anyhow::bail!("conflicted entries are not supported");
     }
     Ok(())
@@ -1126,6 +1200,165 @@ mod tests {
             .unwrap();
         assert_eq!(entry.kind, ChangeKind::Modified);
         assert!(!entry.staged);
+    }
+
+    #[test]
+    fn stage_all_stages_modified_untracked_and_deleted_files_together() {
+        let repository = repository();
+        std::fs::write(repository.path().join("removed.txt"), "remove me\n").unwrap();
+        git(repository.path(), &["add", "removed.txt"]);
+        git(
+            repository.path(),
+            &["commit", "--quiet", "-m", "add removable file"],
+        );
+        std::fs::write(repository.path().join("note.txt"), "changed\n").unwrap();
+        std::fs::write(repository.path().join("new.txt"), "new\n").unwrap();
+        std::fs::remove_file(repository.path().join("removed.txt")).unwrap();
+
+        stage_all(repository.path()).unwrap();
+
+        let staged_changes = changes(repository.path()).unwrap();
+        assert_eq!(staged_changes.len(), 3);
+        for (path, kind) in [
+            ("new.txt", ChangeKind::Added),
+            ("note.txt", ChangeKind::Modified),
+            ("removed.txt", ChangeKind::Deleted),
+        ] {
+            let change = staged_changes
+                .iter()
+                .find(|change| change.path == repository.path().join(path))
+                .unwrap();
+            assert!(change.staged, "{path} was not staged");
+            assert_eq!(change.kind, kind, "unexpected kind for {path}");
+        }
+        assert_eq!(
+            std::fs::read_to_string(repository.path().join("note.txt")).unwrap(),
+            "changed\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(repository.path().join("new.txt")).unwrap(),
+            "new\n"
+        );
+        assert!(!repository.path().join("removed.txt").exists());
+
+        // An operation with no remaining unstaged changes is a successful no-op.
+        stage_all(repository.path()).unwrap();
+        assert_eq!(changes(repository.path()).unwrap(), staged_changes);
+    }
+
+    #[test]
+    fn unstage_all_restores_head_entries_and_preserves_the_worktree() {
+        let repository = repository();
+        std::fs::write(repository.path().join("removed.txt"), "remove me\n").unwrap();
+        git(repository.path(), &["add", "removed.txt"]);
+        git(
+            repository.path(),
+            &["commit", "--quiet", "-m", "add removable file"],
+        );
+        std::fs::write(repository.path().join("note.txt"), "staged\n").unwrap();
+        std::fs::write(repository.path().join("new.txt"), "new\n").unwrap();
+        std::fs::remove_file(repository.path().join("removed.txt")).unwrap();
+        git(repository.path(), &["add", "-A"]);
+        std::fs::write(repository.path().join("note.txt"), "worktree\n").unwrap();
+
+        unstage_all(repository.path()).unwrap();
+
+        let unstaged_changes = changes(repository.path()).unwrap();
+        assert_eq!(unstaged_changes.len(), 3);
+        assert!(unstaged_changes.iter().all(|change| !change.staged));
+        for (path, kind) in [
+            ("new.txt", ChangeKind::Untracked),
+            ("note.txt", ChangeKind::Modified),
+            ("removed.txt", ChangeKind::Deleted),
+        ] {
+            let change = unstaged_changes
+                .iter()
+                .find(|change| change.path == repository.path().join(path))
+                .unwrap();
+            assert_eq!(change.kind, kind, "unexpected kind for {path}");
+        }
+        assert_eq!(
+            std::fs::read_to_string(repository.path().join("note.txt")).unwrap(),
+            "worktree\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(repository.path().join("new.txt")).unwrap(),
+            "new\n"
+        );
+        assert!(!repository.path().join("removed.txt").exists());
+
+        let handle = open_repository(repository.path()).unwrap();
+        for path in ["note.txt", "removed.txt"] {
+            assert_eq!(
+                index_entry(&handle, BStr::new(path)),
+                head_entry(&handle, Path::new(path)).map(|(id, _)| id),
+                "index entry was not restored for {path}"
+            );
+        }
+        assert_eq!(index_entry(&handle, BStr::new("new.txt")), None);
+
+        // An operation with no staged changes is a successful no-op.
+        unstage_all(repository.path()).unwrap();
+        assert_eq!(changes(repository.path()).unwrap(), unstaged_changes);
+    }
+
+    #[test]
+    fn bulk_mutations_reject_conflicts_without_partially_updating_the_index() {
+        let repository = repository();
+        git(repository.path(), &["checkout", "--quiet", "-b", "side"]);
+        std::fs::write(repository.path().join("note.txt"), "side\n").unwrap();
+        git(repository.path(), &["add", "note.txt"]);
+        git(repository.path(), &["commit", "--quiet", "-m", "side"]);
+        git(repository.path(), &["checkout", "--quiet", "main"]);
+        std::fs::write(repository.path().join("note.txt"), "main\n").unwrap();
+        git(repository.path(), &["add", "note.txt"]);
+        git(repository.path(), &["commit", "--quiet", "-m", "main"]);
+        let merge = Command::new("git")
+            .arg("-C")
+            .arg(repository.path())
+            .args(["merge", "--quiet", "side"])
+            .output()
+            .unwrap();
+        assert!(!merge.status.success(), "test merge should conflict");
+        std::fs::write(repository.path().join("new.txt"), "new\n").unwrap();
+        let worktree_before = std::fs::read(repository.path().join("note.txt")).unwrap();
+        let index_path = open_repository(repository.path()).unwrap().index_path();
+        let index_before = std::fs::read(&index_path).unwrap();
+
+        for result in [stage_all(repository.path()), unstage_all(repository.path())] {
+            let error = result.unwrap_err();
+            assert!(
+                matches!(&error, MutationError::Failed(message) if message.contains("conflicted")),
+                "unexpected error: {error}"
+            );
+            assert_eq!(std::fs::read(&index_path).unwrap(), index_before);
+            assert_eq!(
+                std::fs::read(repository.path().join("note.txt")).unwrap(),
+                worktree_before
+            );
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn stage_all_rejects_unsupported_files_without_partially_updating_the_index() {
+        let repository = repository();
+        std::fs::write(repository.path().join("a-valid.txt"), "valid\n").unwrap();
+        std::os::unix::fs::symlink("note.txt", repository.path().join("z-link")).unwrap();
+        let index_path = open_repository(repository.path()).unwrap().index_path();
+        let index_before = std::fs::read(&index_path).unwrap();
+
+        let error = stage_all(repository.path()).unwrap_err();
+
+        assert!(
+            matches!(&error, MutationError::Failed(message) if message.contains("regular files")),
+            "unexpected error: {error}"
+        );
+        assert_eq!(std::fs::read(&index_path).unwrap(), index_before);
+        assert_eq!(
+            std::fs::read_to_string(repository.path().join("a-valid.txt")).unwrap(),
+            "valid\n"
+        );
     }
 
     #[test]

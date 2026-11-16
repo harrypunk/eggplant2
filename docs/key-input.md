@@ -24,6 +24,8 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | VCS page | Select previous / next changed file | `k` / `j` |
 | VCS page | Open selected changed file | `Enter` |
 | VCS page | Stage / unstage selected file | `s` / `u` |
+| VCS page | Stage all / unstage all | `Ctrl-S` / `U` |
+| VCS page | Toggle bottom help panel / dismiss help | `?` / `Esc` |
 | VCS page | Toggle inline diff for selected file | `Tab` |
 | VCS page | Open history page | `l` |
 | VCS page | Open commit-message page for staged changes | `c` |
@@ -38,7 +40,7 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | VCS commit page | Enter Insert / return to Normal | `i` / `Esc` |
 | VCS commit Normal | Movement, word motions, insert variants, undo/redo | `h`/`j`/`k`/`l`, `w`/`b`/`e`, `0`/`$`, `a`/`A`/`I`, `o`/`O`, `u`/`Ctrl-R` |
 | VCS commit page | Insert newline / backspace | `Enter` / `Backspace` |
-| VCS page | Placeholder discard / help | `x` / `?` |
+| VCS page | Placeholder discard | `x` |
 | Normal / Explorer | Scroll down / up | `Ctrl-F` / `Ctrl-U` |
 | Normal / Explorer | Focus left / right | `Ctrl-H` / `Ctrl-L` |
 | Normal / Explorer | Focus up / down (reserved) | `Ctrl-K` / `Ctrl-J` |

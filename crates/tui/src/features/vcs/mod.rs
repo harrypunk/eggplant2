@@ -62,6 +62,7 @@ pub struct VcsState {
     diff_base_pending: Option<(BufferId, i32)>,
     diff_base_generation: u64,
     pub(crate) notice: Option<String>,
+    pub(crate) help_visible: bool,
     pub(crate) commit: CommitState,
     documents: DocumentFactory,
 }
@@ -107,6 +108,7 @@ impl Default for VcsState {
             diff_base_pending: None,
             diff_base_generation: 0,
             notice: None,
+            help_visible: false,
             commit: CommitState::default(),
             documents: DocumentFactory::new(),
         }
@@ -264,6 +266,16 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
             handle_command,
         ),
         Command::feature(
+            CommandId("vcs_stage_all"),
+            "stage all changes",
+            handle_command,
+        ),
+        Command::feature(
+            CommandId("vcs_unstage_all"),
+            "unstage all changes",
+            handle_command,
+        ),
+        Command::feature(
             CommandId("vcs_toggle_diff"),
             "toggle changed-file diff",
             handle_command,
@@ -302,16 +314,29 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         },
         "open_vcs_commit_detail" => open_history_detail(model),
         "vcs_history_load_more" => load_history_more(model),
-        "close_vcs_page" | "close_vcs_page_q" => close_page(model),
+        "close_vcs_page" => {
+            if model.vcs.help_visible {
+                model.vcs.help_visible = false;
+                None
+            } else {
+                close_page(model)
+            }
+        }
+        "close_vcs_page_q" => close_page(model),
         "vcs_next_change" => select_change(model, SelectionDirection::Next),
         "vcs_previous_change" => select_change(model, SelectionDirection::Previous),
         "open_vcs_change" => open_selected_change(model),
         "vcs_stage" => mutate_selected_change(model, true),
         "vcs_unstage" => mutate_selected_change(model, false),
+        "vcs_stage_all" => mutate_all_changes(model, true),
+        "vcs_unstage_all" => mutate_all_changes(model, false),
         "vcs_toggle_diff" => toggle_diff(model),
         "vcs_discard_placeholder" => placeholder(model, "Discard is not implemented"),
         "vcs_commit_placeholder" => commit::open(model),
-        "vcs_help_placeholder" => placeholder(model, "Help is not implemented"),
+        "vcs_help_placeholder" => {
+            model.vcs.help_visible = !model.vcs.help_visible;
+            None
+        }
         _ => {
             model.status = Some(StatusMessage::error(format!(
                 "unknown VCS command `{}`",
@@ -335,6 +360,7 @@ fn open_page(model: &mut Model) -> Option<Effect> {
 }
 
 fn close_page(model: &mut Model) -> Option<Effect> {
+    model.vcs.help_visible = false;
     model.active_page = AppPage::Editor;
     model
         .context_stack
@@ -603,6 +629,35 @@ fn mutate_selected_change(model: &mut Model, stage: bool) -> Option<Effect> {
     }))
 }
 
+fn mutate_all_changes(model: &mut Model, stage: bool) -> Option<Effect> {
+    let ChangesState::Ready(changes) = &model.vcs.changes else {
+        return None;
+    };
+    if !changes.iter().any(|change| change.staged != stage) {
+        return placeholder(
+            model,
+            match stage {
+                true => "No unstaged changes",
+                false => "No staged changes",
+            },
+        );
+    }
+    if model.editor.has_modified_buffers() || model.editor.has_saving_buffers() {
+        return placeholder(model, "Wait for pending saves before changing the index");
+    }
+    let target = repository_target(model)?;
+    model.vcs.changes_revision = model.vcs.changes_revision.wrapping_add(1);
+    model.vcs.changes_refreshing = false;
+    model.vcs.operation_target = Some(target.clone());
+    model.vcs.operation_revision = model.vcs.operation_revision.wrapping_add(1);
+    model.vcs.notice = None;
+    Some(Effect::feature(BulkOperationRequest {
+        stage,
+        target,
+        revision: model.vcs.operation_revision,
+    }))
+}
+
 /// Load the active buffer's HEAD base once, without blocking the editor.
 pub fn sync_active_buffer(model: &mut Model) -> Option<Effect> {
     let (buffer_id, revision) = model.editor.active_revision()?;
@@ -863,6 +918,85 @@ impl Completion for OperationCompletion {
                 model.vcs.notice = Some(error);
                 None
             }
+        }
+    }
+}
+
+struct BulkOperationRequest {
+    stage: bool,
+    target: PathBuf,
+    revision: u64,
+}
+
+impl FeatureEffect for BulkOperationRequest {
+    fn perform(self: Box<Self>) -> Message {
+        let result = match self.stage {
+            true => ::vcs::stage_all(&self.target),
+            false => ::vcs::unstage_all(&self.target),
+        }
+        .map_err(|error| error.to_string());
+        Message::FeatureCompletion(FeatureCompletion::new(BulkOperationCompletion {
+            stage: self.stage,
+            target: self.target,
+            revision: self.revision,
+            result,
+        }))
+    }
+}
+
+struct BulkOperationCompletion {
+    stage: bool,
+    target: PathBuf,
+    revision: u64,
+    result: Result<(), String>,
+}
+
+impl Completion for BulkOperationCompletion {
+    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
+        if model.vcs.operation_revision != self.revision
+            || model.vcs.operation_target.as_ref() != Some(&self.target)
+        {
+            return None;
+        }
+        if let Err(error) = self.result {
+            model.vcs.notice = Some(error);
+            return None;
+        }
+        model.vcs.notice = Some(match self.stage {
+            true => "Staged all changes".to_string(),
+            false => "Unstaged all changes".to_string(),
+        });
+        let selected_path = model
+            .vcs
+            .selected_change()
+            .map(|change| change.path.clone());
+        let kind = match self.stage {
+            true => OperationKind::Stage,
+            false => OperationKind::Unstage,
+        };
+        let ChangesState::Ready(changes) = &model.vcs.changes else {
+            return refresh_changes(model);
+        };
+        let paths = changes
+            .iter()
+            .filter(|change| change.staged != self.stage)
+            .map(|change| change.path.clone())
+            .collect::<Vec<_>>();
+        let mut updated = true;
+        for path in paths {
+            updated &= apply_operation_to_changes(model, kind, &path);
+        }
+        if let Some(selected_path) = selected_path {
+            let ChangesState::Ready(changes) = &model.vcs.changes else {
+                return refresh_changes(model);
+            };
+            model.vcs.selected_change = changes
+                .iter()
+                .position(|change| change.path == selected_path);
+        }
+        match updated {
+            true => None,
+            false => refresh_changes(model),
         }
     }
 }
@@ -1559,6 +1693,56 @@ mod tests {
     }
 
     #[test]
+    fn bulk_completions_update_all_changes_and_preserve_selection() {
+        let root = PathBuf::from("/workspace");
+        let mut model = Model {
+            workspace: Some(Workspace::new(root.clone())),
+            ..Model::default()
+        };
+        let mut added = change(root.join("a.txt"), ChangeKind::Added);
+        added.staged = true;
+        model.vcs.changes = ChangesState::Ready(vec![
+            added,
+            change(root.join("b.txt"), ChangeKind::Modified),
+            change(root.join("c.txt"), ChangeKind::Untracked),
+        ]);
+        model.vcs.selected_change = Some(1);
+
+        assert!(handle_command(&mut model, CommandId("vcs_stage_all")).is_some());
+        Box::new(BulkOperationCompletion {
+            stage: true,
+            target: root.clone(),
+            revision: model.vcs.operation_revision,
+            result: Ok(()),
+        })
+        .update(&mut model);
+        let ChangesState::Ready(changes) = &model.vcs.changes else {
+            panic!("expected ready changes");
+        };
+        assert!(changes.iter().all(|change| change.staged));
+        assert_eq!(changes[2].kind, ChangeKind::Added);
+        assert_eq!(model.vcs.selected_change, Some(1));
+        assert_eq!(model.vcs.notice.as_deref(), Some("Staged all changes"));
+
+        assert!(handle_command(&mut model, CommandId("vcs_unstage_all")).is_some());
+        Box::new(BulkOperationCompletion {
+            stage: false,
+            target: root,
+            revision: model.vcs.operation_revision,
+            result: Ok(()),
+        })
+        .update(&mut model);
+        let ChangesState::Ready(changes) = &model.vcs.changes else {
+            panic!("expected ready changes");
+        };
+        assert!(changes.iter().all(|change| !change.staged));
+        assert_eq!(changes[0].kind, ChangeKind::Untracked);
+        assert_eq!(changes[2].kind, ChangeKind::Untracked);
+        assert_eq!(model.vcs.selected_change, Some(1));
+        assert_eq!(model.vcs.notice.as_deref(), Some("Unstaged all changes"));
+    }
+
+    #[test]
     fn unstage_merges_duplicate_entries_without_a_refresh() {
         let path = PathBuf::from("/workspace/note.txt");
         let mut staged = change(path.clone(), ChangeKind::Modified);
@@ -1887,15 +2071,33 @@ mod tests {
     }
 
     #[test]
-    fn placeholder_keys_explain_that_they_do_not_mutate() {
+    fn help_toggles_and_escape_dismisses_it_without_closing_the_page() {
+        let mut model = Model {
+            active_page: AppPage::Vcs,
+            ..Model::default()
+        };
+        model.context_stack.push(Context::VCS);
+
+        assert!(handle_command(&mut model, CommandId("vcs_help_placeholder")).is_none());
+        assert!(model.vcs.help_visible);
+        assert!(handle_command(&mut model, CommandId("close_vcs_page")).is_none());
+        assert!(!model.vcs.help_visible);
+        assert_eq!(model.active_page, AppPage::Vcs);
+
+        assert!(handle_command(&mut model, CommandId("vcs_help_placeholder")).is_none());
+        assert!(handle_command(&mut model, CommandId("close_vcs_page_q")).is_none());
+        assert_eq!(model.active_page, AppPage::Editor);
+        assert!(!model.vcs.help_visible);
+    }
+
+    #[test]
+    fn discard_placeholder_explains_that_it_does_not_mutate() {
         let mut model = Model::default();
-        for (command, message) in [
-            ("vcs_discard_placeholder", "Discard is not implemented"),
-            ("vcs_help_placeholder", "Help is not implemented"),
-        ] {
-            assert!(handle_command(&mut model, CommandId(command)).is_none());
-            assert_eq!(model.vcs.notice.as_deref(), Some(message));
-        }
+        assert!(handle_command(&mut model, CommandId("vcs_discard_placeholder")).is_none());
+        assert_eq!(
+            model.vcs.notice.as_deref(),
+            Some("Discard is not implemented")
+        );
     }
 
     #[test]

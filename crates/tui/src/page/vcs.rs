@@ -3,7 +3,7 @@ use ratatui::{
     layout::{Constraint, Flex, Layout, Rect},
     style::Modifier,
     text::{Line, Span},
-    widgets::Paragraph,
+    widgets::{Block, Borders, Paragraph},
 };
 
 use ::vcs::{ChangeKind, FileChange};
@@ -22,10 +22,11 @@ pub struct Vcs;
 
 impl Vcs {
     pub fn view(&self, model: &Model, frame: &mut Frame) {
-        let [hints_area, head_area, body] = Layout::vertical([
+        let [hints_area, head_area, body, help_area] = Layout::vertical([
             Constraint::Length(3),
             Constraint::Length(2),
             Constraint::Fill(1),
+            Constraint::Length(if model.vcs.help_visible { 5 } else { 0 }),
         ])
         .flex(Flex::Start)
         .areas(frame.area());
@@ -36,7 +37,7 @@ impl Vcs {
             .add_modifier(Modifier::BOLD);
 
         let mut hints = vec![Line::styled(
-            "Tab toggle  s stage  u unstage  l history  x discard  c commit  ? help",
+            "Tab toggle  s stage  u unstage  c commit  x discard  ? help",
             heading,
         )];
         if let Some(notice) = &model.vcs.notice {
@@ -77,7 +78,26 @@ impl Vcs {
                 render_section(model, styles, remaining, false, frame);
             }
         }
+        if model.vcs.help_visible {
+            render_help(model, frame, help_area);
+        }
     }
+}
+
+fn render_help(model: &Model, frame: &mut Frame, area: Rect) {
+    let styles = model.theme.ui();
+    let lines = vec![
+        Line::raw("s stage   u unstage   Ctrl-s stage all   U unstage all"),
+        Line::raw("Tab toggle  Enter open  l history          c commit"),
+        Line::raw("? / Esc close help    x discard (placeholder)"),
+    ];
+    let help = Paragraph::new(lines).block(
+        Block::new()
+            .title("Help")
+            .borders(Borders::ALL)
+            .border_style(styles.base.patch(styles.focused_border)),
+    );
+    frame.render_widget(help.style(styles.base), area);
 }
 
 fn head_line(model: &Model, styles: &UiTheme) -> Line<'static> {
@@ -342,6 +362,29 @@ mod tests {
 
         assert_eq!(lines.len(), 3);
         assert_eq!(selected, Some(2));
+    }
+
+    #[test]
+    fn help_uses_a_bordered_bottom_panel() {
+        let mut model = Model::default();
+        model.vcs.help_visible = true;
+        let backend = TestBackend::new(80, 12);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal.draw(|frame| Vcs.view(&model, frame)).unwrap();
+
+        let content = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(content.contains("Help"));
+        assert!(content.contains("Ctrl-s stage all"));
+        assert!(content.contains("U unstage all"));
+        assert!(content.contains("? / Esc close help"));
+        assert!(content.contains("└"));
     }
 
     #[test]
