@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::{
-    component::{diff, picker},
+    component::{diff, picker, relative_time},
     data_object::Model,
     vcs::{CommitDetailsState, DiffState, HistoryMoreState, HistoryState},
 };
@@ -102,14 +102,24 @@ fn commit_line(model: &Model, index: usize, commit: &::vcs::CommitSummary) -> Li
     } else {
         styles.base
     };
-    Line::from(vec![
+    let relative = relative_time::describe(commit.timestamp, relative_time::now());
+    let branches =
+        (!commit.branches.is_empty()).then(|| format!("[{}]", commit.branches.join(", ")));
+    let mut spans = vec![
         Span::styled(format!("{marker} {}  ", commit.id), styles.key_hint),
         Span::styled(commit.subject.clone(), style),
         Span::styled(
-            format!("  {}  {}", commit.author, commit.date),
+            format!("  {}  {relative}", commit.author),
             styles.base.patch(styles.muted),
         ),
-    ])
+    ];
+    if let Some(branches) = branches {
+        spans.push(Span::styled(
+            format!("  {branches}"),
+            styles.base.patch(styles.action_hint),
+        ));
+    }
+    Line::from(spans)
 }
 
 fn history_file_lines(model: &Model) -> Vec<Line<'static>> {
@@ -223,7 +233,8 @@ mod tests {
             id: "abc1234".to_string(),
             subject: "current commit".to_string(),
             author: "Eggplant".to_string(),
-            date: "2026-11-16".to_string(),
+            timestamp: relative_time::now(),
+            branches: vec!["main".to_string()],
         }]);
         model.vcs.history_selected = Some(0);
         model.vcs.history_has_more = true;
@@ -232,7 +243,7 @@ mod tests {
             full_id: "abc1234".to_string(),
             message: "complete message\nsecond line".to_string(),
             author: "Eggplant".to_string(),
-            date: "2026-11-16".to_string(),
+            date: "2026-11-16 10:30:00 +0000".to_string(),
             files: vec![CommitFile {
                 kind: ChangeKind::Modified,
                 path: "note.txt".to_string(),
@@ -241,7 +252,7 @@ mod tests {
         });
         model.vcs.history_detail = model.vcs.history_files.clone();
         model.vcs.history_detail_selected_file = Some(0);
-        let backend = TestBackend::new(100, 12);
+        let backend = TestBackend::new(120, 12);
         let mut terminal = Terminal::new(backend).unwrap();
 
         terminal
@@ -261,6 +272,9 @@ mod tests {
         assert!(content.contains("second line"));
         assert!(content.contains("Changed files"));
         assert!(content.contains("M note.txt"));
+        assert!(content.contains("just now"));
+        assert!(content.contains("[main]"), "{content}");
+        assert!(content.contains("2026-11-16 10:30:00 +0000"));
         assert!(content.contains("n load more"));
         let load_more = &terminal.backend().buffer()[(0, 1)];
         assert_eq!(load_more.symbol(), "n");

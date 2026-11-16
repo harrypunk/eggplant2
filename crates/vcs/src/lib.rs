@@ -1,4 +1,7 @@
-use std::{collections::BTreeSet, path::Path};
+use std::{
+    collections::{BTreeSet, HashMap},
+    path::Path,
+};
 
 use anyhow::Context as _;
 use gix::{
@@ -86,7 +89,8 @@ pub struct CommitSummary {
     pub id: String,
     pub subject: String,
     pub author: String,
-    pub date: String,
+    pub timestamp: i64,
+    pub branches: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -462,7 +466,7 @@ fn commit_details_inner(path: &Path, commit_id: &str) -> anyhow::Result<CommitDe
         author: author.name.to_str_lossy().into_owned(),
         date: author
             .time()?
-            .format_or_unix(gix::date::time::format::SHORT),
+            .format_or_unix(gix::date::time::format::ISO8601),
         files,
     })
 }
@@ -856,6 +860,7 @@ fn read_history(
         }
         Err(error) => return Err(error.into()),
     };
+    let branches = branch_tips(&repository)?;
     let mut commits = repository
         .rev_walk([head.id])
         .all()?
@@ -875,15 +880,47 @@ fn read_history(
                 id: info.id.to_hex_with_len(7).to_string(),
                 subject,
                 author: author.name.to_str_lossy().into_owned(),
-                date: author
-                    .time()?
-                    .format_or_unix(gix::date::time::format::SHORT),
+                timestamp: author.time()?.seconds,
+                branches: branches.get(&info.id).cloned().unwrap_or_default(),
             })
         })
         .collect::<anyhow::Result<Vec<_>>>()?;
     let has_more = commits.len() > limit;
     commits.truncate(limit);
     Ok(HistoryPage { commits, has_more })
+}
+
+fn branch_tips(repository: &Repository) -> anyhow::Result<HashMap<ObjectId, Vec<String>>> {
+    repository
+        .references()?
+        .all()?
+        .try_fold(
+            HashMap::<ObjectId, Vec<String>>::new(),
+            |mut tips, reference| {
+                let reference = reference.map_err(|error| anyhow::anyhow!(error.to_string()))?;
+                if let (Some(id), Some((category, name))) = (
+                    reference.target().try_id(),
+                    reference.name().category_and_short_name(),
+                ) && matches!(
+                    category,
+                    gix::reference::Category::LocalBranch | gix::reference::Category::RemoteBranch
+                ) {
+                    tips.entry(id.to_owned())
+                        .or_default()
+                        .push(name.to_str_lossy().into_owned());
+                }
+                Ok::<_, anyhow::Error>(tips)
+            },
+        )
+        .map(|tips| {
+            tips.into_iter()
+                .map(|(id, mut branches)| {
+                    branches.sort();
+                    branches.dedup();
+                    (id, branches)
+                })
+                .collect()
+        })
 }
 
 #[cfg(test)]
@@ -1004,6 +1041,7 @@ mod tests {
         let details = commit_details(repository.path(), &commits[0].id).unwrap();
         assert_eq!(details.full_id.len(), 40);
         assert_eq!(details.message, "second\n");
+        assert!(details.date.contains(':'));
         assert_eq!(details.files.len(), 3);
         let other = commit_file_diff(repository.path(), &commits[0].id, "other.txt", 100).unwrap();
         assert!(other.lines.iter().any(|line| line == "+other"));
@@ -1060,7 +1098,7 @@ mod tests {
                 .iter()
                 .all(|commit| commit.author == "Eggplant Test")
         );
-        assert!(commits.iter().all(|commit| commit.date.len() == 10));
+        assert!(commits.iter().all(|commit| commit.timestamp > 0));
         assert!(commits.iter().all(|commit| commit.id.len() == 7));
         let first_page = history(repository.path(), 0, 1).unwrap();
         assert_eq!(first_page.commits.len(), 1);
@@ -1072,6 +1110,27 @@ mod tests {
         assert!(!second_page.has_more);
         assert!(history(repository.path(), 2, 1).unwrap().commits.is_empty());
         assert!(history(repository.path(), 0, 0).unwrap().commits.is_empty());
+    }
+
+    #[test]
+    fn history_decorates_only_local_and_remote_branch_tips() {
+        let repository = repository();
+        std::fs::write(repository.path().join("note.txt"), "updated\n").unwrap();
+        git(repository.path(), &["add", "note.txt"]);
+        git(repository.path(), &["commit", "--quiet", "-m", "second"]);
+        let existing = history(repository.path(), 0, 10).unwrap().commits;
+        assert_eq!(existing[0].branches, ["main"]);
+        assert!(existing[1].branches.is_empty());
+        git(repository.path(), &["branch", "side", &existing[1].id]);
+        git(
+            repository.path(),
+            &["update-ref", "refs/remotes/origin/main", &existing[0].id],
+        );
+
+        let commits = history(repository.path(), 0, 10).unwrap().commits;
+
+        assert_eq!(commits[0].branches, ["main", "origin/main"]);
+        assert_eq!(commits[1].branches, ["side"]);
     }
 
     #[test]

@@ -6,6 +6,7 @@ pub mod file_picker;
 pub mod key_hints;
 pub mod picker;
 pub mod popup;
+pub mod relative_time;
 pub mod search_highlight;
 pub mod status_bar;
 pub mod text_input;

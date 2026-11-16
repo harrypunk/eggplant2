@@ -9,7 +9,7 @@ use ratatui::{
 use ::vcs::{ChangeKind, FileChange};
 
 use crate::{
-    component::{diff, picker},
+    component::{diff, picker, relative_time},
     data_object::Model,
     theme::UiTheme,
     vcs::{ChangesState, DiffState, HistoryState},
@@ -107,6 +107,13 @@ fn head_line(model: &Model, styles: &UiTheme) -> Line<'static> {
                 Span::styled(format!("HEAD {head}  "), styles.key_hint),
                 Span::styled(format!("{}  ", commit.id), styles.key_hint),
                 Span::raw(commit.subject.clone()),
+                Span::styled(
+                    format!(
+                        "  {}",
+                        relative_time::describe(commit.timestamp, relative_time::now())
+                    ),
+                    styles.base.patch(styles.muted),
+                ),
             ])
         }
         HistoryState::Idle | HistoryState::Loading => {
@@ -276,7 +283,8 @@ mod tests {
             id: "abc1234".to_string(),
             subject: "current commit".to_string(),
             author: "Eggplant".to_string(),
-            date: "2026-11-16".to_string(),
+            timestamp: relative_time::now(),
+            branches: Vec::new(),
         }]);
         model.vcs.changes =
             ChangesState::Ready(vec![change("note.rs", ChangeKind::Modified, false)]);
@@ -303,7 +311,7 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
         assert!(content.contains("Tab toggle"));
-        assert!(content.contains("abc1234  current commit"));
+        assert!(content.contains("abc1234  current commit  just now"));
         assert!(!content.contains("Staged files"));
         assert!(content.contains("Unstaged files"));
         assert!(content.contains("> M note.rs"));

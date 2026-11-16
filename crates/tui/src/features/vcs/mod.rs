@@ -1475,7 +1475,8 @@ mod tests {
             id: "abc1234".to_string(),
             subject: "subject".to_string(),
             author: "Eggplant".to_string(),
-            date: "2026-11-16".to_string(),
+            timestamp: 1_800_000_000,
+            branches: Vec::new(),
         }];
         Box::new(HistoryCompletion {
             target: root,
@@ -1501,7 +1502,8 @@ mod tests {
             id: id.to_string(),
             subject: id.to_string(),
             author: "Eggplant".to_string(),
-            date: "2026-11-16".to_string(),
+            timestamp: 1_800_000_000,
+            branches: Vec::new(),
         };
         model.vcs.history = HistoryState::Ready(vec![commit("first")]);
         model.vcs.history_selected = Some(0);
@@ -1554,7 +1556,8 @@ mod tests {
             id: "first".to_string(),
             subject: "first".to_string(),
             author: "Eggplant".to_string(),
-            date: "2026-11-16".to_string(),
+            timestamp: 1_800_000_000,
+            branches: Vec::new(),
         }]);
         model.vcs.history_selected = Some(0);
         model.vcs.history_has_more = true;
@@ -1891,7 +1894,8 @@ mod tests {
             id: id.to_string(),
             subject: "subject".to_string(),
             author: "Eggplant".to_string(),
-            date: "2026-11-16".to_string(),
+            timestamp: 1_800_000_000,
+            branches: Vec::new(),
         };
         model.vcs.history = HistoryState::Ready(vec![commit("first"), commit("second")]);
         model.vcs.history_selected = Some(0);
@@ -1914,7 +1918,8 @@ mod tests {
             id: "abc1234".to_string(),
             subject: "subject".to_string(),
             author: "Eggplant".to_string(),
-            date: "2026-11-16".to_string(),
+            timestamp: 1_800_000_000,
+            branches: Vec::new(),
         };
         model.vcs.history = HistoryState::Ready(vec![commit.clone()]);
         model.vcs.history_selected = Some(0);
@@ -1922,7 +1927,7 @@ mod tests {
             full_id: commit.id.clone(),
             message: "complete message".to_string(),
             author: commit.author.clone(),
-            date: commit.date.clone(),
+            date: "2026-11-16 10:00:00 +0000".to_string(),
             files: vec![CommitFile {
                 kind: ChangeKind::Modified,
                 path: "note.txt".to_string(),
@@ -1964,7 +1969,8 @@ mod tests {
             id: "abc1234".to_string(),
             subject: "subject".to_string(),
             author: "Eggplant".to_string(),
-            date: "2026-11-16".to_string(),
+            timestamp: 1_800_000_000,
+            branches: Vec::new(),
         };
         model.vcs.history = HistoryState::Ready(vec![commit]);
         model.vcs.history_selected = Some(0);
@@ -1972,7 +1978,7 @@ mod tests {
             full_id: "full-commit-id".to_string(),
             message: "complete message".to_string(),
             author: "Eggplant".to_string(),
-            date: "2026-11-16".to_string(),
+            date: "2026-11-16 10:00:00 +0000".to_string(),
             files: vec![CommitFile {
                 kind: ChangeKind::Modified,
                 path: "note.txt".to_string(),
@@ -2023,7 +2029,8 @@ mod tests {
             id: "abc1234".to_string(),
             subject: "subject".to_string(),
             author: "Eggplant".to_string(),
-            date: "2026-11-16".to_string(),
+            timestamp: 1_800_000_000,
+            branches: Vec::new(),
         };
         let file = |path: &str| CommitFile {
             kind: ChangeKind::Modified,
@@ -2038,7 +2045,7 @@ mod tests {
                 full_id: "full-commit-id".to_string(),
                 message: "complete message".to_string(),
                 author: "Eggplant".to_string(),
-                date: "2026-11-16".to_string(),
+                date: "2026-11-16 10:00:00 +0000".to_string(),
                 files: vec![file("first.txt"), file("second.txt")],
             },
         );

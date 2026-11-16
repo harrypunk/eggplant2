@@ -82,11 +82,11 @@ Use a repository containing both staged and unstaged changes, then open the Git 
 ### History page
 
 - [ ] `l` opens a separate history page without embedding a log in Git status.
-- [ ] Commit rows show short ID, subject, author, and date.
+- [ ] Commit rows show short ID, subject, author, relative time, and labels for local/remote refs pointing exactly at that commit, all flowing left-to-right without wide right alignment. The Git status HEAD reference also shows relative time.
 - [ ] `j`/`k` selection wraps and keeps the selected commit visible while scrolling.
 - [ ] History loads at most 20 commits per page. When available, a bold accent-colored `n load more` appears in the header; `n` appends the next page without moving selection. Loading/retry feedback appears there and disappears at the end.
 - [ ] `Tab` toggles a commit's changed-file list without opening a diff.
-- [ ] Enter opens a right-side detail with full hash, complete message, author/date, and changed files.
+- [ ] Enter opens a right-side detail with full hash, complete message, author, full date/time/offset, and changed files.
 - [ ] `Tab` on a selected detail file toggles its diff and reuses the cached result on reopening.
 - [ ] A commit touching multiple files lists every changed path without raw-object or encoding garbage.
 - [ ] `q` or Escape returns to Git status rather than losing that page's context.
