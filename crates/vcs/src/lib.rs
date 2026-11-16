@@ -1,7 +1,40 @@
 use std::path::Path;
 
 use anyhow::Context as _;
-use gix::{bstr::ByteSlice as _, sec::trust::DefaultForLevel as _};
+use gix::{
+    Repository,
+    bstr::{BStr, BString, ByteSlice as _},
+    diff::{
+        blob::unified_diff::{ConsumeBinaryHunk, ContextSize},
+        blob::{Algorithm, InternedInput, UnifiedDiff},
+        index::{
+            Change as TreeIndexChange,
+            ChangeRef::{
+                Addition, Deletion, Modification as TreeModification, Rewrite as TreeRewrite,
+            },
+        },
+    },
+    dir::entry::Status as DirEntryStatus,
+    hash::ObjectId,
+    index::{
+        File as IndexFile, State as IndexState,
+        entry::{Flags, Mode, Stage, Stat},
+        fs::Metadata as IndexMetadata,
+    },
+    object::tree::{EntryKind, EntryMode},
+    sec::trust::DefaultForLevel as _,
+    status::{
+        Item as StatusItem,
+        index_worktree::{
+            Item as IndexWorktreeItem,
+            Item::{
+                DirectoryContents, Modification as WorktreeModification, Rewrite as WorktreeRewrite,
+            },
+        },
+        iter::Error as StatusIterError,
+        plumbing::index_as_worktree::{Change, EntryStatus},
+    },
+};
 use helix_vcs::DiffProviderRegistry;
 
 /// Return the current Git branch name or abbreviated detached commit.
@@ -64,16 +97,10 @@ pub fn changes(path: &Path) -> Result<Vec<FileChange>, ChangesError> {
         .status(gix::progress::Discard)
         .map_err(|error| ChangesError::Read(error.into()))?
         .untracked_files(gix::status::UntrackedFiles::Files);
-    let mut changes = Vec::new();
-    for item in status
+    let items = status
         .into_iter(Vec::new())
-        .map_err(|error| ChangesError::Read(error.into()))?
-    {
-        let item = item.map_err(|error| ChangesError::Read(error.into()))?;
-        if let Some(change) = change_from_status(&workdir, item) {
-            changes.push(change);
-        }
-    }
+        .map_err(|error| ChangesError::Read(error.into()))?;
+    let mut changes = collect_changes(&workdir, items)?;
     changes.sort_by(|left, right| {
         right
             .staged
@@ -83,79 +110,97 @@ pub fn changes(path: &Path) -> Result<Vec<FileChange>, ChangesError> {
     Ok(changes)
 }
 
-fn change_from_status(workdir: &Path, item: gix::status::Item) -> Option<FileChange> {
+fn collect_changes(
+    workdir: &Path,
+    mut items: impl Iterator<Item = Result<StatusItem, StatusIterError>>,
+) -> Result<Vec<FileChange>, ChangesError> {
+    items.try_fold(Vec::new(), |mut changes, item| {
+        let item = item.map_err(|error| ChangesError::Read(error.into()))?;
+        if let Some(change) = change_from_status(workdir, item) {
+            changes.push(change);
+        }
+        Ok::<_, ChangesError>(changes)
+    })
+}
+
+fn change_from_status(workdir: &Path, item: StatusItem) -> Option<FileChange> {
     match item {
-        gix::status::Item::IndexWorktree(item) => match item {
-            gix::status::index_worktree::Item::Modification {
-                rela_path, status, ..
-            } => {
-                use gix::status::plumbing::index_as_worktree::{Change, EntryStatus};
-                let kind = match status {
-                    EntryStatus::Conflict { .. } => ChangeKind::Conflict,
-                    EntryStatus::Change(Change::Removed) => ChangeKind::Deleted,
-                    EntryStatus::Change(Change::Modification { .. }) => ChangeKind::Modified,
-                    EntryStatus::IntentToAdd => ChangeKind::Untracked,
-                    _ => return None,
-                };
-                Some(FileChange {
-                    kind,
-                    staged: false,
-                    path: workdir.join(rela_path.to_path().ok()?),
-                    previous_path: None,
-                })
-            }
-            gix::status::index_worktree::Item::DirectoryContents { entry, .. }
-                if entry.status == gix::dir::entry::Status::Untracked =>
-            {
-                Some(FileChange {
-                    kind: ChangeKind::Untracked,
-                    staged: false,
-                    path: workdir.join(entry.rela_path.to_path().ok()?),
-                    previous_path: None,
-                })
-            }
-            gix::status::index_worktree::Item::Rewrite {
-                source,
-                dirwalk_entry,
-                ..
-            } => Some(FileChange {
-                kind: ChangeKind::Renamed,
+        StatusItem::IndexWorktree(item) => change_from_index_worktree(workdir, item),
+        StatusItem::TreeIndex(change) => change_from_tree_index(workdir, change),
+    }
+}
+
+fn change_from_index_worktree(workdir: &Path, item: IndexWorktreeItem) -> Option<FileChange> {
+    match item {
+        WorktreeModification {
+            rela_path, status, ..
+        } => {
+            let kind = match status {
+                EntryStatus::Conflict { .. } => ChangeKind::Conflict,
+                EntryStatus::Change(Change::Removed) => ChangeKind::Deleted,
+                EntryStatus::Change(Change::Modification { .. }) => ChangeKind::Modified,
+                EntryStatus::IntentToAdd => ChangeKind::Untracked,
+                _ => return None,
+            };
+            Some(FileChange {
+                kind,
                 staged: false,
-                path: workdir.join(dirwalk_entry.rela_path.to_path().ok()?),
-                previous_path: Some(workdir.join(source.rela_path().to_path().ok()?)),
-            }),
-            _ => None,
-        },
-        gix::status::Item::TreeIndex(change) => match change {
-            gix::diff::index::ChangeRef::Addition { location, .. } => Some(FileChange {
-                kind: ChangeKind::Added,
-                staged: true,
-                path: workdir.join(location.to_path().ok()?),
+                path: workdir.join(rela_path.to_path().ok()?),
                 previous_path: None,
-            }),
-            gix::diff::index::ChangeRef::Deletion { location, .. } => Some(FileChange {
-                kind: ChangeKind::Deleted,
-                staged: true,
-                path: workdir.join(location.to_path().ok()?),
+            })
+        }
+        DirectoryContents { entry, .. } if entry.status == DirEntryStatus::Untracked => {
+            Some(FileChange {
+                kind: ChangeKind::Untracked,
+                staged: false,
+                path: workdir.join(entry.rela_path.to_path().ok()?),
                 previous_path: None,
-            }),
-            gix::diff::index::ChangeRef::Modification { location, .. } => Some(FileChange {
-                kind: ChangeKind::Modified,
-                staged: true,
-                path: workdir.join(location.to_path().ok()?),
-                previous_path: None,
-            }),
-            gix::diff::index::ChangeRef::Rewrite {
-                source_location,
-                location,
-                ..
-            } => Some(FileChange {
-                kind: ChangeKind::Renamed,
-                staged: true,
-                path: workdir.join(location.to_path().ok()?),
-                previous_path: Some(workdir.join(source_location.to_path().ok()?)),
-            }),
-        },
+            })
+        }
+        WorktreeRewrite {
+            source,
+            dirwalk_entry,
+            ..
+        } => Some(FileChange {
+            kind: ChangeKind::Renamed,
+            staged: false,
+            path: workdir.join(dirwalk_entry.rela_path.to_path().ok()?),
+            previous_path: Some(workdir.join(source.rela_path().to_path().ok()?)),
+        }),
+        _ => None,
+    }
+}
+
+fn change_from_tree_index(workdir: &Path, change: TreeIndexChange) -> Option<FileChange> {
+    match change {
+        Addition { location, .. } => Some(FileChange {
+            kind: ChangeKind::Added,
+            staged: true,
+            path: workdir.join(location.to_path().ok()?),
+            previous_path: None,
+        }),
+        Deletion { location, .. } => Some(FileChange {
+            kind: ChangeKind::Deleted,
+            staged: true,
+            path: workdir.join(location.to_path().ok()?),
+            previous_path: None,
+        }),
+        TreeModification { location, .. } => Some(FileChange {
+            kind: ChangeKind::Modified,
+            staged: true,
+            path: workdir.join(location.to_path().ok()?),
+            previous_path: None,
+        }),
+        TreeRewrite {
+            source_location,
+            location,
+            ..
+        } => Some(FileChange {
+            kind: ChangeKind::Renamed,
+            staged: true,
+            path: workdir.join(location.to_path().ok()?),
+            previous_path: Some(workdir.join(source_location.to_path().ok()?)),
+        }),
     }
 }
 
@@ -185,35 +230,19 @@ pub fn diff(change: &FileChange, limit: usize) -> Result<Diff, DiffError> {
 fn diff_inner(change: &FileChange, limit: usize) -> anyhow::Result<Diff> {
     let repository = open_repository(&change.path)?;
     let relative = relative_path(&repository, &change.path)?;
-    let head = head_entry(
+    let head_id = head_entry(
         &repository,
         &gix::path::from_bstr(relative.as_slice().as_bstr()),
     )
     .map(|(id, _)| id);
     let indexed = index_entry(&repository, relative.as_slice().as_bstr());
-    let (before, after) = if change.staged {
-        (head, indexed)
-    } else {
-        (indexed, None)
+    let (before_id, after_id) = match change.staged {
+        true => (head_id, indexed),
+        false => (indexed, None),
     };
-    let before = read_optional_blob(&repository, before)?;
-    let after = if change.staged {
-        read_optional_blob(&repository, after)?
-    } else if change.kind == ChangeKind::Deleted {
-        Vec::new()
-    } else {
-        std::fs::read(&change.path)?
-    };
-    let input = gix::diff::blob::InternedInput::new(before.as_slice(), after.as_slice());
-    let diff =
-        gix::diff::blob::diff_with_slider_heuristics(gix::diff::blob::Algorithm::Histogram, &input);
-    let output = gix::diff::blob::UnifiedDiff::new(
-        &diff,
-        &input,
-        gix::diff::blob::unified_diff::ConsumeBinaryHunk::new(Vec::new(), "\n"),
-        gix::diff::blob::unified_diff::ContextSize::default(),
-    )
-    .consume()?;
+    let before = read_optional_blob(&repository, before_id)?;
+    let after = read_diff_after(&repository, change, after_id)?;
+    let output = render_unified_diff(&before, &after)?;
     Ok(bounded_diff_lines(
         String::from_utf8_lossy(&output)
             .lines()
@@ -223,10 +252,31 @@ fn diff_inner(change: &FileChange, limit: usize) -> anyhow::Result<Diff> {
     ))
 }
 
-fn index_entry(
-    repository: &gix::Repository,
-    relative: &gix::bstr::BStr,
-) -> Option<gix::hash::ObjectId> {
+fn read_diff_after(
+    repository: &Repository,
+    change: &FileChange,
+    indexed: Option<ObjectId>,
+) -> anyhow::Result<Vec<u8>> {
+    match (change.staged, change.kind) {
+        (true, _) => read_optional_blob(repository, indexed),
+        (false, ChangeKind::Deleted) => Ok(Vec::new()),
+        (false, _) => Ok(std::fs::read(&change.path)?),
+    }
+}
+
+fn render_unified_diff(before: &[u8], after: &[u8]) -> anyhow::Result<Vec<u8>> {
+    let input = InternedInput::new(before, after);
+    let diff = gix::diff::blob::diff_with_slider_heuristics(Algorithm::Histogram, &input);
+    Ok(UnifiedDiff::new(
+        &diff,
+        &input,
+        ConsumeBinaryHunk::new(Vec::new(), "\n"),
+        ContextSize::default(),
+    )
+    .consume()?)
+}
+
+fn index_entry(repository: &Repository, relative: &BStr) -> Option<ObjectId> {
     repository
         .index_or_empty()
         .ok()?
@@ -234,10 +284,7 @@ fn index_entry(
         .map(|entry| entry.id)
 }
 
-fn read_optional_blob(
-    repository: &gix::Repository,
-    id: Option<gix::hash::ObjectId>,
-) -> anyhow::Result<Vec<u8>> {
+fn read_optional_blob(repository: &Repository, id: Option<ObjectId>) -> anyhow::Result<Vec<u8>> {
     match id {
         Some(id) => Ok(repository.find_object(id)?.detach().data),
         None => Ok(Vec::new()),
@@ -270,51 +317,21 @@ pub fn unstage(path: &Path) -> Result<(), MutationError> {
     unstage_inner(repository, path).map_err(|error| MutationError::Failed(error.to_string()))
 }
 
-fn stage_inner(repository: gix::Repository, path: &Path) -> anyhow::Result<()> {
+fn stage_inner(repository: Repository, path: &Path) -> anyhow::Result<()> {
     let relative = relative_path(&repository, path)?;
     let mut index = open_index(&repository)?;
     ensure_unconflicted(&index, relative.as_slice().as_bstr())?;
 
-    if path.exists() {
-        let mut pipeline = repository.filter_pipeline(None)?;
-        let Some((id, kind, _)) = pipeline
-            .0
-            .worktree_file_to_object(relative.as_ref(), &index)?
-        else {
-            anyhow::bail!("unsupported file type");
-        };
-        let mode = match kind {
-            gix::object::tree::EntryKind::Blob => gix::index::entry::Mode::FILE,
-            gix::object::tree::EntryKind::BlobExecutable => {
-                gix::index::entry::Mode::FILE_EXECUTABLE
-            }
-            _ => anyhow::bail!("only regular files are supported"),
-        };
-        let metadata = gix::index::fs::Metadata::from_path_no_follow(path)?;
-        let stat = gix::index::entry::Stat::from_fs(&metadata)?;
-        if let Some(entry) = index
-            .entry_mut_by_path_and_stage(relative.as_ref(), gix::index::entry::Stage::Unconflicted)
-        {
-            entry.id = id;
-            entry.mode = mode;
-            entry.stat = stat;
-        } else {
-            index.dangerously_push_entry(
-                stat,
-                id,
-                gix::index::entry::Flags::empty(),
-                mode,
-                relative.as_ref(),
-            );
-            index.sort_entries();
+    match path.exists() {
+        true => stage_file(repository, path, &mut index, relative.as_slice().as_bstr())?,
+        false => {
+            index.remove_entries(|_, entry_path, _| entry_path == relative.as_slice().as_bstr());
         }
-    } else {
-        index.remove_entries(|_, entry_path, _| entry_path == relative.as_slice().as_bstr());
     }
     write_index(&mut index)
 }
 
-fn unstage_inner(repository: gix::Repository, path: &Path) -> anyhow::Result<()> {
+fn unstage_inner(repository: Repository, path: &Path) -> anyhow::Result<()> {
     let relative = relative_path(&repository, path)?;
     let mut index = open_index(&repository)?;
     ensure_unconflicted(&index, relative.as_slice().as_bstr())?;
@@ -323,32 +340,64 @@ fn unstage_inner(repository: gix::Repository, path: &Path) -> anyhow::Result<()>
         &gix::path::from_bstr(relative.as_slice().as_bstr()),
     );
 
-    if let Some((id, mode)) = head_entry {
-        let mode = gix::index::entry::Mode::from(mode);
-        if let Some(entry) = index
-            .entry_mut_by_path_and_stage(relative.as_ref(), gix::index::entry::Stage::Unconflicted)
-        {
-            entry.id = id;
-            entry.mode = mode;
-            entry.stat = Default::default();
-        } else {
-            index.dangerously_push_entry(
-                Default::default(),
-                id,
-                gix::index::entry::Flags::empty(),
-                mode,
-                relative.as_ref(),
-            );
-            index.sort_entries();
+    match head_entry {
+        Some((id, mode)) => upsert_index_entry(
+            &mut index,
+            relative.as_slice().as_bstr(),
+            id,
+            Mode::from(mode),
+            Stat::default(),
+        ),
+        None => {
+            index.remove_entries(|_, entry_path, _| entry_path == relative.as_slice().as_bstr());
         }
-    } else {
-        index.remove_entries(|_, entry_path, _| entry_path == relative.as_slice().as_bstr());
     }
     write_index(&mut index)
 }
 
-fn open_index(repository: &gix::Repository) -> anyhow::Result<gix::index::File> {
-    Ok(gix::index::File::at_or_default(
+fn stage_file(
+    repository: Repository,
+    path: &Path,
+    index: &mut IndexFile,
+    relative: &BStr,
+) -> anyhow::Result<()> {
+    let mut pipeline = repository.filter_pipeline(None)?;
+    let Some((id, kind, _)) = pipeline.0.worktree_file_to_object(relative, index)? else {
+        anyhow::bail!("unsupported file type");
+    };
+    let mode = match kind {
+        EntryKind::Blob => Mode::FILE,
+        EntryKind::BlobExecutable => Mode::FILE_EXECUTABLE,
+        _ => anyhow::bail!("only regular files are supported"),
+    };
+    let metadata = IndexMetadata::from_path_no_follow(path)?;
+    let stat = Stat::from_fs(&metadata)?;
+    upsert_index_entry(index, relative, id, mode, stat);
+    Ok(())
+}
+
+fn upsert_index_entry(
+    index: &mut IndexFile,
+    relative: &BStr,
+    id: ObjectId,
+    mode: Mode,
+    stat: Stat,
+) {
+    match index.entry_mut_by_path_and_stage(relative, Stage::Unconflicted) {
+        Some(entry) => {
+            entry.id = id;
+            entry.mode = mode;
+            entry.stat = stat;
+        }
+        None => {
+            index.dangerously_push_entry(stat, id, Flags::empty(), mode, relative);
+            index.sort_entries();
+        }
+    }
+}
+
+fn open_index(repository: &Repository) -> anyhow::Result<IndexFile> {
+    Ok(IndexFile::at_or_default(
         repository.index_path(),
         repository.object_hash(),
         false,
@@ -356,33 +405,30 @@ fn open_index(repository: &gix::Repository) -> anyhow::Result<gix::index::File> 
     )?)
 }
 
-fn relative_path(repository: &gix::Repository, path: &Path) -> anyhow::Result<gix::bstr::BString> {
+fn relative_path(repository: &Repository, path: &Path) -> anyhow::Result<BString> {
     let workdir = repository.workdir().context("working tree not found")?;
     let relative = path.strip_prefix(workdir)?;
     Ok(gix::path::try_into_bstr(relative)?.into_owned())
 }
 
-fn ensure_unconflicted(index: &gix::index::State, path: &gix::bstr::BStr) -> anyhow::Result<()> {
+fn ensure_unconflicted(index: &IndexState, path: &BStr) -> anyhow::Result<()> {
     if index.entry_range(path).is_some_and(|range| {
         range
             .into_iter()
-            .any(|idx| index.entry(idx).stage() != gix::index::entry::Stage::Unconflicted)
+            .any(|idx| index.entry(idx).stage() != Stage::Unconflicted)
     }) {
         anyhow::bail!("conflicted entries are not supported");
     }
     Ok(())
 }
 
-fn write_index(index: &mut gix::index::File) -> anyhow::Result<()> {
+fn write_index(index: &mut IndexFile) -> anyhow::Result<()> {
     index.remove_tree();
     index.write(Default::default())?;
     Ok(())
 }
 
-fn head_entry(
-    repository: &gix::Repository,
-    relative: &Path,
-) -> Option<(gix::hash::ObjectId, gix::object::tree::EntryMode)> {
+fn head_entry(repository: &Repository, relative: &Path) -> Option<(ObjectId, EntryMode)> {
     repository
         .head_commit()
         .ok()
@@ -408,7 +454,7 @@ pub fn history(path: &Path, limit: usize) -> Result<Vec<CommitSummary>, HistoryE
     read_history(repository, limit).map_err(HistoryError::Read)
 }
 
-fn open_repository(path: &Path) -> anyhow::Result<gix::Repository> {
+fn open_repository(path: &Path) -> anyhow::Result<Repository> {
     if !path.is_absolute() {
         anyhow::bail!("repository path must be absolute");
     }
@@ -431,7 +477,7 @@ fn open_repository(path: &Path) -> anyhow::Result<gix::Repository> {
         .to_thread_local())
 }
 
-fn read_history(repository: gix::Repository, limit: usize) -> anyhow::Result<Vec<CommitSummary>> {
+fn read_history(repository: Repository, limit: usize) -> anyhow::Result<Vec<CommitSummary>> {
     let head = match repository.head_commit() {
         Ok(head) => head,
         Err(_) if repository.head_name().ok().flatten().is_some() => {

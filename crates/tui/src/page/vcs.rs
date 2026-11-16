@@ -139,35 +139,50 @@ fn change_lines(
     let ChangesState::Ready(changes) = model.vcs.changes() else {
         return (Vec::new(), None);
     };
-    let mut lines = Vec::new();
-    let mut selected = None;
-    for (index, change) in changes
+    let selected = changes
         .iter()
         .enumerate()
         .filter(|(_, change)| change.staged == staged)
-    {
-        if model.vcs.selected_change == Some(index) {
-            selected = Some(lines.len());
-        }
-        let is_selected = model.vcs.selected_change == Some(index);
-        let style = if is_selected {
-            styles
-                .base
-                .patch(styles.key_hint)
-                .add_modifier(Modifier::BOLD)
-        } else {
-            styles.base
-        };
-        let marker = if is_selected { "> " } else { "  " };
-        lines.push(Line::styled(
-            format!("{marker}{}", change_text(model, change)),
-            style,
-        ));
-        if model.vcs.expanded_change.as_ref() == Some(&(change.path.clone(), change.staged)) {
-            lines.extend(diff_lines(model, styles));
-        }
-    }
+        .position(|(index, _)| model.vcs.selected_change == Some(index));
+    let lines = changes
+        .iter()
+        .enumerate()
+        .filter(|(_, change)| change.staged == staged)
+        .flat_map(|(index, change)| {
+            let file_line = change_line(model, styles, index, change);
+            let expanded = model
+                .vcs
+                .expanded_change
+                .as_ref()
+                .is_some_and(|(path, staged)| path == &change.path && *staged == change.staged);
+            let diff = if expanded {
+                diff_lines(model, styles)
+            } else {
+                Vec::new()
+            };
+            std::iter::once(file_line).chain(diff)
+        })
+        .collect();
     (lines, selected)
+}
+
+fn change_line(
+    model: &Model,
+    styles: &UiTheme,
+    index: usize,
+    change: &FileChange,
+) -> Line<'static> {
+    let is_selected = model.vcs.selected_change == Some(index);
+    let style = if is_selected {
+        styles
+            .base
+            .patch(styles.key_hint)
+            .add_modifier(Modifier::BOLD)
+    } else {
+        styles.base
+    };
+    let marker = if is_selected { "> " } else { "  " };
+    Line::styled(format!("{marker}{}", change_text(model, change)), style)
 }
 
 fn diff_lines(model: &Model, styles: &UiTheme) -> Vec<Line<'static>> {
@@ -196,14 +211,11 @@ fn diff_lines(model: &Model, styles: &UiTheme) -> Vec<Line<'static>> {
 }
 
 fn diff_style(styles: &UiTheme, line: &str) -> Style {
-    if line.starts_with('+') {
-        styles.base.patch(styles.diff_add)
-    } else if line.starts_with('-') {
-        styles.base.patch(styles.diff_remove)
-    } else if line.starts_with("@@") {
-        styles.base.patch(styles.diff_hunk)
-    } else {
-        styles.base
+    match line.as_bytes().first() {
+        Some(b'+') => styles.base.patch(styles.diff_add),
+        Some(b'-') => styles.base.patch(styles.diff_remove),
+        Some(b'@') if line.starts_with("@@") => styles.base.patch(styles.diff_hunk),
+        _ => styles.base,
     }
 }
 
