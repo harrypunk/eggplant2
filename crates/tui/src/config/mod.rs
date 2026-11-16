@@ -203,6 +203,7 @@ impl Default for Config {
                         ("vcs_history_previous", "k"),
                         ("vcs_history_toggle_diff", "tab"),
                         ("open_vcs_commit_detail", "enter"),
+                        ("vcs_history_load_more", "n"),
                     ],
                 ),
                 keymap_context(

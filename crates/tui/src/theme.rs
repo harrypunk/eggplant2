@@ -109,6 +109,7 @@ pub struct UiTheme {
     pub(crate) diff_add: Style,
     pub(crate) diff_remove: Style,
     pub(crate) diff_hunk: Style,
+    pub(crate) action_hint: Style,
     pub(crate) key_hint: Style,
     pub(crate) popup: Style,
     pub(crate) status_normal: Style,
@@ -148,6 +149,10 @@ impl UiTheme {
                 .unwrap_or_else(|| Style::new().fg(Color::Red)),
             diff_hunk: source_style(source, "diff.delta")
                 .unwrap_or_else(|| Style::new().fg(Color::LightBlue)),
+            action_hint: source_style(source, "ui.virtual.jump-label")
+                .or_else(|| source_style(source, "ui.help"))
+                .unwrap_or_else(|| Style::new().fg(Color::LightBlue))
+                .add_modifier(Modifier::BOLD),
             key_hint: source_style(source, "ui.help")
                 .unwrap_or_default()
                 .add_modifier(Modifier::BOLD),

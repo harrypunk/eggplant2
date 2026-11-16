@@ -89,6 +89,12 @@ pub struct CommitSummary {
     pub date: String,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HistoryPage {
+    pub commits: Vec<CommitSummary>,
+    pub has_more: bool,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChangeKind {
     Added,
@@ -660,13 +666,16 @@ pub enum HistoryError {
     Read(#[source] anyhow::Error),
 }
 
-/// Read a bounded newest-first history with short IDs and one-line subjects.
-pub fn history(path: &Path, limit: usize) -> Result<Vec<CommitSummary>, HistoryError> {
+/// Read one bounded newest-first history page with short IDs and one-line subjects.
+pub fn history(path: &Path, offset: usize, limit: usize) -> Result<HistoryPage, HistoryError> {
     if limit == 0 {
-        return Ok(Vec::new());
+        return Ok(HistoryPage {
+            commits: Vec::new(),
+            has_more: false,
+        });
     }
     let repository = open_repository(path).map_err(|_| HistoryError::NotRepository)?;
-    read_history(repository, limit).map_err(HistoryError::Read)
+    read_history(repository, offset, limit).map_err(HistoryError::Read)
 }
 
 fn open_repository(path: &Path) -> anyhow::Result<Repository> {
@@ -692,19 +701,27 @@ fn open_repository(path: &Path) -> anyhow::Result<Repository> {
         .to_thread_local())
 }
 
-fn read_history(repository: Repository, limit: usize) -> anyhow::Result<Vec<CommitSummary>> {
+fn read_history(
+    repository: Repository,
+    offset: usize,
+    limit: usize,
+) -> anyhow::Result<HistoryPage> {
     let head = match repository.head_commit() {
         Ok(head) => head,
         Err(_) if repository.head_name().ok().flatten().is_some() => {
             // A symbolic HEAD without a commit is an unborn branch, not corrupt history.
-            return Ok(Vec::new());
+            return Ok(HistoryPage {
+                commits: Vec::new(),
+                has_more: false,
+            });
         }
         Err(error) => return Err(error.into()),
     };
-    repository
+    let mut commits = repository
         .rev_walk([head.id])
         .all()?
-        .take(limit)
+        .skip(offset)
+        .take(limit.saturating_add(1))
         .map(|info| {
             let info = info?;
             let commit = info.object()?;
@@ -724,7 +741,10 @@ fn read_history(repository: Repository, limit: usize) -> anyhow::Result<Vec<Comm
                     .format_or_unix(gix::date::time::format::SHORT),
             })
         })
-        .collect()
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    let has_more = commits.len() > limit;
+    commits.truncate(limit);
+    Ok(HistoryPage { commits, has_more })
 }
 
 #[cfg(test)]
@@ -809,7 +829,7 @@ mod tests {
     }
 
     #[test]
-    fn commit_diff_uses_the_first_parent_and_returns_unified_lines() {
+    fn commit_diff_returns_unified_lines_for_multiple_files() {
         let repository = repository();
         std::fs::write(repository.path().join("note.txt"), "updated\n").unwrap();
         std::fs::write(repository.path().join("other.txt"), "other\n").unwrap();
@@ -817,7 +837,7 @@ mod tests {
         std::fs::write(repository.path().join("src/new.rs"), "fn main() {}\n").unwrap();
         git(repository.path(), &["add", "."]);
         git(repository.path(), &["commit", "--quiet", "-m", "second"]);
-        let commits = history(repository.path(), 10).unwrap();
+        let commits = history(repository.path(), 0, 10).unwrap().commits;
 
         let diff = commit_diff(repository.path(), &commits[0].id, 100).unwrap();
         assert!(diff.lines.iter().any(|line| line == "-hello"));
@@ -839,6 +859,35 @@ mod tests {
     }
 
     #[test]
+    fn merge_commit_diff_uses_only_the_first_parent() {
+        let repository = repository();
+        git(repository.path(), &["checkout", "--quiet", "-b", "side"]);
+        std::fs::write(repository.path().join("side.txt"), "side\n").unwrap();
+        git(repository.path(), &["add", "side.txt"]);
+        git(repository.path(), &["commit", "--quiet", "-m", "side"]);
+        git(repository.path(), &["checkout", "--quiet", "main"]);
+        std::fs::write(repository.path().join("main.txt"), "main\n").unwrap();
+        git(repository.path(), &["add", "main.txt"]);
+        git(repository.path(), &["commit", "--quiet", "-m", "main"]);
+        git(
+            repository.path(),
+            &["merge", "--quiet", "--no-ff", "side", "-m", "merge"],
+        );
+
+        let commits = history(repository.path(), 0, 10).unwrap().commits;
+        let merge = commits
+            .iter()
+            .find(|commit| commit.subject == "merge")
+            .unwrap();
+        let details = commit_details(repository.path(), &merge.id).unwrap();
+
+        assert_eq!(details.files.len(), 1);
+        assert_eq!(details.files[0].path, "side.txt");
+        let diff = commit_file_diff(repository.path(), &merge.id, "side.txt", 100).unwrap();
+        assert!(diff.lines.iter().any(|line| line == "+side"));
+    }
+
+    #[test]
     fn history_is_bounded_newest_first_oneline_summaries() {
         let repository = repository();
         std::fs::write(repository.path().join("note.txt"), "updated\n").unwrap();
@@ -848,7 +897,7 @@ mod tests {
             &["commit", "--quiet", "-m", "second subject\n\nbody"],
         );
 
-        let commits = history(repository.path(), 10).unwrap();
+        let commits = history(repository.path(), 0, 10).unwrap().commits;
         assert_eq!(commits.len(), 2);
         assert_eq!(commits[0].subject, "second subject");
         assert_eq!(commits[1].subject, "initial");
@@ -859,8 +908,40 @@ mod tests {
         );
         assert!(commits.iter().all(|commit| commit.date.len() == 10));
         assert!(commits.iter().all(|commit| commit.id.len() == 7));
-        assert_eq!(history(repository.path(), 1).unwrap().len(), 1);
-        assert!(history(repository.path(), 0).unwrap().is_empty());
+        let first_page = history(repository.path(), 0, 1).unwrap();
+        assert_eq!(first_page.commits.len(), 1);
+        assert_eq!(first_page.commits[0].subject, "second subject");
+        assert!(first_page.has_more);
+        let second_page = history(repository.path(), 1, 1).unwrap();
+        assert_eq!(second_page.commits.len(), 1);
+        assert_eq!(second_page.commits[0].subject, "initial");
+        assert!(!second_page.has_more);
+        assert!(history(repository.path(), 2, 1).unwrap().commits.is_empty());
+        assert!(history(repository.path(), 0, 0).unwrap().commits.is_empty());
+    }
+
+    #[test]
+    fn history_lossily_decodes_non_utf8_subjects() {
+        let repository = repository();
+        std::fs::write(repository.path().join("note.txt"), "updated\n").unwrap();
+        git(repository.path(), &["add", "note.txt"]);
+        let message = repository.path().join("message.txt");
+        std::fs::write(&message, b"invalid \xff subject\n").unwrap();
+        git(
+            repository.path(),
+            &[
+                "-c",
+                "i18n.commitEncoding=ISO-8859-1",
+                "commit",
+                "--quiet",
+                "--file",
+                message.to_str().unwrap(),
+            ],
+        );
+
+        let page = history(repository.path(), 0, 1).unwrap();
+
+        assert_eq!(page.commits[0].subject, "invalid \u{fffd} subject");
     }
 
     #[tokio::test]
@@ -971,7 +1052,7 @@ mod tests {
     fn history_distinguishes_non_repositories_and_unborn_branches() {
         let directory = tempfile::tempdir().unwrap();
         assert!(matches!(
-            history(directory.path(), 10),
+            history(directory.path(), 0, 10),
             Err(HistoryError::NotRepository)
         ));
 
@@ -979,6 +1060,6 @@ mod tests {
             directory.path(),
             &["init", "--quiet", "--initial-branch=main"],
         );
-        assert!(history(directory.path(), 10).unwrap().is_empty());
+        assert!(history(directory.path(), 0, 10).unwrap().commits.is_empty());
     }
 }

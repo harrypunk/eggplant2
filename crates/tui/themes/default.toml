@@ -27,3 +27,4 @@ error = { fg = "red" }
 "ui.statusline.insert" = {}
 "ui.window" = {}
 "ui.help" = { modifiers = ["bold"] }
+"ui.virtual.jump-label" = { fg = "light-blue", modifiers = ["bold"] }

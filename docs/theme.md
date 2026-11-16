@@ -67,6 +67,7 @@ The adapter maps existing UI scopes to Eggplant's semantic roles, for example:
 | Popup | `ui.popup` | `ui.menu`, then base. |
 | Status/mode line | `ui.statusline.normal`, `ui.statusline.insert` | `ui.statusline`, then base. |
 | Diff additions/deletions/hunks | `diff.plus`, `diff.minus`, `diff.delta` | Green, red, and light-blue respectively. |
+| Action hint | `ui.virtual.jump-label` | `ui.help`, then bold light-blue. |
 | Panel border | `ui.window` | Base foreground. |
 
 The adapter owns this mapping and its fallbacks. Components still see only resolved semantic roles. Unsupported Helix features can initially produce warnings or documented fallbacks; they must not cause per-component color branches.
@@ -125,6 +126,7 @@ struct UiTheme {
     border: Style,
     focused_border: Style,
     error: Style,
+    action_hint: Style,
     key_hint: Style,
 }
 

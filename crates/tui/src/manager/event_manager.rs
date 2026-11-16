@@ -319,6 +319,7 @@ mod tests {
             (KeyCode::Char('k'), "vcs_history_previous"),
             (KeyCode::Tab, "vcs_history_toggle_diff"),
             (KeyCode::Enter, "open_vcs_commit_detail"),
+            (KeyCode::Char('n'), "vcs_history_load_more"),
         ] {
             let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
             assert!(matches!(

@@ -30,6 +30,7 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | VCS history page | Select previous / next commit | `k` / `j` |
 | VCS history page | Toggle commit's changed-file list / selected detail-file diff | `Tab` |
 | VCS history page | Open selected commit's right-side detail | `Enter` |
+| VCS history page | Load the next 20 commits when available | `n` |
 | VCS page | Placeholder discard / commit / help | `x` / `c` / `?` |
 | Normal / Explorer | Scroll down / up | `Ctrl-F` / `Ctrl-U` |
 | Normal / Explorer | Focus left / right | `Ctrl-H` / `Ctrl-L` |

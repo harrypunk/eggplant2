@@ -15,7 +15,7 @@ The addon currently provides:
 - Toggleable inline diffs with caching.
 - Safe file opening through the existing document capability.
 
-Discard, commit, and help commands remain placeholders. A separate history page provides bounded commit summaries with short IDs, subjects, authors, and short dates. Toggling a commit lists its changed files inline. Opening the commit shows a right-side detail with full hash, complete message, author/date, and its file list. Each detail file can toggle its own first-parent diff with the same theme colors and cache behavior as file diffs. Merge commits intentionally use the first parent in this slice. Tree changes are filtered to regular blobs so directory objects never render as text, and multi-file commits retain every changed path. Pagination is separate work.
+Discard, commit, and help commands remain placeholders. A separate history page provides bounded commit summaries with short IDs, subjects, authors, and short dates. Toggling a commit lists its changed files inline. Opening the commit shows a right-side detail with full hash, complete message, author/date, and its file list. Each detail file can toggle its own first-parent diff with the same theme colors and cache behavior as file diffs. Merge commits intentionally use the first parent in this slice. Tree changes are filtered to regular blobs so directory objects never render as text, and multi-file commits retain every changed path. History loads 20 commits per page; the header shows a prominent `n load more` hint plus loading and retry feedback.
 
 ## Ownership and dependency direction
 
@@ -35,7 +35,7 @@ The status page has three regions:
 2. A one-line HEAD reference with the latest short commit ID and subject.
 3. Content-driven staged and unstaged sections, hidden when empty.
 
-Selection follows one staged-first order. Empty sections consume no space, and inline diffs appear directly beneath their expanded file. The embedded Git log was removed; a separate history UI can be developed later.
+Selection follows one staged-first order. Empty sections consume no space, and inline diffs appear directly beneath their expanded file. Commit browsing stays on the separate history page rather than embedding a log in Git status.
 
 Changed files use the existing safe document-opening and explorer-reveal path. Deleted files are not recreated.
 
@@ -73,6 +73,5 @@ The existing gutter displays a vertical `│` for every change, using the theme'
 
 ## Deferred work
 
-- History pagination for larger repositories.
 - Reviewed discard, commit, and fast-forward-only merge workflows.
 - Conflict resolution, staging of unsupported entry types, and other advanced Git behavior.

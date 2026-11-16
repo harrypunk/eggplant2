@@ -9,7 +9,7 @@ use ratatui::{
 use crate::{
     component::{diff, picker},
     data_object::Model,
-    vcs::{CommitDetailsState, DiffState, HistoryState},
+    vcs::{CommitDetailsState, DiffState, HistoryMoreState, HistoryState},
 };
 
 const DIFF_DISPLAY_LIMIT: usize = 6;
@@ -26,14 +26,15 @@ impl VcsHistory {
                 .areas(frame.area()),
             false => [frame.area(), Rect::default()],
         };
-        let [title, body] = Layout::vertical([Constraint::Length(2), Constraint::Fill(1)])
+        let [header, body] = Layout::vertical([Constraint::Length(2), Constraint::Fill(1)])
             .flex(Flex::Start)
             .areas(history_area);
         let styles = model.theme.ui();
-        frame.render_widget(
-            Paragraph::new("History").style(styles.base.patch(styles.key_hint)),
-            title,
-        );
+        let header_lines =
+            std::iter::once(Line::styled("History", styles.base.patch(styles.key_hint)))
+                .chain(history_more_line(model))
+                .collect::<Vec<_>>();
+        frame.render_widget(Paragraph::new(header_lines).style(styles.base), header);
         let (lines, selected) = history_lines(model);
         let lines = picker::visible_lines(lines, selected, body.height);
         frame.render_widget(Paragraph::new(lines).style(styles.base), body);
@@ -69,6 +70,25 @@ fn history_lines(model: &Model) -> (Vec<Line<'static>>, Option<usize>) {
                 (lines, selected)
             },
         ),
+    }
+}
+
+fn history_more_line(model: &Model) -> Option<Line<'static>> {
+    let styles = model.theme.ui();
+    match &model.vcs.history_more {
+        HistoryMoreState::Idle if model.vcs.history_has_more => Some(Line::styled(
+            "n load more",
+            styles.base.patch(styles.action_hint),
+        )),
+        HistoryMoreState::Idle => None,
+        HistoryMoreState::Loading => Some(Line::styled(
+            "Loading more…",
+            styles.base.patch(styles.muted),
+        )),
+        HistoryMoreState::Failed(error) => Some(Line::styled(
+            format!("{error} — press n to retry"),
+            styles.base.patch(styles.error),
+        )),
     }
 }
 
@@ -212,6 +232,7 @@ mod tests {
             date: "2026-11-16".to_string(),
         }]);
         model.vcs.history_selected = Some(0);
+        model.vcs.history_has_more = true;
         model.vcs.history_expanded = Some("abc1234".to_string());
         model.vcs.history_files = CommitDetailsState::Ready(CommitDetails {
             full_id: "abc1234".to_string(),
@@ -246,5 +267,14 @@ mod tests {
         assert!(content.contains("second line"));
         assert!(content.contains("Changed files"));
         assert!(content.contains("M note.txt"));
+        assert!(content.contains("n load more"));
+        let load_more = &terminal.backend().buffer()[(0, 1)];
+        assert_eq!(load_more.symbol(), "n");
+        assert_eq!(
+            load_more.fg,
+            model.theme.ui().action_hint.fg.unwrap(),
+            "load-more help should use the accent color"
+        );
+        assert!(load_more.modifier.contains(Modifier::BOLD));
     }
 }
