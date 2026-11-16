@@ -1,13 +1,12 @@
 use ratatui::{
     Frame,
     layout::{Constraint, Flex, Layout, Rect},
-    style::Modifier,
-    text::{Line, Span},
+    text::Line,
     widgets::Paragraph,
 };
 
 use crate::{
-    component::{diff, picker, relative_time},
+    component::{commit_message, diff, picker},
     data_object::Model,
     vcs::{CommitDetailsState, DiffState, HistoryMoreState, HistoryState},
 };
@@ -91,35 +90,9 @@ fn history_more_line(model: &Model) -> Option<Line<'static>> {
 }
 
 fn commit_line(model: &Model, index: usize, commit: &::vcs::CommitSummary) -> Line<'static> {
-    let styles = model.theme.ui();
     let selected = model.vcs.history_selected == Some(index);
-    let marker = if selected { ">" } else { " " };
-    let style = if selected {
-        styles
-            .base
-            .patch(styles.key_hint)
-            .add_modifier(Modifier::BOLD)
-    } else {
-        styles.base
-    };
-    let relative = relative_time::describe(commit.timestamp, relative_time::now());
-    let branches =
-        (!commit.branches.is_empty()).then(|| format!("[{}]", commit.branches.join(", ")));
-    let mut spans = vec![
-        Span::styled(format!("{marker} {}  ", commit.id), styles.key_hint),
-        Span::styled(commit.subject.clone(), style),
-        Span::styled(
-            format!("  {}  {relative}", commit.author),
-            styles.base.patch(styles.muted),
-        ),
-    ];
-    if let Some(branches) = branches {
-        spans.push(Span::styled(
-            format!("  {branches}"),
-            styles.base.patch(styles.action_hint),
-        ));
-    }
-    Line::from(spans)
+    let prefix = if selected { "> " } else { "  " };
+    commit_message::line(commit, prefix.to_string(), selected, model.theme.ui())
 }
 
 fn history_file_lines(model: &Model) -> Vec<Line<'static>> {
@@ -221,9 +194,10 @@ fn change_marker(kind: ::vcs::ChangeKind) -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use ratatui::{Terminal, backend::TestBackend};
+    use ratatui::{Terminal, backend::TestBackend, style::Modifier};
 
     use super::*;
+    use crate::component::relative_time;
     use ::vcs::{ChangeKind, CommitDetails, CommitFile};
 
     #[test]

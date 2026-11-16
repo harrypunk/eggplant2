@@ -1,4 +1,5 @@
 pub mod buffer_tabs;
+pub mod commit_message;
 pub mod diff;
 pub mod editor;
 pub mod file_explorer;

@@ -2,14 +2,14 @@ use ratatui::{
     Frame,
     layout::{Constraint, Flex, Layout, Rect},
     style::Modifier,
-    text::{Line, Span},
+    text::Line,
     widgets::{Block, Borders, Paragraph},
 };
 
 use ::vcs::{ChangeKind, FileChange};
 
 use crate::{
-    component::{diff, picker, relative_time},
+    component::{commit_message, diff, picker},
     data_object::Model,
     theme::UiTheme,
     vcs::{ChangesState, DiffState, HistoryState},
@@ -103,18 +103,7 @@ fn head_line(model: &Model, styles: &UiTheme) -> Line<'static> {
     match model.vcs.history() {
         HistoryState::Ready(commits) if !commits.is_empty() => {
             let commit = &commits[0];
-            Line::from(vec![
-                Span::styled(format!("HEAD {head}  "), styles.key_hint),
-                Span::styled(format!("{}  ", commit.id), styles.key_hint),
-                Span::raw(commit.subject.clone()),
-                Span::styled(
-                    format!(
-                        "  {}",
-                        relative_time::describe(commit.timestamp, relative_time::now())
-                    ),
-                    styles.base.patch(styles.muted),
-                ),
-            ])
+            commit_message::line(commit, format!("HEAD {head}  "), false, styles)
         }
         HistoryState::Idle | HistoryState::Loading => {
             Line::styled(format!("HEAD {head}  Loading…"), styles.muted)
@@ -262,7 +251,7 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend, style::Color};
 
     use super::*;
-    use crate::data_object::Workspace;
+    use crate::{component::relative_time, data_object::Workspace};
 
     fn change(path: &str, kind: ChangeKind, staged: bool) -> FileChange {
         FileChange {
@@ -311,7 +300,7 @@ mod tests {
             .map(|cell| cell.symbol())
             .collect::<String>();
         assert!(content.contains("Tab toggle"));
-        assert!(content.contains("abc1234  current commit  just now"));
+        assert!(content.contains("abc1234  current commit  Eggplant  just now"));
         assert!(!content.contains("Staged files"));
         assert!(content.contains("Unstaged files"));
         assert!(content.contains("> M note.rs"));
