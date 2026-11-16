@@ -88,6 +88,7 @@ Use a repository containing both staged and unstaged changes, then open the Git 
 - [ ] `Tab` toggles a commit's changed-file list without opening a diff.
 - [ ] Enter opens a right-side detail with full hash, complete message, author, full date/time/offset, and changed files.
 - [ ] `Tab` on a selected detail file toggles its diff and reuses the cached result on reopening.
+- [ ] Long messages and expanded diffs keep the selected detail file visible in the right-side viewport.
 - [ ] A commit touching multiple files lists every changed path without raw-object or encoding garbage.
 - [ ] `q` or Escape returns to Git status rather than losing that page's context.
 
