@@ -41,6 +41,7 @@ pub struct VcsState {
     diff_cache: HashMap<(PathBuf, bool), Diff>,
     diff_base_loaded: HashSet<BufferId>,
     diff_base_pending: Option<(BufferId, i32)>,
+    diff_base_generation: u64,
     pub(crate) notice: Option<String>,
     documents: DocumentFactory,
 }
@@ -69,6 +70,7 @@ impl Default for VcsState {
             diff_cache: HashMap::new(),
             diff_base_loaded: HashSet::new(),
             diff_base_pending: None,
+            diff_base_generation: 0,
             notice: None,
             documents: DocumentFactory::new(),
         }
@@ -338,9 +340,11 @@ pub fn sync_active_buffer(model: &mut Model) -> Option<Effect> {
     }
     let path = model.editor.buffer_path(buffer_id)?.to_path_buf();
     model.vcs.diff_base_pending = Some((buffer_id, revision));
+    model.vcs.diff_base_generation = model.vcs.diff_base_generation.wrapping_add(1);
     Some(Effect::feature(BufferDiffRequest {
         buffer_id,
         revision,
+        generation: model.vcs.diff_base_generation,
         path,
     }))
 }
@@ -359,6 +363,21 @@ pub fn refresh_buffer_base(model: &mut Model, buffer_id: BufferId) -> Option<Eff
         return sync_active_buffer(model);
     }
     None
+}
+
+/// Invalidate Git metadata and schedule fresh HEAD, status, and active-buffer state.
+pub fn repository_changed(model: &mut Model) -> Option<Effect> {
+    model.vcs.diff_base_loaded.clear();
+    model.vcs.diff_base_pending = None;
+    model.vcs.refreshing = false;
+    model.vcs.changes_refreshing = false;
+    if model.vcs.history == HistoryState::Loading {
+        model.vcs.history = HistoryState::Idle;
+    }
+    Effect::combine(
+        Effect::combine(refresh(model), refresh_history(model)),
+        Effect::combine(refresh_changes(model), sync_active_buffer(model)),
+    )
 }
 
 /// Start one background HEAD lookup, preserving the previous label until completion.
@@ -686,6 +705,7 @@ impl Completion for HistoryCompletion {
 struct BufferDiffRequest {
     buffer_id: BufferId,
     revision: i32,
+    generation: u64,
     path: PathBuf,
 }
 
@@ -695,6 +715,7 @@ impl FeatureEffect for BufferDiffRequest {
         Message::FeatureCompletion(FeatureCompletion::new(BufferDiffCompletion {
             buffer_id: self.buffer_id,
             revision: self.revision,
+            generation: self.generation,
             result,
         }))
     }
@@ -703,14 +724,18 @@ impl FeatureEffect for BufferDiffRequest {
 struct BufferDiffCompletion {
     buffer_id: BufferId,
     revision: i32,
+    generation: u64,
     result: Result<Option<Vec<u8>>, String>,
 }
 
 impl Completion for BufferDiffCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        if model.vcs.diff_base_pending == Some((self.buffer_id, self.revision)) {
-            model.vcs.diff_base_pending = None;
+        if model.vcs.diff_base_pending != Some((self.buffer_id, self.revision))
+            || model.vcs.diff_base_generation != self.generation
+        {
+            return None;
         }
+        model.vcs.diff_base_pending = None;
         let Ok(base) = self.result else {
             return None;
         };
@@ -1075,6 +1100,7 @@ mod tests {
         Box::new(BufferDiffCompletion {
             buffer_id: id,
             revision,
+            generation: model.vcs.diff_base_generation,
             result: Ok(Some(b"hello\n".to_vec())),
         })
         .update(&mut model);
@@ -1084,6 +1110,20 @@ mod tests {
         assert!(refresh_buffer_base(&mut model, id).is_some());
         assert!(!model.vcs.diff_base_loaded.contains(&id));
         assert_eq!(model.vcs.diff_base_pending, Some((id, revision)));
+    }
+
+    #[test]
+    fn repository_change_invalidates_cached_bases_and_refreshes_the_active_buffer() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("note.txt");
+        std::fs::write(&path, "hello\n").unwrap();
+        let mut model = Model::default();
+        let id = open_file(&mut model, &path);
+        model.vcs.diff_base_loaded.insert(id);
+
+        assert!(repository_changed(&mut model).is_some());
+        assert!(!model.vcs.diff_base_loaded.contains(&id));
+        assert_eq!(model.vcs.diff_base_pending.map(|(id, _)| id), Some(id));
     }
 
     #[test]

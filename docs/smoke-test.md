@@ -73,6 +73,7 @@ Use a repository containing both staged and unstaged changes, then open the Git 
 - [ ] Added, modified, and deleted lines show a colored vertical `│` in the editor gutter against HEAD.
 - [ ] Untracked files use an empty base and show additions appropriately.
 - [ ] Non-repositories remain unmarked and show a concise status message on the Git page.
+- [ ] Committing outside the editor updates the branch/status state and resets active-buffer indicators to the new HEAD.
 - [ ] `q` or Escape returns to the previous editor/explorer context.
 
 ## Failure and panic review

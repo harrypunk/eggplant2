@@ -15,6 +15,9 @@ pub enum ExternalChangeKind {
 
 /// Coordinate explorer structure updates and clean-buffer reloads for one event.
 pub fn file_changed(model: &mut Model, path: &Path, kind: ExternalChangeKind) -> Option<Effect> {
+    if is_repository_head_change(path) {
+        return crate::vcs::repository_changed(model);
+    }
     match kind {
         ExternalChangeKind::Structure => crate::explorer::refresh_changed(model, path),
         ExternalChangeKind::Content => {}
@@ -37,6 +40,19 @@ pub fn file_changed(model: &mut Model, path: &Path, kind: ExternalChangeKind) ->
         path: path.to_path_buf(),
         request: DocumentOpenRequest::new(DocumentFactory::new(), path),
     }))
+}
+
+fn is_repository_head_change(path: &Path) -> bool {
+    let in_git = path
+        .components()
+        .any(|component| component.as_os_str() == ".git");
+    let reference = path
+        .file_name()
+        .is_some_and(|name| name == "HEAD" || name == "packed-refs")
+        || path
+            .components()
+            .any(|component| component.as_os_str() == "refs" || component.as_os_str() == "logs");
+    in_git && reference
 }
 
 struct ExternalReloadRequest {
@@ -102,6 +118,19 @@ mod tests {
             return;
         };
         MessageManager::default().update(model, request.perform());
+    }
+
+    #[test]
+    fn git_head_and_reference_events_are_detected_without_treating_index_as_head() {
+        for path in [
+            "/repo/.git/HEAD",
+            "/repo/.git/refs/heads/main",
+            "/repo/.git/logs/HEAD",
+        ] {
+            assert!(is_repository_head_change(Path::new(path)));
+        }
+        assert!(!is_repository_head_change(Path::new("/repo/.git/index")));
+        assert!(!is_repository_head_change(Path::new("/repo/note.txt")));
     }
 
     #[test]
