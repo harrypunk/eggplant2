@@ -68,6 +68,17 @@ Use a repository containing both staged and unstaged changes, then open the Git 
 - [ ] Additions, deletions, and hunk headers use readable theme colors.
 - [ ] Closing and reopening the toggle reuses the cached diff.
 
+### History page
+
+- [ ] `l` opens a separate history page without embedding a log in Git status.
+- [ ] Commit rows show short ID, subject, author, and date.
+- [ ] `j`/`k` selection wraps and keeps the selected commit visible while scrolling.
+- [ ] `Tab` toggles a commit's changed-file list without opening a diff.
+- [ ] Enter opens a right-side detail with full hash, complete message, author/date, and changed files.
+- [ ] `Tab` on a selected detail file toggles its diff and reuses the cached result on reopening.
+- [ ] A commit touching multiple files lists every changed path without raw-object or encoding garbage.
+- [ ] `q` or Escape returns to Git status rather than losing that page's context.
+
 ### Editor gutter and repository states
 
 - [ ] Added, modified, and deleted lines show a colored vertical `│` in the editor gutter against HEAD.

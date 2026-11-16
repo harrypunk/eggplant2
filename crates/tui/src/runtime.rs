@@ -14,7 +14,7 @@ use crate::{
         keyboard_input_registry::Registry, message_manager::MessageManager,
         text_input_registry::TextInputRegistry,
     },
-    page::{editor::Editor, vcs::Vcs},
+    page::{editor::Editor, vcs::Vcs, vcs_history::VcsHistory},
     ui::UiRegistry,
 };
 
@@ -32,6 +32,7 @@ pub fn run(
     let message_manager = MessageManager::new(commands, text_input);
     let editor_page = Editor::new(ui);
     let vcs_page = Vcs;
+    let vcs_history_page = VcsHistory;
     let (message_sender, mut message_receiver) = tokio::sync::mpsc::unbounded_channel();
     let watch_root = model
         .workspace
@@ -67,6 +68,7 @@ pub fn run(
         terminal.draw(|frame| match model.active_page {
             AppPage::Editor => editor_page.view(&model, frame),
             AppPage::Vcs => vcs_page.view(&model, frame),
+            AppPage::VcsHistory => vcs_history_page.view(&model, frame),
         })?;
         terminal
             .backend_mut()

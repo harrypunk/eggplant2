@@ -15,7 +15,7 @@ The addon currently provides:
 - Toggleable inline diffs with caching.
 - Safe file opening through the existing document capability.
 
-Discard, commit, and help commands remain placeholders. History pagination, commit details, merge workflows, and other advanced repository behavior are separate work.
+Discard, commit, and help commands remain placeholders. A separate history page provides bounded commit summaries with short IDs, subjects, authors, and short dates. Toggling a commit lists its changed files inline. Opening the commit shows a right-side detail with full hash, complete message, author/date, and its file list. Each detail file can toggle its own first-parent diff with the same theme colors and cache behavior as file diffs. Merge commits intentionally use the first parent in this slice. Tree changes are filtered to regular blobs so directory objects never render as text, and multi-file commits retain every changed path. Pagination is separate work.
 
 ## Ownership and dependency direction
 
@@ -73,7 +73,6 @@ The existing gutter displays a vertical `│` for every change, using the theme'
 
 ## Deferred work
 
-- Separate history UI with scrolling and bounded pagination.
-- Active-buffer diff gutters and commit diff views.
+- History pagination for larger repositories.
 - Reviewed discard, commit, and fast-forward-only merge workflows.
 - Conflict resolution, staging of unsupported entry types, and other advanced Git behavior.

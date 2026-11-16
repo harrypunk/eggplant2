@@ -66,9 +66,27 @@ pub fn diff_base(path: &Path) -> Result<Option<Vec<u8>>, DiffBaseError> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommitFile {
+    pub kind: ChangeKind,
+    pub path: String,
+    pub previous_path: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CommitDetails {
+    pub full_id: String,
+    pub message: String,
+    pub author: String,
+    pub date: String,
+    pub files: Vec<CommitFile>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CommitSummary {
     pub id: String,
     pub subject: String,
+    pub author: String,
+    pub date: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -309,6 +327,191 @@ fn bounded_diff_lines(mut lines: Vec<String>, limit: usize) -> Diff {
     Diff { lines, truncated }
 }
 
+/// Read a commit's first-parent diff as bounded unified text.
+pub fn commit_diff(path: &Path, commit_id: &str, limit: usize) -> Result<Diff, DiffError> {
+    if limit == 0 {
+        return Ok(Diff {
+            lines: Vec::new(),
+            truncated: false,
+        });
+    }
+    commit_diff_inner(path, commit_id, limit).map_err(|error| DiffError::Failed(error.to_string()))
+}
+
+fn commit_diff_inner(path: &Path, commit_id: &str, limit: usize) -> anyhow::Result<Diff> {
+    let repository = open_repository(path)?;
+    let commit = repository
+        .rev_parse_single(commit_id)?
+        .object()?
+        .into_commit();
+    let parent_tree = match commit.parent_ids().next() {
+        Some(parent) => Some(parent.object()?.into_commit().tree()?),
+        None => None,
+    };
+    let changes = repository.diff_tree_to_tree(parent_tree.as_ref(), &commit.tree()?, None)?;
+    let mut lines = Vec::new();
+    for change in changes {
+        let Some((before, after, path)) = commit_change_parts(change) else {
+            continue;
+        };
+        let before = read_optional_blob(&repository, before)?;
+        let after = read_optional_blob(&repository, after)?;
+        lines.push(path);
+        lines.extend(
+            String::from_utf8_lossy(&render_unified_diff(&before, &after)?)
+                .lines()
+                .map(str::to_string),
+        );
+    }
+    Ok(bounded_diff_lines(lines, limit))
+}
+
+fn commit_change_parts(
+    change: gix::object::tree::diff::ChangeDetached,
+) -> Option<(Option<ObjectId>, Option<ObjectId>, String)> {
+    match change {
+        gix::object::tree::diff::ChangeDetached::Addition {
+            location,
+            id,
+            entry_mode,
+            ..
+        } if is_blob(entry_mode) => Some((None, Some(id), location.to_str_lossy().into_owned())),
+        gix::object::tree::diff::ChangeDetached::Deletion {
+            location,
+            id,
+            entry_mode,
+            ..
+        } if is_blob(entry_mode) => Some((Some(id), None, location.to_str_lossy().into_owned())),
+        gix::object::tree::diff::ChangeDetached::Modification {
+            location,
+            previous_entry_mode,
+            entry_mode,
+            previous_id,
+            id,
+            ..
+        } if is_blob(previous_entry_mode) && is_blob(entry_mode) => Some((
+            Some(previous_id),
+            Some(id),
+            location.to_str_lossy().into_owned(),
+        )),
+        gix::object::tree::diff::ChangeDetached::Rewrite {
+            location,
+            source_entry_mode,
+            entry_mode,
+            source_id,
+            id,
+            ..
+        } if is_blob(source_entry_mode) && is_blob(entry_mode) => Some((
+            Some(source_id),
+            Some(id),
+            location.to_str_lossy().into_owned(),
+        )),
+        _ => None,
+    }
+}
+
+fn is_blob(mode: EntryMode) -> bool {
+    matches!(mode.kind(), EntryKind::Blob | EntryKind::BlobExecutable)
+}
+
+/// Read complete commit metadata and its changed-file list.
+pub fn commit_details(path: &Path, commit_id: &str) -> Result<CommitDetails, DiffError> {
+    commit_details_inner(path, commit_id).map_err(|error| DiffError::Failed(error.to_string()))
+}
+
+/// Read a unified diff for one file in a commit's first-parent change.
+pub fn commit_file_diff(
+    path: &Path,
+    commit_id: &str,
+    file_path: &str,
+    limit: usize,
+) -> Result<Diff, DiffError> {
+    commit_file_diff_inner(path, commit_id, file_path, limit)
+        .map_err(|error| DiffError::Failed(error.to_string()))
+}
+
+fn commit_details_inner(path: &Path, commit_id: &str) -> anyhow::Result<CommitDetails> {
+    let repository = open_repository(path)?;
+    let commit = repository
+        .rev_parse_single(commit_id)?
+        .object()?
+        .into_commit();
+    let parent_tree = match commit.parent_ids().next() {
+        Some(parent) => Some(parent.object()?.into_commit().tree()?),
+        None => None,
+    };
+    let author = commit.author()?;
+    let files = repository
+        .diff_tree_to_tree(parent_tree.as_ref(), &commit.tree()?, None)?
+        .into_iter()
+        .filter_map(commit_file)
+        .collect();
+    Ok(CommitDetails {
+        full_id: commit.id.to_string(),
+        message: commit.message_raw_sloppy().to_str_lossy().into_owned(),
+        author: author.name.to_str_lossy().into_owned(),
+        date: author
+            .time()?
+            .format_or_unix(gix::date::time::format::SHORT),
+        files,
+    })
+}
+
+fn commit_file_diff_inner(
+    path: &Path,
+    commit_id: &str,
+    file_path: &str,
+    limit: usize,
+) -> anyhow::Result<Diff> {
+    let repository = open_repository(path)?;
+    let commit = repository
+        .rev_parse_single(commit_id)?
+        .object()?
+        .into_commit();
+    let parent_tree = match commit.parent_ids().next() {
+        Some(parent) => Some(parent.object()?.into_commit().tree()?),
+        None => None,
+    };
+    let changes = repository.diff_tree_to_tree(parent_tree.as_ref(), &commit.tree()?, None)?;
+    let Some((before, after, _)) = changes
+        .into_iter()
+        .filter_map(commit_change_parts)
+        .find(|(_, _, path)| path == file_path)
+    else {
+        anyhow::bail!("file not found in commit");
+    };
+    let before = read_optional_blob(&repository, before)?;
+    let after = read_optional_blob(&repository, after)?;
+    Ok(bounded_diff_lines(
+        String::from_utf8_lossy(&render_unified_diff(&before, &after)?)
+            .lines()
+            .map(str::to_string)
+            .collect(),
+        limit,
+    ))
+}
+
+fn commit_file(change: gix::object::tree::diff::ChangeDetached) -> Option<CommitFile> {
+    let kind = match &change {
+        gix::object::tree::diff::ChangeDetached::Addition { .. } => ChangeKind::Added,
+        gix::object::tree::diff::ChangeDetached::Deletion { .. } => ChangeKind::Deleted,
+        gix::object::tree::diff::ChangeDetached::Modification { .. } => ChangeKind::Modified,
+        gix::object::tree::diff::ChangeDetached::Rewrite { .. } => ChangeKind::Renamed,
+    };
+    let previous_path = match &change {
+        gix::object::tree::diff::ChangeDetached::Rewrite {
+            source_location, ..
+        } => Some(source_location.to_str_lossy().into_owned()),
+        _ => None,
+    };
+    let (_, _, path) = commit_change_parts(change)?;
+    Some(CommitFile {
+        kind,
+        path,
+        previous_path,
+    })
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum MutationError {
     #[error("not a Git repository")]
@@ -511,9 +714,14 @@ fn read_history(repository: Repository, limit: usize) -> anyhow::Result<Vec<Comm
                 .next()
                 .map(|line| String::from_utf8_lossy(line).into_owned())
                 .unwrap_or_default();
+            let author = commit.author()?;
             Ok(CommitSummary {
                 id: info.id.to_hex_with_len(7).to_string(),
                 subject,
+                author: author.name.to_str_lossy().into_owned(),
+                date: author
+                    .time()?
+                    .format_or_unix(gix::date::time::format::SHORT),
             })
         })
         .collect()
@@ -601,6 +809,36 @@ mod tests {
     }
 
     #[test]
+    fn commit_diff_uses_the_first_parent_and_returns_unified_lines() {
+        let repository = repository();
+        std::fs::write(repository.path().join("note.txt"), "updated\n").unwrap();
+        std::fs::write(repository.path().join("other.txt"), "other\n").unwrap();
+        std::fs::create_dir(repository.path().join("src")).unwrap();
+        std::fs::write(repository.path().join("src/new.rs"), "fn main() {}\n").unwrap();
+        git(repository.path(), &["add", "."]);
+        git(repository.path(), &["commit", "--quiet", "-m", "second"]);
+        let commits = history(repository.path(), 10).unwrap();
+
+        let diff = commit_diff(repository.path(), &commits[0].id, 100).unwrap();
+        assert!(diff.lines.iter().any(|line| line == "-hello"));
+        assert!(diff.lines.iter().any(|line| line == "+updated"));
+        for path in ["note.txt", "other.txt", "src/new.rs"] {
+            assert!(diff.lines.iter().any(|line| line == path), "missing {path}");
+        }
+        assert!(diff.lines.iter().all(|line| !line.contains('\u{fffd}')));
+
+        let details = commit_details(repository.path(), &commits[0].id).unwrap();
+        assert_eq!(details.full_id.len(), 40);
+        assert_eq!(details.message, "second\n");
+        assert_eq!(details.files.len(), 3);
+        let other = commit_file_diff(repository.path(), &commits[0].id, "other.txt", 100).unwrap();
+        assert!(other.lines.iter().any(|line| line == "+other"));
+
+        let first = commit_diff(repository.path(), &commits[1].id, 100).unwrap();
+        assert!(first.lines.iter().any(|line| line == "+hello"));
+    }
+
+    #[test]
     fn history_is_bounded_newest_first_oneline_summaries() {
         let repository = repository();
         std::fs::write(repository.path().join("note.txt"), "updated\n").unwrap();
@@ -614,6 +852,12 @@ mod tests {
         assert_eq!(commits.len(), 2);
         assert_eq!(commits[0].subject, "second subject");
         assert_eq!(commits[1].subject, "initial");
+        assert!(
+            commits
+                .iter()
+                .all(|commit| commit.author == "Eggplant Test")
+        );
+        assert!(commits.iter().all(|commit| commit.date.len() == 10));
         assert!(commits.iter().all(|commit| commit.id.len() == 7));
         assert_eq!(history(repository.path(), 1).unwrap().len(), 1);
         assert!(history(repository.path(), 0).unwrap().is_empty());

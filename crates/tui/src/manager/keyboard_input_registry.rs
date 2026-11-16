@@ -45,11 +45,8 @@ fn parse_context_bindings(
     bindings: &HashMap<String, String>,
     commands: &CommandRegistry,
 ) -> color_eyre::Result<ContextBindings> {
-    let context = parse_context(context_name).ok_or_else(|| {
-        eyre!(
-            "unknown keymap context `{context_name}`; expected normal, editor_input, visual, explorer, file_picker, theme_picker, buffer_jump, buffer_navigation, buffer_grep, project_grep, line_jump, view_align, change, yank, agent_chat, agent_chat_dialog, or vcs"
-        )
-    })?;
+    let context = parse_context(context_name)
+        .ok_or_else(|| eyre!("unknown keymap context `{context_name}`"))?;
 
     let parsed = bindings.iter().try_fold(
         HashMap::<KeyChord, (&str, CommandId)>::new(),
@@ -97,6 +94,7 @@ fn parse_context(value: &str) -> Option<Context> {
         "agent_chat" => Some(Context::AgentChat),
         "agent_chat_dialog" => Some(Context::AgentChatDialog),
         "vcs" => Some(Context::VCS),
+        "vcs_history" => Some(Context::VcsHistory),
         "editor_input" => Some(Context::EditorInput),
         "visual" => Some(Context::EditorVisual),
         "explorer" => Some(Context::Explorer),

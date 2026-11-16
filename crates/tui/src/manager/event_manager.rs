@@ -296,6 +296,29 @@ mod tests {
             (KeyCode::Char('x'), "vcs_discard_placeholder"),
             (KeyCode::Char('c'), "vcs_commit_placeholder"),
             (KeyCode::Char('?'), "vcs_help_placeholder"),
+            (KeyCode::Char('l'), "open_vcs_history"),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+    }
+
+    #[test]
+    fn routes_vcs_history_page_keys() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::VcsHistory);
+
+        for (key, command) in [
+            (KeyCode::Esc, "close_vcs_history"),
+            (KeyCode::Char('q'), "close_vcs_history_q"),
+            (KeyCode::Char('j'), "vcs_history_next"),
+            (KeyCode::Char('k'), "vcs_history_previous"),
+            (KeyCode::Tab, "vcs_history_toggle_diff"),
+            (KeyCode::Enter, "open_vcs_commit_detail"),
         ] {
             let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
             assert!(matches!(

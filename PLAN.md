@@ -393,8 +393,10 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 - [x] Read bounded newest-first commits through the shared Gitoxide backend and use the latest short ID and one-line subject as the Git page's HEAD reference.
 - [x] Keep initial history loading off the UI thread and reject stale responses after workspace or repository changes.
-- [ ] Develop a separate history UI/page with scrolling and bounded pagination/loading for larger repositories.
-- [ ] Display author/date summaries and open a selected commit's read-only diff without changing the working tree or current branch.
+- [x] Develop a separate history page with a bounded initial load, selection wrapping, and selection-following scrolling.
+- [ ] Add bounded pagination/loading for larger repositories.
+- [x] Display author/date summaries in history rows.
+- [x] Toggle a commit's changed-file list, open its right-side detail with full hash/message, and toggle each detail file's first-parent read-only diff without changing the working tree or current branch.
 - [ ] Complete multi-parent, non-UTF-8 summary, pagination, and diff-navigation tests alongside those features.
 
 #### M9.5 — Explicit commit

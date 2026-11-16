@@ -25,6 +25,11 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | VCS page | Open selected changed file | `Enter` |
 | VCS page | Stage / unstage selected file | `s` / `u` |
 | VCS page | Toggle inline diff for selected file | `Tab` |
+| VCS page | Open history page | `l` |
+| VCS history page | Close and return to Git status | `q` / `Esc` |
+| VCS history page | Select previous / next commit | `k` / `j` |
+| VCS history page | Toggle commit's changed-file list / selected detail-file diff | `Tab` |
+| VCS history page | Open selected commit's right-side detail | `Enter` |
 | VCS page | Placeholder discard / commit / help | `x` / `c` / `?` |
 | Normal / Explorer | Scroll down / up | `Ctrl-F` / `Ctrl-U` |
 | Normal / Explorer | Focus left / right | `Ctrl-H` / `Ctrl-L` |

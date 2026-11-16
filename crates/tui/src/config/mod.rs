@@ -195,6 +195,17 @@ impl Default for Config {
                 keymap_context("change", [("change_cancel", "esc")]),
                 keymap_context("yank", [("yank_cancel", "esc")]),
                 keymap_context(
+                    "vcs_history",
+                    [
+                        ("close_vcs_history", "esc"),
+                        ("close_vcs_history_q", "q"),
+                        ("vcs_history_next", "j"),
+                        ("vcs_history_previous", "k"),
+                        ("vcs_history_toggle_diff", "tab"),
+                        ("open_vcs_commit_detail", "enter"),
+                    ],
+                ),
+                keymap_context(
                     "vcs",
                     [
                         ("close_vcs_page", "esc"),
@@ -208,6 +219,7 @@ impl Default for Config {
                         ("vcs_discard_placeholder", "x"),
                         ("vcs_commit_placeholder", "c"),
                         ("vcs_help_placeholder", "?"),
+                        ("open_vcs_history", "l"),
                     ],
                 ),
             ]),

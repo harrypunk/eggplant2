@@ -1,7 +1,7 @@
 use ratatui::{
     Frame,
     layout::{Constraint, Flex, Layout, Rect},
-    style::{Modifier, Style},
+    style::Modifier,
     text::{Line, Span},
     widgets::Paragraph,
 };
@@ -9,7 +9,7 @@ use ratatui::{
 use ::vcs::{ChangeKind, FileChange};
 
 use crate::{
-    component::picker,
+    component::{diff, picker},
     data_object::Model,
     theme::UiTheme,
     vcs::{ChangesState, DiffState, HistoryState},
@@ -36,7 +36,7 @@ impl Vcs {
             .add_modifier(Modifier::BOLD);
 
         let mut hints = vec![Line::styled(
-            "Tab toggle  s stage  u unstage  x discard  c commit  ? help",
+            "Tab toggle  s stage  u unstage  l history  x discard  c commit  ? help",
             heading,
         )];
         if let Some(notice) = &model.vcs.notice {
@@ -200,22 +200,13 @@ fn diff_lines(model: &Model, styles: &UiTheme) -> Vec<Line<'static>> {
             let mut output = lines
                 .iter()
                 .take(DIFF_DISPLAY_LIMIT)
-                .map(|line| Line::styled(format!("  {line}"), diff_style(styles, line)))
+                .map(|line| Line::styled(format!("  {line}"), diff::line_style(styles, line)))
                 .collect::<Vec<_>>();
             if *truncated || lines.len() > DIFF_DISPLAY_LIMIT {
                 output.push(Line::styled("  …", styles.base.patch(styles.muted)));
             }
             output
         }
-    }
-}
-
-fn diff_style(styles: &UiTheme, line: &str) -> Style {
-    match line.as_bytes().first() {
-        Some(b'+') => styles.base.patch(styles.diff_add),
-        Some(b'-') => styles.base.patch(styles.diff_remove),
-        Some(b'@') if line.starts_with("@@") => styles.base.patch(styles.diff_hunk),
-        _ => styles.base,
     }
 }
 
@@ -270,6 +261,8 @@ mod tests {
         model.vcs.history = HistoryState::Ready(vec![::vcs::CommitSummary {
             id: "abc1234".to_string(),
             subject: "current commit".to_string(),
+            author: "Eggplant".to_string(),
+            date: "2026-11-16".to_string(),
         }]);
         model.vcs.changes =
             ChangesState::Ready(vec![change("note.rs", ChangeKind::Modified, false)]);

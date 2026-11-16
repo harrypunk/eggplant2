@@ -141,3 +141,12 @@ vcs_toggle_diff = "tab"
 vcs_discard_placeholder = "x"
 vcs_commit_placeholder = "c"
 vcs_help_placeholder = "?"
+open_vcs_history = "l"
+
+[keymap.vcs_history]
+close_vcs_history = "esc"
+close_vcs_history_q = "q"
+vcs_history_next = "j"
+vcs_history_previous = "k"
+vcs_history_toggle_diff = "tab"
+open_vcs_commit_detail = "enter"

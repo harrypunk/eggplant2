@@ -1,4 +1,5 @@
 pub mod buffer_tabs;
+pub mod diff;
 pub mod editor;
 pub mod file_explorer;
 pub mod file_picker;
