@@ -5,7 +5,7 @@ use crate::{
     manager::effect::Effect,
 };
 
-use super::{ExpansionState, IgnoreMode};
+use super::{ExpansionState, IgnoreMode, work::ExplorerRefreshKind};
 
 /// Explorer state commands. File opening and panel focus stay in separate slices.
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
@@ -14,7 +14,7 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         "explorer_previous" => model.explorer.select_previous(),
         "explorer_fold" => change_expansion(model, ExpansionState::Collapsed),
         "explorer_unfold" => change_expansion(model, ExpansionState::Expanded),
-        "refresh_explorer" => refresh(model),
+        "refresh_explorer" => return refresh(model),
         "toggle_ignored_files" => toggle_ignored_files(model),
         _ => {
             model.status = Some(StatusMessage::error(format!(
@@ -45,30 +45,26 @@ fn change_expansion(model: &mut Model, target: ExpansionState) {
     }
 }
 
-fn refresh(model: &mut Model) {
-    let Some(workspace) = &model.workspace else {
-        return;
-    };
-    let root = workspace.root().to_path_buf();
-
-    match model.explorer.reload(&root) {
-        Ok(()) => model.status = None,
-        Err(error) => report_error(model, "failed to refresh", &root, error),
-    }
+fn refresh(model: &mut Model) -> Option<Effect> {
+    let root = model.workspace.as_ref()?.root().to_path_buf();
+    Some(Effect::feature(
+        model
+            .explorer
+            .reload_request(&root, ExplorerRefreshKind::Manual),
+    ))
 }
 
 /// Refresh the tree after an external create/delete/rename without clearing unrelated status.
-pub(crate) fn refresh_changed(model: &mut Model, path: &Path) {
-    let Some(workspace) = &model.workspace else {
-        return;
-    };
-    let root = workspace.root().to_path_buf();
+pub(crate) fn refresh_changed(model: &mut Model, path: &Path) -> Option<Effect> {
+    let root = model.workspace.as_ref()?.root().to_path_buf();
     if path.strip_prefix(&root).is_err() {
-        return;
+        return None;
     }
-    if let Err(error) = model.explorer.reload(&root) {
-        report_error(model, "failed to refresh", &root, error);
-    }
+    Some(Effect::feature(
+        model
+            .explorer
+            .reload_request(&root, ExplorerRefreshKind::External),
+    ))
 }
 
 fn toggle_ignored_files(model: &mut Model) {
@@ -104,6 +100,20 @@ mod tests {
         manager::message_manager::MessageManager,
         startup::initial_model,
     };
+
+    fn apply(model: &mut Model, effect: Effect) {
+        match effect {
+            Effect::Feature(request) => {
+                MessageManager::default().update(model, request.perform());
+            }
+            Effect::Batch(effects) => {
+                for effect in effects {
+                    apply(model, effect);
+                }
+            }
+            _ => {}
+        }
+    }
 
     #[test]
     fn unfold_and_fold_preserve_the_workspace_root() {
@@ -141,10 +151,13 @@ mod tests {
         assert!(model.explorer.entries.is_empty());
 
         std::fs::write(directory.path().join("new.txt"), "new").unwrap();
-        manager.update(
+        let effect = manager.update(
             &mut model,
             Message::InvokeCommand(CommandId("refresh_explorer")),
         );
+        if let Some(effect) = effect {
+            apply(&mut model, effect);
+        }
 
         assert_eq!(model.explorer.entries.len(), 1);
         assert_eq!(model.explorer.selected, Some(0));

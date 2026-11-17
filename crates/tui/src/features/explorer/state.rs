@@ -5,7 +5,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use super::fs;
+use super::{
+    fs,
+    work::{ExplorerRefreshKind, ExplorerRequest},
+};
 use crate::{data_object::Visibility, navigation::VerticalNavigation};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,6 +60,7 @@ pub struct ExplorerState {
     pub selected: Option<usize>,
     expanded_directories: HashSet<PathBuf>,
     ignore_mode: IgnoreMode,
+    refresh_generation: u64,
 }
 
 impl Default for ExplorerState {
@@ -67,11 +71,32 @@ impl Default for ExplorerState {
             selected: None,
             expanded_directories: HashSet::new(),
             ignore_mode: IgnoreMode::HideIgnored,
+            refresh_generation: 0,
         }
     }
 }
 
 impl ExplorerState {
+    pub(crate) fn reload_request(
+        &mut self,
+        root: &Path,
+        kind: ExplorerRefreshKind,
+    ) -> ExplorerRequest {
+        self.refresh_generation = self.refresh_generation.wrapping_add(1);
+        ExplorerRequest {
+            root: root.to_path_buf(),
+            expanded_directories: self.expanded_directories.clone(),
+            ignore_mode: self.ignore_mode,
+            selected_path: self.selected_entry().map(|entry| entry.path.clone()),
+            generation: self.refresh_generation,
+            kind,
+        }
+    }
+
+    pub(super) fn refresh_generation(&self) -> u64 {
+        self.refresh_generation
+    }
+
     /// Load the root's immediate children and select the first entry.
     pub fn load(root: &Path) -> io::Result<Self> {
         let state = Self::default();

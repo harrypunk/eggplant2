@@ -21,10 +21,10 @@ pub fn file_changed(model: &mut Model, path: &Path, kind: ExternalChangeKind) ->
     if is_repository_index_change(path) {
         return crate::vcs::sync_changes(model);
     }
-    match kind {
+    let explorer = match kind {
         ExternalChangeKind::Structure => crate::explorer::refresh_changed(model, path),
-        ExternalChangeKind::Content => {}
-    }
+        ExternalChangeKind::Content => None,
+    };
     let picker = match kind {
         ExternalChangeKind::Structure => model
             .workspace
@@ -35,8 +35,11 @@ pub fn file_changed(model: &mut Model, path: &Path, kind: ExternalChangeKind) ->
     };
     let picker = picker.map(Effect::feature);
     Effect::combine(
-        crate::vcs::sync_changes(model),
-        Effect::combine(picker, reload_buffer(model, path)),
+        explorer,
+        Effect::combine(
+            crate::vcs::sync_changes(model),
+            Effect::combine(picker, reload_buffer(model, path)),
+        ),
     )
 }
 
@@ -176,6 +179,19 @@ mod tests {
         }
     }
 
+    fn external_change(model: &mut Model, path: PathBuf) {
+        let effect = MessageManager::default().update(
+            model,
+            Message::ExternalFileChanged {
+                path,
+                kind: ExternalChangeKind::Structure,
+            },
+        );
+        if let Some(effect) = effect {
+            apply(model, effect);
+        }
+    }
+
     #[test]
     fn git_head_and_reference_events_are_detected_without_treating_index_as_head() {
         for path in [
@@ -232,13 +248,7 @@ mod tests {
 
         let created = directory.path().join("c.txt");
         std::fs::write(&created, "c").unwrap();
-        manager.update(
-            &mut model,
-            Message::ExternalFileChanged {
-                path: created.clone(),
-                kind: ExternalChangeKind::Structure,
-            },
-        );
+        external_change(&mut model, created.clone());
         assert!(
             model
                 .explorer
@@ -249,13 +259,7 @@ mod tests {
         assert_eq!(model.explorer.selected_entry().unwrap().path, selected);
 
         std::fs::remove_file(&first).unwrap();
-        manager.update(
-            &mut model,
-            Message::ExternalFileChanged {
-                path: first.clone(),
-                kind: ExternalChangeKind::Structure,
-            },
-        );
+        external_change(&mut model, first.clone());
         assert!(
             !model
                 .explorer
@@ -267,13 +271,7 @@ mod tests {
 
         let renamed = directory.path().join("d.txt");
         std::fs::rename(&created, &renamed).unwrap();
-        manager.update(
-            &mut model,
-            Message::ExternalFileChanged {
-                path: renamed.clone(),
-                kind: ExternalChangeKind::Structure,
-            },
-        );
+        external_change(&mut model, renamed.clone());
         assert!(
             model
                 .explorer

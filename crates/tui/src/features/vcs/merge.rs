@@ -436,14 +436,15 @@ impl Completion for MergeCompletion {
             None => format!("Switched to {target}; already up to date"),
         });
         let effect = repository_changed(model);
-        if let Some(root) = model
+        let explorer = model
             .workspace
             .as_ref()
             .map(|workspace| workspace.root().to_path_buf())
-        {
-            crate::explorer::refresh_changed(model, &root);
-        }
-        Effect::combine(effect, crate::external_sync::reload_open_buffers(model))
+            .and_then(|root| crate::explorer::refresh_changed(model, &root));
+        Effect::combine(
+            Effect::combine(effect, explorer),
+            crate::external_sync::reload_open_buffers(model),
+        )
     }
 }
 
