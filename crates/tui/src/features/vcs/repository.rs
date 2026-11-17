@@ -11,6 +11,58 @@ use super::{
     buffer_diff::BufferDiffApply, change_workflow::refresh_changes, history::refresh_history,
 };
 
+#[derive(Debug, Default)]
+pub struct RepositoryState {
+    pub(super) head: Option<String>,
+    pub(super) target: Option<PathBuf>,
+    pub(super) revision: u64,
+    pub(super) refreshing: bool,
+}
+
+impl RepositoryState {
+    pub fn head(&self) -> Option<&str> {
+        self.head.as_deref()
+    }
+
+    pub(super) fn cancel(&mut self) {
+        self.refreshing = false;
+    }
+
+    pub(super) fn refresh(&mut self, target: Option<PathBuf>) -> Option<HeadRequest> {
+        let Some(target) = target else {
+            self.target = None;
+            self.head = None;
+            self.refreshing = false;
+            self.revision = self.revision.wrapping_add(1);
+            return None;
+        };
+        if self.target.as_ref() == Some(&target) && self.refreshing {
+            return None;
+        }
+        self.target = Some(target.clone());
+        self.refreshing = true;
+        self.revision = self.revision.wrapping_add(1);
+        Some(HeadRequest {
+            target,
+            revision: self.revision,
+        })
+    }
+
+    pub(super) fn complete(
+        &mut self,
+        target: PathBuf,
+        revision: u64,
+        head: Option<String>,
+    ) -> bool {
+        if self.revision != revision || self.target.as_ref() != Some(&target) {
+            return false;
+        }
+        self.refreshing = false;
+        self.head = head;
+        true
+    }
+}
+
 /// Load the active buffer's HEAD base once, without blocking the editor.
 pub fn sync_active_buffer(model: &mut Model) -> Option<Effect> {
     let (buffer_id, revision) = model.editor.active_revision()?;
@@ -39,7 +91,7 @@ pub fn refresh_buffer_base(model: &mut Model, buffer_id: BufferId) -> Option<Eff
 /// Invalidate Git metadata and schedule fresh HEAD, status, and active-buffer state.
 pub fn repository_changed(model: &mut Model) -> Option<Effect> {
     model.vcs.buffer_diff.invalidate_all();
-    model.vcs.refreshing = false;
+    model.vcs.repository.cancel();
     model.vcs.changes.cancel();
     if model.vcs.history == super::HistoryState::Loading {
         model.vcs.history = super::HistoryState::Idle;
@@ -52,25 +104,11 @@ pub fn repository_changed(model: &mut Model) -> Option<Effect> {
 
 /// Start one background HEAD lookup, preserving the previous label until completion.
 pub fn refresh(model: &mut Model) -> Option<Effect> {
-    let target = repository_target(model);
-    let Some(target) = target else {
-        model.vcs.target = None;
-        model.vcs.head = None;
-        model.vcs.refreshing = false;
-        model.vcs.revision = model.vcs.revision.wrapping_add(1);
-        return None;
-    };
-    if model.vcs.target.as_ref() == Some(&target) && model.vcs.refreshing {
-        return None;
-    }
-
-    model.vcs.target = Some(target.clone());
-    model.vcs.refreshing = true;
-    model.vcs.revision = model.vcs.revision.wrapping_add(1);
-    Some(Effect::feature(HeadRequest {
-        target,
-        revision: model.vcs.revision,
-    }))
+    model
+        .vcs
+        .repository
+        .refresh(repository_target(model))
+        .map(Effect::feature)
 }
 
 pub(crate) fn repository_target(model: &Model) -> Option<PathBuf> {
@@ -135,7 +173,7 @@ impl Completion for BufferDiffCompletion {
     }
 }
 
-struct HeadRequest {
+pub(super) struct HeadRequest {
     target: PathBuf,
     revision: u64,
 }
@@ -159,11 +197,35 @@ pub(super) struct HeadCompletion {
 
 impl Completion for HeadCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        if model.vcs.revision != self.revision || model.vcs.target.as_ref() != Some(&self.target) {
-            return None;
-        }
-        model.vcs.refreshing = false;
-        model.vcs.head = self.head;
+        model
+            .vcs
+            .repository
+            .complete(self.target, self.revision, self.head);
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn head_refresh_coalesces_and_rejects_stale_completion() {
+        let root = PathBuf::from("/workspace");
+        let mut state = RepositoryState::default();
+        let request = state.refresh(Some(root.clone())).unwrap();
+        assert!(state.refresh(Some(root.clone())).is_none());
+        assert!(!state.complete(
+            root.clone(),
+            request.revision.wrapping_sub(1),
+            Some("stale".to_string())
+        ));
+        assert!(state.complete(root, request.revision, Some("main".to_string())));
+        assert_eq!(state.head(), Some("main"));
+        assert!(!state.refreshing);
+
+        assert!(state.refresh(None).is_none());
+        assert_eq!(state.head(), None);
+        assert_eq!(state.target, None);
     }
 }

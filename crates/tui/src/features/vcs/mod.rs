@@ -31,6 +31,7 @@ use history::{
     select_history, toggle_history_file_diff, toggle_history_files,
 };
 use merge::MergeState;
+use repository::RepositoryState;
 
 pub use crate::component::diff::DiffState;
 pub(crate) use change_workflow::{refresh_changes, sync_changes};
@@ -57,10 +58,7 @@ const DIFF_LIMIT: usize = 200;
 
 #[derive(Debug)]
 pub struct VcsState {
-    head: Option<String>,
-    target: Option<PathBuf>,
-    revision: u64,
-    refreshing: bool,
+    repository: RepositoryState,
     pub(crate) history: HistoryState,
     pub(crate) history_pane: HistoryPane,
     pub(crate) history_has_more: bool,
@@ -93,10 +91,7 @@ pub struct VcsState {
 impl Default for VcsState {
     fn default() -> Self {
         Self {
-            head: None,
-            target: None,
-            revision: 0,
-            refreshing: false,
+            repository: RepositoryState::default(),
             history: HistoryState::Idle,
             history_pane: HistoryPane::List,
             history_has_more: false,
@@ -130,7 +125,7 @@ impl Default for VcsState {
 
 impl VcsState {
     pub fn head(&self) -> Option<&str> {
-        self.head.as_deref()
+        self.repository.head()
     }
 
     pub fn history(&self) -> &HistoryState {
@@ -377,12 +372,12 @@ mod tests {
             workspace: Some(Workspace::new(root.clone())),
             ..Model::default()
         };
-        model.vcs.head = Some("old".to_string());
+        model.vcs.repository.head = Some("old".to_string());
 
         assert!(refresh(&mut model).is_some());
         assert!(refresh(&mut model).is_none());
         assert_eq!(model.vcs.head(), Some("old"));
-        let revision = model.vcs.revision;
+        let revision = model.vcs.repository.revision;
 
         Box::new(HeadCompletion {
             target: root.clone(),
@@ -391,7 +386,7 @@ mod tests {
         })
         .update(&mut model);
         assert_eq!(model.vcs.head(), Some("old"));
-        assert!(model.vcs.refreshing);
+        assert!(model.vcs.repository.refreshing);
 
         Box::new(HeadCompletion {
             target: root,
@@ -400,12 +395,12 @@ mod tests {
         })
         .update(&mut model);
         assert_eq!(model.vcs.head(), Some("main"));
-        assert!(!model.vcs.refreshing);
+        assert!(!model.vcs.repository.refreshing);
 
         model.workspace = None;
         assert!(refresh(&mut model).is_none());
         assert_eq!(model.vcs.head(), None);
-        assert_eq!(model.vcs.target, None);
+        assert_eq!(model.vcs.repository.target, None);
     }
 
     #[test]
