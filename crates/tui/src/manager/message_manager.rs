@@ -54,15 +54,6 @@ impl MessageManager {
             }
             Message::OpenSelected => return self.open_selected(model),
             Message::FileOpened(completion) => return Self::finish_open_file(model, completion),
-            Message::FileScanFinished { revision, result } => {
-                return file_picker::complete_scan(model, revision, result);
-            }
-            Message::FileFilterFinished { revision, results } => {
-                return file_picker::complete_filter(model, revision, results);
-            }
-            Message::FilePreviewFinished { revision, preview } => {
-                file_picker::complete_preview(model, revision, preview);
-            }
             Message::FocusLost => return buffer::save_active(model),
             Message::ExternalFileChanged { path, kind } => {
                 return crate::external_sync::file_changed(model, &path, kind);

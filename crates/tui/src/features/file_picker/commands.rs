@@ -4,9 +4,7 @@ use crate::{
     manager::effect::Effect,
 };
 
-use super::{FileEntry, PreviewState};
-
-/// File-picker commands and completion coordination.
+/// File-picker command adapter.
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     match id.as_str() {
         "open_file_picker" => open(model),
@@ -43,33 +41,6 @@ pub(crate) fn insert_char(model: &mut Model, character: char) -> Option<Effect> 
         .map(Effect::feature)
 }
 
-pub(crate) fn complete_scan(
-    model: &mut Model,
-    revision: u64,
-    result: Result<Vec<FileEntry>, String>,
-) -> Option<Effect> {
-    let root = model.workspace.as_ref()?.root().to_path_buf();
-    model
-        .file_picker
-        .complete_scan(&root, revision, result)
-        .map(Effect::feature)
-}
-
-pub(crate) fn complete_filter(
-    model: &mut Model,
-    revision: u64,
-    results: Vec<FileEntry>,
-) -> Option<Effect> {
-    model
-        .file_picker
-        .complete_filter(revision, results)
-        .map(Effect::feature)
-}
-
-pub(crate) fn complete_preview(model: &mut Model, revision: u64, preview: PreviewState) {
-    model.file_picker.complete_preview(revision, preview);
-}
-
 pub(crate) fn close(model: &mut Model) {
     model.file_picker.close();
     model
@@ -100,6 +71,7 @@ mod tests {
     use crate::{
         data_object::{Message, Visibility},
         explorer::ExpansionState,
+        file_picker::PreviewState,
         manager::message_manager::MessageManager,
         startup::initial_model,
     };

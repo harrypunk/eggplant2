@@ -10,8 +10,12 @@ use nucleo_matcher::{
     pattern::{CaseMatching, Normalization, Pattern},
 };
 
-use super::{FileEntry, PREVIEW_VIEWPORT_HEIGHT, PreviewState, ScanDepth};
-use crate::{data_object::Message, filesystem::workspace_walk, manager::effect::FeatureEffect};
+use super::{FileEntry, FilePickerState, PREVIEW_VIEWPORT_HEIGHT, PreviewState, ScanDepth};
+use crate::{
+    data_object::{Message, Model},
+    filesystem::workspace_walk,
+    manager::effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
+};
 
 const PREVIEW_VIEWPORT_WIDTH: u16 = 80;
 
@@ -36,12 +40,12 @@ pub enum FilePickerRequest {
 
 impl FilePickerRequest {
     pub fn perform(self) -> Message {
-        match self {
+        let completion = match self {
             Self::Scan {
                 root,
                 depth,
                 revision,
-            } => Message::FileScanFinished {
+            } => FilePickerCompletion::Scan {
                 revision,
                 result: scan_files(&root, depth),
             },
@@ -49,7 +53,7 @@ impl FilePickerRequest {
                 files,
                 query,
                 revision,
-            } => Message::FileFilterFinished {
+            } => FilePickerCompletion::Filter {
                 revision,
                 results: filter_files(&files, &query),
             },
@@ -57,17 +61,58 @@ impl FilePickerRequest {
                 documents,
                 path,
                 revision,
-            } => Message::FilePreviewFinished {
+            } => FilePickerCompletion::Preview {
                 revision,
                 preview: read_preview(&documents, &path),
             },
-        }
+        };
+        Message::FeatureCompletion(FeatureCompletion::new(completion))
     }
 }
 
 impl FeatureEffect for FilePickerRequest {
     fn perform(self: Box<Self>) -> Message {
         FilePickerRequest::perform(*self)
+    }
+}
+
+enum FilePickerCompletion {
+    Scan {
+        revision: u64,
+        result: Result<Vec<FileEntry>, String>,
+    },
+    Filter {
+        revision: u64,
+        results: Vec<FileEntry>,
+    },
+    Preview {
+        revision: u64,
+        preview: PreviewState,
+    },
+}
+
+impl FilePickerCompletion {
+    fn apply(self, picker: &mut FilePickerState, root: Option<&Path>) -> Option<FilePickerRequest> {
+        match self {
+            Self::Scan { revision, result } => picker.complete_scan(root?, revision, result),
+            Self::Filter { revision, results } => picker.complete_filter(revision, results),
+            Self::Preview { revision, preview } => {
+                picker.complete_preview(revision, preview);
+                None
+            }
+        }
+    }
+}
+
+impl Completion for FilePickerCompletion {
+    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
+        let Model {
+            file_picker,
+            workspace,
+            ..
+        } = model;
+        let root = workspace.as_ref().map(|workspace| workspace.root());
+        self.apply(file_picker, root).map(Effect::feature)
     }
 }
 

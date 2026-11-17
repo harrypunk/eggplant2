@@ -55,4 +55,4 @@ Effect handlers may use shared capabilities, but they must not capture mutable a
 1. **Command invocations** represent user or automation intent and use stable `CommandId`s.
 2. **Feature messages/completions** represent internal state transitions and worker results. These can remain feature-specific enums during the internal edition.
 
-The shell routes a completion to its owning feature without understanding the domain payload. Stable request IDs, buffer IDs, and feature revisions reject stale results. Dynamic type erasure is not required until static feature composition becomes an actual external-interface problem.
+The shell routes a completion to its owning feature without understanding the domain payload. Stable request IDs, buffer IDs, and feature revisions reject stale results. File-picker scan/filter/preview work uses a typed `FilePickerCompletion` that applies directly to `FilePickerState` with an optional workspace root; the global `Message` enum and shell coordinator contain no picker-specific completion variants. Dynamic type erasure is not required until static feature composition becomes an actual external-interface problem.

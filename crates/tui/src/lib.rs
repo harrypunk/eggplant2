@@ -39,22 +39,12 @@ pub mod data_object {
     use crate::manager::effect::FeatureCompletion;
 
     use crate::{
-        buffer_grep::BufferGrepState,
-        buffer_jump::BufferJumpState,
-        buffer_navigation::BufferNavigationState,
-        capabilities::page_scroll::PageScroll,
-        change::ChangeState,
-        command_menu::CommandMenuState,
-        explorer::ExplorerState,
-        file_picker::{FileEntry, FilePickerState, PreviewState},
-        line_jump::LineJumpState,
-        project_grep::ProjectGrepState,
-        register::RegisterState,
-        theme::Theme,
-        theme_picker::ThemePickerState,
-        tools::ToolsPanelState,
-        vcs::VcsState,
-        yank::YankState,
+        buffer_grep::BufferGrepState, buffer_jump::BufferJumpState,
+        buffer_navigation::BufferNavigationState, capabilities::page_scroll::PageScroll,
+        change::ChangeState, command_menu::CommandMenuState, explorer::ExplorerState,
+        file_picker::FilePickerState, line_jump::LineJumpState, project_grep::ProjectGrepState,
+        register::RegisterState, theme::Theme, theme_picker::ThemePickerState,
+        tools::ToolsPanelState, vcs::VcsState, yank::YankState,
     };
 
     /// Stable semantic command identity shared by keymaps and feature handlers.
@@ -287,18 +277,6 @@ pub mod data_object {
         },
         Resize(u16, u16),
         OpenSelected,
-        FileScanFinished {
-            revision: u64,
-            result: Result<Vec<FileEntry>, String>,
-        },
-        FileFilterFinished {
-            revision: u64,
-            results: Vec<FileEntry>,
-        },
-        FilePreviewFinished {
-            revision: u64,
-            preview: PreviewState,
-        },
         GotoBuffer(usize),
     }
 
