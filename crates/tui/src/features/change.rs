@@ -1,5 +1,5 @@
 use crate::{
-    data_object::{AppPage, CommandId, Context, Model, PendingInput, StatusMessage},
+    data_object::{CommandId, Context, Model, PendingInput, StatusMessage},
     editing::{self, EditingTarget, target},
     manager::{
         command_registry::{Command, CommandRegistry},
@@ -148,9 +148,8 @@ pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
 
 fn start(model: &mut Model, pending: PendingChange) {
     // Normal d/c are prefixes; Visual d/c use direct selection commands instead.
-    let normal_context = match model.active_page {
-        AppPage::VcsCommit => target::commit_message(model).normal_context(),
-        _ => target::main_editor(model).normal_context(),
+    let Some(normal_context) = target::with_active(model, |target| target.normal_context()) else {
+        return;
     };
     if model.context_stack.last() != Some(&normal_context) {
         return;
@@ -172,13 +171,10 @@ fn reset(model: &mut Model) {
 }
 
 fn delete_grapheme(model: &mut Model) -> Option<Effect> {
-    match model.active_page {
-        AppPage::VcsCommit => delete_grapheme_with(&mut target::commit_message(model)),
-        _ => delete_grapheme_with(&mut target::main_editor(model)),
-    }
+    target::with_active(model, |target| delete_grapheme_with(target)).flatten()
 }
 
-fn delete_grapheme_with(target: &mut impl EditingTarget) -> Option<Effect> {
+fn delete_grapheme_with(target: &mut dyn EditingTarget) -> Option<Effect> {
     if !target.is_editing_enabled() {
         return None;
     }
@@ -194,14 +190,11 @@ fn delete_grapheme_with(target: &mut impl EditingTarget) -> Option<Effect> {
 }
 
 fn delete_selection(model: &mut Model, operation: SelectionOperation) -> Option<Effect> {
-    match model.active_page {
-        AppPage::VcsCommit => delete_selection_with(&mut target::commit_message(model), operation),
-        _ => delete_selection_with(&mut target::main_editor(model), operation),
-    }
+    target::with_active(model, |target| delete_selection_with(target, operation)).flatten()
 }
 
 fn delete_selection_with(
-    target: &mut impl EditingTarget,
+    target: &mut dyn EditingTarget,
     operation: SelectionOperation,
 ) -> Option<Effect> {
     if !target.is_editing_enabled() {
@@ -238,13 +231,10 @@ fn delete_selection_with(
 
 fn delete_line(model: &mut Model) -> Option<Effect> {
     reset(model);
-    match model.active_page {
-        AppPage::VcsCommit => delete_line_with(&mut target::commit_message(model)),
-        _ => delete_line_with(&mut target::main_editor(model)),
-    }
+    target::with_active(model, |target| delete_line_with(target)).flatten()
 }
 
-fn delete_line_with(target: &mut impl EditingTarget) -> Option<Effect> {
+fn delete_line_with(target: &mut dyn EditingTarget) -> Option<Effect> {
     if !target.is_editing_enabled() {
         return None;
     }
@@ -261,13 +251,10 @@ fn delete_line_with(target: &mut impl EditingTarget) -> Option<Effect> {
 
 fn change_line(model: &mut Model) -> Option<Effect> {
     reset(model);
-    match model.active_page {
-        AppPage::VcsCommit => change_line_with(&mut target::commit_message(model)),
-        _ => change_line_with(&mut target::main_editor(model)),
-    }
+    target::with_active(model, |target| change_line_with(target)).flatten()
 }
 
-fn change_line_with(target: &mut impl EditingTarget) -> Option<Effect> {
+fn change_line_with(target: &mut dyn EditingTarget) -> Option<Effect> {
     if !target.is_editing_enabled() {
         return None;
     }
@@ -285,13 +272,10 @@ fn change_line_with(target: &mut impl EditingTarget) -> Option<Effect> {
 
 fn delete_word(model: &mut Model) -> Option<Effect> {
     reset(model);
-    match model.active_page {
-        AppPage::VcsCommit => delete_word_with(&mut target::commit_message(model)),
-        _ => delete_word_with(&mut target::main_editor(model)),
-    }
+    target::with_active(model, |target| delete_word_with(target)).flatten()
 }
 
-fn delete_word_with(target: &mut impl EditingTarget) -> Option<Effect> {
+fn delete_word_with(target: &mut dyn EditingTarget) -> Option<Effect> {
     if !target.is_editing_enabled() {
         return None;
     }
@@ -308,13 +292,10 @@ fn delete_word_with(target: &mut impl EditingTarget) -> Option<Effect> {
 
 fn change_word(model: &mut Model) -> Option<Effect> {
     reset(model);
-    match model.active_page {
-        AppPage::VcsCommit => change_word_with(&mut target::commit_message(model)),
-        _ => change_word_with(&mut target::main_editor(model)),
-    }
+    target::with_active(model, |target| change_word_with(target)).flatten()
 }
 
-fn change_word_with(target: &mut impl EditingTarget) -> Option<Effect> {
+fn change_word_with(target: &mut dyn EditingTarget) -> Option<Effect> {
     if !target.is_editing_enabled() {
         return None;
     }
@@ -334,7 +315,7 @@ fn change_word_with(target: &mut impl EditingTarget) -> Option<Effect> {
 mod tests {
     use super::*;
     use crate::{
-        data_object::{Message, Workspace},
+        data_object::{AppPage, Message, Workspace},
         manager::message_manager::MessageManager,
         test_utils::create_buffer,
         vcs::ChangesState,

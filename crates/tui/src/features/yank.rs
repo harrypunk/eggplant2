@@ -2,7 +2,7 @@ use editor::{BufferId, PastePosition};
 use helix_view::clipboard::{ClipboardProvider, ClipboardType};
 
 use crate::{
-    data_object::{AppPage, CommandId, Context, Message, Model, PendingInput, StatusMessage},
+    data_object::{CommandId, Context, Message, Model, PendingInput, StatusMessage},
     editing::{EditingTarget, target},
     manager::{
         command_registry::{Command, CommandRegistry},
@@ -122,13 +122,10 @@ pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
 }
 
 fn yank_selection(model: &mut Model) -> Option<Effect> {
-    match model.active_page {
-        AppPage::VcsCommit => yank_selection_with(&mut target::commit_message(model)),
-        _ => yank_selection_with(&mut target::main_editor(model)),
-    }
+    target::with_active(model, |target| yank_selection_with(target)).flatten()
 }
 
-fn yank_selection_with(target: &mut impl EditingTarget) -> Option<Effect> {
+fn yank_selection_with(target: &mut dyn EditingTarget) -> Option<Effect> {
     if !target.is_editing_enabled() {
         return None;
     }
@@ -144,13 +141,10 @@ fn yank_selection_with(target: &mut impl EditingTarget) -> Option<Effect> {
 
 fn yank_current_line(model: &mut Model) -> Option<Effect> {
     reset(model);
-    match model.active_page {
-        AppPage::VcsCommit => yank_current_line_with(&mut target::commit_message(model)),
-        _ => yank_current_line_with(&mut target::main_editor(model)),
-    }
+    target::with_active(model, |target| yank_current_line_with(target)).flatten()
 }
 
-fn yank_current_line_with(target: &mut impl EditingTarget) -> Option<Effect> {
+fn yank_current_line_with(target: &mut dyn EditingTarget) -> Option<Effect> {
     if !target.is_editing_enabled() {
         return None;
     }
@@ -181,30 +175,23 @@ fn paste(model: &mut Model, position: PastePosition) -> Option<Effect> {
 }
 
 fn paste_direct(model: &mut Model, position: PastePosition) -> Option<Effect> {
-    match model.active_page {
-        AppPage::VcsCommit => paste_with(&mut target::commit_message(model), position),
-        _ => paste_with(&mut target::main_editor(model), position),
-    }
+    target::with_active(model, |target| paste_with(target, position)).flatten()
 }
 
 fn paste_enabled(model: &mut Model) -> bool {
-    match model.active_page {
-        AppPage::VcsCommit => target::commit_message(model).is_editing_enabled(),
-        _ => target::main_editor(model).is_editing_enabled(),
-    }
+    target::with_active(model, |target| target.is_editing_enabled()).unwrap_or(false)
 }
 
 fn current_paste_target(model: &mut Model) -> Option<PasteTarget> {
-    let (buffer_id, revision) = match model.active_page {
-        AppPage::VcsCommit => model.vcs.commit.editor.active_revision(),
-        _ => model.editor.active_revision(),
-    }?;
-    Some(match model.active_page {
-        AppPage::VcsCommit => PasteTarget::Commit {
+    let kind = target::active_kind(model)?;
+    let (buffer_id, revision) =
+        target::with_active(model, |target| target.session().active_revision()).flatten()?;
+    Some(match kind {
+        target::EditingTargetKind::Commit => PasteTarget::Commit {
             buffer_id,
             revision,
         },
-        _ => PasteTarget::Main {
+        target::EditingTargetKind::Main => PasteTarget::Main {
             buffer_id,
             revision,
         },
@@ -212,23 +199,24 @@ fn current_paste_target(model: &mut Model) -> Option<PasteTarget> {
 }
 
 fn target_is_current(model: &mut Model, target: PasteTarget) -> bool {
-    match target {
+    let (kind, buffer_id, revision) = match target {
         PasteTarget::Main {
             buffer_id,
             revision,
-        } => {
-            model.active_page == AppPage::Editor
-                && model.editor.active_revision() == Some((buffer_id, revision))
-        }
+        } => (target::EditingTargetKind::Main, buffer_id, revision),
         PasteTarget::Commit {
             buffer_id,
             revision,
-        } => {
-            model.active_page == AppPage::VcsCommit
-                && model.vcs.commit.is_editing()
-                && model.vcs.commit.editor.active_revision() == Some((buffer_id, revision))
-        }
+        } => (target::EditingTargetKind::Commit, buffer_id, revision),
+    };
+    if target::active_kind(model) != Some(kind) {
+        return false;
     }
+    target::with_active(model, |target| {
+        target.is_editing_enabled()
+            && target.session().active_revision() == Some((buffer_id, revision))
+    })
+    .unwrap_or(false)
 }
 
 struct PasteRequest {
@@ -288,7 +276,7 @@ impl Completion for PasteCompletion {
     }
 }
 
-fn paste_with(target: &mut impl EditingTarget, position: PastePosition) -> Option<Effect> {
+fn paste_with(target: &mut dyn EditingTarget, position: PastePosition) -> Option<Effect> {
     if !target.is_editing_enabled() {
         return None;
     }
@@ -306,9 +294,8 @@ fn paste_with(target: &mut impl EditingTarget, position: PastePosition) -> Optio
 
 fn start(model: &mut Model) {
     // Normal y waits for the second y; Visual y is a direct selection command.
-    let normal_context = match model.active_page {
-        AppPage::VcsCommit => target::commit_message(model).normal_context(),
-        _ => target::main_editor(model).normal_context(),
+    let Some(normal_context) = target::with_active(model, |target| target.normal_context()) else {
+        return;
     };
     if model.context_stack.last() != Some(&normal_context) {
         return;
@@ -330,7 +317,7 @@ fn reset(model: &mut Model) {
 mod tests {
     use super::*;
     use crate::{
-        data_object::{Message, Workspace},
+        data_object::{AppPage, Message, Workspace},
         manager::message_manager::MessageManager,
         test_utils::create_buffer,
         vcs::ChangesState,
@@ -397,6 +384,23 @@ mod tests {
                 .as_ref()
                 .is_some_and(|pending| pending.is_owner(Context::LineJump))
         );
+    }
+
+    #[test]
+    fn non_editing_pages_do_not_compose_paste_targets() {
+        for page in [AppPage::Vcs, AppPage::VcsHistory] {
+            let mut model = Model::default();
+            create_buffer(&mut model, "ab");
+            model.active_page = page;
+            model.register.set_provider(ClipboardProvider::None);
+            model.register.record("X".to_string());
+            let revision = model.editor.active_revision();
+
+            assert!(paste(&mut model, PastePosition::After).is_none());
+            assert!(current_paste_target(&mut model).is_none());
+            assert_eq!(model.editor.active_text_snapshot().unwrap().text, "ab");
+            assert_eq!(model.editor.active_revision(), revision);
+        }
     }
 
     #[test]

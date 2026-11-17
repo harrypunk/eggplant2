@@ -66,7 +66,7 @@ Adapters provide concrete policies:
 
 `register_text` and `record_yanked` complete the same capability for `yy`, `p`, and `P`. `ActiveEditor::paste_text` owns characterwise and linewise placement, while the target owns register and persistence policy. Explicit yanks intentionally share the register across editor and commit pages; commit deletions still do not overwrite it. When a system clipboard provider exists, paste reads it in a background effect, updates the register on completion, and applies only if the original page, buffer, and document revision are unchanged. Local-register paste remains the fallback when no provider exists.
 
-The page dispatcher is the only place that needs to select an adapter. Static generics are normally sufficient; avoid `dyn Trait` and global registries unless dynamic behavior is a real requirement.
+The page dispatcher is the only place that needs to select an adapter. `with_active` performs that composition once using `EditingTargetKind`; pages without editing do not construct a target. Reusable operations accept `&mut dyn EditingTarget` because main versus commit selection is a real runtime policy choice. Static generics remain preferable where the target is fixed. Avoid global registries unless dynamic behavior is a real requirement.
 
 ### Interface design rules
 

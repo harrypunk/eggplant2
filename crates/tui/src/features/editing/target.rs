@@ -2,7 +2,7 @@ use editor::EditorSession;
 
 use crate::{
     buffer,
-    data_object::{Context, Model},
+    data_object::{AppPage, Context, Model},
     manager::effect::Effect,
 };
 
@@ -43,8 +43,28 @@ pub(crate) trait EditingTarget {
     fn after_edit(&mut self) -> Option<Effect>;
 }
 
-pub(crate) fn main_editor(model: &mut Model) -> impl EditingTarget + '_ {
-    MainEditingTarget { model }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum EditingTargetKind {
+    Main,
+    Commit,
+}
+
+pub(crate) fn active_kind(model: &Model) -> Option<EditingTargetKind> {
+    match model.active_page {
+        AppPage::Editor => Some(EditingTargetKind::Main),
+        AppPage::VcsCommit => Some(EditingTargetKind::Commit),
+        AppPage::Vcs | AppPage::VcsHistory => None,
+    }
+}
+
+pub(crate) fn with_active<R>(
+    model: &mut Model,
+    operation: impl FnOnce(&mut dyn EditingTarget) -> R,
+) -> Option<R> {
+    match active_kind(model)? {
+        EditingTargetKind::Main => Some(operation(&mut MainEditingTarget { model })),
+        EditingTargetKind::Commit => Some(operation(&mut CommitEditingTarget { model })),
+    }
 }
 
 struct MainEditingTarget<'a> {
@@ -79,10 +99,6 @@ impl EditingTarget for MainEditingTarget<'_> {
     fn after_edit(&mut self) -> Option<Effect> {
         buffer::auto_save_active(self.model)
     }
-}
-
-pub(crate) fn commit_message(model: &mut Model) -> impl EditingTarget + '_ {
-    CommitEditingTarget { model }
 }
 
 struct CommitEditingTarget<'a> {
