@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use editor::BufferTextSnapshot;
 
-use super::GrepMatch;
+use super::{BufferGrepState, GrepMatch};
 use crate::{
     data_object::{Message, Model},
     manager::effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
@@ -46,17 +46,65 @@ struct BufferGrepCompletion {
     result: Result<Vec<GrepMatch>, String>,
 }
 
-impl Completion for BufferGrepCompletion {
-    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        let active_revision = model.editor.active_revision();
-        if model.buffer_grep.complete(
+impl BufferGrepCompletion {
+    fn apply(
+        self,
+        state: &mut BufferGrepState,
+        active_revision: Option<(editor::BufferId, i32)>,
+    ) -> bool {
+        state.complete(
             self.query_revision,
             self.source,
             active_revision,
             self.result,
-        ) {
+        )
+    }
+}
+
+impl Completion for BufferGrepCompletion {
+    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
+        let active_revision = model.editor.active_revision();
+        if self.apply(&mut model.buffer_grep, active_revision) {
             super::refresh_preview(model);
         }
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use editor::{DocumentFactory, EditorSession};
+
+    use super::*;
+    use crate::buffer_grep::SearchStatus;
+
+    #[test]
+    fn completion_applies_with_explicit_active_buffer_identity() {
+        let mut session = EditorSession::new();
+        let buffer_id = session.insert_document(DocumentFactory::new().create(""));
+        let identity = (buffer_id, 4);
+        let mut state = BufferGrepState::default();
+        state.open(BufferTextSnapshot {
+            buffer_id,
+            revision: 4,
+            text: "hello".to_string(),
+        });
+        let request = state.insert('e').expect("typing should start a search");
+
+        let stale = BufferGrepCompletion {
+            source: identity,
+            query_revision: request.query_revision,
+            result: Ok(Vec::new()),
+        };
+        assert!(!stale.apply(&mut state, Some((buffer_id, 5))));
+        assert_eq!(state.status, SearchStatus::Searching);
+
+        let current = BufferGrepCompletion {
+            source: identity,
+            query_revision: request.query_revision,
+            result: Ok(Vec::new()),
+        };
+        assert!(current.apply(&mut state, Some(identity)));
+        assert_eq!(state.status, SearchStatus::Ready);
     }
 }
