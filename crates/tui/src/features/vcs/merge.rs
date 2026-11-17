@@ -30,10 +30,10 @@ enum MergeCompletionOutcome {
 #[derive(Debug, Default)]
 pub(crate) struct MergeState {
     phase: MergePhase,
-    pub(crate) query: String,
-    pub(crate) targets: Vec<String>,
-    pub(crate) selected: Option<usize>,
-    pub(crate) error: Option<String>,
+    query: String,
+    targets: Vec<String>,
+    selected: Option<usize>,
+    error: Option<String>,
     repository: Option<PathBuf>,
     revision: u64,
     targets_revision: u64,
@@ -54,6 +54,86 @@ impl MergeState {
 
     fn is_selecting(&self) -> bool {
         self.phase == MergePhase::Selecting
+    }
+
+    pub(crate) fn query(&self) -> &str {
+        &self.query
+    }
+
+    pub(crate) fn selected(&self) -> Option<usize> {
+        self.selected
+    }
+
+    pub(crate) fn error(&self) -> Option<&str> {
+        self.error.as_deref()
+    }
+
+    fn start(&mut self, repository: PathBuf) -> Option<u64> {
+        if self.is_merging() {
+            return None;
+        }
+        self.phase = MergePhase::Loading;
+        self.query.clear();
+        self.targets.clear();
+        self.selected = None;
+        self.error = None;
+        self.repository = Some(repository);
+        self.targets_revision = self.targets_revision.wrapping_add(1);
+        Some(self.targets_revision)
+    }
+
+    fn cancel(&mut self) -> bool {
+        if self.is_merging() {
+            return false;
+        }
+        self.phase = MergePhase::Closed;
+        self.query.clear();
+        self.targets.clear();
+        self.selected = None;
+        self.error = None;
+        true
+    }
+
+    fn insert(&mut self, character: char) {
+        if self.is_selecting() {
+            self.query.push(character);
+            self.select_first();
+        }
+    }
+
+    fn backspace(&mut self) {
+        if self.is_selecting() {
+            self.query.pop();
+            self.select_first();
+        }
+    }
+
+    fn select(&mut self, next: bool) {
+        let len = self.filtered_targets().len();
+        if len == 0 || !self.is_selecting() {
+            return;
+        }
+        let selected = self.selected.unwrap_or(0);
+        self.selected = Some(match next {
+            true => (selected + 1).min(len - 1),
+            false => selected.saturating_sub(1),
+        });
+    }
+
+    fn submit(&mut self, repository: PathBuf) -> Option<(String, u64)> {
+        if !self.is_selecting() {
+            return None;
+        }
+        let target = self.selected_target()?;
+        self.phase = MergePhase::Merging;
+        self.error = None;
+        self.repository = Some(repository);
+        self.revision = self.revision.wrapping_add(1);
+        Some((target, self.revision))
+    }
+
+    fn set_error(&mut self, error: String) {
+        self.error = Some(error);
     }
 
     pub(crate) fn filtered_targets(&self) -> Vec<&str> {
@@ -190,36 +270,21 @@ fn start(model: &mut Model) -> Option<Effect> {
         return None;
     }
     let repository = repository_target(model)?;
+    let revision = model.vcs.merge.start(repository.clone())?;
     model.vcs.help_visible = false;
-    model.vcs.merge.phase = MergePhase::Loading;
-    model.vcs.merge.query.clear();
-    model.vcs.merge.targets.clear();
-    model.vcs.merge.selected = None;
-    model.vcs.merge.error = None;
-    model.vcs.merge.repository = Some(repository.clone());
-    model.vcs.merge.targets_revision = model.vcs.merge.targets_revision.wrapping_add(1);
     model.context_stack.push(Context::VcsMerge);
     Some(Effect::feature(MergeTargetsRequest {
         repository,
-        revision: model.vcs.merge.targets_revision,
+        revision,
     }))
 }
 
 fn cancel(model: &mut Model) -> Option<Effect> {
-    if model.vcs.merge.is_merging() {
+    if !model.vcs.merge.cancel() {
         return None;
     }
-    close_prompt(model);
-    model.vcs.merge.query.clear();
-    model.vcs.merge.targets.clear();
-    model.vcs.merge.selected = None;
-    model.vcs.merge.error = None;
-    None
-}
-
-fn close_prompt(model: &mut Model) {
-    model.vcs.merge.phase = MergePhase::Closed;
     close_merge_context(model);
+    None
 }
 
 fn close_merge_context(model: &mut Model) {
@@ -229,31 +294,17 @@ fn close_merge_context(model: &mut Model) {
 }
 
 fn insert_char(model: &mut Model, character: char) -> Option<Effect> {
-    if model.vcs.merge.is_selecting() {
-        model.vcs.merge.query.push(character);
-        model.vcs.merge.select_first();
-    }
+    model.vcs.merge.insert(character);
     None
 }
 
 fn backspace(model: &mut Model) -> Option<Effect> {
-    if model.vcs.merge.is_selecting() {
-        model.vcs.merge.query.pop();
-        model.vcs.merge.select_first();
-    }
+    model.vcs.merge.backspace();
     None
 }
 
 fn select(model: &mut Model, next: bool) -> Option<Effect> {
-    let len = model.vcs.merge.filtered_targets().len();
-    if len == 0 || !model.vcs.merge.is_selecting() {
-        return None;
-    }
-    let selected = model.vcs.merge.selected.unwrap_or(0);
-    model.vcs.merge.selected = Some(match next {
-        true => (selected + 1).min(len - 1),
-        false => selected.saturating_sub(1),
-    });
+    model.vcs.merge.select(next);
     None
 }
 
@@ -262,19 +313,18 @@ fn submit(model: &mut Model) -> Option<Effect> {
         return None;
     }
     if !status_is_clean(model) {
-        model.vcs.merge.error = Some("Git status must be clean before merge".to_string());
+        model
+            .vcs
+            .merge
+            .set_error("Git status must be clean before merge".to_string());
         return None;
     }
-    let target = model.vcs.merge.selected_target()?;
     let repository = repository_target(model)?;
-    model.vcs.merge.phase = MergePhase::Merging;
-    model.vcs.merge.error = None;
-    model.vcs.merge.repository = Some(repository.clone());
-    model.vcs.merge.revision = model.vcs.merge.revision.wrapping_add(1);
+    let (target, revision) = model.vcs.merge.submit(repository.clone())?;
     Some(Effect::feature(MergeRequest {
         repository,
         target,
-        revision: model.vcs.merge.revision,
+        revision,
     }))
 }
 
@@ -465,6 +515,37 @@ mod tests {
         );
         assert!(!state.is_active());
         assert!(state.query.is_empty());
+    }
+
+    #[test]
+    fn picker_commands_are_local_state_transitions() {
+        let root = PathBuf::from("/workspace");
+        let mut state = MergeState::default();
+        let targets_revision = state.start(root.clone()).unwrap();
+        assert!(state.is_loading());
+        state.complete_targets(
+            root.clone(),
+            targets_revision,
+            None,
+            Ok(vec!["main".to_string(), "other".to_string()]),
+        );
+        state.insert('o');
+        assert_eq!(state.filtered_targets(), ["other"]);
+
+        let (target, revision) = state.submit(root.clone()).unwrap();
+        assert_eq!(target, "other");
+        assert!(state.is_merging());
+        assert!(!state.cancel());
+        assert_eq!(
+            state.complete_merge(&root, revision, Err("failed".to_string())),
+            MergeCompletionOutcome::Failed
+        );
+        assert!(state.is_selecting());
+
+        assert!(state.cancel());
+        assert!(!state.is_active());
+        assert!(state.filtered_targets().is_empty());
+        assert!(state.query().is_empty());
     }
 
     #[test]

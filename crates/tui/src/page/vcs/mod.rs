@@ -84,12 +84,12 @@ impl Vcs {
         if model.vcs.merge.is_active() {
             render_merge_popup(
                 MergePopupProps {
-                    query: &model.vcs.merge.query,
+                    query: model.vcs.merge.query(),
                     targets: model.vcs.merge.filtered_targets(),
-                    selected: model.vcs.merge.selected,
+                    selected: model.vcs.merge.selected(),
                     loading: model.vcs.merge.is_loading(),
                     merging: model.vcs.merge.is_merging(),
-                    error: model.vcs.merge.error.as_deref(),
+                    error: model.vcs.merge.error(),
                     theme: &model.theme,
                 },
                 frame,
