@@ -9,6 +9,7 @@ use crate::{
     },
 };
 
+pub(crate) mod branch;
 pub(crate) mod buffer_diff;
 mod change_workflow;
 pub(crate) mod changes;
@@ -18,6 +19,7 @@ pub(crate) mod merge;
 pub(crate) mod navigation;
 mod repository;
 
+use branch::BranchState;
 use buffer_diff::BufferDiffState;
 use change_workflow::{
     mutate_all_changes, mutate_selected_change, open_selected_change, select_change, toggle_diff,
@@ -63,6 +65,7 @@ pub struct VcsState {
     buffer_diff: BufferDiffState,
     pub(crate) notice: Option<String>,
     pub(crate) help_visible: bool,
+    pub(crate) branch: BranchState,
     pub(crate) commit: CommitState,
     pub(crate) merge: MergeState,
     documents: DocumentFactory,
@@ -77,6 +80,7 @@ impl Default for VcsState {
             buffer_diff: BufferDiffState::default(),
             notice: None,
             help_visible: false,
+            branch: BranchState::default(),
             commit: CommitState::default(),
             merge: MergeState::default(),
             documents: DocumentFactory::new(),
@@ -104,6 +108,19 @@ impl VcsState {
     pub fn documents(&self) -> &DocumentFactory {
         &self.documents
     }
+}
+
+pub(crate) fn repository_mutation_completed(model: &mut Model) -> Option<Effect> {
+    let effect = repository_changed(model);
+    let explorer = model
+        .workspace
+        .as_ref()
+        .map(|workspace| workspace.root().to_path_buf())
+        .and_then(|root| crate::explorer::refresh_changed(model, &root));
+    Effect::combine(
+        Effect::combine(effect, explorer),
+        crate::external_sync::reload_open_buffers(model),
+    )
 }
 
 pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<()> {
@@ -228,6 +245,7 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
     .into_iter()
     .try_for_each(|command| commands.register(command))?;
     commit::register_commands(commands)?;
+    branch::register_commands(commands)?;
     merge::register_commands(commands)
 }
 

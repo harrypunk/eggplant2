@@ -9,7 +9,7 @@ use crate::{
     },
 };
 
-use super::{ChangesState, repository_changed, repository_target};
+use super::{ChangesState, repository_mutation_completed, repository_target};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 enum MergePhase {
@@ -435,16 +435,7 @@ impl Completion for MergeCompletion {
             Some(id) => format!("Switched to {target} and fast-forwarded to {id}"),
             None => format!("Switched to {target}; already up to date"),
         });
-        let effect = repository_changed(model);
-        let explorer = model
-            .workspace
-            .as_ref()
-            .map(|workspace| workspace.root().to_path_buf())
-            .and_then(|root| crate::explorer::refresh_changed(model, &root));
-        Effect::combine(
-            Effect::combine(effect, explorer),
-            crate::external_sync::reload_open_buffers(model),
-        )
+        repository_mutation_completed(model)
     }
 }
 

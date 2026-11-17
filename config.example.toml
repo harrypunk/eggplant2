@@ -147,6 +147,7 @@ vcs_commit_placeholder = "c"
 vcs_help_placeholder = "?"
 open_vcs_history = "l"
 vcs_merge_start = "m"
+vcs_branch_menu = "b"
 
 [keymap.vcs_merge]
 vcs_merge_cancel = "esc"
@@ -154,6 +155,18 @@ vcs_merge_submit = "enter"
 vcs_merge_backspace = "backspace"
 vcs_merge_next = "down"
 vcs_merge_previous = "up"
+
+[keymap.vcs_branch_menu]
+vcs_branch_menu_close = "esc"
+vcs_branch_create = "c"
+vcs_branch_switch = "s"
+
+[keymap.vcs_branch]
+vcs_branch_cancel = "esc"
+vcs_branch_submit = "enter"
+vcs_branch_backspace = "backspace"
+vcs_branch_next = "down"
+vcs_branch_previous = "up"
 
 [keymap.vcs_commit]
 vcs_commit_close = "q"

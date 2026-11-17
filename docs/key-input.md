@@ -30,6 +30,14 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | VCS page | Open history page | `l` |
 | VCS page | Open commit-message page for staged changes | `c` |
 | VCS page | Open branch picker for switch & fast-forward (requires clean status) | `m` |
+| VCS page | Open bottom branch actions | `b` |
+| VCS branch menu | Create new branch / switch existing branch | `c` / `s` |
+| VCS branch menu | Close branch actions | `Esc` |
+| VCS branch picker | Filter branches or enter a short/full commit start point | Printable characters |
+| VCS branch picker | Select next / previous start point or branch | `Down` / `Up` |
+| VCS branch picker | Accept selection or submit new branch name | `Enter` |
+| VCS branch picker | Close before repository mutation starts | `Esc` |
+| VCS branch picker | Delete previous filter/name character | `Backspace` |
 | VCS merge picker | Type to filter branches | Printable characters |
 | VCS merge picker | Select next / previous branch | `Down` / `Up` |
 | VCS merge picker | Submit selected target | `Enter` |

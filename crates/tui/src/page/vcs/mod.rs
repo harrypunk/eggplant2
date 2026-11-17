@@ -1,3 +1,4 @@
+mod branch_popup;
 mod change_section;
 mod merge_popup;
 
@@ -17,6 +18,7 @@ use crate::{
 };
 
 use self::{
+    branch_popup::{BranchPopup, BranchPopupProps},
     change_section::{ChangeSection, ChangeSectionProps},
     merge_popup::{MergePopup, MergePopupProps},
 };
@@ -26,7 +28,11 @@ pub struct Vcs;
 
 impl Vcs {
     pub fn view(&self, model: &Model, frame: &mut Frame) {
-        let areas = VcsLayout::new(frame.area(), model.vcs.help_visible);
+        let areas = VcsLayout::new(
+            frame.area(),
+            model.vcs.help_visible,
+            model.vcs.branch.is_menu(),
+        );
         let styles = model.theme.ui();
         let heading = styles
             .base
@@ -34,7 +40,7 @@ impl Vcs {
             .add_modifier(Modifier::BOLD);
 
         let mut hints = vec![Line::styled(
-            "Tab toggle  s stage  u unstage  c commit  x discard  ? help",
+            "Tab toggle  s stage  u unstage  c commit  b branch  ? help",
             heading,
         )];
         if let Some(notice) = &model.vcs.notice {
@@ -81,6 +87,26 @@ impl Vcs {
         if model.vcs.help_visible {
             render_help(model, frame, areas.bottom);
         }
+        if model.vcs.branch.is_menu() {
+            render_branch_menu(model, frame, areas.bottom);
+        }
+        if model.vcs.branch.is_popup_active() {
+            BranchPopup::new(BranchPopupProps {
+                query: model.vcs.branch.query(),
+                targets: model.vcs.branch.filtered_targets(),
+                selected: model.vcs.branch.selected(),
+                creating: model.vcs.branch.is_creating(),
+                loading: model.vcs.branch.is_loading(),
+                switching: model.vcs.branch.is_switching(),
+                naming: model.vcs.branch.is_naming(),
+                selecting: model.vcs.branch.is_selecting(),
+                start: model.vcs.branch.start_description(),
+                revision: model.vcs.branch.revision_query(),
+                error: model.vcs.branch.error(),
+                theme: &model.theme,
+            })
+            .render(frame, frame.area());
+        }
         if model.vcs.merge.is_active() {
             MergePopup::new(MergePopupProps {
                 query: model.vcs.merge.query(),
@@ -104,8 +130,14 @@ struct VcsLayout {
 }
 
 impl VcsLayout {
-    fn new(area: Rect, help_visible: bool) -> Self {
-        let bottom_height = if help_visible { 5 } else { 0 };
+    fn new(area: Rect, help_visible: bool, branch_menu: bool) -> Self {
+        let bottom_height = if help_visible {
+            5
+        } else if branch_menu {
+            3
+        } else {
+            0
+        };
         let [hints, head, changes, bottom] = Layout::vertical([
             Constraint::Length(3),
             Constraint::Length(2),
@@ -135,7 +167,7 @@ fn render_help(model: &Model, frame: &mut Frame, area: Rect) {
     let styles = model.theme.ui();
     let lines = vec![
         Line::raw("s stage   u unstage   Ctrl-s stage all   U unstage all"),
-        Line::raw("Tab toggle  Enter open  l history  c commit  m merge"),
+        Line::raw("Tab toggle  Enter open  l history  c commit  b branch  m merge"),
         Line::raw("? / Esc close help    x discard (placeholder)"),
     ];
     let help = Paragraph::new(lines).block(
@@ -145,6 +177,20 @@ fn render_help(model: &Model, frame: &mut Frame, area: Rect) {
             .border_style(styles.base.patch(styles.focused_border)),
     );
     frame.render_widget(help.style(styles.base), area);
+}
+
+fn render_branch_menu(model: &Model, frame: &mut Frame, area: Rect) {
+    let styles = model.theme.ui();
+    let menu = Paragraph::new(Line::raw(
+        "c checkout new branch   s switch existing branch   Esc cancel",
+    ))
+    .block(
+        Block::new()
+            .title("Branch")
+            .borders(Borders::ALL)
+            .border_style(styles.base.patch(styles.focused_border)),
+    );
+    frame.render_widget(menu.style(styles.base), area);
 }
 
 fn head_line(model: &Model, styles: &UiTheme) -> Line<'static> {
@@ -272,6 +318,57 @@ mod tests {
         assert!(content.contains("U unstage all"));
         assert!(content.contains("? / Esc close help"));
         assert!(content.contains("└"));
+    }
+
+    #[test]
+    fn branch_actions_use_the_bottom_panel_and_open_the_start_popup() {
+        let mut model = Model {
+            workspace: Some(Workspace::new(std::path::PathBuf::from("/workspace"))),
+            ..Model::default()
+        };
+        model.context_stack.push(crate::data_object::Context::VCS);
+        let manager = crate::manager::message_manager::MessageManager::default();
+        manager.update(
+            &mut model,
+            crate::data_object::Message::InvokeCommand(crate::data_object::CommandId(
+                "vcs_branch_menu",
+            )),
+        );
+        let backend = TestBackend::new(80, 12);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal.draw(|frame| Vcs.view(&model, frame)).unwrap();
+        let content = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(content.contains("Branch"));
+        assert!(content.contains("c checkout new branch"));
+        assert!(content.contains("s switch existing branch"));
+
+        let effect = manager.update(
+            &mut model,
+            crate::data_object::Message::InvokeCommand(crate::data_object::CommandId(
+                "vcs_branch_create",
+            )),
+        );
+        assert!(matches!(
+            effect,
+            Some(crate::manager::effect::Effect::Feature(_))
+        ));
+        terminal.draw(|frame| Vcs.view(&model, frame)).unwrap();
+        let content = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(content.contains("New branch: start point"));
+        assert!(content.contains("Loading branches"));
     }
 
     #[test]

@@ -85,6 +85,13 @@ Use a repository containing both staged and unstaged changes, then open the Git 
 - [ ] Backend or save failures preserve the draft. Success clears it, returns to status, and refreshes HEAD, changes, history, and diff indicators.
 - [ ] While commit saving or Git work is active, close/quit is rejected with `Commit in progress; try again after it finishes`. While close/quit is pending, commit submission is rejected without changing the draft or deferred action.
 
+### Branch switching and creation
+
+- [ ] `b` opens the bottom Branch action bar without overloading page-local commit/stage keys. `s` lists existing local branches except the current one; filtering and Up/Down selection work, Enter switches, and Escape cancels before checkout.
+- [ ] Switch between divergent branches without moving either branch tip. Clean added/modified/deleted files follow the destination tree, while compatible staged, unstaged, and untracked changes remain intact. A conflicting local or untracked path rejects the switch with an error and leaves HEAD/worktree content unchanged.
+- [ ] `b`, then `c`, shows HEAD first followed by all local branches. Selecting HEAD or a branch advances to the new-name field. Typing a short or full commit hash also advances with that exact start point; invalid revisions and invalid/duplicate branch names report an error without changing HEAD.
+- [ ] Successful switches/creations close the popup, update HEAD/history/status/explorer/diff indicators, and reload eligible active and inactive buffers. Dirty buffers are preserved. Escape cannot cancel an in-flight mutation.
+
 ### Fast-forward merge
 
 - [ ] `m` opens a picker with existing local target branches. Typing filters, Up/Down selects, Enter switches to the target and fast-forwards it to the source branch, and Escape cancels. Backend errors remain in the popup.

@@ -11,7 +11,7 @@ The current application is intentionally lightweight: it is not a full IDE, a Vi
 - A small Vim-inspired Normal/Insert/Visual editing model with exactly one cursor/selection.
 - Automatic persistence after edits and before close/quit, with revision and external-change protection.
 - Fuzzy file opening, current/project search, and built-in themes.
-- A separate **VCS addon** for branch display, changed files, staging, and inline diffs.
+- A separate **VCS addon** for branch display, switching/creation, changed files, staging, commits, and inline diffs.
 - Narrow boundaries for future AI commands instead of direct widget or Helix access.
 
 ## Run

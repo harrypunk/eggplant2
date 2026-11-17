@@ -15,6 +15,7 @@ The addon provides:
 - Safe file opening through the shared document capability.
 - Explicit commits of already-staged changes with a multiline message editor.
 - Bounded commit history with commit details and hash copying.
+- Plain local-branch switching and creation with compatible local changes preserved.
 - Switch-and-fast-forward merges to local target branches without fetching or rewriting history.
 
 Discard remains a placeholder.
@@ -33,10 +34,13 @@ Discard remains a placeholder.
 - `ChangesController` owns changed files, selection, refresh/trailing state, index operation identity, and working-tree diff state.
 - `RepositoryState` owns HEAD refresh identity.
 - `HistoryController` owns history list/detail state, selection, caching, and refresh/pagination completion.
+- `BranchState` owns branch-menu, start-point, naming, and switching phases.
 - Active-buffer diff-base identity has a separate state object.
-- `history.rs`, `change_workflow.rs`, and `repository.rs` contain adapters and request/completion implementations instead of growing `mod.rs`.
+- `history.rs`, `change_workflow.rs`, `repository.rs`, and `branch.rs` contain adapters and request/completion implementations instead of growing `mod.rs`.
 
 History-detail completions match repository, generation, and commit identity. Cached or cross-commit transitions invalidate older detail work.
+
+The branch backend exposes local listing, existing-branch switching, and typed `BranchStartPoint` creation separately from merge. A future history action can reuse checkout without depending on popup state.
 
 The commit workflow owns a separate scratch `EditorSession` and its save-before-commit barrier. Merge has a separate clean-status policy.
 
@@ -118,6 +122,21 @@ Git status and all editor buffers must be clean before opening or submitting. Pe
 
 Remote targets, hashes, tags, arbitrary revisions, and fetching are outside this slice.
 
+## Branch switching and creation
+
+### Interaction
+
+- `b` opens a bordered bottom Branch action bar.
+- `s` opens a filtered existing-local-branch selector.
+- `c` opens a start-point selector with HEAD first, followed by all local branches.
+- A short or full hexadecimal commit ID can be entered as the start point instead.
+- Create-and-switch advances to a separate branch-name field before repository work starts.
+- The bottom bar and popup use separate input contexts, so `c` and `s` do not overload page-local commit/stage input.
+
+Cancellation is allowed before mutation but not while checkout is active. Failures remain in the current selector/name phase, and stale target or mutation completions are ignored.
+
+Plain branch switching has no automatic-save or clean-status gate. Its checkout safeguards are distinct from merge policy.
+
 ## Mutation behavior
 
 ### Shared rules
@@ -144,6 +163,19 @@ Remote targets, hashes, tags, arbitrary revisions, and fetching are outside this
 The backend holds the index lock, builds a tree from exactly the staged index, and validates identity, message, staged changes, and repository state. HEAD is updated with expected-parent protection.
 
 Unstaged and untracked content is never added implicitly. Hooks and signing are outside this slice. Success clears the draft and refreshes HEAD, status, history, and diff bases without reloading unchanged worktree files.
+
+### Plain branch switching
+
+- Existing targets resolve to exact local branches; neither branch tip moves.
+- New branches can start from HEAD, an exact local branch, or a revision resolved to a commit.
+- In-progress repository state, unborn HEAD, conflicts, sparse entries, submodules, and invalid/duplicate names are rejected.
+- A locally changed path must have identical source and target tree entries; otherwise checkout fails before mutation.
+- Compatible local index/worktree entries are retained and temporarily skipped during checkout.
+- Clean added, modified, and deleted paths update normally.
+- Unsafe untracked or ignored collisions are rejected.
+- Index and symbolic-HEAD/new-ref updates commit only after checkout, with rollback on failure.
+
+Successful switches and creations share repository, explorer, and open-buffer reconciliation with merge.
 
 ### Fast-forward merge
 

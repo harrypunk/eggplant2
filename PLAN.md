@@ -1,7 +1,7 @@
 # Eggplant first-edition plan
 
 Last updated: 2026-11-15
-Current baseline: Milestone 8 complete
+Current baseline: Milestone 9 complete
 
 ## Purpose
 
@@ -413,7 +413,15 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 - [x] Switch HEAD to the target and advance the target ref/index/worktree through the narrow backend operation; do not create merge commits or attempt conflict resolution.
 - [x] Refresh/reload repository and open-buffer state after switching to the target, and leave the repository untouched on validation or operation failure. Test target updates, already-up-to-date switches, divergent, dirty-worktree, detached-HEAD, and external-change cases.
 
-**Exit criteria:** users can inspect branch/status, changed files, active-buffer and commit diffs, and bounded history; explicitly commit staged changes; and perform safe fast-forward-only merges. All operations reuse the Helix/Gitoxide stack, preserve editing and persistence invariants, and leave ordinary editing usable when Git is unavailable. Unsupported operations fail closed with concise feedback.
+#### M9.7 — Plain branch switching and creation
+
+- [x] Add a separate local-branch catalog and typed checkout capability without reusing fast-forward policy or moving existing branch tips.
+- [x] Preserve compatible staged, unstaged, and untracked changes; reject conflicting paths, unsupported repository/index states, and unsafe untracked/ignored collisions before mutation.
+- [x] Open bottom branch actions with `b`; use `s` for existing branches and `c` for create-and-switch without overloading page-local commit/stage input.
+- [x] Select a new branch's HEAD/local-branch/short-or-full-commit start point, then enter its name in a separate phase; retain errors and reject stale completions.
+- [x] Share repository, explorer, and revision-aware open-buffer reconciliation after successful branch mutations without imposing merge's clean-status gate.
+
+**Exit criteria:** users can inspect branch/status, changed files, active-buffer and commit diffs, and bounded history; switch or create local branches with compatible local changes; explicitly commit staged changes; and perform safe fast-forward-only merges. All operations reuse the Helix/Gitoxide stack, preserve editing and persistence invariants, and leave ordinary editing usable when Git is unavailable. Unsupported operations fail closed with concise feedback.
 
 ### Milestone 10: Minimal opt-in LSP
 

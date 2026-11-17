@@ -265,6 +265,24 @@ impl Default for Config {
                     ],
                 ),
                 keymap_context(
+                    "vcs_branch_menu",
+                    [
+                        ("vcs_branch_menu_close", "esc"),
+                        ("vcs_branch_create", "c"),
+                        ("vcs_branch_switch", "s"),
+                    ],
+                ),
+                keymap_context(
+                    "vcs_branch",
+                    [
+                        ("vcs_branch_cancel", "esc"),
+                        ("vcs_branch_submit", "enter"),
+                        ("vcs_branch_backspace", "backspace"),
+                        ("vcs_branch_next", "down"),
+                        ("vcs_branch_previous", "up"),
+                    ],
+                ),
+                keymap_context(
                     "vcs",
                     [
                         ("close_vcs_page", "esc"),
@@ -282,6 +300,7 @@ impl Default for Config {
                         ("vcs_help_placeholder", "?"),
                         ("open_vcs_history", "l"),
                         ("vcs_merge_start", "m"),
+                        ("vcs_branch_menu", "b"),
                     ],
                 ),
             ]),

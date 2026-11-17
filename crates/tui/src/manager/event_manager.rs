@@ -298,6 +298,7 @@ mod tests {
             (KeyCode::Char('?'), "vcs_help_placeholder"),
             (KeyCode::Char('l'), "open_vcs_history"),
             (KeyCode::Char('m'), "vcs_merge_start"),
+            (KeyCode::Char('b'), "vcs_branch_menu"),
         ] {
             let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
             assert!(matches!(
@@ -363,6 +364,45 @@ mod tests {
             (KeyCode::Up, "vcs_merge_previous"),
             (KeyCode::Enter, "vcs_merge_submit"),
             (KeyCode::Esc, "vcs_merge_cancel"),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+    }
+
+    #[test]
+    fn routes_vcs_branch_menu_and_popup_keys() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::VcsBranchMenu);
+        for (key, command) in [
+            (KeyCode::Esc, "vcs_branch_menu_close"),
+            (KeyCode::Char('c'), "vcs_branch_create"),
+            (KeyCode::Char('s'), "vcs_branch_switch"),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+
+        model.context_stack.pop();
+        model.context_stack.push(Context::VcsBranch);
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::TextInput('x'))
+        ));
+        for (key, command) in [
+            (KeyCode::Backspace, "vcs_branch_backspace"),
+            (KeyCode::Down, "vcs_branch_next"),
+            (KeyCode::Up, "vcs_branch_previous"),
+            (KeyCode::Enter, "vcs_branch_submit"),
+            (KeyCode::Esc, "vcs_branch_cancel"),
         ] {
             let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
             assert!(matches!(
