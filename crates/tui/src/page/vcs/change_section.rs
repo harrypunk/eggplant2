@@ -1,29 +1,41 @@
+use std::path::Path;
+
 use ratatui::{Frame, layout::Rect, style::Modifier, text::Line, widgets::Paragraph};
 
 use ::vcs::{ChangeKind, FileChange};
 
 use crate::{
     component::{diff, picker},
-    data_object::Model,
-    vcs::ChangesState,
+    theme::{Theme, UiTheme},
+    vcs::{ChangesState, DiffState},
 };
 
+#[derive(Debug, Clone, Copy)]
+pub(super) struct ChangeSectionProps<'a> {
+    pub changes: &'a ChangesState,
+    pub selected: Option<usize>,
+    pub expanded: Option<(&'a Path, bool)>,
+    pub diff: &'a DiffState,
+    pub workspace_root: Option<&'a Path>,
+    pub theme: &'a Theme,
+}
+
 pub(super) struct ChangeSection<'a> {
-    model: &'a Model,
+    props: ChangeSectionProps<'a>,
     staged: bool,
 }
 
 impl<'a> ChangeSection<'a> {
-    pub(super) fn staged(model: &'a Model) -> Self {
-        Self::new(model, true)
+    pub(super) fn staged(props: ChangeSectionProps<'a>) -> Self {
+        Self::new(props, true)
     }
 
-    pub(super) fn unstaged(model: &'a Model) -> Self {
-        Self::new(model, false)
+    pub(super) fn unstaged(props: ChangeSectionProps<'a>) -> Self {
+        Self::new(props, false)
     }
 
-    fn new(model: &'a Model, staged: bool) -> Self {
-        Self { model, staged }
+    fn new(props: ChangeSectionProps<'a>, staged: bool) -> Self {
+        Self { props, staged }
     }
 
     /// Render one section and return the height consumed by the next layout.
@@ -32,7 +44,7 @@ impl<'a> ChangeSection<'a> {
         if lines.is_empty() || area.height == 0 {
             return 0;
         }
-        let styles = self.model.theme.ui();
+        let styles = self.props.theme.ui();
         let title = if self.staged {
             "Staged files"
         } else {
@@ -55,9 +67,10 @@ impl<'a> ChangeSection<'a> {
 
     /// Build section rows and the selected file's actual rendered row.
     fn lines(&self) -> (Vec<Line<'static>>, Option<usize>) {
-        let ChangesState::Ready(changes) = self.model.vcs.changes() else {
+        let ChangesState::Ready(changes) = self.props.changes else {
             return (Vec::new(), None);
         };
+        let styles = self.props.theme.ui();
         changes
             .iter()
             .enumerate()
@@ -65,20 +78,21 @@ impl<'a> ChangeSection<'a> {
             .fold(
                 (Vec::new(), None),
                 |(mut lines, mut selected), (index, change)| {
-                    if self.model.vcs.selected_change == Some(index) {
+                    let is_selected = self.props.selected == Some(index);
+                    if is_selected {
                         selected = Some(lines.len());
                     }
-                    lines.push(change_line(self.model, index, change));
-                    let expanded =
-                        self.model
-                            .vcs
-                            .expanded_change
-                            .as_ref()
-                            .is_some_and(|(path, staged)| {
-                                path == &change.path && *staged == change.staged
-                            });
+                    lines.push(change_line(
+                        change,
+                        is_selected,
+                        self.props.workspace_root,
+                        styles,
+                    ));
+                    let expanded = self.props.expanded.is_some_and(|(path, staged)| {
+                        path == change.path.as_path() && staged == change.staged
+                    });
                     if expanded {
-                        lines.extend(diff::lines(&self.model.vcs.diff, self.model.theme.ui()));
+                        lines.extend(diff::lines(self.props.diff, styles));
                     }
                     (lines, selected)
                 },
@@ -86,9 +100,12 @@ impl<'a> ChangeSection<'a> {
     }
 }
 
-fn change_line(model: &Model, index: usize, change: &FileChange) -> Line<'static> {
-    let styles = model.theme.ui();
-    let is_selected = model.vcs.selected_change == Some(index);
+fn change_line(
+    change: &FileChange,
+    is_selected: bool,
+    workspace_root: Option<&Path>,
+    styles: &UiTheme,
+) -> Line<'static> {
     let style = if is_selected {
         styles
             .base
@@ -98,10 +115,13 @@ fn change_line(model: &Model, index: usize, change: &FileChange) -> Line<'static
         styles.base
     };
     let marker = if is_selected { "> " } else { "  " };
-    Line::styled(format!("{marker}{}", change_text(model, change)), style)
+    Line::styled(
+        format!("{marker}{}", change_text(change, workspace_root)),
+        style,
+    )
 }
 
-fn change_text(model: &Model, change: &FileChange) -> String {
+fn change_text(change: &FileChange, workspace_root: Option<&Path>) -> String {
     let marker = match change.kind {
         ChangeKind::Added => "A",
         ChangeKind::Untracked => "?",
@@ -110,18 +130,19 @@ fn change_text(model: &Model, change: &FileChange) -> String {
         ChangeKind::Deleted => "D",
         ChangeKind::Renamed => "R",
     };
-    let path = display_path(model, &change.path);
+    let path = display_path(workspace_root, &change.path);
     match &change.previous_path {
-        Some(previous) => format!("{marker} {} -> {path}", display_path(model, previous)),
+        Some(previous) => format!(
+            "{marker} {} -> {path}",
+            display_path(workspace_root, previous)
+        ),
         None => format!("{marker} {path}"),
     }
 }
 
-fn display_path(model: &Model, path: &std::path::Path) -> String {
-    model
-        .workspace
-        .as_ref()
-        .and_then(|workspace| path.strip_prefix(workspace.root()).ok())
+fn display_path(workspace_root: Option<&Path>, path: &Path) -> String {
+    workspace_root
+        .and_then(|root| path.strip_prefix(root).ok())
         .unwrap_or(path)
         .to_string_lossy()
         .into_owned()
@@ -129,27 +150,35 @@ fn display_path(model: &Model, path: &std::path::Path) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use super::*;
-    use crate::vcs::DiffState;
 
     #[test]
     fn selection_tracks_the_row_after_an_expanded_diff() {
         let change = |path: &str| FileChange {
             kind: ChangeKind::Modified,
             staged: false,
-            path: std::path::PathBuf::from(format!("/workspace/{path}")),
+            path: PathBuf::from(format!("/workspace/{path}")),
             previous_path: None,
         };
-        let mut model = Model::default();
-        model.vcs.changes = ChangesState::Ready(vec![change("first.rs"), change("second.rs")]);
-        model.vcs.selected_change = Some(1);
-        model.vcs.expanded_change = Some((std::path::PathBuf::from("/workspace/first.rs"), false));
-        model.vcs.diff = DiffState::Ready {
+        let changes = ChangesState::Ready(vec![change("first.rs"), change("second.rs")]);
+        let expanded = PathBuf::from("/workspace/first.rs");
+        let diff = DiffState::Ready {
             lines: vec!["+first".to_string()],
             truncated: false,
         };
+        let theme = Theme::default();
 
-        let (lines, selected) = ChangeSection::unstaged(&model).lines();
+        let (lines, selected) = ChangeSection::unstaged(ChangeSectionProps {
+            changes: &changes,
+            selected: Some(1),
+            expanded: Some((&expanded, false)),
+            diff: &diff,
+            workspace_root: Some(Path::new("/workspace")),
+            theme: &theme,
+        })
+        .lines();
 
         assert_eq!(lines.len(), 3);
         assert_eq!(selected, Some(2));

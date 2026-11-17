@@ -15,7 +15,7 @@ use crate::{
     vcs::{ChangesState, HistoryState},
 };
 
-use self::change_section::ChangeSection;
+use self::change_section::{ChangeSection, ChangeSectionProps};
 
 #[derive(Debug, Default)]
 pub struct Vcs;
@@ -62,8 +62,20 @@ impl Vcs {
                 );
             }
             ChangesState::Ready(_) => {
-                let consumed = ChangeSection::staged(model).render(areas.changes, frame);
-                ChangeSection::unstaged(model).render(areas.after_staged(consumed), frame);
+                let props = ChangeSectionProps {
+                    changes: model.vcs.changes(),
+                    selected: model.vcs.selected_change,
+                    expanded: model
+                        .vcs
+                        .expanded_change
+                        .as_ref()
+                        .map(|(path, staged)| (path.as_path(), *staged)),
+                    diff: &model.vcs.diff,
+                    workspace_root: model.workspace.as_ref().map(|workspace| workspace.root()),
+                    theme: &model.theme,
+                };
+                let consumed = ChangeSection::staged(props).render(areas.changes, frame);
+                ChangeSection::unstaged(props).render(areas.after_staged(consumed), frame);
             }
         }
         if model.vcs.help_visible {
