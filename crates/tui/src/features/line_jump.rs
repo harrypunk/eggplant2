@@ -1,5 +1,8 @@
+use editor::EditorSession;
+
 use crate::{
     data_object::{AppPage, CommandId, Context, Model, StatusMessage},
+    explorer::ExplorerState,
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::Effect,
@@ -164,23 +167,55 @@ fn update_pending(model: &mut Model) {
     model.pending_input = model.line_jump.pending_text();
 }
 
-fn accepts_count(model: &mut Model) -> bool {
-    match (model.active_page, model.context_stack.last()) {
-        (_, Some(Context::Explorer)) => model.explorer.accepts_count(),
-        (AppPage::VcsHistory, _) => HistoryNavigation::new(&mut model.vcs).accepts_count(),
-        _ => model.editor.accepts_count(),
+enum NavigationTarget<'a> {
+    Editor(&'a mut EditorSession),
+    Explorer(&'a mut ExplorerState),
+    History(HistoryNavigation<'a>),
+}
+
+impl VerticalNavigation for NavigationTarget<'_> {
+    fn item_count(&self) -> usize {
+        match self {
+            Self::Editor(target) => target.item_count(),
+            Self::Explorer(target) => target.item_count(),
+            Self::History(target) => target.item_count(),
+        }
     }
+
+    fn move_to(&mut self, index: usize) {
+        match self {
+            Self::Editor(target) => target.move_to(index),
+            Self::Explorer(target) => target.move_to(index),
+            Self::History(target) => target.move_to(index),
+        }
+    }
+
+    fn accepts_count(&self) -> bool {
+        match self {
+            Self::Editor(target) => target.accepts_count(),
+            Self::Explorer(target) => target.accepts_count(),
+            Self::History(target) => target.accepts_count(),
+        }
+    }
+}
+
+fn navigation_target(model: &mut Model) -> NavigationTarget<'_> {
+    match (model.active_page, model.context_stack.last()) {
+        (_, Some(Context::Explorer)) => NavigationTarget::Explorer(&mut model.explorer),
+        (AppPage::VcsHistory, _) => {
+            NavigationTarget::History(HistoryNavigation::new(&mut model.vcs))
+        }
+        _ => NavigationTarget::Editor(&mut model.editor),
+    }
+}
+
+fn accepts_count(model: &mut Model) -> bool {
+    navigation_target(model).accepts_count()
 }
 
 fn complete(model: &mut Model, destination: VerticalDestination) {
     reset(model);
-    match (model.active_page, model.context_stack.last()) {
-        (_, Some(Context::Explorer)) => navigate(&mut model.explorer, destination),
-        (AppPage::VcsHistory, _) => {
-            navigate(&mut HistoryNavigation::new(&mut model.vcs), destination)
-        }
-        _ => navigate(&mut model.editor, destination),
-    }
+    navigate(&mut navigation_target(model), destination);
 }
 
 fn navigate(target: &mut impl VerticalNavigation, destination: VerticalDestination) {
