@@ -1,5 +1,4 @@
 use editor::DocumentFactory;
-use ratatui::layout::Rect;
 
 use crate::{
     buffer,
@@ -13,7 +12,6 @@ use crate::{
         effect::Effect,
         text_input_registry::TextInputRegistry,
     },
-    page::{editor::editor_content_area, vcs_commit::message_content_area},
 };
 
 #[derive(Debug)]
@@ -59,18 +57,7 @@ impl MessageManager {
                 return crate::external_sync::file_changed(model, &path, kind);
             }
             Message::Resize(width, height) => {
-                let area = editor_content_area(
-                    Rect::new(0, 0, width, height),
-                    model.explorer.visibility,
-                    model.tools.visibility,
-                    model.editor.active_snapshot().as_ref(),
-                );
-                model.editor.resize_active_view(area.width, area.height);
-                let area = message_content_area(
-                    Rect::new(0, 0, width, height),
-                    model.vcs.commit.editor.active_snapshot().as_ref(),
-                );
-                model.vcs.commit.resize_active_view(area.width, area.height);
+                crate::page::resize(model, width, height);
             }
             _ => {}
         }

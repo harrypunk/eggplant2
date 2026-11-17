@@ -48,10 +48,7 @@ pub fn run(
                 .map(|path| path.to_path_buf())
         });
     let _file_watcher = file_watcher::start(watch_root.as_deref(), message_sender.clone())?;
-    if let Some(effect) = Effect::combine(
-        crate::vcs::refresh(&mut model),
-        crate::vcs::sync_active_buffer(&mut model),
-    ) {
+    if let Some(effect) = crate::startup::initial_effects(&mut model) {
         apply_effect(effect, &message_sender);
     }
 
@@ -72,10 +69,7 @@ pub fn run(
             AppPage::VcsHistory => vcs_history_page.view(&model, frame),
             AppPage::VcsCommit => vcs_commit_page.view(&model, frame),
         })?;
-        let mode = match model.active_page {
-            AppPage::VcsCommit => model.vcs.commit.editor.mode(),
-            _ => model.editor.mode(),
-        };
+        let mode = crate::page::active_mode(&model);
         terminal.backend_mut().execute(cursor_style(mode))?;
 
         if let Some(message) = event_manager.next_message(&model)? {

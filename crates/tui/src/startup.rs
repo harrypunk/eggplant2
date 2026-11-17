@@ -7,6 +7,7 @@ use crate::{
     data_object::{Context, FocusTarget, Model, Workspace},
     explorer::{ExplorerEntryKind, ExplorerState},
     file_picker::FileEntry,
+    manager::effect::Effect,
 };
 
 /// Parse the optional file or folder argument without adding a CLI framework.
@@ -57,6 +58,14 @@ pub fn initial_model(path: Option<PathBuf>) -> color_eyre::Result<Model> {
     }
 
     Ok(model)
+}
+
+/// Compose initial feature work without embedding optional addons in the terminal runtime.
+pub fn initial_effects(model: &mut Model) -> Option<Effect> {
+    Effect::combine(
+        crate::vcs::refresh(model),
+        crate::vcs::sync_active_buffer(model),
+    )
 }
 
 #[cfg(test)]

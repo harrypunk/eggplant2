@@ -31,6 +31,7 @@ The following slices have landed and are covered by the workspace test suite:
 - Save continuation routing at the application root; generic lifecycle no longer imports VCS.
 - Single-owner fail-fast save policy: active commits reject close/quit, and pending close/quit rejects commit submission without changing drafts or owners.
 - Editing composition through one `EditingTargetKind`/`with_active` adapter; reusable operations and direct/asynchronous paste share the same target policy, with no hidden-main fallback.
+- Page-owned resize/cursor policy and startup-owned initial feature effects; runtime and message coordination no longer contain page/VCS implementation details.
 - Worktree/index/save status synchronization with one-in-flight-plus-trailing-read coalescing.
 - File-picker entry/preview invalidation on external changes.
 - History, working-change, and repository workflows have separate implementation modules; `vcs/mod.rs` is reduced to composed state, registration/dispatch, shared selection math, and API re-exports.
