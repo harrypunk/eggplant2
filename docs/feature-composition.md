@@ -112,6 +112,12 @@ Use this pattern for synchronous composition when a narrow concrete adapter is s
 
 Cross-feature reuse should target a semantic capability or workflow like this. Re-entering string dispatch obscures dependencies and makes it easier to accidentally drop required follow-up behavior.
 
+### Example: a one-shot prefix session
+
+`ViewAlignSession` exists in `Model` only as `Option<ViewAlignSession>` while viewport alignment is pending. Starting the prefix creates the session; `finish(self, character)` consumes it and returns an optional `ViewAlignment`. Invalid input therefore finishes the session without alignment, and explicit cancellation drops it. The adapter still owns pending text, input context, and editor application.
+
+Use an owned session when a workflow must survive between messages but has a clear completion boundary. This keeps transient state encapsulated without a long-lived controller or hidden `Drop` side effects.
+
 ## 3. Encapsulate effects as composable policy
 
 Effects are values, not hidden work performed inside rendering or text manipulation. `EditingTarget::after_edit` demonstrates the smallest useful policy hook:

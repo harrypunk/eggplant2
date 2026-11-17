@@ -1,5 +1,23 @@
 use editor::ViewAlignment;
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct ViewAlignSession;
+
+impl ViewAlignSession {
+    pub fn new() -> Self {
+        Self
+    }
+
+    fn finish(self, character: char) -> Option<ViewAlignment> {
+        match character {
+            'z' => Some(ViewAlignment::Center),
+            't' => Some(ViewAlignment::Top),
+            'b' => Some(ViewAlignment::Bottom),
+            _ => None,
+        }
+    }
+}
+
 use crate::{
     data_object::{CommandId, Context, Model, StatusMessage},
     manager::{
@@ -45,12 +63,10 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
 }
 
 pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
-    let alignment = match character {
-        'z' => Some(ViewAlignment::Center),
-        't' => Some(ViewAlignment::Top),
-        'b' => Some(ViewAlignment::Bottom),
-        _ => None,
-    };
+    let alignment = model
+        .view_align
+        .take()
+        .and_then(|session| session.finish(character));
     reset(model);
     if let Some(alignment) = alignment
         && let Ok(mut editor) = model.editor.active_editor()
@@ -66,10 +82,12 @@ fn start(model: &mut Model) {
         return;
     };
     model.pending_input = Some("z".to_string());
+    model.view_align = Some(ViewAlignSession::new());
     model.context_stack.push(Context::ViewAlign);
 }
 
 fn reset(model: &mut Model) {
+    model.view_align = None;
     model.pending_input = None;
     model
         .context_stack
@@ -86,7 +104,20 @@ mod tests {
     fn start_alignment(model: &mut Model, manager: &MessageManager) {
         manager.update(model, Message::InvokeCommand(CommandId("view_align_start")));
         assert_eq!(model.pending_input.as_deref(), Some("z"));
+        assert!(model.view_align.is_some());
         assert_eq!(model.context_stack.last(), Some(&Context::ViewAlign));
+    }
+
+    #[test]
+    fn session_parses_alignment_without_a_model() {
+        for (character, expected) in [
+            ('z', ViewAlignment::Center),
+            ('t', ViewAlignment::Top),
+            ('b', ViewAlignment::Bottom),
+        ] {
+            assert_eq!(ViewAlignSession::new().finish(character), Some(expected));
+        }
+        assert_eq!(ViewAlignSession::new().finish('x'), None);
     }
 
     #[test]
@@ -143,11 +174,13 @@ mod tests {
             Message::InvokeCommand(CommandId("view_align_cancel")),
         );
         assert_eq!(model.pending_input, None);
+        assert!(model.view_align.is_none());
         assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
 
         start_alignment(&mut model, &manager);
         manager.update(&mut model, Message::TextInput('x'));
         assert_eq!(model.pending_input, None);
+        assert!(model.view_align.is_none());
         assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
         assert_eq!(
             model.editor.active_snapshot().unwrap().text.first_line,

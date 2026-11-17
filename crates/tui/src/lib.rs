@@ -44,7 +44,7 @@ pub mod data_object {
         change::ChangeState, command_menu::CommandMenuState, explorer::ExplorerState,
         file_picker::FilePickerState, line_jump::LineJumpState, project_grep::ProjectGrepState,
         register::RegisterState, theme::Theme, theme_picker::ThemePickerState,
-        tools::ToolsPanelState, vcs::VcsState, yank::YankState,
+        tools::ToolsPanelState, vcs::VcsState, view_align::ViewAlignSession, yank::YankState,
     };
 
     /// Stable semantic command identity shared by keymaps and feature handlers.
@@ -143,6 +143,7 @@ pub mod data_object {
         pub buffer_navigation: BufferNavigationState,
         pub buffer_grep: BufferGrepState,
         pub project_grep: ProjectGrepState,
+        pub view_align: Option<ViewAlignSession>,
         pub vcs: VcsState,
         #[cfg(test)]
         pub example_feature: crate::test_utils::ExampleFeatureState,
@@ -176,6 +177,7 @@ pub mod data_object {
                 buffer_navigation: BufferNavigationState::default(),
                 buffer_grep: BufferGrepState::default(),
                 project_grep: ProjectGrepState::default(),
+                view_align: None,
                 vcs: VcsState::default(),
                 #[cfg(test)]
                 example_feature: crate::test_utils::ExampleFeatureState::default(),
