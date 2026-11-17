@@ -346,7 +346,7 @@ struct MergeTargetsRequest {
 
 impl FeatureEffect for MergeTargetsRequest {
     fn perform(self: Box<Self>) -> Message {
-        let result = ::vcs::merge_targets(&self.repository).map_err(|error| error.to_string());
+        let result = ::vcs::local_branches(&self.repository).map_err(|error| error.to_string());
         Message::FeatureCompletion(FeatureCompletion::new(MergeTargetsCompletion {
             repository: self.repository,
             revision: self.revision,

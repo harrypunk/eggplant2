@@ -1,3 +1,9 @@
+mod branch;
+
+pub use branch::{
+    BranchStartPoint, BranchSwitchOutcome, create_branch_and_switch, local_branches, switch_branch,
+};
+
 use std::{
     collections::{BTreeSet, HashMap},
     io::Write as _,
@@ -631,29 +637,6 @@ pub enum FastForwardOutcome {
     AlreadyUpToDate,
 }
 
-/// List existing local and remote-tracking branch names for the merge picker.
-pub fn merge_targets(path: &Path) -> Result<Vec<String>, MutationError> {
-    let repository = open_repository(path).map_err(|_| MutationError::NotRepository)?;
-    let targets = repository
-        .references()
-        .map_err(|error| MutationError::Failed(error.to_string()))?
-        .all()
-        .map_err(|error| MutationError::Failed(error.to_string()))?
-        .try_fold(BTreeSet::new(), |mut targets, reference| {
-            let reference = reference.map_err(|error| anyhow::anyhow!(error.to_string()))?;
-            if let Some((gix::reference::Category::LocalBranch, name)) =
-                reference.name().category_and_short_name()
-            {
-                targets.insert(name.to_str_lossy().into_owned());
-            }
-            Ok::<_, anyhow::Error>(targets)
-        })
-        .map_err(|error| MutationError::Failed(error.to_string()))?
-        .into_iter()
-        .collect();
-    Ok(targets)
-}
-
 /// Advance the current local branch to an explicit local or remote-tracking branch.
 pub fn fast_forward(path: &Path, target: &str) -> Result<FastForwardOutcome, MutationError> {
     let repository = open_repository(path).map_err(|_| MutationError::NotRepository)?;
@@ -863,15 +846,30 @@ fn prune_empty_parents(workdir: &Path, path: &Path) {
 
 fn checkout_tree(
     repository: &Repository,
-    mut index: IndexFile,
+    index: IndexFile,
     workdir: &Path,
 ) -> anyhow::Result<IndexFile> {
+    checkout_tree_preserving(repository, index, workdir, &BTreeSet::new())
+}
+
+fn checkout_tree_preserving(
+    repository: &Repository,
+    mut index: IndexFile,
+    workdir: &Path,
+    preserved_paths: &BTreeSet<BString>,
+) -> anyhow::Result<IndexFile> {
+    for path in preserved_paths {
+        if let Some(entry) = index.entry_mut_by_path_and_stage(path.as_bstr(), Stage::Unconflicted)
+        {
+            entry.flags.insert(Flags::SKIP_WORKTREE);
+        }
+    }
     let mut options =
         repository.checkout_options(gix::worktree::stack::state::attributes::Source::IdMapping)?;
     options.destination_is_initially_empty = false;
     options.overwrite_existing = true;
     options.keep_going = false;
-    let outcome = gix::worktree::state::checkout(
+    let result = gix::worktree::state::checkout(
         &mut index,
         workdir,
         repository.objects.clone().into_arc()?,
@@ -879,7 +877,14 @@ fn checkout_tree(
         &gix::progress::Discard,
         &AtomicBool::new(false),
         options,
-    )?;
+    );
+    for path in preserved_paths {
+        if let Some(entry) = index.entry_mut_by_path_and_stage(path.as_bstr(), Stage::Unconflicted)
+        {
+            entry.flags.remove(Flags::SKIP_WORKTREE);
+        }
+    }
+    let outcome = result?;
     if !outcome.collisions.is_empty()
         || !outcome.errors.is_empty()
         || !outcome.delayed_paths_unknown.is_empty()
@@ -1282,6 +1287,17 @@ mod tests {
         open_repository(root).unwrap().head_id().unwrap().detach()
     }
 
+    fn branch_id(root: &Path, branch: &str) -> ObjectId {
+        let repository = open_repository(root).unwrap();
+        let name = format!("refs/heads/{branch}");
+        repository
+            .find_reference(name.as_str())
+            .unwrap()
+            .peel_to_commit()
+            .unwrap()
+            .id
+    }
+
     fn fast_forward_fixture() -> (tempfile::TempDir, ObjectId, ObjectId) {
         let repository = repository();
         std::fs::write(repository.path().join("obsolete.txt"), "obsolete\n").unwrap();
@@ -1297,6 +1313,205 @@ mod tests {
         let new = head_id(repository.path());
         git(repository.path(), &["checkout", "--quiet", "side"]);
         (repository, old, new)
+    }
+
+    fn branch_switch_fixture() -> tempfile::TempDir {
+        let repository = repository();
+        std::fs::write(repository.path().join("common.txt"), "base\n").unwrap();
+        std::fs::write(repository.path().join("clean.txt"), "main\n").unwrap();
+        std::fs::write(repository.path().join("obsolete.txt"), "main only\n").unwrap();
+        git(
+            repository.path(),
+            &["add", "common.txt", "clean.txt", "obsolete.txt"],
+        );
+        git(
+            repository.path(),
+            &["commit", "--quiet", "-m", "main state"],
+        );
+        git(repository.path(), &["checkout", "--quiet", "-b", "side"]);
+        std::fs::write(repository.path().join("clean.txt"), "side\n").unwrap();
+        std::fs::write(repository.path().join("side-only.txt"), "side only\n").unwrap();
+        std::fs::remove_file(repository.path().join("obsolete.txt")).unwrap();
+        git(repository.path(), &["add", "-A"]);
+        git(
+            repository.path(),
+            &["commit", "--quiet", "-m", "side state"],
+        );
+        git(repository.path(), &["checkout", "--quiet", "main"]);
+        repository
+    }
+
+    #[test]
+    fn branch_switch_preserves_compatible_local_changes_without_moving_tips() {
+        let repository = branch_switch_fixture();
+        let main = branch_id(repository.path(), "main");
+        let side = branch_id(repository.path(), "side");
+        std::fs::write(repository.path().join("common.txt"), "staged\n").unwrap();
+        git(repository.path(), &["add", "common.txt"]);
+        std::fs::write(repository.path().join("common.txt"), "staged\nunstaged\n").unwrap();
+        std::fs::write(repository.path().join("untracked.txt"), "local\n").unwrap();
+
+        let outcome = switch_branch(repository.path(), "side").unwrap();
+
+        assert_eq!(outcome.branch, "side");
+        assert_eq!(outcome.commit, side);
+        assert!(!outcome.created);
+        assert_eq!(branch_id(repository.path(), "main"), main);
+        assert_eq!(branch_id(repository.path(), "side"), side);
+        assert_eq!(current_head(repository.path()).as_deref(), Some("side"));
+        assert_eq!(
+            std::fs::read_to_string(repository.path().join("clean.txt")).unwrap(),
+            "side\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(repository.path().join("common.txt")).unwrap(),
+            "staged\nunstaged\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(repository.path().join("untracked.txt")).unwrap(),
+            "local\n"
+        );
+        let changes = changes(repository.path()).unwrap();
+        assert!(
+            changes
+                .iter()
+                .any(|change| { change.path.ends_with("common.txt") && change.staged })
+        );
+        assert!(
+            changes
+                .iter()
+                .any(|change| { change.path.ends_with("common.txt") && !change.staged })
+        );
+        assert!(changes.iter().any(|change| {
+            change.path.ends_with("untracked.txt") && change.kind == ChangeKind::Untracked
+        }));
+        assert!(!repository.path().join("obsolete.txt").exists());
+        assert!(repository.path().join("side-only.txt").exists());
+
+        switch_branch(repository.path(), "main").unwrap();
+        assert!(repository.path().join("obsolete.txt").exists());
+        assert!(!repository.path().join("side-only.txt").exists());
+        assert_eq!(
+            std::fs::read_to_string(repository.path().join("clean.txt")).unwrap(),
+            "main\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(repository.path().join("common.txt")).unwrap(),
+            "staged\nunstaged\n"
+        );
+        assert_eq!(branch_id(repository.path(), "main"), main);
+        assert_eq!(branch_id(repository.path(), "side"), side);
+    }
+
+    #[test]
+    fn branch_switch_rejects_conflicting_local_and_untracked_files_without_mutation() {
+        let repository = branch_switch_fixture();
+        git(repository.path(), &["checkout", "--quiet", "side"]);
+        std::fs::write(repository.path().join("common.txt"), "side\n").unwrap();
+        std::fs::write(repository.path().join("collision.txt"), "tracked\n").unwrap();
+        git(repository.path(), &["add", "common.txt", "collision.txt"]);
+        git(
+            repository.path(),
+            &["commit", "--quiet", "-m", "conflicting state"],
+        );
+        git(repository.path(), &["checkout", "--quiet", "main"]);
+        let main = branch_id(repository.path(), "main");
+        let side = branch_id(repository.path(), "side");
+        std::fs::write(repository.path().join("common.txt"), "local\n").unwrap();
+
+        let error = switch_branch(repository.path(), "side").unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("local changes would be overwritten")
+        );
+        assert_eq!(head_id(repository.path()), main);
+        assert_eq!(branch_id(repository.path(), "side"), side);
+        assert_eq!(
+            std::fs::read_to_string(repository.path().join("common.txt")).unwrap(),
+            "local\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(repository.path().join("clean.txt")).unwrap(),
+            "main\n"
+        );
+
+        std::fs::write(repository.path().join("common.txt"), "base\n").unwrap();
+        std::fs::write(repository.path().join("collision.txt"), "untracked\n").unwrap();
+        let error = switch_branch(repository.path(), "side").unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("local changes would be overwritten")
+        );
+        assert_eq!(head_id(repository.path()), main);
+        assert_eq!(
+            std::fs::read_to_string(repository.path().join("collision.txt")).unwrap(),
+            "untracked\n"
+        );
+    }
+
+    #[test]
+    fn branch_creation_supports_head_branch_and_short_revision_start_points() {
+        let repository = repository();
+        let first = head_id(repository.path());
+        std::fs::write(repository.path().join("note.txt"), "second\n").unwrap();
+        git(repository.path(), &["add", "note.txt"]);
+        git(repository.path(), &["commit", "--quiet", "-m", "second"]);
+        let second = head_id(repository.path());
+
+        let short = first.to_hex_with_len(7).to_string();
+        let outcome = create_branch_and_switch(
+            repository.path(),
+            "topic",
+            BranchStartPoint::Revision(short),
+        )
+        .unwrap();
+        assert!(outcome.created);
+        assert_eq!(outcome.commit, first);
+        assert_eq!(head_id(repository.path()), first);
+        assert_eq!(branch_id(repository.path(), "main"), second);
+        assert_eq!(
+            std::fs::read_to_string(repository.path().join("note.txt")).unwrap(),
+            "hello\n"
+        );
+
+        let outcome = create_branch_and_switch(
+            repository.path(),
+            "copy",
+            BranchStartPoint::Branch("topic".to_string()),
+        )
+        .unwrap();
+        assert_eq!(outcome.commit, first);
+        assert_eq!(current_head(repository.path()).as_deref(), Some("copy"));
+
+        let outcome = create_branch_and_switch(
+            repository.path(),
+            "long-topic",
+            BranchStartPoint::Revision(first.to_string()),
+        )
+        .unwrap();
+        assert_eq!(outcome.commit, first);
+        assert_eq!(
+            current_head(repository.path()).as_deref(),
+            Some("long-topic")
+        );
+
+        switch_branch(repository.path(), "main").unwrap();
+        let outcome =
+            create_branch_and_switch(repository.path(), "at-main", BranchStartPoint::Head).unwrap();
+        assert_eq!(outcome.commit, second);
+        assert_eq!(head_id(repository.path()), second);
+
+        assert!(
+            create_branch_and_switch(repository.path(), "bad..name", BranchStartPoint::Head,)
+                .is_err()
+        );
+        assert!(
+            create_branch_and_switch(repository.path(), "topic", BranchStartPoint::Head,).is_err()
+        );
+        assert_eq!(current_head(repository.path()).as_deref(), Some("at-main"));
+        assert_eq!(head_id(repository.path()), second);
     }
 
     #[test]
@@ -1362,7 +1577,7 @@ mod tests {
             &["update-ref", "refs/remotes/origin/side", &new.to_string()],
         );
 
-        assert_eq!(merge_targets(repository.path()).unwrap(), ["main", "side"]);
+        assert_eq!(local_branches(repository.path()).unwrap(), ["main", "side"]);
     }
 
     #[test]
