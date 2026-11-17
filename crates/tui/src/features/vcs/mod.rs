@@ -45,6 +45,7 @@ pub struct VcsState {
     pub(crate) history_detail_expanded_file: Option<String>,
     pub(crate) history_detail_diff: DiffState,
     history_detail_target: Option<PathBuf>,
+    history_detail_commit_id: Option<String>,
     history_detail_revision: u64,
     history_detail_diff_cache: HashMap<(String, String), Diff>,
     history_target: Option<PathBuf>,
@@ -93,6 +94,7 @@ impl Default for VcsState {
             history_detail_expanded_file: None,
             history_detail_diff: DiffState::Idle,
             history_detail_target: None,
+            history_detail_commit_id: None,
             history_detail_revision: 0,
             history_detail_diff_cache: HashMap::new(),
             history_target: None,
@@ -391,6 +393,7 @@ fn close_history(model: &mut Model) -> Option<Effect> {
         model.vcs.history_detail_selected_file = None;
         model.vcs.history_detail_expanded_file = None;
         model.vcs.history_detail_diff = DiffState::Idle;
+        model.vcs.history_detail_commit_id = None;
         model.vcs.history_detail_revision = model.vcs.history_detail_revision.wrapping_add(1);
         return None;
     }
@@ -489,18 +492,25 @@ fn open_history_detail(model: &mut Model) -> Option<Effect> {
     if matches!(model.vcs.history_detail, CommitDetailsState::Ready(_)) {
         return None;
     }
+    let cached = model.vcs.history_commit_cache.get(&commit.id).cloned();
+    let target = if cached.is_none() {
+        Some(repository_target(model)?)
+    } else {
+        None
+    };
     model.vcs.history_detail_selected_file = None;
     model.vcs.history_detail_expanded_file = None;
     model.vcs.history_detail_diff = DiffState::Idle;
-    if let Some(details) = model.vcs.history_commit_cache.get(&commit.id).cloned() {
+    model.vcs.history_detail_commit_id = Some(commit.id.clone());
+    model.vcs.history_detail_revision = model.vcs.history_detail_revision.wrapping_add(1);
+    if let Some(details) = cached {
         model.vcs.history_detail_selected_file = (!details.files.is_empty()).then_some(0);
         model.vcs.history_detail = CommitDetailsState::Ready(details);
         return None;
     }
-    let target = repository_target(model)?;
+    let target = target.expect("an uncached detail requires a repository target");
     model.vcs.history_detail = CommitDetailsState::Loading;
     model.vcs.history_detail_target = Some(target.clone());
-    model.vcs.history_detail_revision = model.vcs.history_detail_revision.wrapping_add(1);
     Some(Effect::feature(HistoryDetailRequest {
         commit_id: commit.id,
         target,
@@ -791,6 +801,7 @@ fn refresh_history(model: &mut Model) -> Option<Effect> {
     model.vcs.history_detail_selected_file = None;
     model.vcs.history_detail_expanded_file = None;
     model.vcs.history_detail_diff = DiffState::Idle;
+    model.vcs.history_detail_commit_id = None;
     model.vcs.history_detail_revision = model.vcs.history_detail_revision.wrapping_add(1);
     model.vcs.history_detail_diff_cache.clear();
     let Some(target) = repository_target(model) else {
@@ -1189,6 +1200,7 @@ impl Completion for HistoryDetailCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
         if model.vcs.history_detail_revision != self.revision
             || model.vcs.history_detail_target.as_ref() != Some(&self.target)
+            || model.vcs.history_detail_commit_id.as_deref() != Some(self.commit_id.as_str())
         {
             return None;
         }
@@ -2062,6 +2074,59 @@ mod tests {
             model.vcs.history_detail_diff,
             DiffState::Ready { .. }
         ));
+    }
+
+    #[test]
+    fn stale_history_detail_completion_cannot_replace_a_cached_commit() {
+        let root = PathBuf::from("/workspace");
+        let mut model = Model {
+            workspace: Some(Workspace::new(root.clone())),
+            ..Model::default()
+        };
+        let summary = |id: &str| CommitSummary {
+            id: id.to_string(),
+            subject: id.to_string(),
+            author: "Eggplant".to_string(),
+            timestamp: 1_800_000_000,
+            branches: Vec::new(),
+        };
+        let details = |id: &str| CommitDetails {
+            full_id: format!("full-{id}"),
+            message: id.to_string(),
+            author: "Eggplant".to_string(),
+            date: "2026-11-16 10:00:00 +0000".to_string(),
+            files: Vec::new(),
+        };
+        model.vcs.history = HistoryState::Ready(vec![summary("a"), summary("b")]);
+        model.vcs.history_selected = Some(0);
+        model
+            .vcs
+            .history_commit_cache
+            .insert("b".to_string(), details("b"));
+
+        assert!(open_history_detail(&mut model).is_some());
+        let stale_revision = model.vcs.history_detail_revision;
+        model.vcs.history_selected = Some(1);
+        assert!(open_history_detail(&mut model).is_none());
+        assert!(matches!(
+            &model.vcs.history_detail,
+            CommitDetailsState::Ready(details) if details.full_id == "full-b"
+        ));
+
+        Box::new(HistoryDetailCompletion {
+            commit_id: "a".to_string(),
+            target: root,
+            revision: stale_revision,
+            result: Ok(details("a")),
+        })
+        .update(&mut model);
+
+        assert!(matches!(
+            &model.vcs.history_detail,
+            CommitDetailsState::Ready(details) if details.full_id == "full-b"
+        ));
+        assert!(!model.vcs.history_commit_cache.contains_key("a"));
+        assert!(model.vcs.history_detail_revision > stale_revision);
     }
 
     #[test]

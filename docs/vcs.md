@@ -22,7 +22,7 @@ Discard remains a placeholder. A separate history page provides bounded commit s
 ## Ownership and dependency direction
 
 - `crates/vcs` owns Helix VCS/Gitoxide interaction and returns owned branch, change, history, and diff values.
-- `features/vcs/` owns request generations, loading/error state, duplicate suppression, operation state, and stale-result rejection. Its commit workflow owns a separate scratch `EditorSession` and the save-before-commit barrier; merge instead requires a clean status before opening or submitting.
+- `features/vcs/` owns request generations, loading/error state, duplicate suppression, operation state, and stale-result rejection. History-detail completions match repository, generation, and commit identity; cached or cross-commit transitions invalidate older detail work. Its commit workflow owns a separate scratch `EditorSession` and the save-before-commit barrier; merge instead requires a clean status before opening or submitting.
 - `page/vcs/mod.rs`, `page/vcs_history/mod.rs`, and `page/vcs_commit.rs` render feature state without performing repository work. `page/vcs/change_section.rs` owns section rows, selection, path formatting, and consumed height; `page/vcs_history/history_list.rs` and `commit_detail.rs` own their respective view models and selection-following viewports; `component/diff.rs` shares diff-state rendering between status and history.
 - `AppPage` and `Context::Vcs` provide shell navigation; closing the page restores the previous editor or explorer context.
 - No Gitoxide types enter application snapshots or Ratatui components.
