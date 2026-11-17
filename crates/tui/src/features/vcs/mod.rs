@@ -82,11 +82,6 @@ pub struct VcsState {
     history_target: Option<PathBuf>,
     history_revision: u64,
     pub(crate) changes: ChangesController,
-    pub(crate) expanded_change: Option<(PathBuf, bool)>,
-    pub(crate) diff: DiffState,
-    diff_target: Option<PathBuf>,
-    diff_revision: u64,
-    diff_cache: HashMap<(PathBuf, bool), Diff>,
     buffer_diff: BufferDiffState,
     pub(crate) notice: Option<String>,
     pub(crate) help_visible: bool,
@@ -123,11 +118,6 @@ impl Default for VcsState {
             history_target: None,
             history_revision: 0,
             changes: ChangesController::default(),
-            expanded_change: None,
-            diff: DiffState::Idle,
-            diff_target: None,
-            diff_revision: 0,
-            diff_cache: HashMap::new(),
             buffer_diff: BufferDiffState::default(),
             notice: None,
             help_visible: false,
@@ -910,7 +900,7 @@ mod tests {
         model.vcs.changes.selected = Some(0);
 
         assert!(handle_command(&mut model, CommandId("vcs_toggle_diff")).is_some());
-        let revision = model.vcs.diff_revision;
+        let revision = model.vcs.changes.diff_revision;
         Box::new(DiffCompletion {
             change: selected.clone(),
             target: root,
@@ -922,7 +912,7 @@ mod tests {
         })
         .update(&mut model);
         assert_eq!(
-            model.vcs.diff,
+            model.vcs.changes.diff,
             DiffState::Ready {
                 lines: vec!["+changed".to_string()],
                 truncated: false,
@@ -930,15 +920,15 @@ mod tests {
         );
 
         assert!(handle_command(&mut model, CommandId("vcs_toggle_diff")).is_none());
-        assert_eq!(model.vcs.expanded_change, None);
-        assert_eq!(model.vcs.diff, DiffState::Idle);
+        assert_eq!(model.vcs.changes.expanded, None);
+        assert_eq!(model.vcs.changes.diff, DiffState::Idle);
 
         assert!(handle_command(&mut model, CommandId("vcs_toggle_diff")).is_none());
         assert_eq!(
-            model.vcs.expanded_change,
+            model.vcs.changes.expanded,
             Some((selected.path.clone(), selected.staged))
         );
-        assert!(matches!(model.vcs.diff, DiffState::Ready { .. }));
+        assert!(matches!(model.vcs.changes.diff, DiffState::Ready { .. }));
     }
 
     #[tokio::test]

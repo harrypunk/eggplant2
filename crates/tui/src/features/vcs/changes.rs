@@ -1,6 +1,11 @@
-use std::path::PathBuf;
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+};
 
-use ::vcs::FileChange;
+use ::vcs::{Diff, FileChange};
+
+use crate::component::diff::DiffState;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub enum ChangesState {
@@ -15,6 +20,17 @@ pub enum ChangesState {
 pub(crate) struct ChangesRequest {
     pub target: PathBuf,
     pub revision: u64,
+}
+
+pub(crate) struct DiffRequest {
+    pub change: FileChange,
+    pub target: PathBuf,
+    pub revision: u64,
+}
+
+pub(crate) enum DiffApply {
+    Ignored,
+    Applied,
 }
 
 pub(crate) enum ChangesApply {
@@ -39,6 +55,11 @@ pub struct ChangesController {
     pub(super) dirty: bool,
     operation: Option<IndexOperation>,
     operation_revision: u64,
+    pub(crate) expanded: Option<(PathBuf, bool)>,
+    pub(crate) diff: DiffState,
+    pub(super) diff_target: Option<PathBuf>,
+    pub(super) diff_revision: u64,
+    diff_cache: HashMap<(PathBuf, bool), Diff>,
 }
 
 impl Default for ChangesController {
@@ -52,6 +73,11 @@ impl Default for ChangesController {
             dirty: false,
             operation: None,
             operation_revision: 0,
+            expanded: None,
+            diff: DiffState::Idle,
+            diff_target: None,
+            diff_revision: 0,
+            diff_cache: HashMap::new(),
         }
     }
 }
@@ -66,6 +92,82 @@ impl ChangesController {
             return None;
         };
         changes.get(self.selected?)
+    }
+
+    pub(crate) fn expanded(&self) -> Option<(&Path, bool)> {
+        self.expanded
+            .as_ref()
+            .map(|(path, staged)| (path.as_path(), *staged))
+    }
+
+    pub(crate) fn diff(&self) -> &DiffState {
+        &self.diff
+    }
+
+    pub(super) fn invalidate_diff(&mut self) {
+        self.expanded = None;
+        self.diff = DiffState::Idle;
+        self.diff_cache.clear();
+        self.diff_revision = self.diff_revision.wrapping_add(1);
+    }
+
+    pub(super) fn toggle_diff(
+        &mut self,
+        change: FileChange,
+        target: Option<PathBuf>,
+    ) -> Option<DiffRequest> {
+        let expanded = (change.path.clone(), change.staged);
+        if self.expanded.as_ref() == Some(&expanded) {
+            self.expanded = None;
+            self.diff = DiffState::Idle;
+            self.diff_revision = self.diff_revision.wrapping_add(1);
+            return None;
+        }
+        if let Some(diff) = self.diff_cache.get(&expanded).cloned() {
+            self.expanded = Some(expanded);
+            self.diff = DiffState::Ready {
+                lines: diff.lines,
+                truncated: diff.truncated,
+            };
+            return None;
+        }
+        let target = target?;
+        self.expanded = Some(expanded);
+        self.diff = DiffState::Loading;
+        self.diff_target = Some(target.clone());
+        self.diff_revision = self.diff_revision.wrapping_add(1);
+        Some(DiffRequest {
+            change,
+            target,
+            revision: self.diff_revision,
+        })
+    }
+
+    /// Apply a worker result only when it still belongs to the visible diff request.
+    /// Successful diffs are cached by path and staged side for collapse/reopen.
+    pub(super) fn complete_diff(
+        &mut self,
+        request: DiffRequest,
+        result: Result<Diff, String>,
+    ) -> DiffApply {
+        let expanded = (request.change.path.clone(), request.change.staged);
+        if self.diff_revision != request.revision
+            || self.diff_target.as_ref() != Some(&request.target)
+            || self.expanded.as_ref() != Some(&expanded)
+        {
+            return DiffApply::Ignored;
+        }
+        self.diff = match result {
+            Ok(diff) => {
+                self.diff_cache.insert(expanded, diff.clone());
+                DiffState::Ready {
+                    lines: diff.lines,
+                    truncated: diff.truncated,
+                }
+            }
+            Err(error) => DiffState::Failed(error),
+        };
+        DiffApply::Applied
     }
 
     pub(super) fn begin_operation(&mut self, target: PathBuf) -> Option<u64> {
@@ -210,6 +312,59 @@ mod tests {
         assert!(controller.accept_operation(&root, revision));
         assert!(!controller.operation_in_progress());
         assert!(controller.begin_operation(root).unwrap() > revision);
+    }
+
+    #[test]
+    fn working_diff_validates_completion_and_reuses_cache() {
+        let root = PathBuf::from("/workspace");
+        let selected = change("/workspace/note.txt");
+        let mut controller = ChangesController::default();
+        let request = controller
+            .toggle_diff(selected.clone(), Some(root.clone()))
+            .unwrap();
+        assert!(matches!(
+            controller.complete_diff(
+                DiffRequest {
+                    change: selected.clone(),
+                    target: root.clone(),
+                    revision: request.revision.wrapping_sub(1),
+                },
+                Ok(Diff {
+                    lines: vec!["stale".to_string()],
+                    truncated: false,
+                })
+            ),
+            DiffApply::Ignored
+        ));
+        assert_eq!(controller.diff(), &DiffState::Loading);
+
+        assert!(matches!(
+            controller.complete_diff(
+                DiffRequest {
+                    change: selected.clone(),
+                    target: root.clone(),
+                    revision: request.revision,
+                },
+                Ok(Diff {
+                    lines: vec!["+new".to_string()],
+                    truncated: false,
+                })
+            ),
+            DiffApply::Applied
+        ));
+        assert!(matches!(controller.diff(), DiffState::Ready { .. }));
+        assert!(
+            controller
+                .toggle_diff(selected.clone(), Some(root.clone()))
+                .is_none()
+        );
+        assert_eq!(controller.expanded(), None);
+        assert!(controller.toggle_diff(selected, Some(root)).is_none());
+        assert!(matches!(controller.diff(), DiffState::Ready { .. }));
+
+        controller.invalidate_diff();
+        assert_eq!(controller.expanded(), None);
+        assert_eq!(controller.diff(), &DiffState::Idle);
     }
 
     #[test]

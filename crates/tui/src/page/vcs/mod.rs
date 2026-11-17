@@ -69,12 +69,8 @@ impl Vcs {
                 let props = ChangeSectionProps {
                     changes: model.vcs.changes(),
                     selected: model.vcs.changes.selected,
-                    expanded: model
-                        .vcs
-                        .expanded_change
-                        .as_ref()
-                        .map(|(path, staged)| (path.as_path(), *staged)),
-                    diff: &model.vcs.diff,
+                    expanded: model.vcs.changes.expanded(),
+                    diff: model.vcs.changes.diff(),
                     workspace_root: model.workspace.as_ref().map(|workspace| workspace.root()),
                     theme: &model.theme,
                 };
@@ -200,8 +196,8 @@ mod tests {
         model.vcs.changes.state =
             ChangesState::Ready(vec![change("note.rs", ChangeKind::Modified, false)]);
         model.vcs.changes.selected = Some(0);
-        model.vcs.expanded_change = Some((std::path::PathBuf::from("/workspace/note.rs"), false));
-        model.vcs.diff = DiffState::Ready {
+        model.vcs.changes.expanded = Some((std::path::PathBuf::from("/workspace/note.rs"), false));
+        model.vcs.changes.diff = DiffState::Ready {
             lines: vec![
                 "@@ -1 +1 @@".to_string(),
                 "-old".to_string(),

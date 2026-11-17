@@ -9,8 +9,8 @@ use crate::{
 };
 
 use super::{
-    ChangesState, DIFF_LIMIT, DiffState, SelectionDirection,
-    changes::{ChangesApply, ChangesRequest},
+    ChangesState, DIFF_LIMIT, SelectionDirection,
+    changes::{ChangesApply, ChangesRequest, DiffRequest},
     close_page, placeholder, repository_target, wrapped_index,
 };
 
@@ -36,31 +36,11 @@ pub(super) fn open_selected_change(model: &mut Model) -> Option<Effect> {
 
 pub(super) fn toggle_diff(model: &mut Model) -> Option<Effect> {
     let change = model.vcs.selected_change()?.clone();
-    let expanded = (change.path.clone(), change.staged);
-    if model.vcs.expanded_change.as_ref() == Some(&expanded) {
-        model.vcs.expanded_change = None;
-        model.vcs.diff = DiffState::Idle;
-        model.vcs.diff_revision = model.vcs.diff_revision.wrapping_add(1);
-        return None;
-    }
-    if let Some(diff) = model.vcs.diff_cache.get(&expanded).cloned() {
-        model.vcs.expanded_change = Some(expanded);
-        model.vcs.diff = DiffState::Ready {
-            lines: diff.lines,
-            truncated: diff.truncated,
-        };
-        return None;
-    }
-    let target = repository_target(model)?;
-    model.vcs.expanded_change = Some(expanded);
-    model.vcs.diff = DiffState::Loading;
-    model.vcs.diff_target = Some(target.clone());
-    model.vcs.diff_revision = model.vcs.diff_revision.wrapping_add(1);
-    Some(Effect::feature(DiffRequest {
-        change,
-        target,
-        revision: model.vcs.diff_revision,
-    }))
+    model
+        .vcs
+        .changes
+        .toggle_diff(change, repository_target(model))
+        .map(Effect::feature)
 }
 
 fn reject_if_operation_in_progress(model: &mut Model) -> bool {
@@ -149,21 +129,12 @@ pub(crate) fn sync_changes(model: &mut Model) -> Option<Effect> {
 }
 
 pub(crate) fn refresh_changes(model: &mut Model) -> Option<Effect> {
-    model.vcs.expanded_change = None;
-    model.vcs.diff = DiffState::Idle;
-    model.vcs.diff_cache.clear();
-    model.vcs.diff_revision = model.vcs.diff_revision.wrapping_add(1);
+    model.vcs.changes.invalidate_diff();
     model
         .vcs
         .changes
         .refresh(repository_target(model))
         .map(Effect::feature)
-}
-
-struct DiffRequest {
-    change: FileChange,
-    target: PathBuf,
-    revision: u64,
 }
 
 impl FeatureEffect for DiffRequest {
@@ -187,23 +158,14 @@ pub(super) struct DiffCompletion {
 
 impl Completion for DiffCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        let expanded = (self.change.path.clone(), self.change.staged);
-        if model.vcs.diff_revision != self.revision
-            || model.vcs.diff_target.as_ref() != Some(&self.target)
-            || model.vcs.expanded_change.as_ref() != Some(&expanded)
-        {
-            return None;
-        }
-        model.vcs.diff = match self.result {
-            Ok(diff) => {
-                model.vcs.diff_cache.insert(expanded, diff.clone());
-                DiffState::Ready {
-                    lines: diff.lines,
-                    truncated: diff.truncated,
-                }
-            }
-            Err(error) => DiffState::Failed(error),
-        };
+        model.vcs.changes.complete_diff(
+            DiffRequest {
+                change: self.change,
+                target: self.target,
+                revision: self.revision,
+            },
+            self.result,
+        );
         None
     }
 }
