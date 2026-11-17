@@ -69,7 +69,7 @@ impl Vcs {
         if model.vcs.help_visible {
             render_help(model, frame, areas.bottom);
         }
-        if model.vcs.merge.active {
+        if model.vcs.merge.is_active() {
             render_merge_popup(model, frame, frame.area());
         }
     }
@@ -154,9 +154,9 @@ fn render_merge_popup(model: &Model, frame: &mut Frame, area: Rect) {
     frame.render_widget(input, query_area);
 
     let targets = model.vcs.merge.filtered_targets();
-    let lines = if model.vcs.merge.loading {
+    let lines = if model.vcs.merge.is_loading() {
         vec![Line::styled("Loading branches…", styles.muted)]
-    } else if model.vcs.merge.merging {
+    } else if model.vcs.merge.is_merging() {
         vec![Line::styled("Fast-forwarding…", styles.muted)]
     } else if targets.is_empty() {
         vec![Line::styled("No matching branches", styles.muted)]
@@ -327,7 +327,7 @@ mod tests {
     #[test]
     fn merge_picker_filters_branches_and_shows_errors_in_the_popup() {
         let mut model = Model::default();
-        model.vcs.merge.active = true;
+        model.vcs.merge.show_for_test();
         model.vcs.merge.query = "ori".to_string();
         model.vcs.merge.targets = vec!["main".to_string(), "origin/main".to_string()];
         model.vcs.merge.selected = Some(0);

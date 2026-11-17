@@ -11,11 +11,18 @@ use crate::{
 
 use super::{ChangesState, repository_changed, repository_target};
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+enum MergePhase {
+    #[default]
+    Closed,
+    Loading,
+    Selecting,
+    Merging,
+}
+
 #[derive(Debug, Default)]
 pub(crate) struct MergeState {
-    pub(crate) active: bool,
-    pub(crate) loading: bool,
-    pub(crate) merging: bool,
+    phase: MergePhase,
     pub(crate) query: String,
     pub(crate) targets: Vec<String>,
     pub(crate) selected: Option<usize>,
@@ -26,6 +33,27 @@ pub(crate) struct MergeState {
 }
 
 impl MergeState {
+    pub(crate) fn is_active(&self) -> bool {
+        self.phase != MergePhase::Closed
+    }
+
+    pub(crate) fn is_loading(&self) -> bool {
+        self.phase == MergePhase::Loading
+    }
+
+    pub(crate) fn is_merging(&self) -> bool {
+        self.phase == MergePhase::Merging
+    }
+
+    fn is_selecting(&self) -> bool {
+        self.phase == MergePhase::Selecting
+    }
+
+    #[cfg(test)]
+    pub(crate) fn show_for_test(&mut self) {
+        self.phase = MergePhase::Selecting;
+    }
+
     pub(crate) fn filtered_targets(&self) -> Vec<&str> {
         let query = self.query.to_lowercase();
         self.targets
@@ -100,7 +128,7 @@ pub(super) fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect>
 }
 
 fn start(model: &mut Model) -> Option<Effect> {
-    if model.vcs.merge.merging {
+    if model.vcs.merge.is_merging() {
         return None;
     }
     if !status_is_clean(model) {
@@ -109,8 +137,7 @@ fn start(model: &mut Model) -> Option<Effect> {
     }
     let repository = repository_target(model)?;
     model.vcs.help_visible = false;
-    model.vcs.merge.active = true;
-    model.vcs.merge.loading = true;
+    model.vcs.merge.phase = MergePhase::Loading;
     model.vcs.merge.query.clear();
     model.vcs.merge.targets.clear();
     model.vcs.merge.selected = None;
@@ -125,7 +152,7 @@ fn start(model: &mut Model) -> Option<Effect> {
 }
 
 fn cancel(model: &mut Model) -> Option<Effect> {
-    if model.vcs.merge.merging {
+    if model.vcs.merge.is_merging() {
         return None;
     }
     close_prompt(model);
@@ -137,15 +164,14 @@ fn cancel(model: &mut Model) -> Option<Effect> {
 }
 
 fn close_prompt(model: &mut Model) {
-    model.vcs.merge.active = false;
-    model.vcs.merge.loading = false;
+    model.vcs.merge.phase = MergePhase::Closed;
     model
         .context_stack
         .pop_if(|context| context == &Context::VcsMerge);
 }
 
 fn insert_char(model: &mut Model, character: char) -> Option<Effect> {
-    if model.vcs.merge.active && !model.vcs.merge.merging && !model.vcs.merge.loading {
+    if model.vcs.merge.is_selecting() {
         model.vcs.merge.query.push(character);
         model.vcs.merge.select_first();
     }
@@ -153,7 +179,7 @@ fn insert_char(model: &mut Model, character: char) -> Option<Effect> {
 }
 
 fn backspace(model: &mut Model) -> Option<Effect> {
-    if model.vcs.merge.active && !model.vcs.merge.merging && !model.vcs.merge.loading {
+    if model.vcs.merge.is_selecting() {
         model.vcs.merge.query.pop();
         model.vcs.merge.select_first();
     }
@@ -162,7 +188,7 @@ fn backspace(model: &mut Model) -> Option<Effect> {
 
 fn select(model: &mut Model, next: bool) -> Option<Effect> {
     let len = model.vcs.merge.filtered_targets().len();
-    if len == 0 || model.vcs.merge.merging {
+    if len == 0 || !model.vcs.merge.is_selecting() {
         return None;
     }
     let selected = model.vcs.merge.selected.unwrap_or(0);
@@ -174,7 +200,7 @@ fn select(model: &mut Model, next: bool) -> Option<Effect> {
 }
 
 fn submit(model: &mut Model) -> Option<Effect> {
-    if !model.vcs.merge.active || model.vcs.merge.merging || model.vcs.merge.loading {
+    if !model.vcs.merge.is_selecting() {
         return None;
     }
     if !status_is_clean(model) {
@@ -183,7 +209,7 @@ fn submit(model: &mut Model) -> Option<Effect> {
     }
     let target = model.vcs.merge.selected_target()?;
     let repository = repository_target(model)?;
-    model.vcs.merge.merging = true;
+    model.vcs.merge.phase = MergePhase::Merging;
     model.vcs.merge.error = None;
     model.vcs.merge.repository = Some(repository.clone());
     model.vcs.merge.revision = model.vcs.merge.revision.wrapping_add(1);
@@ -225,14 +251,13 @@ struct MergeTargetsCompletion {
 
 impl Completion for MergeTargetsCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        if !model.vcs.merge.active
-            || !model.vcs.merge.loading
+        if !model.vcs.merge.is_loading()
             || model.vcs.merge.targets_revision != self.revision
             || model.vcs.merge.repository.as_ref() != Some(&self.repository)
         {
             return None;
         }
-        model.vcs.merge.loading = false;
+        model.vcs.merge.phase = MergePhase::Selecting;
         match self.result {
             Ok(targets) => {
                 let head = model.vcs.head().map(str::to_string);
@@ -280,13 +305,13 @@ struct MergeCompletion {
 
 impl Completion for MergeCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        if !model.vcs.merge.merging
+        if !model.vcs.merge.is_merging()
             || model.vcs.merge.revision != self.revision
             || model.vcs.merge.repository.as_ref() != Some(&self.repository)
         {
             return None;
         }
-        model.vcs.merge.merging = false;
+        model.vcs.merge.phase = MergePhase::Selecting;
         match self.result {
             Ok(updated) => {
                 close_prompt(model);
@@ -336,7 +361,8 @@ mod tests {
 
     fn open_merge(model: &mut Model) {
         assert!(matches!(start(model), Some(Effect::Feature(_))));
-        assert!(model.vcs.merge.active);
+        assert!(model.vcs.merge.is_active());
+        assert!(model.vcs.merge.is_loading());
     }
 
     fn complete_targets(model: &mut Model, targets: &[&str]) {
@@ -346,6 +372,7 @@ mod tests {
             result: Ok(targets.iter().map(|target| target.to_string()).collect()),
         })
         .update(model);
+        assert!(model.vcs.merge.is_selecting());
     }
 
     #[test]
@@ -359,7 +386,7 @@ mod tests {
         }]);
 
         assert!(start(&mut model).is_none());
-        assert!(!model.vcs.merge.active);
+        assert!(!model.vcs.merge.is_active());
         assert_eq!(
             model.vcs.notice.as_deref(),
             Some("Git status must be clean before merge")
@@ -376,7 +403,7 @@ mod tests {
             .unwrap();
         unsaved_model.editor.enter_normal_mode();
         assert!(start(&mut unsaved_model).is_none());
-        assert!(!unsaved_model.vcs.merge.active);
+        assert!(!unsaved_model.vcs.merge.is_active());
     }
 
     #[test]
@@ -388,6 +415,7 @@ mod tests {
         type_query(&mut model, "side");
         assert_eq!(model.vcs.merge.filtered_targets(), ["side"]);
         assert!(matches!(submit(&mut model), Some(Effect::Feature(_))));
+        assert!(model.vcs.merge.is_merging());
 
         Box::new(MergeCompletion {
             repository: root,
@@ -398,7 +426,8 @@ mod tests {
         .update(&mut model);
 
         assert_eq!(model.vcs.merge.error.as_deref(), Some("not a fast-forward"));
-        assert!(model.vcs.merge.active);
+        assert!(model.vcs.merge.is_active());
+        assert!(model.vcs.merge.is_selecting());
         assert_eq!(model.vcs.merge.selected_target().as_deref(), Some("side"));
     }
 
@@ -417,6 +446,7 @@ mod tests {
         select(&mut model, true);
         assert_eq!(model.vcs.merge.selected_target().as_deref(), Some("other"));
         assert!(submit(&mut model).is_some());
+        assert!(model.vcs.merge.is_merging());
         let stale_revision = model.vcs.merge.revision.wrapping_sub(1);
         Box::new(MergeCompletion {
             repository: root.clone(),
@@ -425,7 +455,8 @@ mod tests {
             result: Ok(Some("stale".to_string())),
         })
         .update(&mut model);
-        assert!(model.vcs.merge.active);
+        assert!(model.vcs.merge.is_active());
+        assert!(model.vcs.merge.is_merging());
 
         Box::new(MergeCompletion {
             repository: root,
@@ -434,7 +465,7 @@ mod tests {
             result: Ok(Some("abc1234".to_string())),
         })
         .update(&mut model);
-        assert!(!model.vcs.merge.active);
+        assert!(!model.vcs.merge.is_active());
         assert_eq!(
             model.vcs.notice.as_deref(),
             Some("Switched to other and fast-forwarded to abc1234")
