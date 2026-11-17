@@ -20,7 +20,7 @@ cargo run -p tui -- "$workdir"
 
 ## Interactive checks
 
-1. **Explorer/open:** select `a.txt` with the arrows or `j`/`k`, then press Enter. Confirm that it opens and becomes selected in the explorer.
+1. **Explorer/open:** select `a.txt` with the arrows or `j`/`k`, then press Enter. Confirm that it opens and becomes selected in the explorer. Use `gg`/`G` to jump to the first/last visible entry and confirm that digits do not start a count.
 2. **Edit/auto-save/cursor:** press `i`, insert `A`, then press Escape. Confirm that `a.txt` now starts with `Afirst`. The terminal cursor should be a steady bar in Insert mode and a steady block after returning to Normal; Visual modes retain the block.
 3. **Switch synchronization:** open `b.txt`, then use `Space b p` and `Space b n`, followed by `[b` and `]b`. Confirm that the active tab and explorer selection stay synchronized in both directions. Confirm the bracket prefix appears as pending input and Escape/invalid input cancels without switching.
 4. **Resize/status bar:** make the terminal narrow and short, then enlarge it. Confirm that content clips without a panic and that the cursor never appears outside the editor. Confirm the full-width status bar shows mode, the current Git branch (or abbreviated detached HEAD, with `--` outside a repository), a project-relative file path, and a right-aligned local `HH:MM` clock; the path should receive the remaining width.
@@ -84,6 +84,7 @@ Use a repository containing both staged and unstaged changes, then open the Git 
 - [ ] `l` opens a separate history page without embedding a log in Git status.
 - [ ] Commit rows show short ID, subject, author, relative time, and labels for local/remote refs pointing exactly at that commit, all flowing left-to-right without wide right alignment. The Git status HEAD reference uses the same commit-message component and also shows relative time.
 - [ ] `j`/`k` selection wraps and keeps the selected commit visible while scrolling.
+- [ ] `gg`/`G` jumps to the first/last commit or detail file; digits do not start a count.
 - [ ] History loads at most 20 commits per page. When available, a bold accent-colored `n load more` appears in the header; `n` appends the next page without moving selection. Loading/retry feedback appears there and disappears at the end.
 - [ ] `Tab` toggles a commit's changed-file list without opening a diff.
 - [ ] Enter opens a right-side detail with full hash, complete message, author, full date/time/offset, and changed files.

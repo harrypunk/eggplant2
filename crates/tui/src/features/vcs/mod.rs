@@ -16,6 +16,7 @@ use crate::{
 };
 
 pub(crate) mod commit;
+pub(crate) mod navigation;
 
 use commit::CommitState;
 

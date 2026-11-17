@@ -31,6 +31,7 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | VCS page | Open commit-message page for staged changes | `c` |
 | VCS history page | Close and return to Git status | `q` / `Esc` |
 | VCS history page | Select previous / next commit | `k` / `j` |
+| VCS history page | Jump to first / last commit or detail file | `gg` / `G` (no counts) |
 | VCS history page | Toggle commit's changed-file list / selected detail-file diff | `Tab` |
 | VCS history page | Open selected commit's right-side detail | `Enter` |
 | VCS history page | Load the next 20 commits when available | `n` |
@@ -41,6 +42,7 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | VCS commit Normal | Movement, word motions, insert variants, undo/redo | `h`/`j`/`k`/`l`, `w`/`b`/`e`, `0`/`$`, `a`/`A`/`I`, `o`/`O`, `u`/`Ctrl-R` |
 | VCS commit page | Insert newline / backspace | `Enter` / `Backspace` |
 | VCS page | Placeholder discard | `x` |
+| Explorer | Jump to first / last visible entry | `gg` / `G` (no counts) |
 | Normal / Explorer | Scroll down / up | `Ctrl-F` / `Ctrl-U` |
 | Normal / Explorer | Focus left / right | `Ctrl-H` / `Ctrl-L` |
 | Normal / Explorer | Focus up / down (reserved) | `Ctrl-K` / `Ctrl-J` |

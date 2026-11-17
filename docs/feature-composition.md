@@ -69,6 +69,22 @@ The page dispatcher is the only place that needs to select an adapter. Static ge
 - Return data rather than reaching for unrelated model fields.
 - Do not turn every helper or feature into a trait. Narrow structs and pure functions are also interfaces.
 
+### Example: vertical navigation with policy
+
+`VerticalNavigation` keeps movement independent of the concrete selection model:
+
+```rust
+trait VerticalNavigation {
+    fn item_count(&self) -> usize;
+    fn move_to(&mut self, index: usize);
+    fn accepts_count(&self) -> bool { false }
+}
+```
+
+`EditorSession`, `ExplorerState`, and the history adapter provide their own index clamping and selection writes. The existing `line_jump` input flow owns `g` prefixes and completion, then dispatches only the destination. The editor opts into counts; explorer and history keep the default `false`, so `gg`/`G` is shared without accidentally enabling counted jumps everywhere.
+
+This is the interface boundary to prefer: shared behavior in the operation, varying state and policy in adapters.
+
 ## 3. Encapsulate effects as composable policy
 
 Effects are values, not hidden work performed inside rendering or text manipulation. `EditingTarget::after_edit` demonstrates the smallest useful policy hook:

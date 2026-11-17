@@ -6,7 +6,7 @@ use std::{
 };
 
 use super::fs;
-use crate::data_object::Visibility;
+use crate::{data_object::Visibility, navigation::VerticalNavigation};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExplorerEntryKind {
@@ -202,6 +202,20 @@ impl ExplorerState {
             .or_else(|| (!entries.is_empty()).then_some(0));
         self.entries = entries;
         Ok(())
+    }
+}
+
+impl VerticalNavigation for ExplorerState {
+    fn item_count(&self) -> usize {
+        self.entries.len()
+    }
+
+    fn move_to(&mut self, index: usize) {
+        self.selected = self
+            .entries
+            .len()
+            .checked_sub(1)
+            .map(|last| index.min(last));
     }
 }
 

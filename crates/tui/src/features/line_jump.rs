@@ -1,10 +1,12 @@
 use crate::{
-    data_object::{CommandId, Context, Model, StatusMessage},
+    data_object::{AppPage, CommandId, Context, Model, StatusMessage},
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::Effect,
         text_input_registry::TextInputRegistry,
     },
+    navigation::VerticalNavigation,
+    vcs::navigation::HistoryNavigation,
 };
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -52,6 +54,8 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
 pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
     input.register(Context::AppNormal, handle_input)?;
     input.register(Context::LineJump, handle_input)?;
+    input.register(Context::Explorer, handle_input)?;
+    input.register(Context::VcsHistory, handle_input)?;
     input.register(Context::EditorVisual, handle_input)
 }
 
@@ -72,7 +76,7 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
 pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
     if !model.line_jump.is_active() {
         match character {
-            '1'..='9' => {
+            '1'..='9' if accepts_count(model) => {
                 model
                     .line_jump
                     .push_digit(character as usize - '0' as usize);
@@ -124,15 +128,42 @@ fn update_pending(model: &mut Model) {
     model.pending_input = model.line_jump.pending_text();
 }
 
+#[derive(Clone, Copy)]
+enum VerticalDestination {
+    Start,
+    End,
+    Index(usize),
+}
+
+fn accepts_count(model: &mut Model) -> bool {
+    match (model.active_page, model.context_stack.last()) {
+        (_, Some(Context::Explorer)) => model.explorer.accepts_count(),
+        (AppPage::VcsHistory, _) => HistoryNavigation::new(&mut model.vcs).accepts_count(),
+        _ => model.editor.accepts_count(),
+    }
+}
+
 fn complete(model: &mut Model, first_line: bool) {
-    let line = match (first_line, model.line_jump.count) {
-        (true, None) => 0,
-        (false, None) => usize::MAX,
-        (_, Some(count)) => count.saturating_sub(1),
+    let destination = match (first_line, model.line_jump.count) {
+        (true, None) => VerticalDestination::Start,
+        (false, None) => VerticalDestination::End,
+        (_, Some(count)) => VerticalDestination::Index(count.saturating_sub(1)),
     };
     reset(model);
-    if let Ok(mut editor) = model.editor.active_editor() {
-        let _ = editor.move_cursor_to_line(line);
+    match (model.active_page, model.context_stack.last()) {
+        (_, Some(Context::Explorer)) => navigate(&mut model.explorer, destination),
+        (AppPage::VcsHistory, _) => {
+            navigate(&mut HistoryNavigation::new(&mut model.vcs), destination)
+        }
+        _ => navigate(&mut model.editor, destination),
+    }
+}
+
+fn navigate(target: &mut impl VerticalNavigation, destination: VerticalDestination) {
+    match destination {
+        VerticalDestination::Start => target.move_to_start(),
+        VerticalDestination::End => target.move_to_end(),
+        VerticalDestination::Index(index) => target.move_to(index),
     }
 }
 
@@ -254,5 +285,79 @@ mod tests {
         assert_eq!(model.pending_input, None);
         assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
         assert_eq!(cursor_line(&model), 0);
+    }
+
+    #[test]
+    fn explorer_supports_gg_and_g_but_ignores_counts() {
+        let mut model = Model::default();
+        model.context_stack.push(Context::Explorer);
+        model.explorer.entries = (0..3)
+            .map(|index| crate::explorer::ExplorerEntry {
+                name: format!("file-{index}").into(),
+                path: std::path::PathBuf::from(format!("/workspace/file-{index}")),
+                kind: crate::explorer::ExplorerEntryKind::File,
+                depth: 0,
+                expansion: crate::explorer::ExpansionState::Collapsed,
+            })
+            .collect();
+        model.explorer.selected = Some(1);
+        let manager = MessageManager::default();
+
+        input(&mut model, &manager, "G");
+        assert_eq!(model.explorer.selected, Some(2));
+        input(&mut model, &manager, "gg");
+        assert_eq!(model.explorer.selected, Some(0));
+        input(&mut model, &manager, "2G");
+        assert_eq!(model.explorer.selected, Some(2));
+        assert_eq!(model.pending_input, None);
+    }
+
+    #[test]
+    fn history_and_detail_support_gg_and_g_but_ignore_counts() {
+        let commit = |id: &str| ::vcs::CommitSummary {
+            id: id.to_string(),
+            subject: id.to_string(),
+            author: "Eggplant".to_string(),
+            timestamp: 0,
+            branches: Vec::new(),
+        };
+        let mut model = Model {
+            active_page: AppPage::VcsHistory,
+            ..Model::default()
+        };
+        model.context_stack.push(Context::VcsHistory);
+        model.vcs.history = crate::vcs::HistoryState::Ready(vec![
+            commit("first"),
+            commit("second"),
+            commit("third"),
+        ]);
+        model.vcs.history_selected = Some(1);
+        let manager = MessageManager::default();
+
+        input(&mut model, &manager, "G");
+        assert_eq!(model.vcs.history_selected, Some(2));
+        input(&mut model, &manager, "gg");
+        assert_eq!(model.vcs.history_selected, Some(0));
+        input(&mut model, &manager, "2G");
+        assert_eq!(model.vcs.history_selected, Some(2));
+
+        let file = |path: &str| ::vcs::CommitFile {
+            kind: ::vcs::ChangeKind::Modified,
+            path: path.to_string(),
+            previous_path: None,
+        };
+        model.vcs.history_detail = crate::vcs::CommitDetailsState::Ready(::vcs::CommitDetails {
+            full_id: "third".to_string(),
+            message: "message".to_string(),
+            author: "Eggplant".to_string(),
+            date: "2026-11-16 10:30:00 +0000".to_string(),
+            files: vec![file("first.txt"), file("second.txt")],
+        });
+        model.vcs.history_detail_selected_file = Some(0);
+        input(&mut model, &manager, "G");
+        assert_eq!(model.vcs.history_detail_selected_file, Some(1));
+        input(&mut model, &manager, "2gg");
+        assert_eq!(model.vcs.history_detail_selected_file, Some(0));
+        assert_eq!(model.pending_input, None);
     }
 }
