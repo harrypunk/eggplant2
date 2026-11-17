@@ -1,6 +1,18 @@
 use ratatui::{style::Style, text::Line};
 
-use crate::{theme::UiTheme, vcs::DiffState};
+use crate::theme::UiTheme;
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub enum DiffState {
+    #[default]
+    Idle,
+    Loading,
+    Ready {
+        lines: Vec<String>,
+        truncated: bool,
+    },
+    Failed(String),
+}
 
 pub fn lines(state: &DiffState, styles: &UiTheme) -> Vec<Line<'static>> {
     match state {

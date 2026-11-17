@@ -22,6 +22,8 @@ pub(crate) mod navigation;
 use commit::CommitState;
 use merge::MergeState;
 
+pub use crate::component::diff::DiffState;
+
 const HISTORY_PAGE_SIZE: usize = 20;
 const DIFF_LIMIT: usize = 200;
 
@@ -147,18 +149,6 @@ pub enum ChangesState {
     Idle,
     Loading,
     Ready(Vec<FileChange>),
-    Failed(String),
-}
-
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub enum DiffState {
-    #[default]
-    Idle,
-    Loading,
-    Ready {
-        lines: Vec<String>,
-        truncated: bool,
-    },
     Failed(String),
 }
 
