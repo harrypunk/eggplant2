@@ -18,8 +18,8 @@ pub use shell::{buffer, command_menu, focus, lifecycle};
 
 pub use features::{
     buffer_grep, buffer_jump, buffer_navigation, change, editing, explorer, external_sync,
-    file_picker, line_jump, navigation, page_scroll, project_grep, theme_picker, vcs, view_align,
-    yank,
+    file_picker, line_jump, navigation, notifications, page_scroll, project_grep, theme_picker,
+    vcs, view_align, yank,
 };
 
 #[cfg(test)]
@@ -39,11 +39,11 @@ pub mod data_object {
     use crate::{
         buffer_grep::BufferGrepState, buffer_jump::BufferJumpState,
         buffer_navigation::BufferNavigationState, capabilities::document::DocumentOpening,
-        capabilities::page_scroll::PageScroll, change::ChangeState, command_menu::CommandMenuState,
-        explorer::ExplorerState, file_picker::FilePickerState, line_jump::LineJumpState,
-        project_grep::ProjectGrepState, register::RegisterState, theme::Theme,
-        theme_picker::ThemePickerState, tools::ToolsPanelState, vcs::VcsState,
-        view_align::ViewAlignSession, yank::YankState,
+        capabilities::notification::NotificationCenter, capabilities::page_scroll::PageScroll,
+        change::ChangeState, command_menu::CommandMenuState, explorer::ExplorerState,
+        file_picker::FilePickerState, line_jump::LineJumpState, project_grep::ProjectGrepState,
+        register::RegisterState, theme::Theme, theme_picker::ThemePickerState,
+        tools::ToolsPanelState, vcs::VcsState, view_align::ViewAlignSession, yank::YankState,
     };
 
     /// Stable semantic command identity shared by keymaps and feature handlers.
@@ -127,6 +127,7 @@ pub mod data_object {
 
         // Transient feedback, popup, and save-dependent workflows.
         pub status: Option<StatusMessage>,
+        pub notifications: NotificationCenter,
         pub pending_input: Option<PendingInput>,
         pub document_open: DocumentOpening,
         pub deferred_action: Option<DeferredAction>,
@@ -162,6 +163,7 @@ pub mod data_object {
                 context_stack: Vec::new(),
                 theme: Theme::default(),
                 status: None,
+                notifications: NotificationCenter::default(),
                 pending_input: None,
                 document_open: DocumentOpening::default(),
                 deferred_action: None,

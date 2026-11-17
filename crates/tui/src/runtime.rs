@@ -63,11 +63,14 @@ pub fn run(
             apply_message(&mut model, &message_manager, message, &message_sender);
         }
 
-        terminal.draw(|frame| match model.active_page {
-            AppPage::Editor => editor_page.view(&model, frame),
-            AppPage::Vcs => vcs_page.view(&model, frame),
-            AppPage::VcsHistory => vcs_history_page.view(&model, frame),
-            AppPage::VcsCommit => vcs_commit_page.view(&model, frame),
+        terminal.draw(|frame| {
+            match model.active_page {
+                AppPage::Editor => editor_page.view(&model, frame),
+                AppPage::Vcs => vcs_page.view(&model, frame),
+                AppPage::VcsHistory => vcs_history_page.view(&model, frame),
+                AppPage::VcsCommit => vcs_commit_page.view(&model, frame),
+            }
+            crate::notifications::render(&model, frame);
         })?;
         let mode = crate::page::active_mode(&model);
         terminal.backend_mut().execute(cursor_style(mode))?;

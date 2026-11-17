@@ -10,6 +10,7 @@ pub mod external_sync;
 pub mod file_picker;
 pub mod line_jump;
 pub mod navigation;
+pub mod notifications;
 pub mod page_scroll;
 pub mod project_grep;
 pub mod theme_picker;
