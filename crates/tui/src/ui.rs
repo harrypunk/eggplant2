@@ -143,9 +143,10 @@ impl UiRegistry {
         slot: PanelSlot,
         render: RenderContribution,
     ) -> color_eyre::Result<()> {
-        if self.panels.insert(slot, render).is_some() {
+        if self.panels.contains_key(&slot) {
             return Err(eyre!("duplicate panel contribution for `{slot:?}`"));
         }
+        self.panels.insert(slot, render);
         Ok(())
     }
 
@@ -154,9 +155,10 @@ impl UiRegistry {
         slot: StatusSlot,
         render: RenderContribution,
     ) -> color_eyre::Result<()> {
-        if self.status.insert(slot, render).is_some() {
+        if self.status.contains_key(&slot) {
             return Err(eyre!("duplicate status contribution for `{slot:?}`"));
         }
+        self.status.insert(slot, render);
         Ok(())
     }
 
@@ -383,18 +385,27 @@ mod tests {
 
     #[test]
     fn rejects_duplicate_contribution_slots_and_overlay_ids() {
+        fn replacement(_: &Model, _: &mut Frame, _: Rect) {}
+
         let mut ui = UiRegistry::empty();
         ui.register_panel(PanelSlot::Explorer, render_explorer_panel)
             .unwrap();
-        assert!(
-            ui.register_panel(PanelSlot::Explorer, render_explorer_panel)
-                .is_err()
+        let panel = ui.panels.get(&PanelSlot::Explorer).copied().unwrap() as usize;
+        assert!(ui.register_panel(PanelSlot::Explorer, replacement).is_err());
+        assert_eq!(
+            ui.panels.get(&PanelSlot::Explorer).copied().unwrap() as usize,
+            panel
         );
         ui.register_status(StatusSlot::Message, render_status)
             .unwrap();
+        let status = ui.status.get(&StatusSlot::Message).copied().unwrap() as usize;
         assert!(
-            ui.register_status(StatusSlot::Message, render_status)
+            ui.register_status(StatusSlot::Message, replacement)
                 .is_err()
+        );
+        assert_eq!(
+            ui.status.get(&StatusSlot::Message).copied().unwrap() as usize,
+            status
         );
         ui.register_overlay("example", command_menu_overlay)
             .unwrap();

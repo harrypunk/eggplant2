@@ -52,9 +52,10 @@ impl TextInputRegistry {
         context: Context,
         handler: TextInputHandler,
     ) -> color_eyre::Result<()> {
-        if self.handlers.insert(context, handler).is_some() {
+        if self.handlers.contains_key(&context) {
             return Err(eyre!("duplicate text-input handler for `{context:?}`"));
         }
+        self.handlers.insert(context, handler);
         Ok(())
     }
 
@@ -72,6 +73,37 @@ impl TextInputRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn replacement_input(_: &mut Model, _: char) -> Option<Effect> {
+        None
+    }
+
+    #[test]
+    fn duplicate_input_preserves_the_original_handler() {
+        let mut registry = TextInputRegistry::default();
+        registry
+            .register(Context::EditorInput, crate::editing::insert_char)
+            .unwrap();
+        let original = registry
+            .handlers
+            .get(&Context::EditorInput)
+            .copied()
+            .unwrap() as usize;
+
+        assert!(
+            registry
+                .register(Context::EditorInput, replacement_input)
+                .is_err()
+        );
+        assert_eq!(
+            registry
+                .handlers
+                .get(&Context::EditorInput)
+                .copied()
+                .unwrap() as usize,
+            original
+        );
+    }
 
     #[test]
     fn rejects_duplicate_context_handlers() {
