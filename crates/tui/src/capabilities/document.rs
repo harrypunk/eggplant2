@@ -1,7 +1,8 @@
 use std::path::Path;
 
 use editor::{
-    BufferId, DocumentFactory, DocumentOpenCompletion, DocumentOpenRequest, DocumentPosition,
+    BufferId, DocumentFactory, DocumentOpenCompletion as EditorDocumentOpenCompletion,
+    DocumentOpenRequest, DocumentPosition,
 };
 
 use crate::{
@@ -9,6 +10,63 @@ use crate::{
     data_object::{Model, OpenLocation, StatusMessage},
     manager::effect::Effect,
 };
+
+#[derive(Debug, Default)]
+pub struct DocumentOpening {
+    next_id: u64,
+    pending: Option<PendingOpen>,
+}
+
+#[derive(Debug)]
+struct PendingOpen {
+    id: OpenRequestId,
+    location: OpenLocation,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct OpenRequestId(u64);
+
+pub struct OpenFileRequest {
+    id: OpenRequestId,
+    request: DocumentOpenRequest,
+}
+
+#[derive(Debug)]
+pub struct OpenFileCompletion {
+    id: OpenRequestId,
+    completion: EditorDocumentOpenCompletion,
+}
+
+impl OpenFileRequest {
+    pub fn perform(self) -> OpenFileCompletion {
+        OpenFileCompletion {
+            id: self.id,
+            completion: self.request.perform(),
+        }
+    }
+}
+
+impl DocumentOpening {
+    fn begin(&mut self, location: OpenLocation) -> OpenRequestId {
+        self.next_id = self.next_id.wrapping_add(1);
+        let id = OpenRequestId(self.next_id);
+        self.pending = Some(PendingOpen { id, location });
+        id
+    }
+
+    fn complete(&mut self, id: OpenRequestId, path: &Path) -> Option<OpenLocation> {
+        let pending = self.pending.as_ref()?;
+        if pending.id != id || pending.location.path.as_path() != path {
+            return None;
+        }
+        self.pending.take().map(|pending| pending.location)
+    }
+
+    #[cfg(test)]
+    fn pending_location(&self) -> Option<&OpenLocation> {
+        self.pending.as_ref().map(|pending| &pending.location)
+    }
+}
 
 /// Start opening a document through the shared text-only document capability.
 pub(crate) fn open_file(
@@ -26,36 +84,26 @@ pub(crate) fn open_file_at(
     path: &Path,
     position: Option<DocumentPosition>,
 ) -> Option<Effect> {
-    model.opening_file = Some(OpenLocation {
+    let id = model.document_open.begin(OpenLocation {
         path: path.to_path_buf(),
         position,
     });
-    Some(Effect::OpenDocument(DocumentOpenRequest::new(
-        documents.clone(),
-        path,
-    )))
+    Some(Effect::OpenDocument(OpenFileRequest {
+        id,
+        request: DocumentOpenRequest::new(documents.clone(), path),
+    }))
 }
 
 /// Apply the latest document-open completion. Picker/focus reconciliation stays
 /// in the shell until the picker command migration.
 pub(crate) fn finish_open_file(
     model: &mut Model,
-    completion: DocumentOpenCompletion,
+    completion: OpenFileCompletion,
 ) -> Option<BufferId> {
-    if model
-        .opening_file
-        .as_ref()
-        .map(|location| location.path.as_path())
-        != Some(completion.path())
-    {
-        return None;
-    }
+    let OpenFileCompletion { id, completion } = completion;
+    let location = model.document_open.complete(id, completion.path())?;
     let path = completion.path().to_path_buf();
-    let position = model
-        .opening_file
-        .as_ref()
-        .and_then(|location| location.position);
-    model.opening_file = None;
+    let position = location.position;
     let opened = match completion.into_result() {
         Ok(opened) => opened,
         Err(error) => {
@@ -180,8 +228,8 @@ mod tests {
         assert!(finish_open_file(&mut model, first_completion).is_none());
         assert!(model.editor.is_empty());
         assert_eq!(
-            model.opening_file,
-            Some(OpenLocation {
+            model.document_open.pending_location(),
+            Some(&OpenLocation {
                 path: second.clone(),
                 position: None,
             })
@@ -194,6 +242,58 @@ mod tests {
                 .editor
                 .buffer_path(model.editor.active_buffer().unwrap()),
             Some(std::fs::canonicalize(second).unwrap().as_path())
+        );
+    }
+
+    #[test]
+    fn same_path_completion_requires_the_latest_request_id() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("note.txt");
+        std::fs::write(&path, "zero\none").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        model.editor.resize_active_view(80, 10);
+        let documents = DocumentFactory::new();
+        let first = match open_file_at(
+            &documents,
+            &mut model,
+            &path,
+            Some(DocumentPosition {
+                line: 0,
+                character: 0,
+            }),
+        ) {
+            Some(Effect::OpenDocument(request)) => request.perform(),
+            _ => panic!("expected an open-document effect"),
+        };
+        let second = match open_file_at(
+            &documents,
+            &mut model,
+            &path,
+            Some(DocumentPosition {
+                line: 1,
+                character: 0,
+            }),
+        ) {
+            Some(Effect::OpenDocument(request)) => request.perform(),
+            _ => panic!("expected an open-document effect"),
+        };
+
+        assert!(finish_open_file(&mut model, first).is_none());
+        assert!(model.editor.is_empty());
+        assert_eq!(
+            model
+                .document_open
+                .pending_location()
+                .and_then(|location| location.position),
+            Some(DocumentPosition {
+                line: 1,
+                character: 0,
+            })
+        );
+        assert!(finish_open_file(&mut model, second).is_some());
+        assert_eq!(
+            model.editor.active_snapshot().unwrap().cursor.unwrap().row,
+            1
         );
     }
 }

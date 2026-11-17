@@ -1,4 +1,4 @@
-use editor::{DocumentFactory, DocumentOpenCompletion};
+use editor::DocumentFactory;
 use ratatui::layout::Rect;
 
 use crate::{
@@ -109,7 +109,10 @@ impl MessageManager {
         }
     }
 
-    fn finish_open_file(model: &mut Model, completion: DocumentOpenCompletion) -> Option<Effect> {
+    fn finish_open_file(
+        model: &mut Model,
+        completion: document::OpenFileCompletion,
+    ) -> Option<Effect> {
         document::finish_open_file(model, completion)?;
         match model.file_picker.visibility {
             Visibility::Displayed => file_picker::close(model),

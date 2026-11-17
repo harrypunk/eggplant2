@@ -1,7 +1,10 @@
-use editor::{DocumentOpenRequest, SaveRequest};
+use editor::SaveRequest;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::data_object::{Message, Model};
+use crate::{
+    capabilities::document::OpenFileRequest,
+    data_object::{Message, Model},
+};
 
 /// Typed worker result routed back to its owning feature on the main thread.
 pub trait Completion: Send + 'static {
@@ -40,7 +43,7 @@ pub trait FeatureEffect: Send + 'static {
 
 pub enum Effect {
     Save(SaveRequest),
-    OpenDocument(DocumentOpenRequest),
+    OpenDocument(OpenFileRequest),
     Feature(Box<dyn FeatureEffect>),
     Batch(Vec<Effect>),
 }

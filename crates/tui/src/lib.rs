@@ -32,19 +32,18 @@ pub mod data_object {
         path::{Path, PathBuf},
     };
 
-    use editor::{
-        BufferId, DocumentOpenCompletion, DocumentPosition, EditorSession, SaveCompletion,
-    };
+    use editor::{BufferId, DocumentPosition, EditorSession, SaveCompletion};
 
     use crate::manager::effect::FeatureCompletion;
 
     use crate::{
         buffer_grep::BufferGrepState, buffer_jump::BufferJumpState,
-        buffer_navigation::BufferNavigationState, capabilities::page_scroll::PageScroll,
-        change::ChangeState, command_menu::CommandMenuState, explorer::ExplorerState,
-        file_picker::FilePickerState, line_jump::LineJumpState, project_grep::ProjectGrepState,
-        register::RegisterState, theme::Theme, theme_picker::ThemePickerState,
-        tools::ToolsPanelState, vcs::VcsState, view_align::ViewAlignSession, yank::YankState,
+        buffer_navigation::BufferNavigationState, capabilities::document::DocumentOpening,
+        capabilities::page_scroll::PageScroll, change::ChangeState, command_menu::CommandMenuState,
+        explorer::ExplorerState, file_picker::FilePickerState, line_jump::LineJumpState,
+        project_grep::ProjectGrepState, register::RegisterState, theme::Theme,
+        theme_picker::ThemePickerState, tools::ToolsPanelState, vcs::VcsState,
+        view_align::ViewAlignSession, yank::YankState,
     };
 
     /// Stable semantic command identity shared by keymaps and feature handlers.
@@ -129,7 +128,7 @@ pub mod data_object {
         // Transient feedback, popup, and save-dependent workflows.
         pub status: Option<StatusMessage>,
         pub pending_input: Option<PendingInput>,
-        pub opening_file: Option<OpenLocation>,
+        pub document_open: DocumentOpening,
         pub deferred_action: Option<DeferredAction>,
         pub command_menu: CommandMenuState,
         pub file_picker: FilePickerState,
@@ -163,7 +162,7 @@ pub mod data_object {
                 theme: Theme::default(),
                 status: None,
                 pending_input: None,
-                opening_file: None,
+                document_open: DocumentOpening::default(),
                 deferred_action: None,
                 command_menu: CommandMenuState::default(),
                 file_picker: FilePickerState::default(),
@@ -300,7 +299,7 @@ pub mod data_object {
         FeatureCompletion(FeatureCompletion),
         TextInput(char),
         SaveFinished(SaveCompletion),
-        FileOpened(DocumentOpenCompletion),
+        FileOpened(crate::document::OpenFileCompletion),
         FocusLost,
         ExternalFileChanged {
             path: PathBuf,
