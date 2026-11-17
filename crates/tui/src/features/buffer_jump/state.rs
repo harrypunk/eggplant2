@@ -14,7 +14,7 @@ pub(crate) struct JumpTarget {
 /// State for one visible-buffer jump session.
 #[derive(Debug, Default)]
 pub struct BufferJumpState {
-    buffer: Option<BufferId>,
+    source: Option<(BufferId, i32)>,
     pattern: String,
     label: String,
     targets: Vec<JumpTarget>,
@@ -22,11 +22,15 @@ pub struct BufferJumpState {
 
 impl BufferJumpState {
     pub fn is_active(&self) -> bool {
-        self.buffer.is_some()
+        self.source.is_some()
     }
 
     pub(crate) fn buffer(&self) -> Option<BufferId> {
-        self.buffer
+        self.source.map(|(buffer, _)| buffer)
+    }
+
+    pub(crate) fn source_identity(&self) -> Option<(BufferId, i32)> {
+        self.source
     }
 
     pub(crate) fn pattern(&self) -> &str {
@@ -51,9 +55,9 @@ impl BufferJumpState {
             .map_or(1, |target| target.label.chars().count())
     }
 
-    pub(crate) fn start(&mut self, buffer: BufferId) {
+    pub(crate) fn start(&mut self, source: (BufferId, i32)) {
         *self = Self {
-            buffer: Some(buffer),
+            source: Some(source),
             ..Self::default()
         };
     }

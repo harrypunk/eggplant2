@@ -72,7 +72,7 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
 
 /// Handle pattern or label text without adding feature-specific messages to the shell.
 pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
-    if model.buffer_jump.buffer() != model.editor.active_buffer() {
+    if model.buffer_jump.source_identity() != model.editor.active_revision() {
         close(model);
         return None;
     }
@@ -124,12 +124,12 @@ fn start(model: &mut Model) {
     ) {
         return;
     }
-    let Some(buffer) = model.editor.active_buffer() else {
+    let Some(source) = model.editor.active_revision() else {
         model.status = Some(StatusMessage::info("No active buffer"));
         return;
     };
     model.status = None;
-    model.buffer_jump.start(buffer);
+    model.buffer_jump.start(source);
     model.context_stack.push(Context::BufferJump);
 }
 
@@ -201,6 +201,45 @@ mod tests {
             1
         );
         assert!(!model.editor.active_is_modified());
+    }
+
+    #[test]
+    fn revision_change_cancels_instead_of_accepting_stale_targets() {
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+        create_buffer(&mut model, "hello\nyellow\nelse");
+        let manager = MessageManager::default();
+        manager.update(&mut model, Message::Resize(80, 10));
+        start_jump(&mut model, &manager);
+        for character in ['e', 'l'] {
+            manager.update(&mut model, Message::TextInput(character));
+        }
+        assert!(!model.buffer_jump.targets().is_empty());
+
+        {
+            let mut editor = model.editor.active_editor().unwrap();
+            editor
+                .move_cursor_to(editor::DocumentPosition {
+                    line: 2,
+                    character: 0,
+                })
+                .unwrap();
+            editor.insert_text("!").unwrap();
+        }
+        let cursor_before_label = model.editor.active_snapshot().unwrap().cursor;
+
+        manager.update(&mut model, Message::TextInput('z'));
+
+        assert!(!model.buffer_jump.is_active());
+        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert_eq!(
+            model.editor.active_snapshot().unwrap().cursor,
+            cursor_before_label
+        );
+        assert_eq!(
+            model.editor.active_text_snapshot().unwrap().text,
+            "hello\nyellow\n!else"
+        );
     }
 
     #[test]
