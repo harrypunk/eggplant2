@@ -19,6 +19,35 @@ pub struct YankState {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum YankPrefixAction {
+    Ignored,
+    Cancelled,
+    YankLine,
+}
+
+impl YankState {
+    fn begin_prefix(&mut self) {
+        self.pending = true;
+    }
+
+    fn finish_prefix(&mut self, character: char) -> YankPrefixAction {
+        if !self.pending {
+            return YankPrefixAction::Ignored;
+        }
+        self.pending = false;
+        if character == 'y' {
+            YankPrefixAction::YankLine
+        } else {
+            YankPrefixAction::Cancelled
+        }
+    }
+
+    fn clear_prefix(&mut self) {
+        self.pending = false;
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PasteTarget {
     Main { buffer_id: BufferId, revision: i32 },
     Commit { buffer_id: BufferId, revision: i32 },
@@ -84,12 +113,10 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
 }
 
 pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
-    if !model.yank.pending {
-        return None;
-    }
-    match character {
-        'y' => return yank_current_line(model),
-        _ => reset(model),
+    match model.yank.finish_prefix(character) {
+        YankPrefixAction::YankLine => return yank_current_line(model),
+        YankPrefixAction::Cancelled => reset(model),
+        YankPrefixAction::Ignored => {}
     }
     None
 }
@@ -286,13 +313,13 @@ fn start(model: &mut Model) {
     if model.context_stack.last() != Some(&normal_context) {
         return;
     }
-    model.yank.pending = true;
+    model.yank.begin_prefix();
     model.pending_input = Some("y".to_string());
     model.context_stack.push(Context::EditorYank);
 }
 
 fn reset(model: &mut Model) {
-    model.yank.pending = false;
+    model.yank.clear_prefix();
     model.pending_input = None;
     model
         .context_stack
@@ -335,6 +362,20 @@ mod tests {
 
     fn commit_text(model: &Model) -> String {
         model.vcs.commit.editor.active_text_snapshot().unwrap().text
+    }
+
+    #[test]
+    fn state_parses_yank_prefix_without_a_model() {
+        let mut state = YankState::default();
+        assert_eq!(state.finish_prefix('y'), YankPrefixAction::Ignored);
+
+        state.begin_prefix();
+        assert_eq!(state.finish_prefix('y'), YankPrefixAction::YankLine);
+        state.begin_prefix();
+        assert_eq!(state.finish_prefix('x'), YankPrefixAction::Cancelled);
+        state.begin_prefix();
+        state.clear_prefix();
+        assert_eq!(state.finish_prefix('y'), YankPrefixAction::Ignored);
     }
 
     #[test]

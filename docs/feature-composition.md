@@ -116,7 +116,7 @@ Cross-feature reuse should target a semantic capability or workflow like this. R
 
 `ViewAlignSession` exists in `Model` only as `Option<ViewAlignSession>` while viewport alignment is pending. Starting the prefix creates the session; `finish(self, character)` consumes it and returns an optional `ViewAlignment`. Invalid input therefore finishes the session without alignment, and explicit cancellation drops it. The adapter still owns pending text, input context, and editor application.
 
-Use an owned session when a workflow must survive between messages but has a clear completion boundary. This keeps transient state encapsulated without a long-lived controller or hidden `Drop` side effects. `ChangeState` applies the same action-oriented pattern to `dd`, `dw`, `cc`, and `cw`: taking its pending operator makes each prefix one-shot, while the adapter executes the returned typed action.
+Use an owned session when a workflow must survive between messages but has a clear completion boundary. This keeps transient state encapsulated without a long-lived controller or hidden `Drop` side effects. `ChangeState` applies the same action-oriented pattern to `dd`, `dw`, `cc`, and `cw`: taking its pending operator makes each prefix one-shot, while the adapter executes the returned typed action. `YankState` similarly owns `yy` begin/finish/clear transitions without mixing that prefix lifecycle into asynchronous paste state.
 
 ## 3. Encapsulate effects as composable policy
 
