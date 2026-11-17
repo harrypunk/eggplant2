@@ -14,7 +14,7 @@ use crate::{
 };
 
 use self::{
-    commit_detail::CommitDetail,
+    commit_detail::{CommitDetail, CommitDetailProps},
     history_list::{HistoryList, HistoryListProps},
 };
 
@@ -43,7 +43,14 @@ impl VcsHistory {
         })
         .render(areas.body, frame);
         if let Some(detail) = areas.detail {
-            CommitDetail::new(model).render(detail, frame);
+            CommitDetail::new(CommitDetailProps {
+                detail: &model.vcs.history_detail,
+                selected_file: model.vcs.history_detail_selected_file,
+                expanded_file: model.vcs.history_detail_expanded_file.as_deref(),
+                diff: &model.vcs.history_detail_diff,
+                theme: &model.theme,
+            })
+            .render(detail, frame);
         }
     }
 }

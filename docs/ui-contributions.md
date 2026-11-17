@@ -16,7 +16,7 @@ OverlaySlot.Modal
 StatusSlot.Message
 ```
 
-For example, `HistoryListProps` supplies only history state, selection, expanded commit identity, file details, and theme. The route page assembles those props from `Model`; `HistoryList` and its tests do not need application state.
+For example, `HistoryListProps` supplies only history state, selection, expanded commit identity, file details, and theme. `CommitDetailProps` similarly supplies detail state, file selection/expansion, diff state, and theme. The route page assembles those props from `Model`; both components and their tests operate without application state.
 
 The shell resolves overlay ordering by semantic priority, not accidental registration order. Feature components never query terminal size, perform filesystem work, or install global key handlers.
 
