@@ -25,7 +25,19 @@ pub fn file_changed(model: &mut Model, path: &Path, kind: ExternalChangeKind) ->
         ExternalChangeKind::Structure => crate::explorer::refresh_changed(model, path),
         ExternalChangeKind::Content => {}
     }
-    Effect::combine(crate::vcs::sync_changes(model), reload_buffer(model, path))
+    let picker = match kind {
+        ExternalChangeKind::Structure => model
+            .workspace
+            .as_ref()
+            .map(|workspace| workspace.root().to_path_buf())
+            .and_then(|root| model.file_picker.structure_changed(&root)),
+        ExternalChangeKind::Content => model.file_picker.content_changed(path),
+    };
+    let picker = picker.map(Effect::feature);
+    Effect::combine(
+        crate::vcs::sync_changes(model),
+        Effect::combine(picker, reload_buffer(model, path)),
+    )
 }
 
 pub(crate) fn save_completed(model: &mut Model) -> Option<Effect> {

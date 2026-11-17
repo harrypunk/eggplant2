@@ -211,6 +211,37 @@ impl FilePickerState {
         self.results.get(self.selected?)
     }
 
+    pub fn structure_changed(&mut self, root: &Path) -> Option<FilePickerRequest> {
+        self.files = Arc::new(Vec::new());
+        self.results.clear();
+        self.selected = None;
+        self.depth = ScanDepth::TopLevel;
+        self.collection = FileCollectionState::Loading;
+        self.preview = PreviewState::Empty;
+        self.preview_cache.clear();
+        self.pending_preview_path = None;
+        self.filter_revision = self.filter_revision.wrapping_add(1);
+        self.preview_revision = self.preview_revision.wrapping_add(1);
+        if self.visibility == Visibility::Displayed {
+            self.start_scan(root, ScanDepth::TopLevel)
+        } else {
+            None
+        }
+    }
+
+    pub fn content_changed(&mut self, path: &Path) -> Option<FilePickerRequest> {
+        self.preview_cache.remove(path);
+        if self.visibility == Visibility::Displayed
+            && self
+                .selected_entry()
+                .is_some_and(|entry| entry.path == path)
+        {
+            self.preview = PreviewState::Loading;
+            return self.start_preview();
+        }
+        None
+    }
+
     fn update_results(&mut self, root: &Path) -> Option<FilePickerRequest> {
         match (self.collection, self.depth) {
             (FileCollectionState::Ready | FileCollectionState::Filtering, ScanDepth::TopLevel)
@@ -358,6 +389,38 @@ mod tests {
             PreviewState::Text(text_snapshot(&["latest"]))
         );
         assert_eq!(state.selected_entry().unwrap().display, "mod.rs");
+    }
+
+    #[test]
+    fn external_changes_invalidate_entry_and_preview_caches() {
+        let root = PathBuf::from("/workspace");
+        let path = root.join("note.txt");
+        let mut state = FilePickerState::default();
+        state.seed_top_level(vec![FileEntry {
+            path: path.clone(),
+            display: "note.txt".to_string(),
+        }]);
+        let Some(FilePickerRequest::Preview { revision, .. }) = state.open(&root) else {
+            panic!("a ready file should start a preview");
+        };
+        state.complete_preview(revision, PreviewState::Text(text_snapshot(&["old"])));
+        assert!(state.preview_cache.contains_key(&path));
+
+        assert!(matches!(
+            state.content_changed(&path),
+            Some(FilePickerRequest::Preview { .. })
+        ));
+        assert!(!state.preview_cache.contains_key(&path));
+
+        assert!(matches!(
+            state.structure_changed(&root),
+            Some(FilePickerRequest::Scan {
+                depth: ScanDepth::TopLevel,
+                ..
+            })
+        ));
+        assert!(state.files.is_empty());
+        assert_eq!(state.collection, FileCollectionState::Loading);
     }
 
     #[test]

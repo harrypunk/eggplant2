@@ -54,6 +54,8 @@ Filter and preview revisions are independent. A late filter completion cannot ov
 
 Every application document open uses `DocumentFactory::open`. Existing targets must be regular, NUL-free UTF-8 text files. Directories, links, binary data, invalid UTF-8, and other file types return `not a text file` without changing buffers, picker state, or explorer state. A missing path remains valid for deliberate new-file startup behavior.
 
+External watcher events also invalidate picker caches through `FilePickerState`: content changes evict that path's preview and reload it when selected, while structure changes clear the entry/preview caches and rescan a visible picker. Hidden pickers rebuild stale entry state on their next open.
+
 `DocumentOpening` assigns a generated `OpenRequestId` to each pending path/position. The TUI request and completion envelopes carry that identity through the existing editor open request. Completion requires both the latest ID and matching path, so an older same-path result cannot consume a newer position or clear the newer pending request.
 
 Pending opens also retain their originating input context. File-picker opens retain a session generation that advances on every open. After document insertion, picker closing and editor focus run only when that origin/context is still current; an older explorer completion cannot displace a new picker, and an older picker completion cannot close a reopened picker session. Shared explorer reveal and VCS synchronization still apply.
