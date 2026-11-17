@@ -82,6 +82,12 @@ pub enum InsertPosition {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PastePosition {
+    After,
+    Before,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LineBoundary {
     Start,
     End,

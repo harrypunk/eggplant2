@@ -94,6 +94,8 @@ impl Default for Config {
                         ("delete_line_pending", "d"),
                         ("change_line_pending", "c"),
                         ("yank_line_pending", "y"),
+                        ("paste_after", "p"),
+                        ("paste_before", "shift-p"),
                     ],
                 ),
                 keymap_context(
@@ -217,6 +219,9 @@ impl Default for Config {
                         ("move_next_word_end", "e"),
                         ("delete_grapheme", "x"),
                         ("delete_line_pending", "d"),
+                        ("yank_line_pending", "y"),
+                        ("paste_after", "p"),
+                        ("paste_before", "shift-p"),
                         ("undo", "u"),
                         ("redo", "ctrl-r"),
                     ],

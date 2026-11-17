@@ -16,8 +16,8 @@ pub use preview::{preview_document, preview_document_at};
 pub use save::{SaveCompletion, SaveError, SaveRequest};
 pub use session::{
     BufferId, CursorMovement, DocumentPosition, EditMode, EditorError, EditorSession,
-    InsertPosition, LineBoundary, OpenLineDirection, VerticalDirection, ViewAlignment,
-    WordMovement,
+    InsertPosition, LineBoundary, OpenLineDirection, PastePosition, VerticalDirection,
+    ViewAlignment, WordMovement,
 };
 pub use snapshot::{
     BufferInfo, BufferTextSnapshot, CursorPosition, DirtyState, EditorSnapshot, HighlightSpan,

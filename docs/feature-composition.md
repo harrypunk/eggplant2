@@ -48,7 +48,9 @@ trait EditingTarget {
     fn push_context(&mut self, context: Context);
     fn pop_context(&mut self, context: Context);
     fn is_editing_enabled(&self) -> bool { true }
+    fn register_text(&self) -> String { String::new() }
     fn record_deleted(&mut self, text: String) -> Option<Effect> { None }
+    fn record_yanked(&mut self, text: String) -> Option<Effect> { self.record_deleted(text) }
     fn after_edit(&mut self) -> Option<Effect>;
 }
 ```
@@ -61,6 +63,8 @@ Adapters provide concrete policies:
 - `CommitEditingTarget` selects the scratch session, uses `VcsCommitInput`, checks submission state, and performs no message-file save.
 
 `record_deleted` applies the same policy separation to operators: `x`, `dd`, and `dw` reuse the `ActiveEditor` text-object operations in both contexts. The main editor records deleted text in its unnamed register; the commit scratch target does not pollute that register.
+
+`register_text` and `record_yanked` complete the same capability for `yy`, `p`, and `P`. `ActiveEditor::paste_text` owns characterwise and linewise placement, while the target owns register and persistence policy. Explicit yanks intentionally share the register across editor and commit pages; commit deletions still do not overwrite it.
 
 The page dispatcher is the only place that needs to select an adapter. Static generics are normally sufficient; avoid `dyn Trait` and global registries unless dynamic behavior is a real requirement.
 

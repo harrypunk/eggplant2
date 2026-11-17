@@ -24,9 +24,19 @@ pub(crate) trait EditingTarget {
         true
     }
 
+    /// Text available for paste through the shared register policy.
+    fn register_text(&self) -> String {
+        String::new()
+    }
+
     /// Register policy applied to deleted text.
     fn record_deleted(&mut self, _text: String) -> Option<Effect> {
         None
+    }
+
+    /// Explicit yanks share the register by default, like delete operations.
+    fn record_yanked(&mut self, text: String) -> Option<Effect> {
+        self.record_deleted(text)
     }
 
     /// Persistence policy applied after a successful text mutation.
@@ -56,6 +66,10 @@ impl EditingTarget for MainEditingTarget<'_> {
 
     fn pop_context(&mut self, context: Context) {
         self.model.context_stack.pop_if(|active| *active == context);
+    }
+
+    fn register_text(&self) -> String {
+        self.model.register.unnamed().to_string()
     }
 
     fn record_deleted(&mut self, text: String) -> Option<Effect> {
@@ -98,6 +112,14 @@ impl EditingTarget for CommitEditingTarget<'_> {
 
     fn is_editing_enabled(&self) -> bool {
         self.model.vcs.commit.is_editing()
+    }
+
+    fn register_text(&self) -> String {
+        self.model.register.unnamed().to_string()
+    }
+
+    fn record_yanked(&mut self, text: String) -> Option<Effect> {
+        self.model.register.record(text)
     }
 
     fn after_edit(&mut self) -> Option<Effect> {

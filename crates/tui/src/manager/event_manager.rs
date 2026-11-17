@@ -353,6 +353,9 @@ mod tests {
                 KeyModifiers::NONE,
                 "delete_line_pending",
             ),
+            (KeyCode::Char('y'), KeyModifiers::NONE, "yank_line_pending"),
+            (KeyCode::Char('p'), KeyModifiers::NONE, "paste_after"),
+            (KeyCode::Char('P'), KeyModifiers::SHIFT, "paste_before"),
             (
                 KeyCode::Char('s'),
                 KeyModifiers::CONTROL,

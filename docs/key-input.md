@@ -41,6 +41,7 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | VCS commit page | Enter Insert / return to Normal | `i` / `Esc` |
 | VCS commit Normal | Movement, word motions, insert variants, undo/redo | `h`/`j`/`k`/`l`, `w`/`b`/`e`, `0`/`$`, `a`/`A`/`I`, `o`/`O`, `u`/`Ctrl-R` |
 | VCS commit Normal | Delete grapheme / line / word | `x` / `dd` / `dw` |
+| VCS commit Normal | Yank current line / paste after / paste before | `yy` / `p` / `P` |
 | VCS commit page | Insert newline / backspace | `Enter` / `Backspace` |
 | VCS page | Placeholder discard | `x` |
 | Explorer | Jump to first / last visible entry | `gg` / `G` (no counts) |
@@ -58,6 +59,7 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | Visual | Delete selection / change selection | `x` or `d` / `c` |
 | Pending delete/change | Cancel | `Esc` |
 | Normal | Yank current line | `yy` |
+| Normal | Paste after / before cursor | `p` / `P` |
 | Visual | Yank selection and return to Normal | `y` |
 | Pending yank | Cancel | `Esc` |
 | Normal | Move | `h`, `j`, `k`, `l` |

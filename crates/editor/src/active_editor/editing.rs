@@ -3,7 +3,7 @@ use helix_stdx::rope::RopeSliceExt;
 
 use crate::{
     document::default_syntax_loader,
-    session::{EditorError, InsertPosition, OpenLineDirection},
+    session::{EditorError, InsertPosition, OpenLineDirection, PastePosition},
 };
 
 use super::ActiveEditor;
@@ -98,6 +98,59 @@ impl ActiveEditor<'_> {
         };
 
         self.apply_transaction(transaction);
+        Ok(())
+    }
+
+    /// Paste characterwise text at the cursor or linewise text beside the current line.
+    pub fn paste_text(&mut self, text: &str, position: PastePosition) -> Result<(), EditorError> {
+        if text.is_empty() {
+            return Ok(());
+        }
+        let document_text = self.document.text().slice(..);
+        let cursor = self
+            .document
+            .selection(self.view.id)
+            .primary()
+            .cursor(document_text);
+        let line = document_text.char_to_line(cursor);
+        let (insert_at, inserted, cursor) = if text.ends_with('\n') {
+            match position {
+                PastePosition::Before => {
+                    let insert_at = document_text.line_to_char(line);
+                    (insert_at, text.to_string(), insert_at)
+                }
+                PastePosition::After => {
+                    let has_line_ending = line + 1 < document_text.len_lines();
+                    let insert_at = match has_line_ending {
+                        true => document_text.line_to_char(line + 1),
+                        false => helix_core::line_ending::line_end_char_index(&document_text, line),
+                    };
+                    let prefix = match has_line_ending {
+                        true => String::new(),
+                        false => self.document.line_ending.as_str().to_string(),
+                    };
+                    let cursor = insert_at + prefix.chars().count();
+                    (insert_at, format!("{prefix}{text}"), cursor)
+                }
+            }
+        } else {
+            let insert_at = match position {
+                PastePosition::After => {
+                    graphemes::next_grapheme_boundary(document_text, cursor).min(
+                        helix_core::line_ending::line_end_char_index(&document_text, line),
+                    )
+                }
+                PastePosition::Before => cursor,
+            };
+            (insert_at, text.to_string(), insert_at)
+        };
+        let transaction = Transaction::change(
+            self.document.text(),
+            [(insert_at, insert_at, Some(inserted.into()))].into_iter(),
+        )
+        .with_selection(Selection::point(cursor));
+        self.apply_transaction(transaction);
+        self.commit_history();
         Ok(())
     }
 

@@ -759,6 +759,85 @@ fn backspace_removes_the_whole_grapheme() {
 }
 
 #[test]
+fn paste_supports_character_and_line_positions() {
+    let mut session = EditorSession::new();
+    create_buffer(&mut session, "ab");
+    session
+        .active_editor()
+        .unwrap()
+        .paste_text("X", PastePosition::After)
+        .unwrap();
+    assert_eq!(session.active_text_snapshot().unwrap().text, "aXb");
+    session
+        .active_editor()
+        .unwrap()
+        .move_cursor_to(DocumentPosition {
+            line: 0,
+            character: 0,
+        })
+        .unwrap();
+    session
+        .active_editor()
+        .unwrap()
+        .paste_text("Y", PastePosition::Before)
+        .unwrap();
+    assert_eq!(session.active_text_snapshot().unwrap().text, "YaXb");
+
+    let mut session = EditorSession::new();
+    create_buffer(&mut session, "first\nsecond");
+    session
+        .active_editor()
+        .unwrap()
+        .paste_text("pasted\n", PastePosition::After)
+        .unwrap();
+    assert_eq!(
+        session.active_text_snapshot().unwrap().text,
+        "first\npasted\nsecond"
+    );
+    session
+        .active_editor()
+        .unwrap()
+        .move_cursor_to(DocumentPosition {
+            line: 0,
+            character: 0,
+        })
+        .unwrap();
+    session
+        .active_editor()
+        .unwrap()
+        .paste_text("before\n", PastePosition::Before)
+        .unwrap();
+    assert_eq!(
+        session.active_text_snapshot().unwrap().text,
+        "before\nfirst\npasted\nsecond"
+    );
+    session
+        .active_editor()
+        .unwrap()
+        .move_cursor_to(DocumentPosition {
+            line: 3,
+            character: 0,
+        })
+        .unwrap();
+    session
+        .active_editor()
+        .unwrap()
+        .paste_text("last\n", PastePosition::After)
+        .unwrap();
+    assert_eq!(
+        session.active_text_snapshot().unwrap().text,
+        "before\nfirst\npasted\nsecond\nlast\n"
+    );
+    let revision = session.active_revision();
+    session
+        .active_editor()
+        .unwrap()
+        .paste_text("", PastePosition::After)
+        .unwrap();
+    assert_eq!(session.active_revision(), revision);
+}
+
+#[test]
 fn delete_grapheme_and_visual_selection_use_single_transactions() {
     let mut session = EditorSession::new();
     create_buffer(&mut session, "a👩\u{200d}💻b");
