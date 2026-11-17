@@ -66,7 +66,6 @@ pub struct HistoryController {
     pub(crate) selected_file: Option<usize>,
     pub(crate) expanded_file: Option<String>,
     pub(crate) diff: DiffState,
-    pub(crate) notice: Option<StatusMessage>,
     pub(super) detail_target: Option<PathBuf>,
     pub(super) detail_commit_id: Option<String>,
     pub(super) detail_revision: u64,
@@ -92,7 +91,6 @@ impl Default for HistoryController {
             selected_file: None,
             expanded_file: None,
             diff: DiffState::Idle,
-            notice: None,
             detail_target: None,
             detail_commit_id: None,
             detail_revision: 0,
@@ -109,7 +107,6 @@ impl HistoryController {
     }
 
     pub(super) fn refresh(&mut self, target: Option<PathBuf>) -> Option<HistoryRequest> {
-        self.notice = None;
         self.has_more = false;
         self.more = HistoryMoreState::Idle;
         self.expanded = None;
@@ -354,7 +351,6 @@ pub(super) fn open_history_detail(model: &mut Model) -> Option<Effect> {
         None
     };
     model.vcs.history.pane = HistoryPane::Detail;
-    model.vcs.history.notice = None;
     model.vcs.history.selected_file = None;
     model.vcs.history.expanded_file = None;
     model.vcs.history.diff = DiffState::Idle;
@@ -418,7 +414,6 @@ pub(super) fn copy_history_hash(model: &mut Model, format: HashFormat) -> Option
         return None;
     };
     let copy = CopyHash::new(details.full_id.clone(), format, model.register.provider());
-    model.vcs.history.notice = None;
     Some(Effect::feature(HistoryCopyRequest { copy }))
 }
 
@@ -449,7 +444,6 @@ impl Completion for HistoryCopyCompletion {
             Ok(()) => StatusMessage::info(format!("Copied {label} {}", outcome.text)),
             Err(error) => StatusMessage::error(format!("System clipboard unavailable: {error}")),
         };
-        model.vcs.history.notice = Some(status.clone());
         Some(crate::notifications::publish_status(
             model,
             status,
@@ -802,8 +796,8 @@ mod tests {
         completion.update(&mut model);
         assert_eq!(model.register.unnamed(), "keep register");
         assert_eq!(
-            model.vcs.history.notice.as_ref().unwrap().kind,
-            crate::data_object::StatusKind::Error
+            model.notifications.current().unwrap().kind(),
+            crate::capabilities::notification::NotificationKind::Error
         );
 
         Box::new(HistoryCopyCompletion {
@@ -814,10 +808,6 @@ mod tests {
             },
         })
         .update(&mut model);
-        assert_eq!(
-            model.vcs.history.notice.as_ref().unwrap().text,
-            format!("Copied full hash {full}")
-        );
         assert_eq!(model.register.unnamed(), "keep register");
         assert!(model.status.is_none());
         let notification = model.notifications.current().unwrap();

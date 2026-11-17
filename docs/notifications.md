@@ -11,7 +11,8 @@ Transient notifications provide common one-shot feedback without changing focus,
 - A new notification replaces the current one.
 - An older expiry cannot dismiss a newer notification.
 - The popup renders above every application page and clamps to small terminals.
-- Persistent status, VCS notices, and modal-local errors remain available where needed.
+- Persistent status and modal-local errors remain available where needed.
+- Migrated one-shot VCS feedback clears stale workflow notices; saving/committing progress remains in the page.
 
 ## Source-independent core
 

@@ -92,7 +92,7 @@ Changed files use the shared safe document-opening and explorer-reveal path. Del
 - In a ready detail, `c` copies the seven-character short hash.
 - `C` copies the full hash.
 - The reusable `CopyHash` capability performs copying without depending on history state.
-- Success or clipboard failure appears in the history header.
+- Success or clipboard failure appears in a transient `Git` notification.
 - Copying does not change the editor's unnamed yank register.
 
 ## Commit page

@@ -440,9 +440,10 @@ mod tests {
         assert!(model.vcs.commit.is_editing());
         assert_eq!(message(&model), "subject");
         assert_eq!(model.deferred_action, Some(DeferredAction::Quit));
+        assert_eq!(model.vcs.notice, None);
         assert_eq!(
-            model.vcs.notice.as_deref(),
-            Some("Wait for the pending close/quit operation to finish")
+            model.notifications.current().unwrap().message(),
+            "Wait for the pending close/quit operation to finish"
         );
     }
 
@@ -454,9 +455,10 @@ mod tests {
 
         assert!(submit(&mut model).is_some());
         assert!(model.vcs.commit.is_editing());
+        assert_eq!(model.vcs.notice, None);
         assert_eq!(
-            model.vcs.notice.as_deref(),
-            Some("Commit message must not be empty")
+            model.notifications.current().unwrap().message(),
+            "Commit message must not be empty"
         );
     }
 
@@ -478,7 +480,11 @@ mod tests {
 
         assert!(model.vcs.commit.is_editing());
         assert_eq!(message(&model), "subject\n\nbody");
-        assert_eq!(model.vcs.notice.as_deref(), Some("identity missing"));
+        assert_eq!(model.vcs.notice, None);
+        assert_eq!(
+            model.notifications.current().unwrap().message(),
+            "identity missing"
+        );
         assert!(matches!(submit(&mut model), Some(Effect::Feature(_))));
     }
 
@@ -529,7 +535,11 @@ mod tests {
 
         assert_eq!(model.active_page, AppPage::Vcs);
         assert!(model.vcs.commit.editor.is_empty());
-        assert_eq!(model.vcs.notice.as_deref(), Some("Created commit abc1234"));
+        assert_eq!(model.vcs.notice, None);
+        assert_eq!(
+            model.notifications.current().unwrap().message(),
+            "Created commit abc1234"
+        );
         assert_eq!(model.vcs.history.state, HistoryState::Loading);
     }
 

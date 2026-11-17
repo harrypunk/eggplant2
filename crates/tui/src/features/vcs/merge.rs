@@ -561,9 +561,10 @@ mod tests {
 
         assert!(start(&mut model).is_some());
         assert!(!model.vcs.merge.is_active());
+        assert_eq!(model.vcs.notice, None);
         assert_eq!(
-            model.vcs.notice.as_deref(),
-            Some("Git status must be clean before merge")
+            model.notifications.current().unwrap().message(),
+            "Git status must be clean before merge"
         );
 
         let mut unsaved_model = self::model(PathBuf::from("/workspace"));
@@ -640,9 +641,10 @@ mod tests {
         })
         .update(&mut model);
         assert!(!model.vcs.merge.is_active());
+        assert_eq!(model.vcs.notice, None);
         assert_eq!(
-            model.vcs.notice.as_deref(),
-            Some("Switched to other and fast-forwarded to abc1234")
+            model.notifications.current().unwrap().message(),
+            "Switched to other and fast-forwarded to abc1234"
         );
         assert_eq!(model.vcs.history.state, HistoryState::Loading);
     }

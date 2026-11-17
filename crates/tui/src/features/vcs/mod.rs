@@ -319,7 +319,7 @@ fn close_page(model: &mut Model) -> Option<Effect> {
 }
 
 pub(crate) fn report(model: &mut Model, status: StatusMessage) -> Effect {
-    model.vcs.notice = Some(status.text.clone());
+    model.vcs.notice = None;
     crate::notifications::publish_status(model, status, Some("Git"))
 }
 
@@ -690,9 +690,10 @@ mod tests {
         assert!(handle_command(&mut model, CommandId("vcs_stage")).is_some());
         assert!(handle_command(&mut model, CommandId("vcs_stage_all")).is_some());
         assert_eq!(model.vcs.changes.operation_revision(), revision);
+        assert_eq!(model.vcs.notice, None);
         assert_eq!(
-            model.vcs.notice.as_deref(),
-            Some("Git operation in progress")
+            model.notifications.current().unwrap().message(),
+            "Git operation in progress"
         );
         assert!(model.vcs.changes.operation_in_progress());
 
@@ -740,7 +741,7 @@ mod tests {
         })
         .update(&mut model);
         assert!(matches!(refresh, Some(Effect::Batch(_))));
-        assert_eq!(model.vcs.notice.as_deref(), Some("Staged file"));
+        assert_eq!(model.vcs.notice, None);
         assert_eq!(model.notifications.current().unwrap().title(), Some("Git"));
         assert_eq!(
             model.notifications.current().unwrap().message(),
@@ -804,7 +805,11 @@ mod tests {
         assert!(changes.iter().all(|change| change.staged));
         assert_eq!(changes[2].kind, ChangeKind::Added);
         assert_eq!(model.vcs.changes.selected, Some(1));
-        assert_eq!(model.vcs.notice.as_deref(), Some("Staged all changes"));
+        assert_eq!(model.vcs.notice, None);
+        assert_eq!(
+            model.notifications.current().unwrap().message(),
+            "Staged all changes"
+        );
 
         assert!(handle_command(&mut model, CommandId("vcs_unstage_all")).is_some());
         let refresh = Box::new(BulkOperationCompletion {
@@ -831,7 +836,11 @@ mod tests {
         assert_eq!(changes[0].kind, ChangeKind::Untracked);
         assert_eq!(changes[2].kind, ChangeKind::Untracked);
         assert_eq!(model.vcs.changes.selected, Some(1));
-        assert_eq!(model.vcs.notice.as_deref(), Some("Unstaged all changes"));
+        assert_eq!(model.vcs.notice, None);
+        assert_eq!(
+            model.notifications.current().unwrap().message(),
+            "Unstaged all changes"
+        );
     }
 
     #[test]
@@ -856,7 +865,11 @@ mod tests {
 
         assert!(effect.is_some());
         assert!(!model.vcs.changes.operation_in_progress());
-        assert_eq!(model.vcs.notice.as_deref(), Some("index locked"));
+        assert_eq!(model.vcs.notice, None);
+        assert_eq!(
+            model.notifications.current().unwrap().message(),
+            "index locked"
+        );
         assert!(handle_command(&mut model, CommandId("vcs_stage")).is_some());
     }
 
@@ -1275,9 +1288,10 @@ mod tests {
     fn discard_placeholder_explains_that_it_does_not_mutate() {
         let mut model = Model::default();
         assert!(handle_command(&mut model, CommandId("vcs_discard_placeholder")).is_some());
+        assert_eq!(model.vcs.notice, None);
         assert_eq!(
-            model.vcs.notice.as_deref(),
-            Some("Discard is not implemented")
+            model.notifications.current().unwrap().message(),
+            "Discard is not implemented"
         );
     }
 
