@@ -76,11 +76,11 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         }
         "buffer_grep_next" => {
             model.buffer_grep.select_next();
-            refresh_preview(model);
+            model.buffer_grep.refresh_preview(&model.editor);
         }
         "buffer_grep_previous" => {
             model.buffer_grep.select_previous();
-            refresh_preview(model);
+            model.buffer_grep.refresh_preview(&model.editor);
         }
         "buffer_grep_accept" => accept(model),
         _ => {
@@ -123,19 +123,6 @@ fn close(model: &mut Model) {
     model
         .context_stack
         .pop_if(|context| context == &Context::BufferGrep);
-}
-
-pub(crate) fn refresh_preview(model: &mut Model) {
-    let selected_line = model.buffer_grep.selected_match().map(|result| result.line);
-    let preview = match model.buffer_grep.source_identity() == model.editor.active_revision() {
-        true => selected_line.and_then(|line| {
-            model
-                .editor
-                .active_preview_at_line(line, state::PREVIEW_HEIGHT)
-        }),
-        false => None,
-    };
-    model.buffer_grep.preview = preview;
 }
 
 fn accept(model: &mut Model) {

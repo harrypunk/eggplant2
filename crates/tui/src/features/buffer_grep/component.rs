@@ -102,7 +102,7 @@ impl Widget for BufferGrepContent<'_> {
         let preview_block = Block::bordered().style(surface).border_style(border);
         let preview_inner = preview_block.inner(areas.preview);
         preview_block.render(areas.preview, buf);
-        match &self.state.preview {
+        match self.state.preview() {
             Some(snapshot) => {
                 TextView::new(snapshot, self.theme).render(preview_inner, buf);
                 style_preview(
@@ -170,7 +170,7 @@ mod tests {
     };
 
     use super::*;
-    use crate::buffer_grep::{GrepMatch, refresh_preview};
+    use crate::buffer_grep::GrepMatch;
 
     #[test]
     fn renders_query_results_and_context_preview() {
@@ -191,7 +191,7 @@ mod tests {
             match_ranges: vec![std::ops::Range { start: 3, end: 7 }],
         }];
         model.buffer_grep.selected = Some(0);
-        refresh_preview(&mut model);
+        model.buffer_grep.refresh_preview(&model.editor);
 
         let backend = TestBackend::new(60, 12);
         let mut terminal = Terminal::new(backend).unwrap();

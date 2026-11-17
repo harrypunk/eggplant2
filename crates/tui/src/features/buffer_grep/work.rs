@@ -65,7 +65,7 @@ impl Completion for BufferGrepCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
         let active_revision = model.editor.active_revision();
         if self.apply(&mut model.buffer_grep, active_revision) {
-            super::refresh_preview(model);
+            model.buffer_grep.refresh_preview(&model.editor);
         }
         None
     }

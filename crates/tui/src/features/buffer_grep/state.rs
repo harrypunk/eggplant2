@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use editor::{BufferId, BufferTextSnapshot, TextViewSnapshot};
+use editor::{BufferId, BufferTextSnapshot, EditorSession, TextViewSnapshot};
 
 use super::BufferGrepRequest;
 use crate::data_object::Visibility;
@@ -24,7 +24,7 @@ pub struct BufferGrepState {
     pub results: Vec<GrepMatch>,
     pub selected: Option<usize>,
     pub status: SearchStatus,
-    pub preview: Option<TextViewSnapshot>,
+    preview: Option<TextViewSnapshot>,
     source: Option<Arc<BufferTextSnapshot>>,
     query_revision: u64,
 }
@@ -127,6 +127,20 @@ impl BufferGrepState {
         self.results.get(self.selected?)
     }
 
+    pub fn preview(&self) -> Option<&TextViewSnapshot> {
+        self.preview.as_ref()
+    }
+
+    pub fn refresh_preview(&mut self, editor: &EditorSession) {
+        let selected_line = self.selected_match().map(|result| result.line);
+        self.preview = match self.source_identity() == editor.active_revision() {
+            true => {
+                selected_line.and_then(|line| editor.active_preview_at_line(line, PREVIEW_HEIGHT))
+            }
+            false => None,
+        };
+    }
+
     fn start_search(&mut self) -> Option<BufferGrepRequest> {
         self.query_revision = self.query_revision.wrapping_add(1);
         self.results.clear();
@@ -191,6 +205,28 @@ mod tests {
         ));
         assert!(state.complete(current_query, identity, Some(identity), result()));
         assert_eq!(state.results.len(), 1);
+    }
+
+    #[test]
+    fn preview_uses_explicit_editor_and_clears_for_a_changed_buffer() {
+        let mut editor = EditorSession::new();
+        editor.insert_document(DocumentFactory::new().create("hello\nworld"));
+        editor.resize_active_view(80, 10);
+        let mut state = BufferGrepState::default();
+        state.open(editor.active_text_snapshot().unwrap());
+        state.results = vec![GrepMatch {
+            line: 0,
+            text: "hello".to_string(),
+            match_ranges: Vec::new(),
+        }];
+        state.selected = Some(0);
+
+        state.refresh_preview(&editor);
+        assert_eq!(state.preview().unwrap().lines[0].text, "hello");
+
+        editor.insert_document(DocumentFactory::new().create("other"));
+        state.refresh_preview(&editor);
+        assert!(state.preview().is_none());
     }
 
     #[test]
