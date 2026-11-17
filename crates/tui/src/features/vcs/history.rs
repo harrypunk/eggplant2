@@ -42,6 +42,12 @@ pub enum CommitDetailsState {
     Failed(String),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HistoryApply {
+    Ignored,
+    Applied,
+}
+
 #[derive(Debug)]
 pub struct HistoryController {
     pub(crate) state: HistoryState,
@@ -169,6 +175,73 @@ impl HistoryController {
             }
             Err(error) => self.more = HistoryMoreState::Failed(error),
         }
+    }
+    fn complete_files(
+        &mut self,
+        request: HistoryFilesRequest,
+        result: Result<CommitDetails, String>,
+    ) -> HistoryApply {
+        if self.files_revision != request.revision
+            || self.files_target.as_ref() != Some(&request.target)
+            || self.expanded.as_ref() != Some(&request.commit_id)
+        {
+            return HistoryApply::Ignored;
+        }
+        self.files = match result {
+            Ok(details) => {
+                self.commit_cache.insert(request.commit_id, details.clone());
+                CommitDetailsState::Ready(details)
+            }
+            Err(error) => CommitDetailsState::Failed(error),
+        };
+        HistoryApply::Applied
+    }
+
+    fn complete_detail(
+        &mut self,
+        request: HistoryDetailRequest,
+        result: Result<CommitDetails, String>,
+    ) -> HistoryApply {
+        if self.detail_revision != request.revision
+            || self.detail_target.as_ref() != Some(&request.target)
+            || self.detail_commit_id.as_deref() != Some(request.commit_id.as_str())
+        {
+            return HistoryApply::Ignored;
+        }
+        self.detail = match result {
+            Ok(details) => {
+                self.selected_file = (!details.files.is_empty()).then_some(0);
+                self.commit_cache.insert(request.commit_id, details.clone());
+                CommitDetailsState::Ready(details)
+            }
+            Err(error) => CommitDetailsState::Failed(error),
+        };
+        HistoryApply::Applied
+    }
+
+    fn complete_file_diff(
+        &mut self,
+        request: HistoryFileDiffRequest,
+        result: Result<Diff, String>,
+    ) -> HistoryApply {
+        if self.detail_revision != request.revision
+            || self.detail_target.as_ref() != Some(&request.target)
+            || self.expanded_file.as_ref() != Some(&request.file_path)
+        {
+            return HistoryApply::Ignored;
+        }
+        self.diff = match result {
+            Ok(diff) => {
+                self.detail_diff_cache
+                    .insert((request.commit_id, request.file_path), diff.clone());
+                DiffState::Ready {
+                    lines: diff.lines,
+                    truncated: diff.truncated,
+                }
+            }
+            Err(error) => DiffState::Failed(error),
+        };
+        HistoryApply::Applied
     }
 }
 
@@ -410,23 +483,14 @@ pub(super) struct HistoryFilesCompletion {
 
 impl Completion for HistoryFilesCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        if model.vcs.history.files_revision != self.revision
-            || model.vcs.history.files_target.as_ref() != Some(&self.target)
-            || model.vcs.history.expanded.as_ref() != Some(&self.commit_id)
-        {
-            return None;
-        }
-        model.vcs.history.files = match self.result {
-            Ok(details) => {
-                model
-                    .vcs
-                    .history
-                    .commit_cache
-                    .insert(self.commit_id, details.clone());
-                CommitDetailsState::Ready(details)
-            }
-            Err(error) => CommitDetailsState::Failed(error),
-        };
+        model.vcs.history.complete_files(
+            HistoryFilesRequest {
+                commit_id: self.commit_id,
+                target: self.target,
+                revision: self.revision,
+            },
+            self.result,
+        );
         None
     }
 }
@@ -459,24 +523,14 @@ pub(super) struct HistoryDetailCompletion {
 
 impl Completion for HistoryDetailCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        if model.vcs.history.detail_revision != self.revision
-            || model.vcs.history.detail_target.as_ref() != Some(&self.target)
-            || model.vcs.history.detail_commit_id.as_deref() != Some(self.commit_id.as_str())
-        {
-            return None;
-        }
-        model.vcs.history.detail = match self.result {
-            Ok(details) => {
-                model.vcs.history.selected_file = (!details.files.is_empty()).then_some(0);
-                model
-                    .vcs
-                    .history
-                    .commit_cache
-                    .insert(self.commit_id, details.clone());
-                CommitDetailsState::Ready(details)
-            }
-            Err(error) => CommitDetailsState::Failed(error),
-        };
+        model.vcs.history.complete_detail(
+            HistoryDetailRequest {
+                commit_id: self.commit_id,
+                target: self.target,
+                revision: self.revision,
+            },
+            self.result,
+        );
         None
     }
 }
@@ -513,26 +567,15 @@ pub(super) struct HistoryFileDiffCompletion {
 
 impl Completion for HistoryFileDiffCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        if model.vcs.history.detail_revision != self.revision
-            || model.vcs.history.detail_target.as_ref() != Some(&self.target)
-            || model.vcs.history.expanded_file.as_ref() != Some(&self.file_path)
-        {
-            return None;
-        }
-        model.vcs.history.diff = match self.result {
-            Ok(diff) => {
-                model
-                    .vcs
-                    .history
-                    .detail_diff_cache
-                    .insert((self.commit_id, self.file_path), diff.clone());
-                DiffState::Ready {
-                    lines: diff.lines,
-                    truncated: diff.truncated,
-                }
-            }
-            Err(error) => DiffState::Failed(error),
-        };
+        model.vcs.history.complete_file_diff(
+            HistoryFileDiffRequest {
+                commit_id: self.commit_id,
+                file_path: self.file_path,
+                target: self.target,
+                revision: self.revision,
+            },
+            self.result,
+        );
         None
     }
 }
@@ -596,5 +639,81 @@ mod tests {
         assert_eq!(commits.len(), 2);
         assert!(!state.has_more);
         assert_eq!(state.more, HistoryMoreState::Idle);
+    }
+
+    #[test]
+    fn detail_completions_validate_commit_and_diff_identity() {
+        let root = PathBuf::from("/workspace");
+        let mut state = HistoryController {
+            detail: CommitDetailsState::Loading,
+            detail_target: Some(root.clone()),
+            detail_commit_id: Some("a".to_string()),
+            detail_revision: 4,
+            expanded_file: Some("note.txt".to_string()),
+            ..HistoryController::default()
+        };
+        let details = || CommitDetails {
+            full_id: "a".to_string(),
+            message: "message".to_string(),
+            author: "Eggplant".to_string(),
+            date: "date".to_string(),
+            files: Vec::new(),
+        };
+
+        assert!(matches!(
+            state.complete_detail(
+                HistoryDetailRequest {
+                    commit_id: "b".to_string(),
+                    target: root.clone(),
+                    revision: 4,
+                },
+                Ok(details())
+            ),
+            HistoryApply::Ignored
+        ));
+        assert_eq!(state.detail, CommitDetailsState::Loading);
+        assert!(matches!(
+            state.complete_detail(
+                HistoryDetailRequest {
+                    commit_id: "a".to_string(),
+                    target: root.clone(),
+                    revision: 4,
+                },
+                Ok(details())
+            ),
+            HistoryApply::Applied
+        ));
+
+        let diff = || {
+            Ok(Diff {
+                lines: vec!["+new".to_string()],
+                truncated: false,
+            })
+        };
+        assert!(matches!(
+            state.complete_file_diff(
+                HistoryFileDiffRequest {
+                    commit_id: "a".to_string(),
+                    file_path: "note.txt".to_string(),
+                    target: root.clone(),
+                    revision: 3,
+                },
+                diff()
+            ),
+            HistoryApply::Ignored
+        ));
+        assert!(matches!(
+            state.complete_file_diff(
+                HistoryFileDiffRequest {
+                    commit_id: "a".to_string(),
+                    file_path: "note.txt".to_string(),
+                    target: root,
+                    revision: 4,
+                },
+                diff()
+            ),
+            HistoryApply::Applied
+        ));
+        assert!(matches!(state.diff, DiffState::Ready { .. }));
     }
 }
