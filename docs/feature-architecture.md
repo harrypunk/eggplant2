@@ -8,6 +8,7 @@ Detailed contracts live in:
 - [UI contributions](ui-contributions.md)
 - [Milestone history](milestone-history.md)
 - [VCS addon](vcs.md)
+- [Global `Model` coupling audit and incremental refactor](global-model-refactor.md)
 
 ## 1. Purpose
 
