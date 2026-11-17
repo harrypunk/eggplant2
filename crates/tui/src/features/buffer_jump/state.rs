@@ -1,5 +1,7 @@
 use editor::{BufferId, DocumentPosition, TextViewSnapshot};
-use unicode_width::UnicodeWidthStr;
+
+pub(crate) use super::matching::visible_cell;
+use super::matching::{JumpMatch, VisibleJumpView, find_visible_matches};
 
 const PATTERN_LENGTH: usize = 2;
 const LABEL_KEYS: &[u8] = b"zxcvbnmasdfghjklqwertyuiop";
@@ -18,6 +20,7 @@ pub struct BufferJumpState {
     pattern: String,
     label: String,
     targets: Vec<JumpTarget>,
+    matches: Vec<JumpMatch>,
 }
 
 impl BufferJumpState {
@@ -43,6 +46,10 @@ impl BufferJumpState {
 
     pub(crate) fn targets(&self) -> &[JumpTarget] {
         &self.targets
+    }
+
+    pub(crate) fn matches(&self) -> &[JumpMatch] {
+        &self.matches
     }
 
     pub(crate) fn is_label_phase(&self) -> bool {
@@ -72,14 +79,20 @@ impl BufferJumpState {
         self.is_label_phase()
     }
 
-    /// Match the visible snapshot once and assign stable labels to the results.
-    pub(crate) fn assign_targets(&mut self, text: &TextViewSnapshot, viewport_width: usize) {
+    /// Refresh visible matches after newly typed input; labels appear at two characters.
+    pub(crate) fn refresh_matches(&mut self, text: &TextViewSnapshot, viewport_width: usize) {
         let pattern = self.pattern.chars().collect::<Vec<_>>();
-        let Ok(pattern): Result<[char; PATTERN_LENGTH], _> = pattern.try_into() else {
+        if pattern.is_empty() || pattern.len() > PATTERN_LENGTH {
+            self.matches.clear();
             self.targets.clear();
             return;
+        }
+        self.matches = find_visible_matches(text, viewport_width, &pattern);
+        self.targets = if self.is_label_phase() {
+            label_targets(&self.matches, text, viewport_width)
+        } else {
+            Vec::new()
         };
-        self.targets = visible_targets(text, viewport_width, pattern);
     }
 
     pub(crate) fn push_label(&mut self, character: char) {
@@ -110,46 +123,16 @@ impl BufferJumpState {
             self.targets.clear();
         }
         self.pattern.pop();
+        self.matches.clear();
     }
 }
 
-fn visible_targets(
-    text: &TextViewSnapshot,
+fn label_targets(
+    matches: &[JumpMatch],
+    text: &impl VisibleJumpView,
     viewport_width: usize,
-    pattern: [char; PATTERN_LENGTH],
 ) -> Vec<JumpTarget> {
-    let case_sensitive = pattern.iter().any(|character| character.is_uppercase());
-    let positions = text
-        .lines
-        .iter()
-        .enumerate()
-        .flat_map(|(row, line)| {
-            let characters = line.text.chars().collect::<Vec<_>>();
-            let mut matches = Vec::new();
-            let mut index = 0;
-            while index + PATTERN_LENGTH <= characters.len() {
-                if characters[index..index + PATTERN_LENGTH]
-                    .iter()
-                    .zip(pattern)
-                    .all(|(actual, expected)| {
-                        *actual == expected
-                            || (!case_sensitive
-                                && actual.to_lowercase().eq(expected.to_lowercase()))
-                    })
-                {
-                    matches.push(DocumentPosition {
-                        line: text.first_line + row,
-                        character: index,
-                    });
-                    index += PATTERN_LENGTH;
-                } else {
-                    index += 1;
-                }
-            }
-            matches
-        })
-        .collect::<Vec<_>>();
-    let label_length = if positions.len() <= LABEL_KEYS.len() {
+    let label_length = if matches.len() <= LABEL_KEYS.len() {
         1
     } else {
         2
@@ -158,35 +141,28 @@ fn visible_targets(
         1 => LABEL_KEYS.len(),
         _ => MAX_TARGETS,
     };
-
-    positions
-        .into_iter()
-        .filter(|position| visible_cell(text, viewport_width, *position, label_length).is_some())
+    matches
+        .iter()
+        .filter(|target| {
+            visible_cell(text, viewport_width, target.position, label_length).is_some()
+        })
         .take(max_targets)
         .enumerate()
-        .map(|(index, position)| JumpTarget {
-            position,
+        .map(|(index, target)| JumpTarget {
+            position: target.position,
             label: label_for(index, label_length),
         })
         .collect()
 }
 
-pub(crate) fn visible_cell(
+#[cfg(test)]
+fn visible_targets(
     text: &TextViewSnapshot,
     viewport_width: usize,
-    position: DocumentPosition,
-    label_width: usize,
-) -> Option<(usize, usize)> {
-    let row = position.line.checked_sub(text.first_line)?;
-    let line = text.lines.get(row)?;
-    let byte = line
-        .text
-        .char_indices()
-        .nth(position.character)
-        .map_or(line.text.len(), |(byte, _)| byte);
-    let display_column = UnicodeWidthStr::width(&line.text[..byte]);
-    let column = display_column.checked_sub(text.horizontal_offset)?;
-    (column + label_width <= viewport_width).then_some((row, column))
+    pattern: [char; PATTERN_LENGTH],
+) -> Vec<JumpTarget> {
+    let matches = find_visible_matches(text, viewport_width, &pattern);
+    label_targets(&matches, text, viewport_width)
 }
 
 fn label_for(index: usize, length: usize) -> String {
@@ -266,7 +242,7 @@ mod tests {
         let mut state = BufferJumpState::default();
         state.push_pattern('e');
         state.push_pattern('l');
-        state.assign_targets(&text, 100);
+        state.refresh_matches(&text, 100);
 
         assert_eq!(state.targets().len(), 27);
         assert_eq!(state.targets()[0].label, "zx");

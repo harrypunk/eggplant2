@@ -88,6 +88,7 @@ impl Default for Config {
                         ("page_scroll_down", "ctrl-f"),
                         ("page_scroll_up", "ctrl-u"),
                         ("view_align_start", "z"),
+                        ("buffer_jump_start", "s"),
                         ("next_buffer_pending", "]"),
                         ("previous_buffer_pending", "["),
                         ("delete_grapheme", "x"),

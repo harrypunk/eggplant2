@@ -477,6 +477,18 @@ mod tests {
     }
 
     #[test]
+    fn normal_s_routes_to_visible_buffer_jump() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::InvokeCommand(CommandId("buffer_jump_start")))
+        ));
+    }
+
+    #[test]
     fn routes_buffer_jump_text_and_commands_in_its_context() {
         let manager = event_manager();
         let mut model = Model::default();

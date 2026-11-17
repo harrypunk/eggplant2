@@ -52,6 +52,7 @@ Available in Normal and Explorer contexts.
 | First line / line N | `gg` / `[count]gg` |
 | Last line / line N | `G` / `[count]G` |
 | Center / top / bottom cursor line | `zz` / `zt` / `zb` |
+| Start visible-buffer jump | `s` |
 | Cancel pending line jump | `Esc` |
 | Cancel pending viewport alignment | `Esc` |
 
@@ -121,7 +122,7 @@ Paste uses the shared register and reads the system clipboard when available.
 
 | Action | Default binding |
 | --- | --- |
-| Enter smart-case two-character pattern, then label | Printable input |
+| Enter smart-case pattern, then label | Printable input |
 | Edit input / cancel | `Backspace` / `Esc` |
 
 ### Current-buffer grep

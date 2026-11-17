@@ -1,4 +1,5 @@
 mod component;
+mod matching;
 mod state;
 
 pub use state::BufferJumpState;
@@ -78,14 +79,9 @@ pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
     }
 
     if !model.buffer_jump.is_label_phase() {
-        if !model.buffer_jump.push_pattern(character) {
-            return None;
-        }
-        let width = model.editor.active_view_width().unwrap_or(0);
-        if let Some(snapshot) = model.editor.active_snapshot() {
-            model.buffer_jump.assign_targets(&snapshot.text, width);
-        }
-        if model.buffer_jump.targets().is_empty() {
+        model.buffer_jump.push_pattern(character);
+        refresh_matches(model);
+        if model.buffer_jump.is_label_phase() && model.buffer_jump.targets().is_empty() {
             let pattern = model.buffer_jump.pattern().to_string();
             close(model);
             model.status = Some(StatusMessage::info(format!(
@@ -115,6 +111,13 @@ pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
         }
     }
     None
+}
+
+fn refresh_matches(model: &mut Model) {
+    let width = model.editor.active_view_width().unwrap_or(0);
+    if let Some(snapshot) = model.editor.active_snapshot() {
+        model.buffer_jump.refresh_matches(&snapshot.text, width);
+    }
 }
 
 fn start(model: &mut Model) {
@@ -307,7 +310,50 @@ mod tests {
     }
 
     #[test]
-    fn renders_dimmed_text_with_bright_labels_and_hides_the_cursor() {
+    fn one_character_input_highlights_following_characters_before_labels() {
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+        create_buffer(&mut model, "hello\nyellow\nelse");
+        let manager = MessageManager::default();
+        manager.update(&mut model, Message::Resize(40, 8));
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("buffer_jump_start")),
+        );
+        manager.update(&mut model, Message::TextInput('e'));
+
+        assert_eq!(model.buffer_jump.matches().len(), 4);
+        assert!(model.buffer_jump.targets().is_empty());
+        assert!(!model.buffer_jump.is_label_phase());
+        let backend = TestBackend::new(40, 8);
+        let mut terminal = Terminal::new(backend).unwrap();
+        terminal
+            .draw(|frame| Editor::default().view(&model, frame))
+            .unwrap();
+
+        let content = terminal.backend().buffer().content();
+        let text = content.iter().map(|cell| cell.symbol()).collect::<String>();
+        assert!(text.contains("Jump: one more"));
+        let accent = model.theme.ui().action_hint.fg;
+        assert!(content.iter().any(|cell| {
+            cell.symbol() == "l"
+                && Some(cell.fg) == accent
+                && !cell.modifier.contains(Modifier::DIM)
+        }));
+        assert!(!content.iter().any(|cell| {
+            cell.symbol() == "e"
+                && Some(cell.fg) == accent
+                && !cell.modifier.contains(Modifier::DIM)
+        }));
+        assert!(
+            content
+                .iter()
+                .any(|cell| { cell.symbol() == "h" && cell.modifier.contains(Modifier::DIM) })
+        );
+    }
+
+    #[test]
+    fn renders_only_bright_labels_after_two_characters_and_hides_the_cursor() {
         let mut model = Model::default();
         model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "hello");
@@ -337,6 +383,12 @@ mod tests {
                 .iter()
                 .any(|cell| cell.symbol() == "z" && !cell.modifier.contains(Modifier::DIM))
         );
+        let match_color = model.theme.ui().action_hint.fg;
+        assert!(!content.iter().any(|cell| {
+            matches!(cell.symbol(), "e" | "l")
+                && Some(cell.fg) == match_color
+                && !cell.modifier.contains(Modifier::DIM)
+        }));
 
         manager.update(&mut model, Message::Resize(4, 2));
         let backend = TestBackend::new(4, 2);

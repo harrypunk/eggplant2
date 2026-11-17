@@ -100,6 +100,14 @@ This is the interface boundary to prefer: shared behavior in the operation, vary
 
 Feature availability comes from composition—the editor's Normal keymap and adapter—not from page checks inside the reusable capability. A page that does not need scrolling simply does not compose it.
 
+### Example: visible-buffer jump matching
+
+`features/buffer_jump/matching.rs` depends on the narrow `VisibleJumpView` interface: visible line text/count, first absolute line, and horizontal offset. It owns smart-case matching and display-cell geometry without importing `Model` or rendering state. Tests provide a small fake view.
+
+`BufferJumpState` owns the typed pattern, live matches, adaptive labels, and source identity. The application adapter refreshes matches only for newly typed pattern characters and performs final cursor movement through `EditorSession`.
+
+The editor overlay uses the same geometry to highlight the character following each first-character match, showing which second character the user can type. Matches at line end have no hint. After the second character, phase dispatch draws only labels and removes the earlier hints. Rendering leaves receive match/target slices rather than `Model`; they do not search or mutate the session.
+
 ### Example: environment-independent hash copying
 
 `capabilities/copy_hash.rs` accepts hash text, `HashFormat`, and any `ClipboardWriter`. `CopyHash<C>` returns a `CopyHashOutcome` containing the selected text and copy result; it imports no page, VCS, `Model`, message, or effect types. Tests inject an in-memory clipboard, and other callers can provide a different output implementation.
