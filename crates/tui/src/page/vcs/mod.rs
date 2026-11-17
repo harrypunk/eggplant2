@@ -9,7 +9,7 @@ use ratatui::{
 };
 
 use crate::{
-    component::commit_message,
+    component::{commit_message, picker, text_input::TextInput},
     data_object::Model,
     theme::UiTheme,
     vcs::{ChangesState, HistoryState},
@@ -67,7 +67,10 @@ impl Vcs {
             }
         }
         if model.vcs.help_visible {
-            render_help(model, frame, areas.help);
+            render_help(model, frame, areas.bottom);
+        }
+        if model.vcs.merge.active {
+            render_merge_popup(model, frame, frame.area());
         }
     }
 }
@@ -76,16 +79,17 @@ struct VcsLayout {
     hints: Rect,
     head: Rect,
     changes: Rect,
-    help: Rect,
+    bottom: Rect,
 }
 
 impl VcsLayout {
     fn new(area: Rect, help_visible: bool) -> Self {
-        let [hints, head, changes, help] = Layout::vertical([
+        let bottom_height = if help_visible { 5 } else { 0 };
+        let [hints, head, changes, bottom] = Layout::vertical([
             Constraint::Length(3),
             Constraint::Length(2),
             Constraint::Fill(1),
-            Constraint::Length(if help_visible { 5 } else { 0 }),
+            Constraint::Length(bottom_height),
         ])
         .flex(Flex::Start)
         .areas(area);
@@ -93,7 +97,7 @@ impl VcsLayout {
             hints,
             head,
             changes,
-            help,
+            bottom,
         }
     }
 
@@ -110,7 +114,7 @@ fn render_help(model: &Model, frame: &mut Frame, area: Rect) {
     let styles = model.theme.ui();
     let lines = vec![
         Line::raw("s stage   u unstage   Ctrl-s stage all   U unstage all"),
-        Line::raw("Tab toggle  Enter open  l history          c commit"),
+        Line::raw("Tab toggle  Enter open  l history  c commit  m merge"),
         Line::raw("? / Esc close help    x discard (placeholder)"),
     ];
     let help = Paragraph::new(lines).block(
@@ -120,6 +124,77 @@ fn render_help(model: &Model, frame: &mut Frame, area: Rect) {
             .border_style(styles.base.patch(styles.focused_border)),
     );
     frame.render_widget(help.style(styles.base), area);
+}
+
+fn render_merge_popup(model: &Model, frame: &mut Frame, area: Rect) {
+    let styles = model.theme.ui();
+    let width = area.width.min(64);
+    let height = area.height.min(12);
+    let popup = Rect::new(
+        area.x + area.width.saturating_sub(width) / 2,
+        area.y + area.height.saturating_sub(height) / 3,
+        width,
+        height,
+    );
+    let block = Block::new()
+        .title("Switch & fast-forward")
+        .borders(Borders::ALL)
+        .border_style(styles.base.patch(styles.focused_border));
+    let inner = block.inner(popup);
+    frame.render_widget(block.style(styles.base), popup);
+    let [query_area, list_area, status_area] = Layout::vertical([
+        Constraint::Length(3),
+        Constraint::Fill(1),
+        Constraint::Length(1),
+    ])
+    .areas(inner);
+
+    let input = TextInput::new(&model.vcs.merge.query, styles);
+    let cursor = input.cursor_position(query_area);
+    frame.render_widget(input, query_area);
+
+    let targets = model.vcs.merge.filtered_targets();
+    let lines = if model.vcs.merge.loading {
+        vec![Line::styled("Loading branches…", styles.muted)]
+    } else if model.vcs.merge.merging {
+        vec![Line::styled("Fast-forwarding…", styles.muted)]
+    } else if targets.is_empty() {
+        vec![Line::styled("No matching branches", styles.muted)]
+    } else {
+        targets
+            .iter()
+            .enumerate()
+            .map(|(index, target)| {
+                let selected = model.vcs.merge.selected == Some(index);
+                let marker = if selected { "> " } else { "  " };
+                Line::styled(
+                    format!("{marker}{target}"),
+                    if selected {
+                        styles
+                            .base
+                            .patch(styles.key_hint)
+                            .add_modifier(Modifier::BOLD)
+                    } else {
+                        styles.base
+                    },
+                )
+            })
+            .collect()
+    };
+    let lines = picker::visible_lines(lines, model.vcs.merge.selected, list_area.height);
+    frame.render_widget(Paragraph::new(lines).style(styles.base), list_area);
+
+    let (status, style) = model.vcs.merge.error.as_ref().map_or(
+        (
+            "Type to filter  Up/Down select  Enter switch  Esc close".to_string(),
+            styles.base.patch(styles.muted),
+        ),
+        |error| (error.clone(), styles.base.patch(styles.error)),
+    );
+    frame.render_widget(Paragraph::new(status).style(style), status_area);
+    if let Some(cursor) = cursor {
+        frame.set_cursor_position(cursor);
+    }
 }
 
 fn head_line(model: &Model, styles: &UiTheme) -> Line<'static> {
@@ -247,6 +322,32 @@ mod tests {
         assert!(content.contains("U unstage all"));
         assert!(content.contains("? / Esc close help"));
         assert!(content.contains("└"));
+    }
+
+    #[test]
+    fn merge_picker_filters_branches_and_shows_errors_in_the_popup() {
+        let mut model = Model::default();
+        model.vcs.merge.active = true;
+        model.vcs.merge.query = "ori".to_string();
+        model.vcs.merge.targets = vec!["main".to_string(), "origin/main".to_string()];
+        model.vcs.merge.selected = Some(0);
+        model.vcs.merge.error = Some("not a fast-forward".to_string());
+        let backend = TestBackend::new(80, 12);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal.draw(|frame| Vcs.view(&model, frame)).unwrap();
+
+        let content = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(content.contains("Switch & fast-forward"));
+        assert!(content.contains("> origin/main"));
+        assert!(!content.contains("> main"));
+        assert!(content.contains("not a fast-forward"));
     }
 
     #[test]

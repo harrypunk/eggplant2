@@ -274,6 +274,14 @@ impl EditorSession {
         self.active_view.as_ref().map(|view| view.buffer)
     }
 
+    /// Stable identities of all open file-backed buffers.
+    pub fn file_buffer_ids(&self) -> Vec<BufferId> {
+        self.buffers
+            .iter()
+            .filter_map(|(&id, buffer)| buffer.document.path().is_some().then_some(id))
+            .collect()
+    }
+
     /// Canonical path of an open file-backed buffer, if it has one.
     pub fn buffer_path(&self, id: BufferId) -> Option<&Path> {
         self.buffers.get(&id)?.document.path()
@@ -501,6 +509,7 @@ impl EditorSession {
         if self.saving_buffers.contains(&id) {
             return Err(EditorError::SaveInProgress(id));
         }
+        let active_buffer = self.active_buffer();
         let view = &mut self
             .active_view
             .as_mut()
@@ -540,7 +549,9 @@ impl EditorSession {
         document.language = prepared.language;
         document.syntax = prepared.syntax;
         document.detect_indent_and_line_ending();
-        view.ensure_cursor_in_view(document, self.scrolloff);
+        if active_buffer == Some(id) {
+            view.ensure_cursor_in_view(document, self.scrolloff);
+        }
         Ok(true)
     }
 

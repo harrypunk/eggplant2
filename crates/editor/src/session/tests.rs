@@ -1244,6 +1244,30 @@ fn external_reload_updates_a_clean_buffer_and_keeps_cursor_valid() {
 }
 
 #[test]
+fn inactive_external_reload_preserves_the_active_buffer_and_cursor() {
+    let directory = tempfile::tempdir().unwrap();
+    let active_path = directory.path().join("active.txt");
+    let inactive_path = directory.path().join("inactive.txt");
+    std::fs::write(&active_path, "active").unwrap();
+    std::fs::write(&inactive_path, "before").unwrap();
+    let mut session = EditorSession::new();
+    let active = open_file(&mut session, &active_path);
+    let inactive = open_file(&mut session, &inactive_path);
+    session.activate_buffer(active).unwrap();
+    session.resize_active_view(80, 10);
+    let before = session.active_snapshot().unwrap();
+    std::fs::write(&inactive_path, "after").unwrap();
+
+    assert!(complete_external_reload(&mut session, inactive).unwrap());
+
+    assert_eq!(session.buffers[&inactive].document.text(), "after");
+    let after = session.active_snapshot().unwrap();
+    assert_eq!(after.buffer_id, active);
+    assert_eq!(after.text.lines[0].text, "active");
+    assert_eq!(after.cursor, before.cursor);
+}
+
+#[test]
 fn external_reload_preserves_dirty_or_deleted_local_buffers() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("note.txt");

@@ -1,6 +1,8 @@
 use std::{
     collections::{BTreeSet, HashMap},
+    io::Write as _,
     path::Path,
+    sync::atomic::AtomicBool,
 };
 
 use anyhow::Context as _;
@@ -623,6 +625,316 @@ fn commit_inner(repository: Repository, message: &str) -> anyhow::Result<ObjectI
     Ok(repository.commit("HEAD", message, tree, parent)?.detach())
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FastForwardOutcome {
+    Updated(ObjectId),
+    AlreadyUpToDate,
+}
+
+/// List existing local and remote-tracking branch names for the merge picker.
+pub fn merge_targets(path: &Path) -> Result<Vec<String>, MutationError> {
+    let repository = open_repository(path).map_err(|_| MutationError::NotRepository)?;
+    let targets = repository
+        .references()
+        .map_err(|error| MutationError::Failed(error.to_string()))?
+        .all()
+        .map_err(|error| MutationError::Failed(error.to_string()))?
+        .try_fold(BTreeSet::new(), |mut targets, reference| {
+            let reference = reference.map_err(|error| anyhow::anyhow!(error.to_string()))?;
+            if let Some((gix::reference::Category::LocalBranch, name)) =
+                reference.name().category_and_short_name()
+            {
+                targets.insert(name.to_str_lossy().into_owned());
+            }
+            Ok::<_, anyhow::Error>(targets)
+        })
+        .map_err(|error| MutationError::Failed(error.to_string()))?
+        .into_iter()
+        .collect();
+    Ok(targets)
+}
+
+/// Advance the current local branch to an explicit local or remote-tracking branch.
+pub fn fast_forward(path: &Path, target: &str) -> Result<FastForwardOutcome, MutationError> {
+    let repository = open_repository(path).map_err(|_| MutationError::NotRepository)?;
+    fast_forward_inner(repository, target).map_err(|error| MutationError::Failed(error.to_string()))
+}
+
+fn fast_forward_inner(repository: Repository, target: &str) -> anyhow::Result<FastForwardOutcome> {
+    if repository.state().is_some() {
+        anyhow::bail!("repository operation in progress");
+    }
+    let mut head = repository.head()?;
+    if head.is_unborn() {
+        anyhow::bail!("unborn HEAD is not supported");
+    }
+    let branch = head
+        .referent_name()
+        .context("detached HEAD is not supported")?
+        .to_owned();
+    let old_id = head.peel_to_commit()?.id;
+    let (target_branch, new_id) = resolve_fast_forward_target(&repository, target)?;
+    let merge_base = repository.merge_base(old_id, new_id)?.detach();
+    let already_up_to_date = old_id == new_id || merge_base == old_id;
+    if !already_up_to_date && merge_base != new_id {
+        anyhow::bail!("not a fast-forward");
+    }
+
+    let mut index_lock = Some(gix::lock::File::acquire_to_update_resource(
+        repository.index_path(),
+        gix::lock::acquire::Fail::Immediately,
+        None,
+    )?);
+    let old_index = open_index(&repository)?;
+    validate_fast_forward_index(&old_index)?;
+    let old_tree = repository.find_commit(old_id)?.tree_id()?.detach();
+    validate_clean_status(&repository, old_index.clone(), old_tree)?;
+    let committer = repository.committer().transpose()?;
+    let branch_edit = ref_update(
+        target_branch.clone(),
+        new_id,
+        if already_up_to_date { new_id } else { old_id },
+        target,
+    );
+    let head_edit = head_switch(branch.clone(), target_branch.clone());
+    let mut prepared = Some(repository.refs.transaction().prepare(
+        [branch_edit, head_edit],
+        gix::lock::acquire::Fail::Immediately,
+        gix::lock::acquire::Fail::Immediately,
+    )?);
+
+    let workdir = repository
+        .workdir()
+        .context("working tree not found")?
+        .to_path_buf();
+    let new_tree = if already_up_to_date {
+        repository.find_commit(new_id)?.tree_id()?.detach()
+    } else {
+        old_tree
+    };
+    let new_index = repository.index_from_tree(&new_tree)?;
+    let result: anyhow::Result<()> = (|| {
+        remove_old_only_paths(&workdir, &old_index, &new_index)?;
+        let mut index = checkout_tree(&repository, new_index, &workdir)?;
+        index.remove_tree();
+        index.write_to(index_lock.as_mut().unwrap(), Default::default())?;
+        index_lock.as_mut().unwrap().flush()?;
+        index_lock.take().unwrap().commit()?;
+        prepared.take().unwrap().commit(committer)?;
+        Ok(())
+    })();
+    if let Err(error) = result {
+        drop(index_lock);
+        drop(prepared);
+        let rollback = restore_after_fast_forward_failure(
+            &repository,
+            branch,
+            target_branch,
+            old_id,
+            new_id,
+            old_tree,
+        );
+        if let Err(rollback) = rollback {
+            return Err(error.context(format!("rollback failed: {rollback:#}")));
+        }
+        return Err(error);
+    }
+    if already_up_to_date {
+        Ok(FastForwardOutcome::AlreadyUpToDate)
+    } else {
+        Ok(FastForwardOutcome::Updated(old_id))
+    }
+}
+
+fn resolve_fast_forward_target(
+    repository: &Repository,
+    target: &str,
+) -> anyhow::Result<(gix::refs::FullName, ObjectId)> {
+    let name = format!("refs/heads/{target}");
+    if let Ok(mut reference) = repository.find_reference(&name) {
+        let id = reference.peel_to_commit()?.id;
+        return Ok((reference.name().to_owned(), id));
+    }
+    anyhow::bail!("merge target must be an existing local branch")
+}
+
+fn validate_fast_forward_index(index: &IndexFile) -> anyhow::Result<()> {
+    if index
+        .entries()
+        .iter()
+        .any(|entry| entry.stage() != Stage::Unconflicted || entry.mode == Mode::COMMIT)
+    {
+        anyhow::bail!("conflicted or unsupported index entries");
+    }
+    Ok(())
+}
+
+fn validate_clean_status(
+    repository: &Repository,
+    index: IndexFile,
+    head_tree: ObjectId,
+) -> anyhow::Result<()> {
+    let mut items = repository
+        .status(gix::progress::Discard)?
+        .index(gix::worktree::IndexPersistedOrInMemory::InMemory(index))
+        .head_tree(head_tree)
+        .untracked_files(gix::status::UntrackedFiles::Files)
+        .into_iter(Vec::<BString>::new())?;
+    if let Some(item) = items.next() {
+        item?;
+        anyhow::bail!("worktree or index is not clean");
+    }
+    Ok(())
+}
+
+fn ref_update(
+    name: gix::refs::FullName,
+    expected: ObjectId,
+    new: ObjectId,
+    target: &str,
+) -> gix::refs::transaction::RefEdit {
+    gix::refs::transaction::RefEdit {
+        name,
+        deref: false,
+        change: gix::refs::transaction::Change::Update {
+            expected: gix::refs::transaction::PreviousValue::MustExistAndMatch(
+                gix::refs::Target::Object(expected),
+            ),
+            new: gix::refs::Target::Object(new),
+            log: gix::refs::transaction::LogChange {
+                mode: gix::refs::transaction::RefLog::AndReference,
+                force_create_reflog: false,
+                message: format!("merge {target}: fast-forward").into(),
+            },
+        },
+    }
+}
+
+fn head_switch(
+    source: gix::refs::FullName,
+    target: gix::refs::FullName,
+) -> gix::refs::transaction::RefEdit {
+    gix::refs::transaction::RefEdit {
+        name: "HEAD".try_into().expect("HEAD is a valid reference"),
+        deref: false,
+        change: gix::refs::transaction::Change::Update {
+            expected: gix::refs::transaction::PreviousValue::MustExistAndMatch(
+                gix::refs::Target::Symbolic(source),
+            ),
+            new: gix::refs::Target::Symbolic(target),
+            log: Default::default(),
+        },
+    }
+}
+
+fn remove_old_only_paths(
+    workdir: &Path,
+    old_index: &IndexFile,
+    new_index: &IndexFile,
+) -> anyhow::Result<()> {
+    let new_paths = new_index
+        .entries()
+        .iter()
+        .map(|entry| entry.path(new_index).to_owned())
+        .collect::<BTreeSet<_>>();
+    for entry in old_index.entries() {
+        let path = entry.path(old_index);
+        if new_paths.contains(path) {
+            continue;
+        }
+        let absolute = workdir.join(gix::path::from_bstr(path));
+        if std::fs::symlink_metadata(&absolute).is_ok() {
+            std::fs::remove_file(&absolute)?;
+        }
+        prune_empty_parents(workdir, &absolute);
+    }
+    Ok(())
+}
+
+fn prune_empty_parents(workdir: &Path, path: &Path) {
+    let mut parent = path.parent();
+    while let Some(directory) = parent.filter(|directory| *directory != workdir) {
+        if std::fs::remove_dir(directory).is_err() {
+            break;
+        }
+        parent = directory.parent();
+    }
+}
+
+fn checkout_tree(
+    repository: &Repository,
+    mut index: IndexFile,
+    workdir: &Path,
+) -> anyhow::Result<IndexFile> {
+    let mut options =
+        repository.checkout_options(gix::worktree::stack::state::attributes::Source::IdMapping)?;
+    options.destination_is_initially_empty = false;
+    options.overwrite_existing = true;
+    options.keep_going = false;
+    let outcome = gix::worktree::state::checkout(
+        &mut index,
+        workdir,
+        repository.objects.clone().into_arc()?,
+        &gix::progress::Discard,
+        &gix::progress::Discard,
+        &AtomicBool::new(false),
+        options,
+    )?;
+    if !outcome.collisions.is_empty()
+        || !outcome.errors.is_empty()
+        || !outcome.delayed_paths_unknown.is_empty()
+        || !outcome.delayed_paths_unprocessed.is_empty()
+    {
+        anyhow::bail!("checkout failed");
+    }
+    Ok(index)
+}
+
+fn restore_after_fast_forward_failure(
+    repository: &Repository,
+    source_branch: gix::refs::FullName,
+    target_branch: gix::refs::FullName,
+    source_id: ObjectId,
+    target_id: ObjectId,
+    old_tree: ObjectId,
+) -> anyhow::Result<()> {
+    let current = repository
+        .find_reference(target_branch.as_ref())?
+        .target()
+        .try_id()
+        .map(|id| id.to_owned());
+    if current == Some(source_id) {
+        repository.edit_reference(ref_update(
+            target_branch.clone(),
+            source_id,
+            target_id,
+            "rollback",
+        ))?;
+    }
+    if repository.head()?.referent_name() == Some(target_branch.as_ref()) {
+        repository.edit_reference(head_switch(target_branch, source_branch))?;
+    }
+    let workdir = repository
+        .workdir()
+        .context("working tree not found")?
+        .to_path_buf();
+    let new_tree = repository.find_commit(source_id)?.tree_id()?.detach();
+    let target_index = repository.index_from_tree(&new_tree)?;
+    let old_index = repository.index_from_tree(&old_tree)?;
+    remove_old_only_paths(&workdir, &target_index, &old_index)?;
+    let mut index = checkout_tree(repository, old_index, &workdir)?;
+    let mut lock = gix::lock::File::acquire_to_update_resource(
+        repository.index_path(),
+        gix::lock::acquire::Fail::Immediately,
+        None,
+    )?;
+    index.remove_tree();
+    index.write_to(&mut lock, Default::default())?;
+    lock.flush()?;
+    lock.commit()?;
+    Ok(())
+}
+
 fn stage_inner(repository: Repository, path: &Path) -> anyhow::Result<()> {
     let relative = relative_path(&repository, path)?;
     let mut index = open_index(&repository)?;
@@ -968,6 +1280,155 @@ mod tests {
 
     fn head_id(root: &Path) -> ObjectId {
         open_repository(root).unwrap().head_id().unwrap().detach()
+    }
+
+    fn fast_forward_fixture() -> (tempfile::TempDir, ObjectId, ObjectId) {
+        let repository = repository();
+        std::fs::write(repository.path().join("obsolete.txt"), "obsolete\n").unwrap();
+        git(repository.path(), &["add", "obsolete.txt"]);
+        git(repository.path(), &["commit", "--quiet", "-m", "base"]);
+        let old = head_id(repository.path());
+        git(repository.path(), &["checkout", "--quiet", "-b", "side"]);
+        std::fs::remove_file(repository.path().join("obsolete.txt")).unwrap();
+        std::fs::write(repository.path().join("note.txt"), "updated\n").unwrap();
+        std::fs::write(repository.path().join("added.txt"), "added\n").unwrap();
+        git(repository.path(), &["add", "-A"]);
+        git(repository.path(), &["commit", "--quiet", "-m", "second"]);
+        let new = head_id(repository.path());
+        git(repository.path(), &["checkout", "--quiet", "side"]);
+        (repository, old, new)
+    }
+
+    #[test]
+    fn fast_forward_updates_branch_index_and_worktree_including_deletions() {
+        let (repository, old, new) = fast_forward_fixture();
+        assert!(!repository.path().join("obsolete.txt").exists());
+
+        let outcome = fast_forward(repository.path(), "main").unwrap();
+
+        assert_eq!(outcome, FastForwardOutcome::Updated(new));
+        assert_eq!(head_id(repository.path()), new);
+        assert_eq!(current_head(repository.path()).as_deref(), Some("main"));
+        assert_ne!(head_id(repository.path()), old);
+        assert!(!repository.path().join("obsolete.txt").exists());
+        assert_eq!(
+            std::fs::read_to_string(repository.path().join("note.txt")).unwrap(),
+            "updated\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(repository.path().join("added.txt")).unwrap(),
+            "added\n"
+        );
+        assert!(changes(repository.path()).unwrap().is_empty());
+        assert_eq!(
+            fast_forward(repository.path(), "main").unwrap(),
+            FastForwardOutcome::AlreadyUpToDate
+        );
+    }
+
+    #[test]
+    fn fast_forward_rejects_remote_tracking_targets() {
+        let (repository, _, new) = fast_forward_fixture();
+        git(
+            repository.path(),
+            &["update-ref", "refs/remotes/origin/side", &new.to_string()],
+        );
+
+        assert!(fast_forward(repository.path(), "origin/side").is_err());
+        assert_eq!(head_id(repository.path()), new);
+    }
+
+    #[test]
+    fn fast_forward_switches_to_a_target_that_already_contains_source() {
+        let (repository, _, new) = fast_forward_fixture();
+        git(repository.path(), &["checkout", "--quiet", "main"]);
+
+        let outcome = fast_forward(repository.path(), "side").unwrap();
+
+        assert_eq!(outcome, FastForwardOutcome::AlreadyUpToDate);
+        assert_eq!(head_id(repository.path()), new);
+        assert_eq!(current_head(repository.path()).as_deref(), Some("side"));
+        assert_eq!(
+            std::fs::read_to_string(repository.path().join("note.txt")).unwrap(),
+            "updated\n"
+        );
+    }
+
+    #[test]
+    fn merge_targets_list_only_local_branches_sorted() {
+        let (repository, _, new) = fast_forward_fixture();
+        git(
+            repository.path(),
+            &["update-ref", "refs/remotes/origin/side", &new.to_string()],
+        );
+
+        assert_eq!(merge_targets(repository.path()).unwrap(), ["main", "side"]);
+    }
+
+    #[test]
+    fn fast_forward_rejects_divergent_and_dirty_repositories_without_mutation() {
+        let (repository, _, _) = fast_forward_fixture();
+        git(repository.path(), &["checkout", "--quiet", "main"]);
+        std::fs::write(repository.path().join("note.txt"), "main\n").unwrap();
+        git(repository.path(), &["add", "note.txt"]);
+        git(repository.path(), &["commit", "--quiet", "-m", "divergent"]);
+        git(repository.path(), &["checkout", "--quiet", "side"]);
+        let divergent = head_id(repository.path());
+        assert!(fast_forward(repository.path(), "main").is_err());
+        assert_eq!(head_id(repository.path()), divergent);
+
+        let (repository, _, new) = fast_forward_fixture();
+        std::fs::write(repository.path().join("untracked.txt"), "local\n").unwrap();
+        assert!(fast_forward(repository.path(), "main").is_err());
+        assert_eq!(head_id(repository.path()), new);
+        assert_eq!(
+            std::fs::read_to_string(repository.path().join("note.txt")).unwrap(),
+            "updated\n"
+        );
+        assert!(!repository.path().join("obsolete.txt").exists());
+        assert!(repository.path().join("added.txt").exists());
+    }
+
+    #[test]
+    fn fast_forward_allows_ignored_files_and_preserves_them() {
+        let (repository, _, _) = fast_forward_fixture();
+        std::fs::write(repository.path().join(".gitignore"), "ignored.txt\n").unwrap();
+        std::fs::write(repository.path().join("ignored.txt"), "local\n").unwrap();
+        git(repository.path(), &["add", ".gitignore"]);
+        git(repository.path(), &["commit", "--quiet", "-m", "ignore"]);
+        let current = head_id(repository.path());
+
+        let outcome = fast_forward(repository.path(), "main").unwrap();
+
+        assert_eq!(outcome, FastForwardOutcome::Updated(current));
+        assert_eq!(
+            std::fs::read_to_string(repository.path().join("ignored.txt")).unwrap(),
+            "local\n"
+        );
+    }
+
+    #[test]
+    fn fast_forward_rejects_detached_unborn_and_locked_repositories() {
+        let (repository, _, new) = fast_forward_fixture();
+        git(repository.path(), &["checkout", "--quiet", "--detach"]);
+        assert!(fast_forward(repository.path(), "main").is_err());
+        assert_eq!(head_id(repository.path()), new);
+
+        let unborn = unborn_repository();
+        assert!(fast_forward(unborn.path(), "main").is_err());
+
+        let (repository, _, new) = fast_forward_fixture();
+        std::fs::write(repository.path().join(".git/index.lock"), "").unwrap();
+        assert!(fast_forward(repository.path(), "main").is_err());
+        assert_eq!(head_id(repository.path()), new);
+        assert!(!repository.path().join("obsolete.txt").exists());
+
+        let (repository, _, new) = fast_forward_fixture();
+        std::fs::write(repository.path().join(".git/refs/heads/main.lock"), "").unwrap();
+        assert!(fast_forward(repository.path(), "main").is_err());
+        assert_eq!(head_id(repository.path()), new);
+        assert!(!repository.path().join("obsolete.txt").exists());
+        assert!(repository.path().join("added.txt").exists());
     }
 
     #[test]

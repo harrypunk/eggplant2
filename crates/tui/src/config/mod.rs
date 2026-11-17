@@ -253,6 +253,16 @@ impl Default for Config {
                     ],
                 ),
                 keymap_context(
+                    "vcs_merge",
+                    [
+                        ("vcs_merge_cancel", "esc"),
+                        ("vcs_merge_submit", "enter"),
+                        ("vcs_merge_backspace", "backspace"),
+                        ("vcs_merge_next", "down"),
+                        ("vcs_merge_previous", "up"),
+                    ],
+                ),
+                keymap_context(
                     "vcs",
                     [
                         ("close_vcs_page", "esc"),
@@ -269,6 +279,7 @@ impl Default for Config {
                         ("vcs_commit_placeholder", "c"),
                         ("vcs_help_placeholder", "?"),
                         ("open_vcs_history", "l"),
+                        ("vcs_merge_start", "m"),
                     ],
                 ),
             ]),

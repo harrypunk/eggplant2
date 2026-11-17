@@ -146,6 +146,14 @@ vcs_discard_placeholder = "x"
 vcs_commit_placeholder = "c"
 vcs_help_placeholder = "?"
 open_vcs_history = "l"
+vcs_merge_start = "m"
+
+[keymap.vcs_merge]
+vcs_merge_cancel = "esc"
+vcs_merge_submit = "enter"
+vcs_merge_backspace = "backspace"
+vcs_merge_next = "down"
+vcs_merge_previous = "up"
 
 [keymap.vcs_commit]
 vcs_commit_close = "q"

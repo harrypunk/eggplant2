@@ -313,6 +313,7 @@ pub mod data_object {
         VcsHistory,
         VcsCommit,
         VcsCommitInput,
+        VcsMerge,
         EditorInput,
         EditorVisual,
         EditorChange,

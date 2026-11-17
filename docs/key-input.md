@@ -29,6 +29,12 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | VCS page | Toggle inline diff for selected file | `Tab` |
 | VCS page | Open history page | `l` |
 | VCS page | Open commit-message page for staged changes | `c` |
+| VCS page | Open branch picker for switch & fast-forward (requires clean status) | `m` |
+| VCS merge picker | Type to filter branches | Printable characters |
+| VCS merge picker | Select next / previous branch | `Down` / `Up` |
+| VCS merge picker | Submit selected target | `Enter` |
+| VCS merge picker | Close without merging | `Esc` |
+| VCS merge picker | Delete previous filter character | `Backspace` |
 | VCS history page | Close and return to Git status | `q` / `Esc` |
 | VCS history page | Select previous / next commit | `k` / `j` |
 | VCS history page | Jump to first / last commit or detail file | `gg` / `G` (no counts) |

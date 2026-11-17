@@ -42,6 +42,8 @@ impl TextInputRegistry {
         crate::change::register_text_input(&mut registry)
             .expect("change text input must be unique");
         crate::yank::register_text_input(&mut registry).expect("yank text input must be unique");
+        crate::vcs::merge::register_text_input(&mut registry)
+            .expect("merge-target text input must be unique");
         registry
     }
 

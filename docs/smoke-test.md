@@ -79,6 +79,12 @@ Use a repository containing both staged and unstaged changes, then open the Git 
 - [ ] `Ctrl-s` saves modified file-backed buffers, waits for saves, and commits exactly the staged content without including unstaged or untracked files.
 - [ ] Backend or save failures preserve the draft. Success clears it, returns to status, and refreshes HEAD, changes, history, and diff indicators.
 
+### Fast-forward merge
+
+- [ ] `m` opens a picker with existing local target branches. Typing filters, Up/Down selects, Enter switches to the target and fast-forwards it to the source branch, and Escape cancels. Backend errors remain in the popup.
+- [ ] Pending Git changes or unsaved/saving buffers prevent opening or submitting a merge; no files are saved automatically. Dirty, untracked, conflicted, detached, unborn, divergent, and locked repositories fail without changing HEAD or worktree contents.
+- [ ] A successful switch leaves HEAD on the target, advances that target when required, and updates index, added/modified/deleted worktree files, history, and diff indicators. All clean open buffers reload after every switch, including already-up-to-date targets and inactive buffers; dirty buffers are preserved.
+
 ### History page
 
 - [ ] `l` opens a separate history page without embedding a log in Git status.

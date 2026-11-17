@@ -297,6 +297,7 @@ mod tests {
             (KeyCode::Char('c'), "vcs_commit_placeholder"),
             (KeyCode::Char('?'), "vcs_help_placeholder"),
             (KeyCode::Char('l'), "open_vcs_history"),
+            (KeyCode::Char('m'), "vcs_merge_start"),
         ] {
             let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
             assert!(matches!(
@@ -330,6 +331,32 @@ mod tests {
             (KeyCode::Tab, "vcs_history_toggle_diff"),
             (KeyCode::Enter, "open_vcs_commit_detail"),
             (KeyCode::Char('n'), "vcs_history_load_more"),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+    }
+
+    #[test]
+    fn routes_vcs_merge_input_keys() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::VcsMerge);
+
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::TextInput('x'))
+        ));
+        for (key, command) in [
+            (KeyCode::Backspace, "vcs_merge_backspace"),
+            (KeyCode::Down, "vcs_merge_next"),
+            (KeyCode::Up, "vcs_merge_previous"),
+            (KeyCode::Enter, "vcs_merge_submit"),
+            (KeyCode::Esc, "vcs_merge_cancel"),
         ] {
             let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
             assert!(matches!(

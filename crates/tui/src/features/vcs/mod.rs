@@ -16,9 +16,11 @@ use crate::{
 };
 
 pub(crate) mod commit;
+pub(crate) mod merge;
 pub(crate) mod navigation;
 
 use commit::CommitState;
+use merge::MergeState;
 
 const HISTORY_PAGE_SIZE: usize = 20;
 const DIFF_LIMIT: usize = 200;
@@ -65,6 +67,7 @@ pub struct VcsState {
     pub(crate) notice: Option<String>,
     pub(crate) help_visible: bool,
     pub(crate) commit: CommitState,
+    pub(crate) merge: MergeState,
     documents: DocumentFactory,
 }
 
@@ -111,6 +114,7 @@ impl Default for VcsState {
             notice: None,
             help_visible: false,
             commit: CommitState::default(),
+            merge: MergeState::default(),
             documents: DocumentFactory::new(),
         }
     }
@@ -299,7 +303,8 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
     ]
     .into_iter()
     .try_for_each(|command| commands.register(command))?;
-    commit::register_commands(commands)
+    commit::register_commands(commands)?;
+    merge::register_commands(commands)
 }
 
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {

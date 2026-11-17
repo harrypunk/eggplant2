@@ -22,6 +22,11 @@ pub fn file_changed(model: &mut Model, path: &Path, kind: ExternalChangeKind) ->
         ExternalChangeKind::Structure => crate::explorer::refresh_changed(model, path),
         ExternalChangeKind::Content => {}
     }
+    reload_buffer(model, path)
+}
+
+/// Schedule a revision-checked reload for one open path, if it has a buffer.
+pub(crate) fn reload_buffer(model: &mut Model, path: &Path) -> Option<Effect> {
     if !path.exists() {
         return None;
     }
@@ -40,6 +45,20 @@ pub fn file_changed(model: &mut Model, path: &Path, kind: ExternalChangeKind) ->
         path: path.to_path_buf(),
         request: DocumentOpenRequest::new(DocumentFactory::new(), path),
     }))
+}
+
+/// Reload every open file-backed buffer after a repository-wide fast-forward.
+pub(crate) fn reload_open_buffers(model: &mut Model) -> Option<Effect> {
+    model
+        .editor
+        .file_buffer_ids()
+        .into_iter()
+        .fold(None, |combined, id| {
+            let Some(path) = model.editor.buffer_path(id).map(Path::to_path_buf) else {
+                return combined;
+            };
+            Effect::combine(combined, reload_buffer(model, &path))
+        })
 }
 
 fn is_repository_head_change(path: &Path) -> bool {
@@ -251,5 +270,50 @@ mod tests {
         );
         assert_eq!(model.status.unwrap().kind, StatusKind::Error);
         assert_eq!(model.editor.buffer_by_path(&path), Some(id));
+    }
+
+    #[test]
+    fn reload_open_buffers_refreshes_active_and_inactive_clean_documents() {
+        let directory = tempfile::tempdir().unwrap();
+        let active_path = directory.path().join("active.txt");
+        let inactive_path = directory.path().join("inactive.txt");
+        std::fs::write(&active_path, "active-old").unwrap();
+        std::fs::write(&inactive_path, "inactive-old").unwrap();
+        let mut model = Model::default();
+        let active = open_file(&mut model, &active_path);
+        let inactive = open_file(&mut model, &inactive_path);
+        model.editor.activate_buffer(active).unwrap();
+        std::fs::write(&active_path, "active-new").unwrap();
+        std::fs::write(&inactive_path, "inactive-new").unwrap();
+
+        fn apply(model: &mut Model, effect: Effect) {
+            match effect {
+                Effect::Feature(request) => {
+                    MessageManager::default().update(model, request.perform());
+                }
+                Effect::Batch(effects) => {
+                    for effect in effects {
+                        apply(model, effect);
+                    }
+                }
+                _ => panic!("expected feature effects"),
+            }
+        }
+
+        let effect = reload_open_buffers(&mut model).unwrap();
+        apply(&mut model, effect);
+
+        let active_text = model.editor.active_text_snapshot().unwrap().text;
+        assert_eq!(active_text, "active-new");
+        assert_eq!(
+            model.editor.buffer_path(inactive).unwrap(),
+            inactive_path.as_path()
+        );
+        assert_eq!(model.editor.active_buffer(), Some(active));
+        model.editor.activate_buffer(inactive).unwrap();
+        assert_eq!(
+            model.editor.active_text_snapshot().unwrap().text,
+            "inactive-new"
+        );
     }
 }

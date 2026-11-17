@@ -97,6 +97,7 @@ fn parse_context(value: &str) -> Option<Context> {
         "vcs_history" => Some(Context::VcsHistory),
         "vcs_commit" => Some(Context::VcsCommit),
         "vcs_commit_input" => Some(Context::VcsCommitInput),
+        "vcs_merge" => Some(Context::VcsMerge),
         "editor_input" => Some(Context::EditorInput),
         "visual" => Some(Context::EditorVisual),
         "explorer" => Some(Context::Explorer),

@@ -15,13 +15,14 @@ The addon currently provides:
 - Toggleable inline diffs with caching.
 - Safe file opening through the existing document capability.
 - Explicit commits of already-staged changes with a multiline scratch-message editor.
+- Switch-and-fast-forward merges to existing local target branches without fetching or rewriting history.
 
 Discard remains a placeholder. A separate history page provides bounded commit summaries with short IDs, subjects, authors, relative times, and local/remote branch labels following each commit's author for refs pointing exactly at that commit. The Git status HEAD reference and history rows share one commit-message component, including relative-time formatting. Toggling a commit lists its changed files inline. Opening the commit shows a right-side detail with full hash, complete message, author, full ISO date-time with offset, and its file list. Each detail file can toggle its own first-parent diff with the same theme colors and cache behavior as file diffs. Merge commits intentionally use the first parent in this slice. Tree changes are filtered to regular blobs so directory objects never render as text, and multi-file commits retain every changed path. History loads 20 commits per page; the header shows a prominent `n load more` hint plus loading and retry feedback.
 
 ## Ownership and dependency direction
 
 - `crates/vcs` owns Helix VCS/Gitoxide interaction and returns owned branch, change, history, and diff values.
-- `features/vcs/` owns request generations, loading/error state, duplicate suppression, operation state, and stale-result rejection. Its commit workflow owns a separate scratch `EditorSession` and the save-before-commit barrier.
+- `features/vcs/` owns request generations, loading/error state, duplicate suppression, operation state, and stale-result rejection. Its commit workflow owns a separate scratch `EditorSession` and the save-before-commit barrier; merge instead requires a clean status before opening or submitting.
 - `page/vcs/mod.rs`, `page/vcs_history/mod.rs`, and `page/vcs_commit.rs` render feature state without performing repository work. `page/vcs/change_section.rs` owns section rows, selection, path formatting, and consumed height; `page/vcs_history/history_list.rs` and `commit_detail.rs` own their respective view models and selection-following viewports; `component/diff.rs` shares diff-state rendering between status and history.
 - `AppPage` and `Context::Vcs` provide shell navigation; closing the page restores the previous editor or explorer context.
 - No Gitoxide types enter application snapshots or Ratatui components.
@@ -42,6 +43,8 @@ Changed files use the existing safe document-opening and explorer-reveal path. D
 
 The commit page shows a read-only staged-file summary in the semantic `file_path` color above a multiline scratch editor. It supports ordinary navigation, Insert editing, and undo/redo without file-backed auto-save. Closing with `q` preserves the in-memory draft; `Ctrl-c` explicitly discards it. Submission locks editing until completion, preserves the message on failure, and clears it on success.
 
+The merge workflow uses a centered branch picker on the status page: `m` loads existing local target branches, typing filters the list, Up/Down selects, and Enter switches to the target before fast-forwarding that target to the source branch. Git status and file-backed buffers must be clean before opening or submitting; pending changes simply prevent the operation. Errors remain in the popup, while success leaves HEAD on the target and closes it. Remote targets, hashes, tags, arbitrary revisions, and fetching are outside this slice.
+
 ## Mutation behavior
 
 Real stage/unstage operations use filtered worktree-to-blob conversion and locked index writes directly through `gix`; production code does not require an external Git executable. Bulk operations validate all targets and use one final index write rather than partially applying a sequence of single-file writes.
@@ -49,13 +52,15 @@ Real stage/unstage operations use filtered worktree-to-blob conversion and locke
 Operations:
 
 - Run in revisioned background effects.
-- Refuse pending-save states.
+- Stage/unstage refuse pending-save states; commit and merge save first.
 - Preserve worktree contents when unstaging.
 - Merge successful changes into the current staged-first model instead of rescanning the repository.
 - Reject conflicts and unsupported file types explicitly.
 - Preserve ready content during background status refreshes.
 
 Explicit `Ctrl-s` submission saves modified file-backed buffers and waits for in-flight saves before committing. The backend holds the index lock, builds a tree from exactly the staged index, validates identity/message/staged changes and repository state, and updates HEAD through Gitoxide with expected-parent protection. Unstaged and untracked content is never added implicitly. Hooks and signing are outside this slice. Success clears the draft and refreshes HEAD, status, history, and diff bases without reloading unchanged worktree files.
+
+Fast-forward merge refuses pending changes rather than saving them. The backend resolves only exact local target refs, requires a born symbolic HEAD and clean status, and verifies that the target can advance to the source commit through the merge base. It holds the index lock, prepares branch and symbolic-HEAD expected-value transactions before checkout, removes old-only tracked paths, checks out the target tree, and commits index/ref updates with rollback on failure. No merge commit, conflict resolution, fetch, or arbitrary revision evaluation is attempted. Every successful switch refreshes repository state and schedules revision-aware reloads for all open file-backed buffers without overwriting dirty buffers, including targets that were already up to date.
 
 ## Diff behavior
 
@@ -80,5 +85,5 @@ The existing gutter displays a vertical `│` for every change, using the theme'
 
 ## Deferred work
 
-- Reviewed discard and fast-forward-only merge workflows.
+- Reviewed discard workflows.
 - Conflict resolution, staging of unsupported entry types, and other advanced Git behavior.

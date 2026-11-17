@@ -353,7 +353,7 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 ### Milestone 9: Common Git workflows
 
-**Status: planned.**
+**Status: complete.**
 
 **Goal:** support common Git diffs, changed files, history, commits, and fast-forward-only merges through one focused `features/vcs/` extension and a narrow Git capability. Reuse `helix-vcs` and its optional Gitoxide backend rather than adding another VCS implementation or a Jujutsu adapter. Keep Git policy outside `EditorSession`, which retains buffer, text, revision, and persistence ownership.
 
@@ -408,10 +408,10 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 #### M9.6 — Fast-forward-only merge
 
-- [ ] Allow an explicit local or existing remote-tracking target and first verify that the current branch can advance strictly by fast-forward. No fetch is performed implicitly.
-- [ ] Require a clean validated worktree/index and refuse non-fast-forward histories, conflicts, detached/unborn states without clear semantics, or any unsafe local-change condition.
-- [ ] Advance the ref/index/worktree through the narrow backend operation; do not create merge commits or attempt conflict resolution.
-- [ ] Refresh/reload repository and open-buffer state after success, and leave the repository untouched on validation or operation failure. Test fast-forward, already-up-to-date, divergent, dirty-worktree, detached-HEAD, and external-change cases.
+- [x] Allow an explicit local target and switch to it before fast-forwarding that target to the source branch. No fetch is performed implicitly.
+- [x] Require a clean validated worktree/index and refuse non-fast-forward histories, conflicts, detached/unborn states without clear semantics, or any unsafe local-change condition.
+- [x] Switch HEAD to the target and advance the target ref/index/worktree through the narrow backend operation; do not create merge commits or attempt conflict resolution.
+- [x] Refresh/reload repository and open-buffer state after switching to the target, and leave the repository untouched on validation or operation failure. Test target updates, already-up-to-date switches, divergent, dirty-worktree, detached-HEAD, and external-change cases.
 
 **Exit criteria:** users can inspect branch/status, changed files, active-buffer and commit diffs, and bounded history; explicitly commit staged changes; and perform safe fast-forward-only merges. All operations reuse the Helix/Gitoxide stack, preserve editing and persistence invariants, and leave ordinary editing usable when Git is unavailable. Unsupported operations fail closed with concise feedback.
 
