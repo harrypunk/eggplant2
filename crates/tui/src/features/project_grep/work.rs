@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use editor::{DocumentFactory, TextViewSnapshot, preview_document_at, read_text_file};
 
-use super::ProjectGrepResult;
+use super::{ProjectGrepResult, ProjectGrepState};
 use crate::{
     data_object::{Message, Model},
     filesystem::workspace_walk,
@@ -75,27 +75,28 @@ enum ProjectGrepCompletion {
     },
 }
 
-impl Completion for ProjectGrepCompletion {
-    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        match *self {
+impl ProjectGrepCompletion {
+    fn apply(self, state: &mut ProjectGrepState) -> Option<ProjectGrepRequest> {
+        match self {
             Self::Search {
                 query_revision,
                 result,
-            } => model
-                .project_grep
-                .complete_search(query_revision, result)
-                .map(Effect::feature),
+            } => state.complete_search(query_revision, result),
             Self::Preview {
                 query_revision,
                 preview_revision,
                 result,
             } => {
-                model
-                    .project_grep
-                    .complete_preview(query_revision, preview_revision, result);
+                state.complete_preview(query_revision, preview_revision, result);
                 None
             }
         }
+    }
+}
+
+impl Completion for ProjectGrepCompletion {
+    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
+        self.apply(&mut model.project_grep).map(Effect::feature)
     }
 }
 
@@ -149,6 +150,50 @@ fn project_order(left: &ProjectGrepResult, right: &ProjectGrepResult) -> std::cm
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::project_grep::SearchStatus;
+
+    #[test]
+    fn completion_applies_to_feature_state_without_a_model() {
+        let mut state = ProjectGrepState::default();
+        state.open(PathBuf::from("/workspace"));
+        let Some(ProjectGrepRequest::Search { query_revision, .. }) = state.insert('x') else {
+            panic!("typing should start a search");
+        };
+
+        let stale = ProjectGrepCompletion::Search {
+            query_revision: query_revision.wrapping_sub(1),
+            result: Ok(Vec::new()),
+        };
+        assert!(stale.apply(&mut state).is_none());
+        assert_eq!(state.status, SearchStatus::Searching);
+
+        let search = ProjectGrepCompletion::Search {
+            query_revision,
+            result: Ok(vec![ProjectGrepResult {
+                path: PathBuf::from("/workspace/main.rs"),
+                display: "main.rs".to_string(),
+                line: 0,
+                text: "x".to_string(),
+                match_ranges: Vec::new(),
+            }]),
+        };
+        let Some(ProjectGrepRequest::Preview {
+            query_revision,
+            preview_revision,
+            ..
+        }) = search.apply(&mut state)
+        else {
+            panic!("a completed search should start a preview");
+        };
+
+        let preview = ProjectGrepCompletion::Preview {
+            query_revision,
+            preview_revision,
+            result: Ok(TextViewSnapshot::plain(Vec::new())),
+        };
+        assert!(preview.apply(&mut state).is_none());
+        assert!(state.preview.is_some());
+    }
 
     #[test]
     fn searches_workspace_text_with_shared_ignore_and_file_rules() {
