@@ -16,27 +16,33 @@ use super::{ChangesState, repository_changed, repository_target};
 pub(crate) struct CommitState {
     pub(crate) editor: EditorSession,
     phase: CommitPhase,
-    target: Option<PathBuf>,
     revision: u64,
     viewport_width: u16,
     viewport_height: u16,
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CommitAttempt {
+    repository: PathBuf,
+    message: String,
+    revision: u64,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 enum CommitPhase {
     #[default]
     Editing,
-    Saving,
-    Committing,
+    Saving(CommitAttempt),
+    Committing(CommitAttempt),
 }
 
 impl CommitState {
     pub(crate) fn is_editing(&self) -> bool {
-        self.phase == CommitPhase::Editing
+        matches!(self.phase, CommitPhase::Editing)
     }
 
     pub(crate) fn is_waiting_for_save(&self) -> bool {
-        self.phase == CommitPhase::Saving
+        matches!(self.phase, CommitPhase::Saving(_))
     }
 
     pub(crate) fn resize_active_view(&mut self, width: u16, height: u16) {
@@ -48,7 +54,6 @@ impl CommitState {
     fn clear(&mut self) {
         self.editor = EditorSession::default();
         self.phase = CommitPhase::Editing;
-        self.target = None;
     }
 }
 
@@ -164,9 +169,12 @@ fn submit(model: &mut Model) -> Option<Effect> {
         model.vcs.notice = Some("not a Git repository".to_string());
         return None;
     };
-    model.vcs.commit.phase = CommitPhase::Saving;
-    model.vcs.commit.target = Some(target);
     model.vcs.commit.revision = model.vcs.commit.revision.wrapping_add(1);
+    model.vcs.commit.phase = CommitPhase::Saving(CommitAttempt {
+        repository: target,
+        message,
+        revision: model.vcs.commit.revision,
+    });
     model.vcs.commit.editor.enter_normal_mode();
     model
         .context_stack
@@ -177,7 +185,9 @@ fn submit(model: &mut Model) -> Option<Effect> {
 
 /// Continue the save barrier after each ordinary file save completes.
 pub(crate) fn continue_after_save(model: &mut Model) -> Option<Effect> {
-    if model.vcs.commit.phase != CommitPhase::Saving || model.editor.has_saving_buffers() {
+    if !matches!(model.vcs.commit.phase, CommitPhase::Saving(_))
+        || model.editor.has_saving_buffers()
+    {
         return None;
     }
     if let Some(id) = model.editor.first_dirty_file_buffer() {
@@ -193,26 +203,23 @@ pub(crate) fn continue_after_save(model: &mut Model) -> Option<Effect> {
 }
 
 pub(crate) fn save_failed(model: &mut Model, error: &str) {
-    if model.vcs.commit.phase == CommitPhase::Saving {
+    if matches!(model.vcs.commit.phase, CommitPhase::Saving(_)) {
         model.vcs.commit.phase = CommitPhase::Editing;
         model.vcs.notice = Some(format!("Commit cancelled: {error}"));
     }
 }
 
 fn start_commit(model: &mut Model) -> Option<Effect> {
-    let target = model.vcs.commit.target.clone()?;
-    let message = model
-        .vcs
-        .commit
-        .editor
-        .active_text_snapshot()
-        .map(|snapshot| snapshot.text)?;
-    model.vcs.commit.phase = CommitPhase::Committing;
+    let CommitPhase::Saving(attempt) = &model.vcs.commit.phase else {
+        return None;
+    };
+    let attempt = attempt.clone();
+    model.vcs.commit.phase = CommitPhase::Committing(attempt.clone());
     model.vcs.notice = Some("Committing staged changes…".to_string());
     Some(Effect::feature(CommitRequest {
-        target,
-        message,
-        revision: model.vcs.commit.revision,
+        target: attempt.repository,
+        message: attempt.message,
+        revision: attempt.revision,
     }))
 }
 
@@ -243,9 +250,11 @@ struct CommitCompletion {
 
 impl Completion for CommitCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        if model.vcs.commit.phase != CommitPhase::Committing
-            || model.vcs.commit.revision != self.revision
-            || model.vcs.commit.target.as_ref() != Some(&self.target)
+        let CommitPhase::Committing(attempt) = &model.vcs.commit.phase else {
+            return None;
+        };
+        if attempt.revision != self.revision
+            || attempt.repository.as_path() != self.target.as_path()
         {
             return None;
         }
@@ -434,7 +443,7 @@ mod tests {
 
         assert_eq!(model.active_page, AppPage::VcsCommit);
         assert_eq!(message(&model), "first second");
-        assert_eq!(model.vcs.commit.phase, CommitPhase::Committing);
+        assert!(matches!(model.vcs.commit.phase, CommitPhase::Committing(_)));
     }
 
     #[test]
@@ -488,7 +497,7 @@ mod tests {
             Some(Effect::Feature(_))
         ));
         assert_eq!(std::fs::read_to_string(path).unwrap(), "dirty saved\n");
-        assert_eq!(model.vcs.commit.phase, CommitPhase::Committing);
+        assert!(matches!(model.vcs.commit.phase, CommitPhase::Committing(_)));
     }
 
     #[tokio::test]
@@ -512,7 +521,7 @@ mod tests {
         type_text(&mut model, "subject");
 
         assert!(submit(&mut model).is_none());
-        assert_eq!(model.vcs.commit.phase, CommitPhase::Saving);
+        assert!(matches!(model.vcs.commit.phase, CommitPhase::Saving(_)));
         let completion = request.perform().await;
         let effect = finish_save(&mut model, completion);
         assert!(
@@ -524,6 +533,6 @@ mod tests {
             model.editor.has_saving_buffers(),
             model.editor.is_modified(id)
         );
-        assert_eq!(model.vcs.commit.phase, CommitPhase::Committing);
+        assert!(matches!(model.vcs.commit.phase, CommitPhase::Committing(_)));
     }
 }
