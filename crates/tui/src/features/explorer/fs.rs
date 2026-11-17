@@ -82,7 +82,7 @@ fn entry_kind(entry: &ignore::DirEntry) -> ExplorerEntryKind {
 }
 
 /// Flatten one directory level and recurse only into expanded directories.
-fn read_directory(
+pub(super) fn read_directory(
     directory: &Path,
     depth: usize,
     expanded_directories: &HashSet<PathBuf>,

@@ -16,7 +16,7 @@ pub(crate) enum ExplorerRefreshKind {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum ExplorerAction {
     Refresh(ExplorerRefreshKind),
-    Expansion { path: PathBuf },
+    Expansion { path: PathBuf, depth: usize },
     Ignore(IgnoreMode),
     Reveal { path: PathBuf },
 }
@@ -49,8 +49,15 @@ impl ExplorerRequest {
     }
 
     pub(super) fn execute(self) -> ExplorerCompletion {
-        let result =
-            fs::read_visible_entries(&self.root, &self.expanded_directories, self.ignore_mode);
+        let result = match &self.action {
+            ExplorerAction::Expansion { path, depth } => fs::read_directory(
+                path,
+                depth + 1,
+                &self.expanded_directories,
+                self.ignore_mode,
+            ),
+            _ => fs::read_visible_entries(&self.root, &self.expanded_directories, self.ignore_mode),
+        };
         ExplorerCompletion {
             request: self,
             result,
@@ -74,6 +81,12 @@ impl ExplorerState {
             Ok(entries) => entries,
             Err(error) => return ExplorerApply::Failed(request.action, error),
         };
+        if matches!(&request.action, ExplorerAction::Expansion { .. }) {
+            if !self.expand_directory(&request, entries) {
+                return ExplorerApply::Unchanged;
+            }
+            return ExplorerApply::Applied(request.action);
+        }
         let selected_path = match &request.action {
             ExplorerAction::Reveal { path } => {
                 if !entries.iter().any(|entry| &entry.path == path) {
@@ -112,7 +125,9 @@ impl Completion for ExplorerCompletion {
             ExplorerApply::Failed(action, error) => {
                 let (action, path) = match action {
                     ExplorerAction::Refresh(_) => ("failed to refresh", root),
-                    ExplorerAction::Expansion { path } => ("failed to update directory tree", path),
+                    ExplorerAction::Expansion { path, .. } => {
+                        ("failed to update directory tree", path)
+                    }
                     ExplorerAction::Ignore(_) => ("failed to toggle ignored files", root),
                     ExplorerAction::Reveal { path } => ("failed to update file explorer", path),
                 };
@@ -149,6 +164,49 @@ mod tests {
             ExplorerApply::Ignored
         ));
         assert_eq!(state.entries, collapsed);
+    }
+
+    #[test]
+    fn unfold_reads_only_selected_subtree_and_preserves_nested_expansion() {
+        let directory = tempfile::tempdir().unwrap();
+        let first = directory.path().join("a");
+        let nested = first.join("nested");
+        let grandchild = nested.join("grandchild.txt");
+        let second = directory.path().join("b");
+        std::fs::create_dir(&first).unwrap();
+        std::fs::create_dir(&nested).unwrap();
+        std::fs::write(&grandchild, "grandchild").unwrap();
+        std::fs::create_dir(&second).unwrap();
+        std::fs::write(second.join("child.txt"), "child").unwrap();
+        let root = directory.path().to_path_buf();
+        let mut state = ExplorerState::load(&root).unwrap();
+
+        assert!(state.unfold_selected(&root).unwrap());
+        state.selected = state.entries.iter().position(|entry| entry.path == nested);
+        assert!(state.unfold_selected(&root).unwrap());
+        state.selected = state.entries.iter().position(|entry| entry.path == second);
+        assert!(state.unfold_selected(&root).unwrap());
+        state.selected = state.entries.iter().position(|entry| entry.path == first);
+        assert!(state.fold_selected());
+
+        // A full visible-tree rebuild would fail while reading this other expanded directory.
+        std::fs::remove_dir_all(&second).unwrap();
+        let request = state.unfold_request(&root).unwrap();
+        assert!(matches!(
+            state.complete(request.execute()),
+            ExplorerApply::Applied(ExplorerAction::Expansion { .. })
+        ));
+        let nested_entry = state
+            .entries
+            .iter()
+            .find(|entry| entry.path == nested)
+            .unwrap();
+        assert_eq!(
+            nested_entry.expansion,
+            super::super::ExpansionState::Expanded
+        );
+        assert!(state.entries.iter().any(|entry| entry.path == grandchild));
+        assert!(state.entries.iter().any(|entry| entry.path == second));
     }
 
     #[test]

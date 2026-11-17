@@ -91,7 +91,12 @@ impl ExplorerState {
     }
 
     pub(crate) fn unfold_request(&mut self, root: &Path) -> Option<ExplorerRequest> {
-        let path = self.selected_directory()?;
+        let entry = self.selected_entry()?;
+        if entry.kind != ExplorerEntryKind::Directory {
+            return None;
+        }
+        let path = entry.path.clone();
+        let depth = entry.depth;
         let mut expanded_directories = self.expanded_directories.clone();
         if !expanded_directories.insert(path.clone()) {
             return None;
@@ -100,7 +105,7 @@ impl ExplorerState {
             root,
             expanded_directories,
             self.ignore_mode,
-            ExplorerAction::Expansion { path },
+            ExplorerAction::Expansion { path, depth },
         ))
     }
 
@@ -203,6 +208,38 @@ impl ExplorerState {
         self.ignore_mode = ignore_mode;
     }
 
+    pub(super) fn expand_directory(
+        &mut self,
+        request: &ExplorerRequest,
+        entries: Vec<ExplorerEntry>,
+    ) -> bool {
+        let ExplorerAction::Expansion { path, .. } = &request.action else {
+            return false;
+        };
+        let Some(index) = self.entries.iter().position(|entry| &entry.path == path) else {
+            return false;
+        };
+        if self.entries[index].kind != ExplorerEntryKind::Directory {
+            return false;
+        }
+
+        let depth = self.entries[index].depth;
+        let end = self.entries[index + 1..]
+            .iter()
+            .position(|entry| entry.depth <= depth)
+            .map(|offset| index + 1 + offset)
+            .unwrap_or(self.entries.len());
+        drop(self.entries.splice(index + 1..end, entries));
+        self.entries[index].expansion = ExpansionState::Expanded;
+        self.expanded_directories = request.expanded_directories.clone();
+        self.selected = request
+            .selected_path
+            .as_ref()
+            .and_then(|path| self.entries.iter().position(|entry| &entry.path == path))
+            .or_else(|| (!self.entries.is_empty()).then_some(0));
+        true
+    }
+
     /// Load the root's immediate children and select the first entry.
     pub fn load(root: &Path) -> io::Result<Self> {
         let state = Self::default();
@@ -278,12 +315,6 @@ impl ExplorerState {
 
     pub fn selected_entry(&self) -> Option<&ExplorerEntry> {
         self.entries.get(self.selected?)
-    }
-
-    fn selected_directory(&self) -> Option<PathBuf> {
-        self.selected_entry().and_then(|entry| {
-            (entry.kind == ExplorerEntryKind::Directory).then(|| entry.path.clone())
-        })
     }
 }
 
