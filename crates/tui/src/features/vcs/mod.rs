@@ -1,7 +1,4 @@
-use std::{
-    collections::{HashMap, HashSet},
-    path::PathBuf,
-};
+use std::{collections::HashMap, path::PathBuf};
 
 use ::vcs::{ChangeKind, CommitDetails, CommitSummary, Diff, FileChange, HistoryPage};
 use editor::{BufferId, DocumentFactory};
@@ -15,10 +12,12 @@ use crate::{
     },
 };
 
+pub(crate) mod buffer_diff;
 pub(crate) mod commit;
 pub(crate) mod merge;
 pub(crate) mod navigation;
 
+use buffer_diff::{BufferDiffApply, BufferDiffState};
 use commit::CommitState;
 use merge::MergeState;
 
@@ -73,9 +72,7 @@ pub struct VcsState {
     diff_target: Option<PathBuf>,
     diff_revision: u64,
     diff_cache: HashMap<(PathBuf, bool), Diff>,
-    diff_base_loaded: HashSet<BufferId>,
-    diff_base_pending: Option<(BufferId, i32)>,
-    diff_base_generation: u64,
+    buffer_diff: BufferDiffState,
     pub(crate) notice: Option<String>,
     pub(crate) help_visible: bool,
     pub(crate) commit: CommitState,
@@ -123,9 +120,7 @@ impl Default for VcsState {
             diff_target: None,
             diff_revision: 0,
             diff_cache: HashMap::new(),
-            diff_base_loaded: HashSet::new(),
-            diff_base_pending: None,
-            diff_base_generation: 0,
+            buffer_diff: BufferDiffState::default(),
             notice: None,
             help_visible: false,
             commit: CommitState::default(),
@@ -710,32 +705,22 @@ fn mutate_all_changes(model: &mut Model, stage: bool) -> Option<Effect> {
 /// Load the active buffer's HEAD base once, without blocking the editor.
 pub fn sync_active_buffer(model: &mut Model) -> Option<Effect> {
     let (buffer_id, revision) = model.editor.active_revision()?;
-    if model.vcs.diff_base_loaded.contains(&buffer_id)
-        || model.vcs.diff_base_pending == Some((buffer_id, revision))
-    {
+    if !model.vcs.buffer_diff.needs_load(buffer_id, revision) {
         return None;
     }
     let path = model.editor.buffer_path(buffer_id)?.to_path_buf();
-    model.vcs.diff_base_pending = Some((buffer_id, revision));
-    model.vcs.diff_base_generation = model.vcs.diff_base_generation.wrapping_add(1);
+    let generation = model.vcs.buffer_diff.begin(buffer_id, revision);
     Some(Effect::feature(BufferDiffRequest {
         buffer_id,
         revision,
-        generation: model.vcs.diff_base_generation,
+        generation,
         path,
     }))
 }
 
 /// Invalidate one externally reloaded buffer and refresh it if active.
 pub fn refresh_buffer_base(model: &mut Model, buffer_id: BufferId) -> Option<Effect> {
-    model.vcs.diff_base_loaded.remove(&buffer_id);
-    if model
-        .vcs
-        .diff_base_pending
-        .is_some_and(|(id, _)| id == buffer_id)
-    {
-        model.vcs.diff_base_pending = None;
-    }
+    model.vcs.buffer_diff.invalidate(buffer_id);
     if model.editor.active_buffer() == Some(buffer_id) {
         return sync_active_buffer(model);
     }
@@ -744,8 +729,7 @@ pub fn refresh_buffer_base(model: &mut Model, buffer_id: BufferId) -> Option<Eff
 
 /// Invalidate Git metadata and schedule fresh HEAD, status, and active-buffer state.
 pub fn repository_changed(model: &mut Model) -> Option<Effect> {
-    model.vcs.diff_base_loaded.clear();
-    model.vcs.diff_base_pending = None;
+    model.vcs.buffer_diff.invalidate_all();
     model.vcs.refreshing = false;
     model.vcs.changes_refreshing = false;
     if model.vcs.history == HistoryState::Loading {
@@ -1307,21 +1291,21 @@ struct BufferDiffCompletion {
 
 impl Completion for BufferDiffCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        if model.vcs.diff_base_pending != Some((self.buffer_id, self.revision))
-            || model.vcs.diff_base_generation != self.generation
-        {
-            return None;
-        }
-        model.vcs.diff_base_pending = None;
-        let Ok(base) = self.result else {
-            return None;
-        };
-        if let Ok(true) = model.editor.set_buffer_diff_base(
+        let BufferDiffApply::Apply {
+            buffer_id,
+            revision,
+            base,
+        } = model.vcs.buffer_diff.complete(
             self.buffer_id,
             self.revision,
-            base.unwrap_or_default(),
-        ) {
-            model.vcs.diff_base_loaded.insert(self.buffer_id);
+            self.generation,
+            self.result,
+        )
+        else {
+            return None;
+        };
+        if let Ok(true) = model.editor.set_buffer_diff_base(buffer_id, revision, base) {
+            model.vcs.buffer_diff.mark_loaded(buffer_id);
         }
         None
     }
@@ -1914,16 +1898,16 @@ mod tests {
         Box::new(BufferDiffCompletion {
             buffer_id: id,
             revision,
-            generation: model.vcs.diff_base_generation,
+            generation: model.vcs.buffer_diff.generation(),
             result: Ok(Some(b"hello\n".to_vec())),
         })
         .update(&mut model);
-        assert!(model.vcs.diff_base_loaded.contains(&id));
+        assert!(model.vcs.buffer_diff.is_loaded(id));
         assert!(sync_active_buffer(&mut model).is_none());
 
         assert!(refresh_buffer_base(&mut model, id).is_some());
-        assert!(!model.vcs.diff_base_loaded.contains(&id));
-        assert_eq!(model.vcs.diff_base_pending, Some((id, revision)));
+        assert!(!model.vcs.buffer_diff.is_loaded(id));
+        assert_eq!(model.vcs.buffer_diff.pending(), Some((id, revision)));
     }
 
     #[test]
@@ -1933,11 +1917,11 @@ mod tests {
         std::fs::write(&path, "hello\n").unwrap();
         let mut model = Model::default();
         let id = open_file(&mut model, &path);
-        model.vcs.diff_base_loaded.insert(id);
+        model.vcs.buffer_diff.mark_loaded(id);
 
         assert!(repository_changed(&mut model).is_some());
-        assert!(!model.vcs.diff_base_loaded.contains(&id));
-        assert_eq!(model.vcs.diff_base_pending.map(|(id, _)| id), Some(id));
+        assert!(!model.vcs.buffer_diff.is_loaded(id));
+        assert_eq!(model.vcs.buffer_diff.pending().map(|(id, _)| id), Some(id));
     }
 
     #[test]
