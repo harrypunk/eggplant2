@@ -9,6 +9,21 @@ use crate::{
     vcs::navigation::HistoryNavigation,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum VerticalDestination {
+    Start,
+    End,
+    Index(usize),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LineJumpAction {
+    Ignored,
+    Pending,
+    Cancelled,
+    Complete(VerticalDestination),
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct LineJumpState {
     count: Option<usize>,
@@ -36,6 +51,59 @@ impl LineJumpState {
                 .saturating_mul(10)
                 .saturating_add(digit),
         );
+    }
+
+    fn update(&mut self, character: char, accepts_count: bool) -> LineJumpAction {
+        if !self.is_active() {
+            return match character {
+                '1'..='9' if accepts_count => {
+                    self.push_digit(character as usize - '0' as usize);
+                    LineJumpAction::Pending
+                }
+                'g' => {
+                    self.pending_g = true;
+                    LineJumpAction::Pending
+                }
+                'G' => self.finish(false),
+                _ => LineJumpAction::Ignored,
+            };
+        }
+
+        if self.pending_g {
+            return match character {
+                'g' => self.finish(true),
+                _ => {
+                    self.clear();
+                    LineJumpAction::Cancelled
+                }
+            };
+        }
+
+        match character {
+            '0'..='9' => {
+                self.push_digit(character as usize - '0' as usize);
+                LineJumpAction::Pending
+            }
+            'g' => {
+                self.pending_g = true;
+                LineJumpAction::Pending
+            }
+            'G' => self.finish(false),
+            _ => {
+                self.clear();
+                LineJumpAction::Cancelled
+            }
+        }
+    }
+
+    fn finish(&mut self, first_line: bool) -> LineJumpAction {
+        let destination = match (first_line, self.count) {
+            (true, None) => VerticalDestination::Start,
+            (false, None) => VerticalDestination::End,
+            (_, Some(count)) => VerticalDestination::Index(count.saturating_sub(1)),
+        };
+        self.clear();
+        LineJumpAction::Complete(destination)
     }
 
     fn clear(&mut self) {
@@ -74,45 +142,13 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
 
 /// Consume only count and gg/G input; unrelated printable input remains a no-op.
 pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
-    if !model.line_jump.is_active() {
-        match character {
-            '1'..='9' if accepts_count(model) => {
-                model
-                    .line_jump
-                    .push_digit(character as usize - '0' as usize);
-                activate(model);
-            }
-            'g' => {
-                model.line_jump.pending_g = true;
-                activate(model);
-            }
-            'G' => complete(model, false),
-            _ => {}
-        }
-        return None;
-    }
-
-    if model.line_jump.pending_g {
-        match character {
-            'g' => complete(model, true),
-            _ => reset(model),
-        }
-        return None;
-    }
-
-    match character {
-        '0'..='9' => {
-            model
-                .line_jump
-                .push_digit(character as usize - '0' as usize);
-            update_pending(model);
-        }
-        'g' => {
-            model.line_jump.pending_g = true;
-            update_pending(model);
-        }
-        'G' => complete(model, false),
-        _ => reset(model),
+    let accepts_count =
+        !model.line_jump.is_active() && matches!(character, '1'..='9') && accepts_count(model);
+    match model.line_jump.update(character, accepts_count) {
+        LineJumpAction::Ignored => {}
+        LineJumpAction::Pending => activate(model),
+        LineJumpAction::Cancelled => reset(model),
+        LineJumpAction::Complete(destination) => complete(model, destination),
     }
     None
 }
@@ -128,13 +164,6 @@ fn update_pending(model: &mut Model) {
     model.pending_input = model.line_jump.pending_text();
 }
 
-#[derive(Clone, Copy)]
-enum VerticalDestination {
-    Start,
-    End,
-    Index(usize),
-}
-
 fn accepts_count(model: &mut Model) -> bool {
     match (model.active_page, model.context_stack.last()) {
         (_, Some(Context::Explorer)) => model.explorer.accepts_count(),
@@ -143,12 +172,7 @@ fn accepts_count(model: &mut Model) -> bool {
     }
 }
 
-fn complete(model: &mut Model, first_line: bool) {
-    let destination = match (first_line, model.line_jump.count) {
-        (true, None) => VerticalDestination::Start,
-        (false, None) => VerticalDestination::End,
-        (_, Some(count)) => VerticalDestination::Index(count.saturating_sub(1)),
-    };
+fn complete(model: &mut Model, destination: VerticalDestination) {
     reset(model);
     match (model.active_page, model.context_stack.last()) {
         (_, Some(Context::Explorer)) => navigate(&mut model.explorer, destination),
@@ -191,6 +215,30 @@ mod tests {
     fn cursor_line(model: &Model) -> usize {
         let snapshot = model.editor.active_snapshot().unwrap();
         snapshot.text.first_line + snapshot.cursor.unwrap().row
+    }
+
+    #[test]
+    fn state_parses_counts_and_prefixes_without_a_model() {
+        let mut state = LineJumpState::default();
+        assert_eq!(state.update('2', false), LineJumpAction::Ignored);
+        assert!(!state.is_active());
+
+        assert_eq!(state.update('2', true), LineJumpAction::Pending);
+        assert_eq!(state.pending_text().as_deref(), Some("2"));
+        assert_eq!(state.update('g', true), LineJumpAction::Pending);
+        assert_eq!(state.pending_text().as_deref(), Some("2g"));
+        assert_eq!(
+            state.update('g', true),
+            LineJumpAction::Complete(VerticalDestination::Index(1))
+        );
+        assert!(!state.is_active());
+
+        assert_eq!(state.update('g', true), LineJumpAction::Pending);
+        assert_eq!(state.update('x', true), LineJumpAction::Cancelled);
+        assert_eq!(
+            state.update('G', true),
+            LineJumpAction::Complete(VerticalDestination::End)
+        );
     }
 
     #[test]

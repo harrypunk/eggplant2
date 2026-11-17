@@ -88,7 +88,7 @@ trait VerticalNavigation {
 }
 ```
 
-`EditorSession`, `ExplorerState`, and the history adapter provide their own index clamping and selection writes. The existing `line_jump` input flow owns `g` prefixes and completion, then dispatches only the destination. The editor opts into counts; explorer and history keep the default `false`, so `gg`/`G` is shared without accidentally enabling counted jumps everywhere.
+`EditorSession`, `ExplorerState`, and the history adapter provide their own index clamping and selection writes. `LineJumpState::update` parses counts and `g` prefixes into explicit actions without `Model`; the input adapter owns pending display/context updates and dispatches only the completed destination. The editor opts into counts; explorer and history keep the default `false`, so `gg`/`G` is shared without accidentally enabling counted jumps everywhere.
 
 This is the interface boundary to prefer: shared behavior in the operation, varying state and policy in adapters.
 
