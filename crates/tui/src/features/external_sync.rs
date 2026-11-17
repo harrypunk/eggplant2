@@ -31,6 +31,10 @@ pub fn file_changed(model: &mut Model, path: &Path, kind: ExternalChangeKind) ->
     )
 }
 
+pub(crate) fn save_completed(model: &mut Model) -> Option<Effect> {
+    crate::vcs::refresh_changes(model)
+}
+
 /// Schedule a revision-checked reload for one open path, if it has a buffer.
 pub(crate) fn reload_buffer(model: &mut Model, path: &Path) -> Option<Effect> {
     if !path.exists() {

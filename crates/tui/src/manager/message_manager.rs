@@ -115,7 +115,8 @@ impl MessageManager {
                 if model.vcs.commit.is_waiting_for_save() {
                     crate::vcs::commit::continue_after_save(model)
                 } else {
-                    lifecycle::continue_save(model, buffer_id)
+                    let continuation = lifecycle::continue_save(model, buffer_id);
+                    Effect::combine(continuation, crate::external_sync::save_completed(model))
                 }
             }
             lifecycle::SaveOutcome::Failed(error) => {
@@ -267,6 +268,29 @@ mod tests {
         assert_eq!(model.running_state, RunningState::Done);
         assert!(!model.editor.has_saving_buffers());
         assert_eq!(std::fs::read_to_string(second_path).unwrap(), "Bsecond");
+    }
+
+    #[tokio::test]
+    async fn successful_save_schedules_status_refresh() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("note.txt");
+        std::fs::write(&path, "hello").unwrap();
+        let mut model = Model::default();
+        let id = open_file(&mut model, &path);
+        model.editor.enter_insert_mode();
+        model
+            .editor
+            .active_editor()
+            .unwrap()
+            .insert_text("!")
+            .unwrap();
+        model.editor.enter_normal_mode();
+        let completion = model.editor.save_buffer(id).unwrap().perform().await;
+
+        let effect =
+            MessageManager::default().update(&mut model, Message::SaveFinished(completion));
+
+        assert!(matches!(effect, Some(Effect::Feature(_))));
     }
 
     #[test]
