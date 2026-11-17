@@ -2,6 +2,7 @@
 
 pub mod document;
 pub mod file_watcher;
+pub mod page_scroll;
 pub mod register;
 pub mod search;
 

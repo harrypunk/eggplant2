@@ -1,49 +1,32 @@
-use color_eyre::eyre::bail;
-use editor::VerticalDirection;
+use editor::{EditorSession, VerticalDirection};
 
 use crate::{
-    config::PageScrollConfig,
+    capabilities::page_scroll::{ScrollDirection, ScrollViewport},
     data_object::{CommandId, Model, StatusMessage},
     manager::effect::Effect,
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct PageScrollState {
-    step_percent: u8,
-}
+impl ScrollViewport for EditorSession {
+    fn viewport_height(&self) -> Option<usize> {
+        self.active_view_height()
+    }
 
-impl PageScrollState {
-    pub fn from_config(config: &PageScrollConfig) -> color_eyre::Result<Self> {
-        let configured = config.step.trim();
-        let Some(percent) = configured.strip_suffix('%') else {
-            bail!("page-scroll step must be a percentage such as `75%`");
+    fn scroll_lines(&mut self, direction: ScrollDirection, rows: usize) {
+        let direction = match direction {
+            ScrollDirection::Down => VerticalDirection::Down,
+            ScrollDirection::Up => VerticalDirection::Up,
         };
-        let Ok(step_percent) = percent.parse::<u8>() else {
-            bail!(
-                "invalid page-scroll step `{configured}`; expected a percentage from `1%` to `100%`"
-            );
-        };
-        if !(1..=100).contains(&step_percent) {
-            bail!("page-scroll step `{configured}` is outside `1%`..=`100%`");
+        if let Ok(mut editor) = self.active_editor() {
+            let _ = editor.scroll_lines(direction, rows);
         }
-        Ok(Self { step_percent })
-    }
-
-    fn rows(self, viewport_height: usize) -> usize {
-        (viewport_height.saturating_mul(usize::from(self.step_percent)) / 100).max(1)
     }
 }
 
-impl Default for PageScrollState {
-    fn default() -> Self {
-        Self { step_percent: 75 }
-    }
-}
-
+/// Compose page-scroll commands with the main editor's viewport capability.
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     let direction = match id.as_str() {
-        "page_scroll_down" => VerticalDirection::Down,
-        "page_scroll_up" => VerticalDirection::Up,
+        "page_scroll_down" => ScrollDirection::Down,
+        "page_scroll_up" => ScrollDirection::Up,
         _ => {
             model.status = Some(StatusMessage::error(format!(
                 "unknown page-scroll command `{}`",
@@ -52,11 +35,7 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
             return None;
         }
     };
-    let viewport_height = model.editor.active_view_height()?;
-    let rows = model.page_scroll.rows(viewport_height);
-    if let Ok(mut editor) = model.editor.active_editor() {
-        let _ = editor.scroll_lines(direction, rows);
-    }
+    model.page_scroll.scroll(&mut model.editor, direction);
     None
 }
 
@@ -64,25 +43,9 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
 mod tests {
     use super::*;
     use crate::{
-        data_object::Message, manager::message_manager::MessageManager, test_utils::create_buffer,
+        capabilities::page_scroll::PageScroll, data_object::Message,
+        manager::message_manager::MessageManager, test_utils::create_buffer,
     };
-
-    #[test]
-    fn validates_percentage_steps_and_computes_viewport_rows() {
-        let config = PageScrollConfig {
-            step: "25%".to_string(),
-        };
-        let state = PageScrollState::from_config(&config).unwrap();
-        assert_eq!(state.rows(20), 5);
-        assert_eq!(state.rows(1), 1);
-
-        for step in ["", "75", "abc%", "0%", "101%"] {
-            let config = PageScrollConfig {
-                step: step.to_string(),
-            };
-            assert!(PageScrollState::from_config(&config).is_err(), "{step}");
-        }
-    }
 
     #[test]
     fn configured_step_scrolls_down_and_up_without_an_effect() {
@@ -92,14 +55,11 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         create_buffer(&mut model, &text);
-        model.page_scroll = PageScrollState::from_config(&PageScrollConfig {
-            step: "25%".to_string(),
-        })
-        .unwrap();
+        model.page_scroll = PageScroll::from_step("25%").unwrap();
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(80, 12));
         let height = model.editor.active_view_height().unwrap();
-        let expected = model.page_scroll.rows(height);
+        let expected = height / 4;
 
         assert!(
             manager
@@ -110,7 +70,7 @@ mod tests {
                 .is_none()
         );
         let snapshot = model.editor.active_snapshot().unwrap();
-        assert_eq!(snapshot.text.first_line, expected);
+        assert_eq!(snapshot.text.first_line, expected.max(1));
         assert!(snapshot.cursor.is_some());
 
         manager.update(

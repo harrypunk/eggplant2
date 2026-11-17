@@ -1,10 +1,10 @@
 use tui::{
+    capabilities::page_scroll::PageScroll,
     config::Config,
     manager::{
         command_registry::CommandRegistry, keyboard_input_registry::Registry,
         text_input_registry::TextInputRegistry,
     },
-    page_scroll::PageScrollState,
     runtime,
     startup::{initial_model, startup_path_from},
     terminal,
@@ -18,7 +18,7 @@ async fn main() -> color_eyre::Result<()> {
     let mut model = initial_model(initial_path)?;
     let config = Config::load()?;
     model.theme = Theme::from_name(&config.theme)?;
-    model.page_scroll = PageScrollState::from_config(&config.features.page_scroll)?;
+    model.page_scroll = PageScroll::from_step(&config.features.page_scroll.step)?;
     let commands = CommandRegistry::builtin();
     let text_input = TextInputRegistry::builtin();
     let ui = UiRegistry::builtin();

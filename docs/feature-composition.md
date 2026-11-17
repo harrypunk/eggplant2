@@ -92,6 +92,14 @@ trait VerticalNavigation {
 
 This is the interface boundary to prefer: shared behavior in the operation, varying state and policy in adapters.
 
+### Example: page scroll without application context
+
+`capabilities/page_scroll.rs` owns percentage validation and row calculation. Its only runtime dependency is the narrow `ScrollViewport` interface; it does not import `Model`, `AppPage`, the editor crate, configuration modules, or status policy. Unit tests use a small fake viewport.
+
+`features/page_scroll.rs` is the composition adapter: it implements `ScrollViewport` for `EditorSession`, maps command IDs to scroll directions, and invokes the configured `PageScroll` value. Startup converts the raw configured percentage with `PageScroll::from_step`.
+
+Feature availability comes from composition—the editor's Normal keymap and adapter—not from page checks inside the reusable capability. A page that does not need scrolling simply does not compose it.
+
 ## 3. Encapsulate effects as composable policy
 
 Effects are values, not hidden work performed inside rendering or text manipulation. `EditingTarget::after_edit` demonstrates the smallest useful policy hook:
