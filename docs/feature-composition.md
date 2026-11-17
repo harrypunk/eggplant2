@@ -108,7 +108,7 @@ Use this pattern for synchronous composition when a narrow concrete adapter is s
 
 ### Example: reuse typed workflows instead of re-entering command dispatch
 
-`buffer::switch(BufferMovement)` is the shared typed workflow for direct next/previous commands and bracket-prefixed navigation. It preserves outgoing save, buffer activation, explorer reveal, and VCS synchronization. The prefix handler passes its parsed `BufferMovement` directly to this function instead of converting it back into a string `CommandId` and invoking another feature's root handler.
+`buffer::switch(BufferMovement)` is the shared typed workflow for direct next/previous commands and bracket-prefixed navigation. It preserves outgoing save, buffer activation, explorer reveal, and VCS synchronization. `BufferNavigationState` owns prefix begin/finish/clear transitions and prompt text; its adapter passes the parsed `BufferMovement` directly to `buffer::switch` instead of converting it back into a string `CommandId` and invoking another feature's root handler.
 
 Cross-feature reuse should target a semantic capability or workflow like this. Re-entering string dispatch obscures dependencies and makes it easier to accidentally drop required follow-up behavior.
 

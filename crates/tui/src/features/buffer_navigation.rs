@@ -13,6 +13,25 @@ pub struct BufferNavigationState {
     pending: Option<BufferMovement>,
 }
 
+impl BufferNavigationState {
+    fn begin(&mut self, movement: BufferMovement) -> &'static str {
+        self.pending = Some(movement);
+        match movement {
+            BufferMovement::Next => "]",
+            BufferMovement::Previous => "[",
+        }
+    }
+
+    fn finish(&mut self, character: char) -> Option<BufferMovement> {
+        let pending = self.pending.take();
+        if character == 'b' { pending } else { None }
+    }
+
+    fn clear(&mut self) {
+        self.pending = None;
+    }
+}
+
 pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<()> {
     [
         Command::feature(
@@ -55,13 +74,9 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
 }
 
 pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
-    let pending = model.buffer_navigation.pending;
+    let movement = model.buffer_navigation.finish(character);
     reset(model);
-    if character != 'b' {
-        return None;
-    }
-    let movement = pending?;
-    buffer::switch(model, movement)
+    buffer::switch(model, movement?)
 }
 
 fn start(model: &mut Model, movement: BufferMovement) {
@@ -69,19 +84,13 @@ fn start(model: &mut Model, movement: BufferMovement) {
     if model.context_stack.last() != Some(&Context::AppNormal) {
         return;
     }
-    model.buffer_navigation.pending = Some(movement);
-    model.pending_input = Some(
-        match movement {
-            BufferMovement::Next => ']',
-            BufferMovement::Previous => '[',
-        }
-        .to_string(),
-    );
+    let pending = model.buffer_navigation.begin(movement);
+    model.pending_input = Some(pending.to_string());
     model.context_stack.push(Context::BufferNavigation);
 }
 
 fn reset(model: &mut Model) {
-    model.buffer_navigation.pending = None;
+    model.buffer_navigation.clear();
     model.pending_input = None;
     model
         .context_stack
@@ -109,6 +118,23 @@ mod tests {
                 .expect("expected a save effect"),
             _ => panic!("expected a save effect"),
         }
+    }
+
+    #[test]
+    fn state_parses_prefix_completion_without_a_model() {
+        let mut state = BufferNavigationState::default();
+        assert_eq!(state.begin(BufferMovement::Next), "]");
+        assert_eq!(state.finish('x'), None);
+        assert_eq!(state.pending, None);
+
+        assert_eq!(state.begin(BufferMovement::Previous), "[");
+        assert_eq!(state.finish('b'), Some(BufferMovement::Previous));
+        assert_eq!(state.pending, None);
+        assert_eq!(state.finish('b'), None);
+
+        state.begin(BufferMovement::Next);
+        state.clear();
+        assert_eq!(state.pending, None);
     }
 
     #[test]
