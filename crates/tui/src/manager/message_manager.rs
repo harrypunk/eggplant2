@@ -4,7 +4,7 @@ use ratatui::layout::Rect;
 use crate::{
     buffer,
     command_menu::CommandMenuOutcome,
-    data_object::{Message, Model, StatusMessage, Visibility},
+    data_object::{CommandId, Message, Model, StatusMessage, Visibility},
     document,
     explorer::ExplorerEntryKind,
     file_picker, focus, lifecycle,
@@ -89,10 +89,28 @@ impl MessageManager {
             )));
             return None;
         };
+        if Self::lifecycle_blocked_by_commit(model, id) {
+            model.status = Some(StatusMessage::info(
+                "Commit in progress; try again after it finishes",
+            ));
+            return None;
+        }
         match &command.handler {
             CommandHandler::Message(message) => self.update(model, message()),
             CommandHandler::Feature(handler) => handler(model, id),
         }
+    }
+
+    fn lifecycle_blocked_by_commit(model: &Model, id: CommandId) -> bool {
+        const LIFECYCLE_COMMANDS: [&str; 5] = [
+            "quit",
+            "close_buffer",
+            "close_other_buffers",
+            "close_buffers_right",
+            "close_all_buffers",
+        ];
+
+        model.vcs.commit.is_in_progress() && LIFECYCLE_COMMANDS.contains(&id.as_str())
     }
 
     fn open_selected(&self, model: &mut Model) -> Option<Effect> {

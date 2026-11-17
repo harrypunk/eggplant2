@@ -26,6 +26,7 @@ The following slices have landed and are covered by the workspace test suite:
 - Buffer-jump source revision validation.
 - Generated document-open request IDs, origin contexts, and picker-session continuation guards.
 - Save continuation routing at the application root; generic lifecycle no longer imports VCS.
+- Single-owner fail-fast save policy: active commits reject close/quit, and pending close/quit rejects commit submission without changing drafts or owners.
 - Worktree/index/save status synchronization with one-in-flight-plus-trailing-read coalescing.
 - File-picker entry/preview invalidation on external changes.
 - Typed VCS list/detail/change/header/popup props and shared presentation-owned `DiffState`.
@@ -37,7 +38,6 @@ Remaining structural work:
 - Introduce shell-owned modal/session coordination and finish registry/page cleanup.
 - Move explorer tree traversal behind effects if responsiveness measurements justify it.
 
-One behavioral decision remains before save coordination can be completed: when commit saving overlaps close/quit, the product must explicitly choose to reject, queue, or cancel one workflow. The current linear behavior is preserved; no implicit policy was selected during the mechanical refactor.
 
 ## 1. Executive summary
 

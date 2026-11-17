@@ -45,6 +45,13 @@ impl CommitState {
         matches!(self.phase, CommitPhase::Saving(_))
     }
 
+    pub(crate) fn is_in_progress(&self) -> bool {
+        matches!(
+            self.phase,
+            CommitPhase::Saving(_) | CommitPhase::Committing(_)
+        )
+    }
+
     pub(crate) fn resize_active_view(&mut self, width: u16, height: u16) {
         self.viewport_width = width;
         self.viewport_height = height;
@@ -148,6 +155,10 @@ fn return_to_status(model: &mut Model) {
 
 fn submit(model: &mut Model) -> Option<Effect> {
     if !model.vcs.commit.is_editing() {
+        return None;
+    }
+    if model.deferred_action.is_some() {
+        model.vcs.notice = Some("Wait for the pending close/quit operation to finish".to_string());
         return None;
     }
     let message = model
@@ -287,7 +298,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        data_object::Workspace,
+        data_object::{DeferredAction, Workspace},
         manager::message_manager::MessageManager,
         test_utils::{create_buffer, open_file},
         vcs::HistoryState,
@@ -378,6 +389,54 @@ mod tests {
         let snapshot = model.vcs.commit.editor.active_snapshot().unwrap();
         assert!(snapshot.cursor.is_some());
         assert!(snapshot.text.lines.iter().any(|line| line.text == "second"));
+    }
+
+    #[test]
+    fn lifecycle_commands_are_rejected_while_commit_is_in_progress() {
+        let mut model = model(PathBuf::from("/workspace"));
+        open(&mut model);
+        type_text(&mut model, "subject");
+        assert!(matches!(submit(&mut model), Some(Effect::Feature(_))));
+
+        for command in [
+            "quit",
+            "close_buffer",
+            "close_other_buffers",
+            "close_buffers_right",
+            "close_all_buffers",
+        ] {
+            let effect = MessageManager::default()
+                .update(&mut model, Message::InvokeCommand(CommandId(command)));
+            assert!(effect.is_none());
+            assert_eq!(model.deferred_action, None);
+            assert!(matches!(
+                model.running_state,
+                crate::data_object::RunningState::Running
+            ));
+            assert!(matches!(model.vcs.commit.phase, CommitPhase::Committing(_)));
+            assert_eq!(
+                model.status.as_ref().unwrap().text,
+                "Commit in progress; try again after it finishes"
+            );
+        }
+    }
+
+    #[test]
+    fn pending_lifecycle_action_rejects_commit_submission() {
+        let mut model = model(PathBuf::from("/workspace"));
+        model.deferred_action = Some(DeferredAction::Quit);
+        open(&mut model);
+        type_text(&mut model, "subject");
+
+        assert!(submit(&mut model).is_none());
+
+        assert!(model.vcs.commit.is_editing());
+        assert_eq!(message(&model), "subject");
+        assert_eq!(model.deferred_action, Some(DeferredAction::Quit));
+        assert_eq!(
+            model.vcs.notice.as_deref(),
+            Some("Wait for the pending close/quit operation to finish")
+        );
     }
 
     #[test]
@@ -490,6 +549,13 @@ mod tests {
         let Some(Effect::Save(request)) = submit(&mut model) else {
             panic!("a dirty file should be saved before commit");
         };
+        assert!(
+            MessageManager::default()
+                .update(&mut model, Message::InvokeCommand(CommandId("quit")))
+                .is_none()
+        );
+        assert!(matches!(model.vcs.commit.phase, CommitPhase::Saving(_)));
+        assert_eq!(model.deferred_action, None);
         let completion = request.perform().await;
         assert_eq!(completion.buffer_id(), id);
         assert!(matches!(

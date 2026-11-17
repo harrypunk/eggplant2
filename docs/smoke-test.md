@@ -79,6 +79,7 @@ Use a repository containing both staged and unstaged changes, then open the Git 
 - [ ] Empty messages and empty staging do not start repository work.
 - [ ] `Ctrl-s` saves modified file-backed buffers, waits for saves, and commits exactly the staged content without including unstaged or untracked files.
 - [ ] Backend or save failures preserve the draft. Success clears it, returns to status, and refreshes HEAD, changes, history, and diff indicators.
+- [ ] While commit saving or Git work is active, close/quit is rejected with `Commit in progress; try again after it finishes`. While close/quit is pending, commit submission is rejected without changing the draft or deferred action.
 
 ### Fast-forward merge
 
