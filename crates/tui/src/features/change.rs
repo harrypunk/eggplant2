@@ -1,5 +1,5 @@
 use crate::{
-    data_object::{AppPage, CommandId, Context, Model, StatusMessage},
+    data_object::{AppPage, CommandId, Context, Model, PendingInput, StatusMessage},
     editing::{self, EditingTarget, target},
     manager::{
         command_registry::{Command, CommandRegistry},
@@ -156,13 +156,16 @@ fn start(model: &mut Model, pending: PendingChange) {
         return;
     }
     let pending = model.change.begin(pending);
-    model.pending_input = Some(pending.to_string());
+    model.pending_input = Some(PendingInput::new(
+        Context::EditorChange,
+        pending.to_string(),
+    ));
     model.context_stack.push(Context::EditorChange);
 }
 
 fn reset(model: &mut Model) {
     model.change.clear();
-    model.pending_input = None;
+    PendingInput::clear(&mut model.pending_input, Context::EditorChange);
     model
         .context_stack
         .pop_if(|context| context == &Context::EditorChange);
@@ -441,7 +444,10 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("delete_line_pending")),
         );
-        assert_eq!(model.pending_input.as_deref(), Some("d"));
+        assert_eq!(
+            model.pending_input.as_ref().map(PendingInput::text),
+            Some("d")
+        );
         manager.update(&mut model, Message::TextInput('d'));
         assert_eq!(
             model.editor.active_snapshot().unwrap().text.lines[0].text,
@@ -454,7 +460,10 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("change_line_pending")),
         );
-        assert_eq!(model.pending_input.as_deref(), Some("c"));
+        assert_eq!(
+            model.pending_input.as_ref().map(PendingInput::text),
+            Some("c")
+        );
         manager.update(
             &mut model,
             Message::InvokeCommand(CommandId("change_cancel")),

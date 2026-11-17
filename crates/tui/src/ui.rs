@@ -13,7 +13,7 @@ use crate::{
         file_explorer::FileExplorer, key_hints::KeyHints, status_bar::StatusBar,
         tools_panel::ToolsPanel,
     },
-    data_object::{FocusState, FocusTarget, Model},
+    data_object::{FocusState, FocusTarget, Model, PendingInput},
 };
 
 pub type RenderContribution = fn(&Model, &mut Frame, Rect);
@@ -251,6 +251,16 @@ fn render_tools_panel(model: &Model, frame: &mut Frame, area: Rect) {
 fn render_status(model: &Model, frame: &mut Frame, area: Rect) {
     let file_path = active_file_path(model);
     let time = chrono::Local::now().format("%H:%M").to_string();
+    let pending_input = model
+        .pending_input
+        .as_ref()
+        .filter(|pending| {
+            model
+                .context_stack
+                .last()
+                .is_some_and(|context| pending.is_owner(*context))
+        })
+        .map(PendingInput::text);
     frame.render_widget(
         StatusBar::new(
             model.editor.mode(),
@@ -258,7 +268,7 @@ fn render_status(model: &Model, frame: &mut Frame, area: Rect) {
             &file_path,
             &time,
             model.status.as_ref(),
-            model.pending_input.as_deref(),
+            pending_input,
             model.theme.ui(),
         ),
         area,

@@ -19,7 +19,7 @@ impl ViewAlignSession {
 }
 
 use crate::{
-    data_object::{CommandId, Context, Model, StatusMessage},
+    data_object::{CommandId, Context, Model, PendingInput, StatusMessage},
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::Effect,
@@ -81,14 +81,14 @@ fn start(model: &mut Model) {
     let Some(Context::AppNormal) = model.context_stack.last() else {
         return;
     };
-    model.pending_input = Some("z".to_string());
+    model.pending_input = Some(PendingInput::new(Context::ViewAlign, "z"));
     model.view_align = Some(ViewAlignSession::new());
     model.context_stack.push(Context::ViewAlign);
 }
 
 fn reset(model: &mut Model) {
     model.view_align = None;
-    model.pending_input = None;
+    PendingInput::clear(&mut model.pending_input, Context::ViewAlign);
     model
         .context_stack
         .pop_if(|context| context == &Context::ViewAlign);
@@ -103,7 +103,10 @@ mod tests {
 
     fn start_alignment(model: &mut Model, manager: &MessageManager) {
         manager.update(model, Message::InvokeCommand(CommandId("view_align_start")));
-        assert_eq!(model.pending_input.as_deref(), Some("z"));
+        assert_eq!(
+            model.pending_input.as_ref().map(PendingInput::text),
+            Some("z")
+        );
         assert!(model.view_align.is_some());
         assert_eq!(model.context_stack.last(), Some(&Context::ViewAlign));
     }

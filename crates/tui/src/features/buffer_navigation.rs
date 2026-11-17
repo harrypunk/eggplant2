@@ -1,6 +1,6 @@
 use crate::{
     buffer::{self, BufferMovement},
-    data_object::{CommandId, Context, Model, StatusMessage},
+    data_object::{CommandId, Context, Model, PendingInput, StatusMessage},
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::Effect,
@@ -85,13 +85,13 @@ fn start(model: &mut Model, movement: BufferMovement) {
         return;
     }
     let pending = model.buffer_navigation.begin(movement);
-    model.pending_input = Some(pending.to_string());
+    model.pending_input = Some(PendingInput::new(Context::BufferNavigation, pending));
     model.context_stack.push(Context::BufferNavigation);
 }
 
 fn reset(model: &mut Model) {
     model.buffer_navigation.clear();
-    model.pending_input = None;
+    PendingInput::clear(&mut model.pending_input, Context::BufferNavigation);
     model
         .context_stack
         .pop_if(|context| context == &Context::BufferNavigation);
@@ -149,7 +149,10 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("next_buffer_pending")),
         );
-        assert_eq!(model.pending_input.as_deref(), Some("]"));
+        assert_eq!(
+            model.pending_input.as_ref().map(PendingInput::text),
+            Some("]")
+        );
         assert_eq!(model.context_stack.last(), Some(&Context::BufferNavigation));
         manager.update(&mut model, Message::TextInput('b'));
         assert_eq!(model.editor.active_buffer(), Some(first));
@@ -160,7 +163,10 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("previous_buffer_pending")),
         );
-        assert_eq!(model.pending_input.as_deref(), Some("["));
+        assert_eq!(
+            model.pending_input.as_ref().map(PendingInput::text),
+            Some("[")
+        );
         manager.update(&mut model, Message::TextInput('b'));
         assert_eq!(model.editor.active_buffer(), Some(second));
 

@@ -128,7 +128,7 @@ pub mod data_object {
 
         // Transient feedback, popup, and save-dependent workflows.
         pub status: Option<StatusMessage>,
-        pub pending_input: Option<String>,
+        pub pending_input: Option<PendingInput>,
         pub opening_file: Option<OpenLocation>,
         pub deferred_action: Option<DeferredAction>,
         pub command_menu: CommandMenuState,
@@ -234,6 +234,35 @@ pub mod data_object {
             Self {
                 kind: StatusKind::Error,
                 text: text.into(),
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct PendingInput {
+        owner: Context,
+        text: String,
+    }
+
+    impl PendingInput {
+        pub fn new(owner: Context, text: impl Into<String>) -> Self {
+            Self {
+                owner,
+                text: text.into(),
+            }
+        }
+
+        pub fn text(&self) -> &str {
+            &self.text
+        }
+
+        pub fn is_owner(&self, owner: Context) -> bool {
+            self.owner == owner
+        }
+
+        pub(crate) fn clear(slot: &mut Option<Self>, owner: Context) {
+            if slot.as_ref().is_some_and(|pending| pending.is_owner(owner)) {
+                *slot = None;
             }
         }
     }

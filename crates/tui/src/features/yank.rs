@@ -2,7 +2,7 @@ use editor::{BufferId, PastePosition};
 use helix_view::clipboard::{ClipboardProvider, ClipboardType};
 
 use crate::{
-    data_object::{AppPage, CommandId, Context, Message, Model, StatusMessage},
+    data_object::{AppPage, CommandId, Context, Message, Model, PendingInput, StatusMessage},
     editing::{EditingTarget, target},
     manager::{
         command_registry::{Command, CommandRegistry},
@@ -314,13 +314,13 @@ fn start(model: &mut Model) {
         return;
     }
     model.yank.begin_prefix();
-    model.pending_input = Some("y".to_string());
+    model.pending_input = Some(PendingInput::new(Context::EditorYank, "y"));
     model.context_stack.push(Context::EditorYank);
 }
 
 fn reset(model: &mut Model) {
     model.yank.clear_prefix();
-    model.pending_input = None;
+    PendingInput::clear(&mut model.pending_input, Context::EditorYank);
     model
         .context_stack
         .pop_if(|context| context == &Context::EditorYank);
@@ -376,6 +376,27 @@ mod tests {
         state.begin_prefix();
         state.clear_prefix();
         assert_eq!(state.finish_prefix('y'), YankPrefixAction::Ignored);
+    }
+
+    #[test]
+    fn cancel_preserves_another_workflows_pending_input() {
+        let mut model = Model {
+            pending_input: Some(PendingInput::new(Context::LineJump, "2")),
+            ..Model::default()
+        };
+
+        reset(&mut model);
+
+        assert_eq!(
+            model.pending_input.as_ref().map(PendingInput::text),
+            Some("2")
+        );
+        assert!(
+            model
+                .pending_input
+                .as_ref()
+                .is_some_and(|pending| pending.is_owner(Context::LineJump))
+        );
     }
 
     #[test]
@@ -524,7 +545,10 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("yank_line_pending")),
         );
-        assert_eq!(model.pending_input.as_deref(), Some("y"));
+        assert_eq!(
+            model.pending_input.as_ref().map(PendingInput::text),
+            Some("y")
+        );
         manager.update(&mut model, Message::InvokeCommand(CommandId("yank_cancel")));
         assert_eq!(model.pending_input, None);
 

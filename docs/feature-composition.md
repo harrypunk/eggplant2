@@ -118,6 +118,8 @@ Cross-feature reuse should target a semantic capability or workflow like this. R
 
 Use an owned session when a workflow must survive between messages but has a clear completion boundary. This keeps transient state encapsulated without a long-lived controller or hidden `Drop` side effects. `ChangeState` applies the same action-oriented pattern to `dd`, `dw`, `cc`, and `cw`: taking its pending operator makes each prefix one-shot, while the adapter executes the returned typed action. `YankState` similarly owns `yy` begin/finish/clear transitions without mixing that prefix lifecycle into asynchronous paste state.
 
+Shared prompt display uses owner-tagged `PendingInput`: each prefix adapter writes its `Context` with the text, and `PendingInput::clear` removes only a matching owner. The status-bar adapter renders pending text only when that owner is the active input context. One workflow's cancellation therefore cannot erase or expose another workflow's prompt.
+
 ## 3. Encapsulate effects as composable policy
 
 Effects are values, not hidden work performed inside rendering or text manipulation. `EditingTarget::after_edit` demonstrates the smallest useful policy hook:

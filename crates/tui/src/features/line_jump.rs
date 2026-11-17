@@ -1,7 +1,7 @@
 use editor::EditorSession;
 
 use crate::{
-    data_object::{AppPage, CommandId, Context, Model, StatusMessage},
+    data_object::{AppPage, CommandId, Context, Model, PendingInput, StatusMessage},
     explorer::ExplorerState,
     manager::{
         command_registry::{Command, CommandRegistry},
@@ -164,7 +164,11 @@ fn activate(model: &mut Model) {
 }
 
 fn update_pending(model: &mut Model) {
-    model.pending_input = model.line_jump.pending_text();
+    if let Some(text) = model.line_jump.pending_text() {
+        model.pending_input = Some(PendingInput::new(Context::LineJump, text));
+    } else {
+        PendingInput::clear(&mut model.pending_input, Context::LineJump);
+    }
 }
 
 enum NavigationTarget<'a> {
@@ -228,7 +232,7 @@ fn navigate(target: &mut impl VerticalNavigation, destination: VerticalDestinati
 
 fn reset(model: &mut Model) {
     model.line_jump.clear();
-    model.pending_input = None;
+    PendingInput::clear(&mut model.pending_input, Context::LineJump);
     model
         .context_stack
         .pop_if(|context| context == &Context::LineJump);
@@ -285,7 +289,10 @@ mod tests {
         manager.update(&mut model, Message::Resize(40, 4));
 
         input(&mut model, &manager, "g");
-        assert_eq!(model.pending_input.as_deref(), Some("g"));
+        assert_eq!(
+            model.pending_input.as_ref().map(PendingInput::text),
+            Some("g")
+        );
         assert_eq!(model.context_stack.last(), Some(&Context::LineJump));
         input(&mut model, &manager, "g");
         assert_eq!(cursor_line(&model), 0);
@@ -306,7 +313,10 @@ mod tests {
         );
 
         input(&mut model, &manager, "2");
-        assert_eq!(model.pending_input.as_deref(), Some("2"));
+        assert_eq!(
+            model.pending_input.as_ref().map(PendingInput::text),
+            Some("2")
+        );
         input(&mut model, &manager, "G");
         let snapshot = model.editor.active_snapshot().unwrap();
         assert_eq!(snapshot.cursor.unwrap().column, 0);
