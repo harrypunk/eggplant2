@@ -1,6 +1,6 @@
 # Global `Model` coupling audit and incremental refactor
 
-Status: planned structural refactor complete; optional future work is listed below.
+Status: planned structural refactor and explorer responsiveness work complete.
 
 Baseline reviewed: `487edc3` on 2026-11-17. The audit covers the TUI application layer, especially `crates/tui/src`. The `editor` and `vcs` crates are included when evaluating dependency direction, but free functions that already accept narrow domain inputs are not treated as problems.
 
@@ -37,10 +37,7 @@ The following slices have landed and are covered by the workspace test suite:
 - File-picker entry/preview invalidation on external changes.
 - History, working-change, and repository workflows have separate implementation modules; `vcs/mod.rs` is reduced to composed state, registration/dispatch, shared selection math, and API re-exports.
 - Typed VCS list/detail/change/header/popup props and shared presentation-owned `DiffState`.
-
-Optional future work:
-
-- Move explorer tree traversal behind effects if responsiveness measurements justify it. This is a performance improvement, not a remaining structural requirement.
+- Explorer reload, fold/unfold, ignore toggles, and reveal use owned generation-checked effects. Current successful completions commit entries, expansion, ignore mode, and selection transactionally; stale results and invisible reveal targets leave the existing tree unchanged.
 
 The planned refactor is complete. `Model` remains the intentional Elm composition root; feature workflows, effects, state transitions, and presentation now use narrow interfaces, controllers, owned requests, or explicit props as appropriate.
 

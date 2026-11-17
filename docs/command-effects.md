@@ -43,6 +43,7 @@ Updates remain pure. A feature returns an effect request; the runtime locates th
 | Save | Async owned future; stable `BufferId` and saved revision. |
 | Picker scan/filter/preview | Blocking pool; feature revision and latest-result checks. |
 | Document open | Blocking read/syntax preparation; generated `OpenRequestId` carried through the TUI request/completion envelope; main-thread construction of non-`Send` Helix `Document`. |
+| Explorer tree work | Blocking traversal with an owned root/expansion/ignore snapshot and generation check; latest successful completion applies entries and selection transactionally. |
 | Theme selection | Pure update; no effect. |
 | Dynamic theme discovery/load | Filesystem effect with request ID, complete validation, and previous-theme preservation on failure. |
 

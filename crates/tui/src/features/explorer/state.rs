@@ -418,6 +418,42 @@ mod tests {
     }
 
     #[test]
+    fn reveal_is_transactional_for_hidden_outside_and_failed_reads() {
+        let directory = tempfile::tempdir().unwrap();
+        let nested = directory.path().join("nested");
+        std::fs::create_dir(&nested).unwrap();
+        let ignored = nested.join("ignored.txt");
+        let visible = directory.path().join("visible.txt");
+        let gitignore = directory.path().join(".gitignore");
+        std::fs::write(&gitignore, "nested/ignored.txt\n").unwrap();
+        std::fs::write(&ignored, "ignored").unwrap();
+        std::fs::write(&visible, "visible").unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let mut explorer = ExplorerState::load(directory.path()).unwrap();
+        let original_entries = explorer.entries.clone();
+        let original_expansion = explorer.expanded_directories.clone();
+        let original_selected = explorer.selected;
+
+        explorer.reveal(directory.path(), &ignored).unwrap();
+        explorer
+            .reveal(directory.path(), &outside.path().join("outside.txt"))
+            .unwrap();
+        assert_eq!(explorer.entries, original_entries);
+        assert_eq!(explorer.expanded_directories, original_expansion);
+        assert_eq!(explorer.selected, original_selected);
+
+        std::fs::remove_file(&ignored).unwrap();
+        std::fs::remove_dir(&nested).unwrap();
+        std::fs::remove_file(&gitignore).unwrap();
+        std::fs::remove_file(&visible).unwrap();
+        std::fs::remove_dir(directory.path()).unwrap();
+        assert!(explorer.reveal(directory.path(), &visible).is_err());
+        assert_eq!(explorer.entries, original_entries);
+        assert_eq!(explorer.expanded_directories, original_expansion);
+        assert_eq!(explorer.selected, original_selected);
+    }
+
+    #[test]
     fn selection_moves_without_wrapping() {
         let directory = tempfile::tempdir().unwrap();
         std::fs::write(directory.path().join("a.txt"), "a").unwrap();
