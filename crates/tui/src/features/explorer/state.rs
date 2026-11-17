@@ -7,7 +7,7 @@ use std::{
 
 use super::{
     fs,
-    work::{ExplorerRefreshKind, ExplorerRequest},
+    work::{ExplorerAction, ExplorerRefreshKind, ExplorerRequest},
 };
 use crate::{data_object::Visibility, navigation::VerticalNavigation};
 
@@ -82,19 +82,84 @@ impl ExplorerState {
         root: &Path,
         kind: ExplorerRefreshKind,
     ) -> ExplorerRequest {
+        self.request(
+            root,
+            self.expanded_directories.clone(),
+            self.ignore_mode,
+            ExplorerAction::Refresh(kind),
+        )
+    }
+
+    pub(crate) fn expansion_request(
+        &mut self,
+        root: &Path,
+        target: ExpansionState,
+    ) -> Option<ExplorerRequest> {
+        let path = self.selected_directory()?;
+        let mut expanded_directories = self.expanded_directories.clone();
+        let changed = match target {
+            ExpansionState::Expanded => expanded_directories.insert(path.clone()),
+            ExpansionState::Collapsed => expanded_directories.remove(&path),
+        };
+        if !changed {
+            return None;
+        }
+        Some(self.request(
+            root,
+            expanded_directories,
+            self.ignore_mode,
+            ExplorerAction::Expansion { path },
+        ))
+    }
+
+    pub(crate) fn toggle_ignore_request(&mut self, root: &Path) -> ExplorerRequest {
+        let ignore_mode = match self.ignore_mode {
+            IgnoreMode::HideIgnored => IgnoreMode::ShowIgnored,
+            IgnoreMode::ShowIgnored => IgnoreMode::HideIgnored,
+        };
+        self.request(
+            root,
+            self.expanded_directories.clone(),
+            ignore_mode,
+            ExplorerAction::Ignore(ignore_mode),
+        )
+    }
+
+    fn request(
+        &mut self,
+        root: &Path,
+        expanded_directories: HashSet<PathBuf>,
+        ignore_mode: IgnoreMode,
+        action: ExplorerAction,
+    ) -> ExplorerRequest {
         self.refresh_generation = self.refresh_generation.wrapping_add(1);
         ExplorerRequest {
             root: root.to_path_buf(),
-            expanded_directories: self.expanded_directories.clone(),
-            ignore_mode: self.ignore_mode,
+            expanded_directories,
+            ignore_mode,
             selected_path: self.selected_entry().map(|entry| entry.path.clone()),
             generation: self.refresh_generation,
-            kind,
+            action,
         }
     }
 
     pub(super) fn refresh_generation(&self) -> u64 {
         self.refresh_generation
+    }
+
+    pub(super) fn replace_tree(
+        &mut self,
+        entries: Vec<ExplorerEntry>,
+        expanded_directories: HashSet<PathBuf>,
+        ignore_mode: IgnoreMode,
+        selected_path: Option<PathBuf>,
+    ) {
+        self.selected = selected_path
+            .and_then(|path| entries.iter().position(|entry| entry.path == path))
+            .or_else(|| (!entries.is_empty()).then_some(0));
+        self.entries = entries;
+        self.expanded_directories = expanded_directories;
+        self.ignore_mode = ignore_mode;
     }
 
     /// Load the root's immediate children and select the first entry.
@@ -110,55 +175,44 @@ impl ExplorerState {
         })
     }
 
-    /// Reload visible entries while preserving expansion and selected path.
-    pub fn reload(&mut self, root: &Path) -> io::Result<()> {
-        self.rebuild(root)
-    }
-
-    /// Toggle Git-ignore filtering without losing expansion or selection state.
+    /// Toggle Git-ignore filtering in synchronous component/state tests.
+    #[cfg(test)]
     pub fn toggle_ignore_mode(&mut self, root: &Path) -> io::Result<IgnoreMode> {
-        let previous = self.ignore_mode;
-        self.ignore_mode = match previous {
-            IgnoreMode::HideIgnored => IgnoreMode::ShowIgnored,
-            IgnoreMode::ShowIgnored => IgnoreMode::HideIgnored,
-        };
-        if let Err(error) = self.rebuild(root) {
-            self.ignore_mode = previous;
-            return Err(error);
-        }
-        Ok(self.ignore_mode)
+        let request = self.toggle_ignore_request(root);
+        let mode = request.ignore_mode;
+        self.complete_test_request(request)?;
+        Ok(mode)
     }
 
-    /// Unfold the selected directory. Returns false for files or expanded directories.
+    /// Unfold the selected directory in synchronous component/state tests.
+    #[cfg(test)]
     pub fn unfold_selected(&mut self, root: &Path) -> io::Result<bool> {
-        let Some(path) = self.selected_directory() else {
+        let Some(request) = self.expansion_request(root, ExpansionState::Expanded) else {
             return Ok(false);
         };
-        if !self.expanded_directories.insert(path.clone()) {
-            return Ok(false);
-        }
-
-        if let Err(error) = self.rebuild(root) {
-            self.expanded_directories.remove(&path);
-            return Err(error);
-        }
+        self.complete_test_request(request)?;
         Ok(true)
     }
 
-    /// Fold the selected directory. Returns false for files or folded directories.
+    /// Fold the selected directory in synchronous component/state tests.
+    #[cfg(test)]
     pub fn fold_selected(&mut self, root: &Path) -> io::Result<bool> {
-        let Some(path) = self.selected_directory() else {
+        let Some(request) = self.expansion_request(root, ExpansionState::Collapsed) else {
             return Ok(false);
         };
-        if !self.expanded_directories.remove(&path) {
-            return Ok(false);
-        }
-
-        if let Err(error) = self.rebuild(root) {
-            self.expanded_directories.insert(path);
-            return Err(error);
-        }
+        self.complete_test_request(request)?;
         Ok(true)
+    }
+
+    #[cfg(test)]
+    fn complete_test_request(&mut self, request: ExplorerRequest) -> io::Result<()> {
+        match self.complete(request.execute()) {
+            super::work::ExplorerApply::Applied(_) => Ok(()),
+            super::work::ExplorerApply::Failed(_, error) => Err(error),
+            super::work::ExplorerApply::Ignored => {
+                unreachable!("a single synchronous test request cannot become stale")
+            }
+        }
     }
 
     /// Expand ancestors and select an opened file when it is visible.
@@ -216,17 +270,6 @@ impl ExplorerState {
         self.selected_entry().and_then(|entry| {
             (entry.kind == ExplorerEntryKind::Directory).then(|| entry.path.clone())
         })
-    }
-
-    fn rebuild(&mut self, root: &Path) -> io::Result<()> {
-        let selected_path = self.selected_entry().map(|entry| entry.path.clone());
-        // Build first so read failures leave the current visible tree untouched.
-        let entries = fs::read_visible_entries(root, &self.expanded_directories, self.ignore_mode)?;
-        self.selected = selected_path
-            .and_then(|path| entries.iter().position(|entry| entry.path == path))
-            .or_else(|| (!entries.is_empty()).then_some(0));
-        self.entries = entries;
-        Ok(())
     }
 }
 

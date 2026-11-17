@@ -1,11 +1,11 @@
-use std::path::PathBuf;
+use std::{io, path::PathBuf};
 
 use crate::{
     data_object::{Message, Model, StatusMessage},
     manager::effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
 };
 
-use super::{ExplorerEntry, ExplorerState, fs};
+use super::{ExplorerEntry, ExplorerState, IgnoreMode, fs};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ExplorerRefreshKind {
@@ -13,25 +13,32 @@ pub(crate) enum ExplorerRefreshKind {
     External,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ExplorerAction {
+    Refresh(ExplorerRefreshKind),
+    Expansion { path: PathBuf },
+    Ignore(IgnoreMode),
+}
+
 #[derive(Debug)]
 pub(crate) struct ExplorerRequest {
     pub root: PathBuf,
     pub expanded_directories: std::collections::HashSet<PathBuf>,
-    pub ignore_mode: super::IgnoreMode,
+    pub ignore_mode: IgnoreMode,
     pub selected_path: Option<PathBuf>,
     pub generation: u64,
-    pub kind: ExplorerRefreshKind,
+    pub action: ExplorerAction,
 }
 
 pub(crate) struct ExplorerCompletion {
     request: ExplorerRequest,
-    result: Result<Vec<ExplorerEntry>, String>,
+    result: io::Result<Vec<ExplorerEntry>>,
 }
 
 pub(crate) enum ExplorerApply {
     Ignored,
-    Applied(ExplorerRefreshKind),
-    Failed(String),
+    Applied(ExplorerAction),
+    Failed(ExplorerAction, io::Error),
 }
 
 impl ExplorerRequest {
@@ -39,10 +46,9 @@ impl ExplorerRequest {
         Message::FeatureCompletion(FeatureCompletion::new(self.execute()))
     }
 
-    fn execute(self) -> ExplorerCompletion {
+    pub(super) fn execute(self) -> ExplorerCompletion {
         let result =
-            fs::read_visible_entries(&self.root, &self.expanded_directories, self.ignore_mode)
-                .map_err(|error| error.to_string());
+            fs::read_visible_entries(&self.root, &self.expanded_directories, self.ignore_mode);
         ExplorerCompletion {
             request: self,
             result,
@@ -57,36 +63,49 @@ impl FeatureEffect for ExplorerRequest {
 }
 
 impl ExplorerState {
-    pub(crate) fn complete_refresh(&mut self, completion: ExplorerCompletion) -> ExplorerApply {
+    pub(crate) fn complete(&mut self, completion: ExplorerCompletion) -> ExplorerApply {
         let ExplorerCompletion { request, result } = completion;
         if self.refresh_generation() != request.generation {
             return ExplorerApply::Ignored;
         }
-        match result {
-            Ok(entries) => {
-                self.selected = request
-                    .selected_path
-                    .and_then(|path| entries.iter().position(|entry| entry.path == path))
-                    .or_else(|| (!entries.is_empty()).then_some(0));
-                self.entries = entries;
-                ExplorerApply::Applied(request.kind)
-            }
-            Err(error) => ExplorerApply::Failed(error),
-        }
+        let entries = match result {
+            Ok(entries) => entries,
+            Err(error) => return ExplorerApply::Failed(request.action, error),
+        };
+        self.replace_tree(
+            entries,
+            request.expanded_directories,
+            request.ignore_mode,
+            request.selected_path,
+        );
+        ExplorerApply::Applied(request.action)
     }
 }
 
 impl Completion for ExplorerCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
         let root = self.request.root.clone();
-        match model.explorer.complete_refresh(*self) {
+        match model.explorer.complete(*self) {
             ExplorerApply::Ignored => {}
-            ExplorerApply::Applied(ExplorerRefreshKind::Manual) => model.status = None,
-            ExplorerApply::Applied(ExplorerRefreshKind::External) => {}
-            ExplorerApply::Failed(error) => {
+            ExplorerApply::Applied(ExplorerAction::Refresh(ExplorerRefreshKind::Manual))
+            | ExplorerApply::Applied(ExplorerAction::Expansion { .. }) => model.status = None,
+            ExplorerApply::Applied(ExplorerAction::Refresh(ExplorerRefreshKind::External)) => {}
+            ExplorerApply::Applied(ExplorerAction::Ignore(mode)) => {
+                let text = match mode {
+                    IgnoreMode::HideIgnored => "Hiding ignored files",
+                    IgnoreMode::ShowIgnored => "Showing ignored files",
+                };
+                model.status = Some(StatusMessage::info(text));
+            }
+            ExplorerApply::Failed(action, error) => {
+                let (action, path) = match action {
+                    ExplorerAction::Refresh(_) => ("failed to refresh", root),
+                    ExplorerAction::Expansion { path } => ("failed to update directory tree", path),
+                    ExplorerAction::Ignore(_) => ("failed to toggle ignored files", root),
+                };
                 model.status = Some(StatusMessage::error(format!(
-                    "failed to refresh `{}`: {error}",
-                    root.display()
+                    "{action} `{}`: {error}",
+                    path.display()
                 )));
             }
         }
@@ -109,13 +128,13 @@ mod tests {
         std::fs::write(root.join("second.txt"), "second").unwrap();
 
         assert!(matches!(
-            state.complete_refresh(first.execute()),
+            state.complete(first.execute()),
             ExplorerApply::Ignored
         ));
         assert!(state.entries.is_empty());
         assert!(matches!(
-            state.complete_refresh(second.execute()),
-            ExplorerApply::Applied(ExplorerRefreshKind::Manual)
+            state.complete(second.execute()),
+            ExplorerApply::Applied(ExplorerAction::Refresh(ExplorerRefreshKind::Manual))
         ));
         assert_eq!(state.entries.len(), 2);
         assert_eq!(state.selected, Some(0));

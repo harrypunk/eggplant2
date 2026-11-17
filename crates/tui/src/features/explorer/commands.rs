@@ -1,21 +1,21 @@
-use std::{fmt::Display, path::Path};
+use std::path::Path;
 
 use crate::{
     data_object::{CommandId, Model, StatusMessage},
     manager::effect::Effect,
 };
 
-use super::{ExpansionState, IgnoreMode, work::ExplorerRefreshKind};
+use super::{ExpansionState, work::ExplorerRefreshKind};
 
 /// Explorer state commands. File opening and panel focus stay in separate slices.
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     match id.as_str() {
         "explorer_next" => model.explorer.select_next(),
         "explorer_previous" => model.explorer.select_previous(),
-        "explorer_fold" => change_expansion(model, ExpansionState::Collapsed),
-        "explorer_unfold" => change_expansion(model, ExpansionState::Expanded),
+        "explorer_fold" => return change_expansion(model, ExpansionState::Collapsed),
+        "explorer_unfold" => return change_expansion(model, ExpansionState::Expanded),
         "refresh_explorer" => return refresh(model),
-        "toggle_ignored_files" => toggle_ignored_files(model),
+        "toggle_ignored_files" => return toggle_ignored_files(model),
         _ => {
             model.status = Some(StatusMessage::error(format!(
                 "unknown explorer command `{}`",
@@ -26,23 +26,12 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     None
 }
 
-fn change_expansion(model: &mut Model, target: ExpansionState) {
-    let Some(workspace) = &model.workspace else {
-        return;
-    };
-    let Some(entry) = model.explorer.selected_entry() else {
-        return;
-    };
-    let path = entry.path.clone();
-    let result = match target {
-        ExpansionState::Expanded => model.explorer.unfold_selected(workspace.root()),
-        ExpansionState::Collapsed => model.explorer.fold_selected(workspace.root()),
-    };
-    match result {
-        Ok(true) => model.status = None,
-        Ok(false) => {}
-        Err(error) => report_error(model, "failed to update directory tree", &path, error),
-    }
+fn change_expansion(model: &mut Model, target: ExpansionState) -> Option<Effect> {
+    let root = model.workspace.as_ref()?.root().to_path_buf();
+    model
+        .explorer
+        .expansion_request(&root, target)
+        .map(Effect::feature)
 }
 
 fn refresh(model: &mut Model) -> Option<Effect> {
@@ -67,29 +56,9 @@ pub(crate) fn refresh_changed(model: &mut Model, path: &Path) -> Option<Effect> 
     ))
 }
 
-fn toggle_ignored_files(model: &mut Model) {
-    let Some(workspace) = &model.workspace else {
-        return;
-    };
-    let root = workspace.root().to_path_buf();
-
-    match model.explorer.toggle_ignore_mode(&root) {
-        Ok(mode) => {
-            let text = match mode {
-                IgnoreMode::HideIgnored => "Hiding ignored files",
-                IgnoreMode::ShowIgnored => "Showing ignored files",
-            };
-            model.status = Some(StatusMessage::info(text));
-        }
-        Err(error) => report_error(model, "failed to toggle ignored files", &root, error),
-    }
-}
-
-fn report_error(model: &mut Model, action: &str, path: &Path, error: impl Display) {
-    model.status = Some(StatusMessage::error(format!(
-        "{action} `{}`: {error}",
-        path.display()
-    )));
+fn toggle_ignored_files(model: &mut Model) -> Option<Effect> {
+    let root = model.workspace.as_ref()?.root().to_path_buf();
+    Some(Effect::feature(model.explorer.toggle_ignore_request(&root)))
 }
 
 #[cfg(test)]
@@ -125,20 +94,29 @@ mod tests {
         let manager = MessageManager::default();
         let workspace_root = model.workspace.as_ref().unwrap().root().to_path_buf();
 
-        manager.update(&mut model, Message::OpenSelected);
+        let effect = manager.update(&mut model, Message::OpenSelected);
+        if let Some(effect) = effect {
+            apply(&mut model, effect);
+        }
         assert_eq!(model.explorer.entries.len(), 2);
         assert_eq!(model.explorer.entries[1].depth, 1);
         assert_eq!(model.workspace.as_ref().unwrap().root(), workspace_root);
 
-        manager.update(
+        let effect = manager.update(
             &mut model,
             Message::InvokeCommand(CommandId("explorer_fold")),
         );
+        if let Some(effect) = effect {
+            apply(&mut model, effect);
+        }
         assert_eq!(model.explorer.entries.len(), 1);
-        manager.update(
+        let effect = manager.update(
             &mut model,
             Message::InvokeCommand(CommandId("explorer_unfold")),
         );
+        if let Some(effect) = effect {
+            apply(&mut model, effect);
+        }
         assert_eq!(model.explorer.entries.len(), 2);
         assert_eq!(model.workspace.as_ref().unwrap().root(), workspace_root);
     }
@@ -172,10 +150,13 @@ mod tests {
         let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
         let manager = MessageManager::default();
 
-        manager.update(
+        let effect = manager.update(
             &mut model,
             Message::InvokeCommand(CommandId("toggle_ignored_files")),
         );
+        if let Some(effect) = effect {
+            apply(&mut model, effect);
+        }
         assert!(
             model
                 .explorer
@@ -188,10 +169,13 @@ mod tests {
             Some("Showing ignored files")
         );
 
-        manager.update(
+        let effect = manager.update(
             &mut model,
             Message::InvokeCommand(CommandId("toggle_ignored_files")),
         );
+        if let Some(effect) = effect {
+            apply(&mut model, effect);
+        }
         assert!(
             model
                 .explorer
@@ -216,7 +200,10 @@ mod tests {
         std::fs::remove_dir(&child).unwrap();
         std::fs::remove_dir(directory.path()).unwrap();
 
-        manager.update(&mut model, Message::OpenSelected);
+        let effect = manager.update(&mut model, Message::OpenSelected);
+        if let Some(effect) = effect {
+            apply(&mut model, effect);
+        }
 
         let status = model.status.as_ref().unwrap();
         assert_eq!(status.kind, StatusKind::Error);
