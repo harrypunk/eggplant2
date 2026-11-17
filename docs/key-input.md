@@ -59,7 +59,7 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | Visual | Delete selection / change selection | `x` or `d` / `c` |
 | Pending delete/change | Cancel | `Esc` |
 | Normal | Yank current line | `yy` |
-| Normal | Paste after / before cursor | `p` / `P` |
+| Normal | Paste after / before cursor (shared register, with system clipboard read-back when available) | `p` / `P` |
 | Visual | Yank selection and return to Normal | `y` |
 | Pending yank | Cancel | `Esc` |
 | Normal | Move | `h`, `j`, `k`, `l` |

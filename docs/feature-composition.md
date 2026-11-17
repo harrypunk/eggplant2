@@ -64,7 +64,7 @@ Adapters provide concrete policies:
 
 `record_deleted` applies the same policy separation to operators: `x`, `dd`, and `dw` reuse the `ActiveEditor` text-object operations in both contexts. The main editor records deleted text in its unnamed register; the commit scratch target does not pollute that register.
 
-`register_text` and `record_yanked` complete the same capability for `yy`, `p`, and `P`. `ActiveEditor::paste_text` owns characterwise and linewise placement, while the target owns register and persistence policy. Explicit yanks intentionally share the register across editor and commit pages; commit deletions still do not overwrite it.
+`register_text` and `record_yanked` complete the same capability for `yy`, `p`, and `P`. `ActiveEditor::paste_text` owns characterwise and linewise placement, while the target owns register and persistence policy. Explicit yanks intentionally share the register across editor and commit pages; commit deletions still do not overwrite it. When a system clipboard provider exists, paste reads it in a background effect, updates the register on completion, and applies only if the original page, buffer, and document revision are unchanged. Local-register paste remains the fallback when no provider exists.
 
 The page dispatcher is the only place that needs to select an adapter. Static generics are normally sufficient; avoid `dyn Trait` and global registries unless dynamic behavior is a real requirement.
 

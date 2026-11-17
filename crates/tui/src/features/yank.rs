@@ -1,11 +1,12 @@
-use editor::PastePosition;
+use editor::{BufferId, PastePosition};
+use helix_view::clipboard::{ClipboardProvider, ClipboardType};
 
 use crate::{
-    data_object::{AppPage, CommandId, Context, Model, StatusMessage},
+    data_object::{AppPage, CommandId, Context, Message, Model, StatusMessage},
     editing::{EditingTarget, target},
     manager::{
         command_registry::{Command, CommandRegistry},
-        effect::Effect,
+        effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
         text_input_registry::TextInputRegistry,
     },
 };
@@ -13,6 +14,20 @@ use crate::{
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct YankState {
     pending: bool,
+    pending_paste: Option<PendingPaste>,
+    paste_generation: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PasteTarget {
+    Main { buffer_id: BufferId, revision: i32 },
+    Commit { buffer_id: BufferId, revision: i32 },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct PendingPaste {
+    target: PasteTarget,
+    generation: u64,
 }
 
 pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<()> {
@@ -120,9 +135,129 @@ fn yank_current_line_with(target: &mut impl EditingTarget) -> Option<Effect> {
 }
 
 fn paste(model: &mut Model, position: PastePosition) -> Option<Effect> {
+    if !paste_enabled(model) {
+        return None;
+    }
+    if !model.register.has_system_provider() {
+        return paste_direct(model, position);
+    }
+    let target = current_paste_target(model)?;
+    model.yank.paste_generation = model.yank.paste_generation.wrapping_add(1);
+    let generation = model.yank.paste_generation;
+    model.yank.pending_paste = Some(PendingPaste { target, generation });
+    Some(Effect::feature(PasteRequest {
+        provider: model.register.provider(),
+        position,
+        target,
+        generation,
+    }))
+}
+
+fn paste_direct(model: &mut Model, position: PastePosition) -> Option<Effect> {
     match model.active_page {
         AppPage::VcsCommit => paste_with(&mut target::commit_message(model), position),
         _ => paste_with(&mut target::main_editor(model), position),
+    }
+}
+
+fn paste_enabled(model: &mut Model) -> bool {
+    match model.active_page {
+        AppPage::VcsCommit => target::commit_message(model).is_editing_enabled(),
+        _ => target::main_editor(model).is_editing_enabled(),
+    }
+}
+
+fn current_paste_target(model: &mut Model) -> Option<PasteTarget> {
+    let (buffer_id, revision) = match model.active_page {
+        AppPage::VcsCommit => model.vcs.commit.editor.active_revision(),
+        _ => model.editor.active_revision(),
+    }?;
+    Some(match model.active_page {
+        AppPage::VcsCommit => PasteTarget::Commit {
+            buffer_id,
+            revision,
+        },
+        _ => PasteTarget::Main {
+            buffer_id,
+            revision,
+        },
+    })
+}
+
+fn target_is_current(model: &mut Model, target: PasteTarget) -> bool {
+    match target {
+        PasteTarget::Main {
+            buffer_id,
+            revision,
+        } => {
+            model.active_page == AppPage::Editor
+                && model.editor.active_revision() == Some((buffer_id, revision))
+        }
+        PasteTarget::Commit {
+            buffer_id,
+            revision,
+        } => {
+            model.active_page == AppPage::VcsCommit
+                && model.vcs.commit.is_editing()
+                && model.vcs.commit.editor.active_revision() == Some((buffer_id, revision))
+        }
+    }
+}
+
+struct PasteRequest {
+    provider: ClipboardProvider,
+    position: PastePosition,
+    target: PasteTarget,
+    generation: u64,
+}
+
+impl FeatureEffect for PasteRequest {
+    fn perform(self: Box<Self>) -> Message {
+        let result = self
+            .provider
+            .get_contents(&ClipboardType::Clipboard)
+            .map_err(|error| error.to_string());
+        Message::FeatureCompletion(FeatureCompletion::new(PasteCompletion {
+            position: self.position,
+            target: self.target,
+            generation: self.generation,
+            result,
+        }))
+    }
+}
+
+struct PasteCompletion {
+    position: PastePosition,
+    target: PasteTarget,
+    generation: u64,
+    result: Result<String, String>,
+}
+
+impl Completion for PasteCompletion {
+    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
+        if model.yank.pending_paste
+            != Some(PendingPaste {
+                target: self.target,
+                generation: self.generation,
+            })
+        {
+            return None;
+        }
+        model.yank.pending_paste = None;
+        let text = match self.result {
+            Ok(text) => text,
+            Err(error) => {
+                model.status = Some(StatusMessage::error(format!(
+                    "System clipboard unavailable: {error}"
+                )));
+                return None;
+            }
+        };
+        if !target_is_current(model, self.target) {
+            return None;
+        }
+        model.register.update_from_clipboard(text);
+        paste_direct(model, self.position)
     }
 }
 
@@ -183,6 +318,7 @@ mod tests {
             ..Model::default()
         };
         model.context_stack.push(Context::VCS);
+        model.register.set_provider(ClipboardProvider::None);
         model.vcs.changes = ChangesState::Ready(vec![FileChange {
             kind: ChangeKind::Modified,
             staged: true,
@@ -206,6 +342,7 @@ mod tests {
         let mut model = Model::default();
         model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "ab");
+        model.register.set_provider(ClipboardProvider::None);
         model.register.record("X".to_string());
         let manager = MessageManager::default();
 
@@ -220,6 +357,59 @@ mod tests {
             Message::InvokeCommand(CommandId("paste_before")),
         );
         assert_eq!(model.editor.active_text_snapshot().unwrap().text, "XaXb");
+    }
+
+    #[test]
+    fn clipboard_completion_updates_register_and_pastes_into_the_original_target() {
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+        create_buffer(&mut model, "ab");
+        let target = current_paste_target(&mut model).unwrap();
+        model.yank.pending_paste = Some(PendingPaste {
+            target,
+            generation: 1,
+        });
+
+        Box::new(PasteCompletion {
+            position: PastePosition::After,
+            target,
+            generation: 1,
+            result: Ok("X".to_string()),
+        })
+        .update(&mut model);
+
+        assert_eq!(model.editor.active_text_snapshot().unwrap().text, "aXb");
+        assert_eq!(model.register.unnamed(), "X");
+        assert_eq!(model.yank.pending_paste, None);
+    }
+
+    #[test]
+    fn clipboard_completion_is_ignored_after_the_target_revision_changes() {
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+        create_buffer(&mut model, "ab");
+        let target = current_paste_target(&mut model).unwrap();
+        model.yank.pending_paste = Some(PendingPaste {
+            target,
+            generation: 1,
+        });
+        model
+            .editor
+            .active_editor()
+            .unwrap()
+            .insert_text("!")
+            .unwrap();
+
+        Box::new(PasteCompletion {
+            position: PastePosition::After,
+            target,
+            generation: 1,
+            result: Ok("stale".to_string()),
+        })
+        .update(&mut model);
+
+        assert_eq!(model.editor.active_text_snapshot().unwrap().text, "!ab");
+        assert_eq!(model.register.unnamed(), "");
     }
 
     #[test]

@@ -17,6 +17,24 @@ impl RegisterState {
         &self.unnamed
     }
 
+    pub fn has_system_provider(&self) -> bool {
+        !matches!(self.provider, ClipboardProvider::None)
+    }
+
+    pub(crate) fn provider(&self) -> ClipboardProvider {
+        self.provider.clone()
+    }
+
+    /// Replace the local register after a background clipboard read without writing it back.
+    pub fn update_from_clipboard(&mut self, text: String) {
+        self.unnamed = text;
+    }
+
+    #[cfg(test)]
+    pub fn set_provider(&mut self, provider: ClipboardProvider) {
+        self.provider = provider;
+    }
+
     /// Update the local register immediately and mirror it in a blocking effect.
     pub fn record(&mut self, text: String) -> Option<Effect> {
         self.unnamed = text.clone();

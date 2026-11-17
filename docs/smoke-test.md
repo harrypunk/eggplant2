@@ -73,7 +73,7 @@ Use a repository containing both staged and unstaged changes, then open the Git 
 
 ### Commit page
 
-- [ ] The header summarizes only staged files; the scratch editor supports multiline messages, Normal/Insert modes, undo/redo, and `x`/`dd`/`dw` deletion without auto-saving a message file or changing the main editor register. `yy` and `p`/`P` share the register intentionally across editor and commit pages.
+- [ ] The header summarizes only staged files; the scratch editor supports multiline messages, Normal/Insert modes, undo/redo, and `x`/`dd`/`dw` deletion without auto-saving a message file or changing the main editor register. `yy` and `p`/`P` share the register intentionally across editor and commit pages. When a system clipboard provider exists, `p`/`P` also read external clipboard text in the background and paste it only into the unchanged target; local-register paste remains available without a provider.
 - [ ] `q` in Normal mode closes and preserves the draft; reopening with `c` restores it. `Ctrl-c` explicitly discards it.
 - [ ] Empty messages and empty staging do not start repository work.
 - [ ] `Ctrl-s` saves modified file-backed buffers, waits for saves, and commits exactly the staged content without including unstaged or untracked files.
