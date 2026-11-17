@@ -3,7 +3,7 @@ use crate::{data_object::Visibility, theme::ThemeName};
 /// Selection state for the modal built-in theme list.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ThemePickerState {
-    pub visibility: Visibility,
+    visibility: Visibility,
     selected: ThemeName,
 }
 
@@ -24,6 +24,10 @@ impl ThemePickerState {
 
     pub fn close(&mut self) {
         self.visibility = Visibility::Hidden;
+    }
+
+    pub fn is_open(&self) -> bool {
+        self.visibility == Visibility::Displayed
     }
 
     pub fn selected(&self) -> ThemeName {
@@ -57,7 +61,7 @@ mod tests {
     fn opens_on_the_active_theme_and_wraps_navigation() {
         let mut picker = ThemePickerState::default();
         picker.open(ThemeName::TokyoNight);
-        assert_eq!(picker.visibility, Visibility::Displayed);
+        assert!(picker.is_open());
         assert_eq!(picker.selected(), ThemeName::TokyoNight);
 
         picker.select_next();
@@ -74,6 +78,6 @@ mod tests {
         assert_eq!(picker.selected(), ThemeName::CatppuccinMocha);
 
         picker.close();
-        assert_eq!(picker.visibility, Visibility::Hidden);
+        assert!(!picker.is_open());
     }
 }

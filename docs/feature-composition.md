@@ -100,6 +100,12 @@ This is the interface boundary to prefer: shared behavior in the operation, vary
 
 Feature availability comes from composition—the editor's Normal keymap and adapter—not from page checks inside the reusable capability. A page that does not need scrolling simply does not compose it.
 
+### Example: a short-lived theme-picker adapter
+
+`ThemePickerAdapter` is constructed per command by destructuring only `ThemePickerState`, `Theme`, the context stack, and status from `Model`. Its methods perform open/close/select/apply transitions, then the adapter is discarded. Pure theme commands return no effect, and picker visibility is private behind `is_open`. The registered `handle_command` is the only function that needs the global model; the widget continues to receive only picker state and theme.
+
+Use this pattern for synchronous composition when a narrow concrete adapter is sufficient. It does not require a new trait, global service, or long-lived controller.
+
 ## 3. Encapsulate effects as composable policy
 
 Effects are values, not hidden work performed inside rendering or text manipulation. `EditingTarget::after_edit` demonstrates the smallest useful policy hook:

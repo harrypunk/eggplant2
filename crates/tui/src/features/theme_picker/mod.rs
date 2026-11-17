@@ -10,62 +10,78 @@ use crate::{
     theme::Theme,
 };
 
-/// Feature-owned theme command handling. The Model adapter keeps this slice small;
-/// a later shell migration can pass narrower state/capabilities without changing IDs.
+/// The only application capabilities needed by theme-picker commands.
+struct ThemePickerAdapter<'a> {
+    state: &'a mut ThemePickerState,
+    theme: &'a mut Theme,
+    contexts: &'a mut Vec<Context>,
+    status: &'a mut Option<StatusMessage>,
+}
+
+impl ThemePickerAdapter<'_> {
+    fn handle(&mut self, id: CommandId) {
+        match id.as_str() {
+            "open_theme_picker" => self.open(),
+            "close_theme_picker" => self.close(),
+            "theme_picker_next" => self.state.select_next(),
+            "theme_picker_previous" => self.state.select_previous(),
+            "apply_theme" => self.apply(),
+            _ => {
+                *self.status = Some(StatusMessage::error(format!(
+                    "unknown theme command `{}`",
+                    id.as_str()
+                )));
+            }
+        }
+    }
+
+    fn open(&mut self) {
+        self.state.open(self.theme.name());
+        if self.contexts.last() != Some(&Context::ThemePicker) {
+            self.contexts.push(Context::ThemePicker);
+        }
+    }
+
+    fn close(&mut self) {
+        self.state.close();
+        self.contexts
+            .pop_if(|context| context == &Context::ThemePicker);
+    }
+
+    fn apply(&mut self) {
+        let selected = self.state.selected();
+        match Theme::from_builtin(selected) {
+            Ok(theme) => {
+                *self.theme = theme;
+                *self.status = None;
+                self.close();
+            }
+            Err(error) => {
+                *self.status = Some(StatusMessage::error(format!(
+                    "failed to apply theme `{}`: {error}",
+                    selected.as_str()
+                )));
+            }
+        }
+    }
+}
+
+/// Registered composition-root adapter for theme-picker commands.
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    match id.as_str() {
-        "open_theme_picker" => open(model),
-        "close_theme_picker" => close(model),
-        "theme_picker_next" => {
-            model.theme_picker.select_next();
-            None
-        }
-        "theme_picker_previous" => {
-            model.theme_picker.select_previous();
-            None
-        }
-        "apply_theme" => apply(model),
-        _ => {
-            model.status = Some(StatusMessage::error(format!(
-                "unknown theme command `{}`",
-                id.as_str()
-            )));
-            None
-        }
+    let Model {
+        theme_picker,
+        theme,
+        context_stack,
+        status,
+        ..
+    } = model;
+    ThemePickerAdapter {
+        state: theme_picker,
+        theme,
+        contexts: context_stack,
+        status,
     }
-}
-
-fn open(model: &mut Model) -> Option<Effect> {
-    model.theme_picker.open(model.theme.name());
-    if model.context_stack.last() != Some(&Context::ThemePicker) {
-        model.context_stack.push(Context::ThemePicker);
-    }
-    None
-}
-
-fn close(model: &mut Model) -> Option<Effect> {
-    model.theme_picker.close();
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::ThemePicker);
-    None
-}
-
-fn apply(model: &mut Model) -> Option<Effect> {
-    let selected = model.theme_picker.selected();
-    match Theme::from_builtin(selected) {
-        Ok(theme) => {
-            model.theme = theme;
-            model.status = None;
-            close(model);
-        }
-        Err(error) => {
-            model.status = Some(StatusMessage::error(format!(
-                "failed to apply theme `{}`: {error}",
-                selected.as_str()
-            )));
-        }
-    }
+    .handle(id);
     None
 }
 
@@ -74,11 +90,7 @@ mod tests {
     use crossterm::event::KeyCode;
 
     use super::*;
-    use crate::{
-        data_object::{Message, Visibility},
-        manager::message_manager::MessageManager,
-        theme::ThemeName,
-    };
+    use crate::{data_object::Message, manager::message_manager::MessageManager, theme::ThemeName};
 
     #[test]
     fn theme_menu_applies_selection_and_escape_preserves_the_active_theme() {
@@ -92,7 +104,7 @@ mod tests {
                     .is_none()
             );
         }
-        assert_eq!(model.theme_picker.visibility, Visibility::Displayed);
+        assert!(model.theme_picker.is_open());
         assert_eq!(model.context_stack.last(), Some(&Context::ThemePicker));
         assert_eq!(model.theme_picker.selected(), ThemeName::Default);
 
@@ -107,7 +119,7 @@ mod tests {
                 .is_none()
         );
         assert_eq!(model.theme.name(), ThemeName::TokyoNight);
-        assert_eq!(model.theme_picker.visibility, Visibility::Hidden);
+        assert!(!model.theme_picker.is_open());
         assert_eq!(model.context_stack.last(), None);
 
         manager.update(
@@ -125,7 +137,7 @@ mod tests {
             Message::InvokeCommand(CommandId("close_theme_picker")),
         );
         assert_eq!(model.theme.name(), ThemeName::TokyoNight);
-        assert_eq!(model.theme_picker.visibility, Visibility::Hidden);
+        assert!(!model.theme_picker.is_open());
         assert_eq!(model.context_stack.last(), None);
     }
 }

@@ -11,7 +11,7 @@ use crate::{
         picker,
         popup::{self, Popup},
     },
-    data_object::{Model, Visibility},
+    data_object::Model,
     theme::{Theme, ThemeName},
     theme_picker::ThemePickerState,
     ui::{OverlayContribution, OverlayKind, OverlayPlacement},
@@ -42,18 +42,16 @@ impl<'a> ThemePicker<'a> {
 }
 
 pub fn overlay(model: &Model) -> Option<OverlayContribution> {
-    match model.theme_picker.visibility {
-        Visibility::Displayed => {
-            let picker = ThemePicker::new(&model.theme_picker, &model.theme);
-            Some(OverlayContribution::new(
-                "theme_picker",
-                OverlayKind::Modal,
-                OverlayPlacement::Centered(picker.size()),
-                render_overlay,
-            ))
-        }
-        Visibility::Hidden => None,
+    if !model.theme_picker.is_open() {
+        return None;
     }
+    let picker = ThemePicker::new(&model.theme_picker, &model.theme);
+    Some(OverlayContribution::new(
+        "theme_picker",
+        OverlayKind::Modal,
+        OverlayPlacement::Centered(picker.size()),
+        render_overlay,
+    ))
 }
 
 fn render_overlay(model: &Model, frame: &mut Frame, area: Rect) {
