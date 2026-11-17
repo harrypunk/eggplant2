@@ -1,5 +1,4 @@
 use crate::{
-    buffer,
     data_object::{AppPage, CommandId, Context, Model, StatusMessage},
     editing::{self, EditingTarget, target},
     manager::{
@@ -27,6 +26,12 @@ impl PendingChange {
             Self::Change => 'c',
         }
     }
+}
+
+#[derive(Clone, Copy)]
+enum SelectionOperation {
+    Delete,
+    Change,
 }
 
 pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<()> {
@@ -78,8 +83,10 @@ pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     match id.as_str() {
         "delete_grapheme" => return delete_grapheme(model),
-        "delete_selection_x" | "delete_selection_d" => return delete_selection(model, false),
-        "change_selection" => return delete_selection(model, true),
+        "delete_selection_x" | "delete_selection_d" => {
+            return delete_selection(model, SelectionOperation::Delete);
+        }
+        "change_selection" => return delete_selection(model, SelectionOperation::Change),
         "delete_line_pending" => start(model, PendingChange::Delete),
         "change_line_pending" => start(model, PendingChange::Change),
         "change_cancel" => reset(model),
@@ -150,28 +157,46 @@ fn delete_grapheme_with(target: &mut impl EditingTarget) -> Option<Effect> {
     Effect::combine(register, target.after_edit())
 }
 
-fn delete_selection(model: &mut Model, insert: bool) -> Option<Effect> {
-    let text = match model.editor.active_editor() {
+fn delete_selection(model: &mut Model, operation: SelectionOperation) -> Option<Effect> {
+    match model.active_page {
+        AppPage::VcsCommit => delete_selection_with(&mut target::commit_message(model), operation),
+        _ => delete_selection_with(&mut target::main_editor(model), operation),
+    }
+}
+
+fn delete_selection_with(
+    target: &mut impl EditingTarget,
+    operation: SelectionOperation,
+) -> Option<Effect> {
+    if !target.is_editing_enabled() {
+        return None;
+    }
+    let text = match target.session().active_editor() {
         Ok(editor) => editor.selected_text(),
         Err(_) => return None,
     };
-    let register = model.register.record(text);
-    if let Ok(mut editor) = model.editor.active_editor() {
-        if insert {
-            let _ = editor.change_selection();
-        } else {
-            let _ = editor.delete_selection();
+    let register = target.record_deleted(text);
+    if let Ok(mut editor) = target.session().active_editor() {
+        match operation {
+            SelectionOperation::Delete => {
+                let _ = editor.delete_selection();
+            }
+            SelectionOperation::Change => {
+                let _ = editor.change_selection();
+            }
         }
     }
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::EditorVisual);
-    if insert {
-        editing::enter_insert(model);
-        register
-    } else {
-        model.editor.enter_normal_mode();
-        Effect::combine(register, buffer::auto_save_active(model))
+    let context = target.visual_context();
+    target.pop_context(context);
+    match operation {
+        SelectionOperation::Delete => {
+            target.session().enter_normal_mode();
+            Effect::combine(register, target.after_edit())
+        }
+        SelectionOperation::Change => {
+            editing::enter_insert_with(target);
+            register
+        }
     }
 }
 
@@ -199,19 +224,26 @@ fn delete_line_with(target: &mut impl EditingTarget) -> Option<Effect> {
 }
 
 fn change_line(model: &mut Model) -> Option<Effect> {
-    let text = match model.editor.active_editor() {
-        Ok(editor) => editor.current_line_change_text(),
-        Err(_) => {
-            reset(model);
-            return None;
-        }
-    };
     reset(model);
-    let register = model.register.record(text);
-    if let Ok(mut editor) = model.editor.active_editor() {
+    match model.active_page {
+        AppPage::VcsCommit => change_line_with(&mut target::commit_message(model)),
+        _ => change_line_with(&mut target::main_editor(model)),
+    }
+}
+
+fn change_line_with(target: &mut impl EditingTarget) -> Option<Effect> {
+    if !target.is_editing_enabled() {
+        return None;
+    }
+    let text = match target.session().active_editor() {
+        Ok(editor) => editor.current_line_change_text(),
+        Err(_) => return None,
+    };
+    let register = target.record_deleted(text);
+    if let Ok(mut editor) = target.session().active_editor() {
         let _ = editor.change_current_line();
     }
-    editing::enter_insert(model);
+    editing::enter_insert_with(target);
     register
 }
 
@@ -239,19 +271,26 @@ fn delete_word_with(target: &mut impl EditingTarget) -> Option<Effect> {
 }
 
 fn change_word(model: &mut Model) -> Option<Effect> {
-    let text = match model.editor.active_editor() {
-        Ok(editor) => editor.current_word_text(),
-        Err(_) => {
-            reset(model);
-            return None;
-        }
-    };
     reset(model);
-    let register = model.register.record(text);
-    if let Ok(mut editor) = model.editor.active_editor() {
+    match model.active_page {
+        AppPage::VcsCommit => change_word_with(&mut target::commit_message(model)),
+        _ => change_word_with(&mut target::main_editor(model)),
+    }
+}
+
+fn change_word_with(target: &mut impl EditingTarget) -> Option<Effect> {
+    if !target.is_editing_enabled() {
+        return None;
+    }
+    let text = match target.session().active_editor() {
+        Ok(editor) => editor.current_word_text(),
+        Err(_) => return None,
+    };
+    let register = target.record_deleted(text);
+    if let Ok(mut editor) = target.session().active_editor() {
         let _ = editor.change_word();
     }
-    editing::enter_insert(model);
+    editing::enter_insert_with(target);
     register
 }
 

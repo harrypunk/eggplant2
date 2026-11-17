@@ -142,7 +142,7 @@ pub(crate) fn enter_insert(model: &mut Model) -> Option<Effect> {
     }
 }
 
-fn enter_insert_with(target: &mut impl EditingTarget) -> Option<Effect> {
+pub(crate) fn enter_insert_with(target: &mut impl EditingTarget) -> Option<Effect> {
     if target.session().active_buffer().is_some() {
         let context = target.input_context();
         target.push_context(context);
