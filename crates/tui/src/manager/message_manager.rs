@@ -50,7 +50,7 @@ impl MessageManager {
             Message::FeatureCompletion(completion) => return completion.update(model),
             Message::TextInput(character) => return self.text_input.handle(model, character),
             Message::SaveFinished(completion) => {
-                return lifecycle::finish_save(model, completion);
+                return Self::finish_save(model, completion);
             }
             Message::OpenSelected => return self.open_selected(model),
             Message::FileOpened(completion) => return Self::finish_open_file(model, completion),
@@ -106,6 +106,23 @@ impl MessageManager {
                 model,
                 crate::data_object::CommandId("explorer_unfold"),
             ),
+        }
+    }
+
+    fn finish_save(model: &mut Model, completion: editor::SaveCompletion) -> Option<Effect> {
+        match lifecycle::complete_save(model, completion) {
+            lifecycle::SaveOutcome::Saved(buffer_id) => {
+                if model.vcs.commit.is_waiting_for_save() {
+                    crate::vcs::commit::continue_after_save(model)
+                } else {
+                    lifecycle::continue_save(model, buffer_id)
+                }
+            }
+            lifecycle::SaveOutcome::Failed(error) => {
+                lifecycle::save_failed(model, &error);
+                crate::vcs::commit::save_failed(model, &error);
+                None
+            }
         }
     }
 

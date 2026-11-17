@@ -279,7 +279,7 @@ mod tests {
     use super::*;
     use crate::{
         data_object::Workspace,
-        lifecycle,
+        manager::message_manager::MessageManager,
         test_utils::{create_buffer, open_file},
         vcs::HistoryState,
     };
@@ -319,6 +319,10 @@ mod tests {
 
     fn submit(model: &mut Model) -> Option<Effect> {
         handle_command(model, CommandId("vcs_commit_submit"))
+    }
+
+    fn finish_save(model: &mut Model, completion: editor::SaveCompletion) -> Option<Effect> {
+        MessageManager::default().update(model, Message::SaveFinished(completion))
     }
 
     #[test]
@@ -480,7 +484,7 @@ mod tests {
         let completion = request.perform().await;
         assert_eq!(completion.buffer_id(), id);
         assert!(matches!(
-            lifecycle::finish_save(&mut model, completion),
+            finish_save(&mut model, completion),
             Some(Effect::Feature(_))
         ));
         assert_eq!(std::fs::read_to_string(path).unwrap(), "dirty saved\n");
@@ -510,7 +514,7 @@ mod tests {
         assert!(submit(&mut model).is_none());
         assert_eq!(model.vcs.commit.phase, CommitPhase::Saving);
         let completion = request.perform().await;
-        let effect = lifecycle::finish_save(&mut model, completion);
+        let effect = finish_save(&mut model, completion);
         assert!(
             matches!(effect, Some(Effect::Feature(_))),
             "status: {:?}, notice: {:?}, phase: {:?}, saving: {}, dirty: {:?}",
