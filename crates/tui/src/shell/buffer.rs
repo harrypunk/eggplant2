@@ -25,6 +25,10 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         }
     };
 
+    switch(model, movement)
+}
+
+pub(crate) fn switch(model: &mut Model, movement: BufferMovement) -> Option<Effect> {
     let effect = auto_save_active(model);
     match movement {
         BufferMovement::Next => {

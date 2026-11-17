@@ -106,6 +106,12 @@ Feature availability comes from composition—the editor's Normal keymap and ada
 
 Use this pattern for synchronous composition when a narrow concrete adapter is sufficient. It does not require a new trait, global service, or long-lived controller.
 
+### Example: reuse typed workflows instead of re-entering command dispatch
+
+`buffer::switch(BufferMovement)` is the shared typed workflow for direct next/previous commands and bracket-prefixed navigation. It preserves outgoing save, buffer activation, explorer reveal, and VCS synchronization. The prefix handler passes its parsed `BufferMovement` directly to this function instead of converting it back into a string `CommandId` and invoking another feature's root handler.
+
+Cross-feature reuse should target a semantic capability or workflow like this. Re-entering string dispatch obscures dependencies and makes it easier to accidentally drop required follow-up behavior.
+
 ## 3. Encapsulate effects as composable policy
 
 Effects are values, not hidden work performed inside rendering or text manipulation. `EditingTarget::after_edit` demonstrates the smallest useful policy hook:

@@ -61,7 +61,7 @@ pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
         return None;
     }
     let movement = pending?;
-    buffer::handle_command(model, buffer_command(movement))
+    buffer::switch(model, movement)
 }
 
 fn start(model: &mut Model, movement: BufferMovement) {
@@ -86,13 +86,6 @@ fn reset(model: &mut Model) {
     model
         .context_stack
         .pop_if(|context| context == &Context::BufferNavigation);
-}
-
-fn buffer_command(movement: BufferMovement) -> CommandId {
-    match movement {
-        BufferMovement::Next => CommandId("next_buffer"),
-        BufferMovement::Previous => CommandId("previous_buffer"),
-    }
 }
 
 #[cfg(test)]
