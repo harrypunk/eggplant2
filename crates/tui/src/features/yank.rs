@@ -346,7 +346,7 @@ mod tests {
         };
         model.context_stack.push(Context::VCS);
         model.register.set_provider(ClipboardProvider::None);
-        model.vcs.changes = ChangesState::Ready(vec![FileChange {
+        model.vcs.changes.state = ChangesState::Ready(vec![FileChange {
             kind: ChangeKind::Modified,
             staged: true,
             path: root.join("note.txt"),

@@ -460,7 +460,7 @@ mod tests {
             ..Model::default()
         };
         model.context_stack.push(Context::VCS);
-        model.vcs.changes = ChangesState::Ready(Vec::new());
+        model.vcs.changes.state = ChangesState::Ready(Vec::new());
         model
     }
 
@@ -551,7 +551,7 @@ mod tests {
     #[test]
     fn pending_changes_prevent_opening_the_picker() {
         let mut model = model(PathBuf::from("/workspace"));
-        model.vcs.changes = ChangesState::Ready(vec![FileChange {
+        model.vcs.changes.state = ChangesState::Ready(vec![FileChange {
             kind: ChangeKind::Modified,
             staged: false,
             path: PathBuf::from("/workspace/note.txt"),

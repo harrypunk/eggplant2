@@ -183,7 +183,7 @@ mod tests {
             workspace: Some(Workspace::new(root.clone())),
             ..Model::default()
         };
-        model.vcs.changes = ChangesState::Ready(vec![FileChange {
+        model.vcs.changes.state = ChangesState::Ready(vec![FileChange {
             kind: ChangeKind::Modified,
             staged: true,
             path: root.join("note.txt"),

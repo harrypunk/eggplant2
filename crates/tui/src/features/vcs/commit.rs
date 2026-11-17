@@ -312,7 +312,7 @@ mod tests {
             ..Model::default()
         };
         model.context_stack.push(Context::VCS);
-        model.vcs.changes = ChangesState::Ready(vec![FileChange {
+        model.vcs.changes.state = ChangesState::Ready(vec![FileChange {
             kind: ChangeKind::Modified,
             staged: true,
             path: root.join("note.txt"),

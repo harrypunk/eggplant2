@@ -13,15 +13,18 @@ use crate::{
 };
 
 pub(crate) mod buffer_diff;
+pub(crate) mod changes;
 pub(crate) mod commit;
 pub(crate) mod merge;
 pub(crate) mod navigation;
 
 use buffer_diff::{BufferDiffApply, BufferDiffState};
+use changes::{ChangesApply, ChangesController, ChangesRequest};
 use commit::CommitState;
 use merge::MergeState;
 
 pub use crate::component::diff::DiffState;
+pub use changes::ChangesState;
 
 const HISTORY_PAGE_SIZE: usize = 20;
 const DIFF_LIMIT: usize = 200;
@@ -59,12 +62,7 @@ pub struct VcsState {
     history_detail_diff_cache: HashMap<(String, String), Diff>,
     history_target: Option<PathBuf>,
     history_revision: u64,
-    pub(crate) changes: ChangesState,
-    pub(crate) selected_change: Option<usize>,
-    changes_target: Option<PathBuf>,
-    changes_revision: u64,
-    changes_refreshing: bool,
-    changes_dirty: bool,
+    pub(crate) changes: ChangesController,
     operation_target: Option<PathBuf>,
     operation_revision: u64,
     operation_in_flight: bool,
@@ -108,12 +106,7 @@ impl Default for VcsState {
             history_detail_diff_cache: HashMap::new(),
             history_target: None,
             history_revision: 0,
-            changes: ChangesState::Idle,
-            selected_change: None,
-            changes_target: None,
-            changes_revision: 0,
-            changes_refreshing: false,
-            changes_dirty: false,
+            changes: ChangesController::default(),
             operation_target: None,
             operation_revision: 0,
             operation_in_flight: false,
@@ -150,15 +143,6 @@ pub enum HistoryMoreState {
 }
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub enum ChangesState {
-    #[default]
-    Idle,
-    Loading,
-    Ready(Vec<FileChange>),
-    Failed(String),
-}
-
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub enum CommitDetailsState {
     #[default]
     Idle,
@@ -177,14 +161,11 @@ impl VcsState {
     }
 
     pub fn changes(&self) -> &ChangesState {
-        &self.changes
+        self.changes.state()
     }
 
     pub fn selected_change(&self) -> Option<&FileChange> {
-        let ChangesState::Ready(changes) = &self.changes else {
-            return None;
-        };
-        changes.get(self.selected_change?)
+        self.changes.selected_change()
     }
 
     pub fn documents(&self) -> &DocumentFactory {
@@ -565,10 +546,11 @@ fn selected_history_commit(model: &Model) -> Option<CommitSummary> {
 }
 
 fn select_change(model: &mut Model, direction: SelectionDirection) -> Option<Effect> {
-    let ChangesState::Ready(changes) = &model.vcs.changes else {
+    let ChangesState::Ready(changes) = model.vcs.changes() else {
         return None;
     };
-    model.vcs.selected_change = wrapped_index(model.vcs.selected_change, changes.len(), direction);
+    model.vcs.changes.selected =
+        wrapped_index(model.vcs.changes.selected, changes.len(), direction);
     None
 }
 
@@ -626,9 +608,7 @@ fn reject_if_operation_in_progress(model: &mut Model) -> bool {
 }
 
 fn begin_operation(model: &mut Model, target: PathBuf) -> u64 {
-    model.vcs.changes_revision = model.vcs.changes_revision.wrapping_add(1);
-    model.vcs.changes_refreshing = false;
-    model.vcs.changes_dirty = false;
+    model.vcs.changes.invalidate();
     model.vcs.operation_target = Some(target);
     model.vcs.operation_in_flight = true;
     model.vcs.operation_revision = model.vcs.operation_revision.wrapping_add(1);
@@ -681,7 +661,7 @@ fn mutate_all_changes(model: &mut Model, stage: bool) -> Option<Effect> {
     if reject_if_operation_in_progress(model) {
         return None;
     }
-    let ChangesState::Ready(changes) = &model.vcs.changes else {
+    let ChangesState::Ready(changes) = model.vcs.changes() else {
         return None;
     };
     if !changes.iter().any(|change| change.staged != stage) {
@@ -734,8 +714,7 @@ pub fn refresh_buffer_base(model: &mut Model, buffer_id: BufferId) -> Option<Eff
 pub fn repository_changed(model: &mut Model) -> Option<Effect> {
     model.vcs.buffer_diff.invalidate_all();
     model.vcs.refreshing = false;
-    model.vcs.changes_refreshing = false;
-    model.vcs.changes_dirty = false;
+    model.vcs.changes.cancel();
     if model.vcs.history == HistoryState::Loading {
         model.vcs.history = HistoryState::Idle;
     }
@@ -821,8 +800,8 @@ fn refresh_history(model: &mut Model) -> Option<Effect> {
 
 pub(crate) fn sync_changes(model: &mut Model) -> Option<Effect> {
     let target = repository_target(model);
-    if model.vcs.changes_refreshing && model.vcs.changes_target == target {
-        model.vcs.changes_dirty = true;
+    if model.vcs.changes.sync_in_flight(&target) {
+        model.vcs.changes.mark_dirty();
         return None;
     }
     refresh_changes(model)
@@ -833,29 +812,11 @@ pub(crate) fn refresh_changes(model: &mut Model) -> Option<Effect> {
     model.vcs.diff = DiffState::Idle;
     model.vcs.diff_cache.clear();
     model.vcs.diff_revision = model.vcs.diff_revision.wrapping_add(1);
-    let Some(target) = repository_target(model) else {
-        model.vcs.changes_target = None;
-        model.vcs.changes = ChangesState::Failed("not a Git repository".to_string());
-        model.vcs.selected_change = None;
-        model.vcs.changes_refreshing = false;
-        model.vcs.changes_dirty = false;
-        model.vcs.changes_revision = model.vcs.changes_revision.wrapping_add(1);
-        return None;
-    };
-    if model.vcs.changes_target.as_ref() == Some(&target) && model.vcs.changes_refreshing {
-        return None;
-    }
-
-    model.vcs.changes_target = Some(target.clone());
-    model.vcs.changes_refreshing = true;
-    if !matches!(model.vcs.changes, ChangesState::Ready(_)) {
-        model.vcs.changes = ChangesState::Loading;
-    }
-    model.vcs.changes_revision = model.vcs.changes_revision.wrapping_add(1);
-    Some(Effect::feature(ChangesRequest {
-        target,
-        revision: model.vcs.changes_revision,
-    }))
+    model
+        .vcs
+        .changes
+        .refresh(repository_target(model))
+        .map(Effect::feature)
 }
 
 struct DiffRequest {
@@ -953,7 +914,7 @@ impl Completion for OperationCompletion {
                     OperationKind::Stage => "Staged file".to_string(),
                     OperationKind::Unstage => "Unstaged file".to_string(),
                 });
-                model.vcs.changes_refreshing = false;
+                model.vcs.changes.finish_operation();
                 refresh_changes(model)
             }
             Err(error) => {
@@ -1006,14 +967,9 @@ impl Completion for BulkOperationCompletion {
             true => "Staged all changes".to_string(),
             false => "Unstaged all changes".to_string(),
         });
-        model.vcs.changes_refreshing = false;
+        model.vcs.changes.finish_operation();
         refresh_changes(model)
     }
-}
-
-struct ChangesRequest {
-    target: PathBuf,
-    revision: u64,
 }
 
 impl FeatureEffect for ChangesRequest {
@@ -1035,33 +991,14 @@ struct ChangesCompletion {
 
 impl Completion for ChangesCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        if model.vcs.changes_revision != self.revision
-            || model.vcs.changes_target.as_ref() != Some(&self.target)
-        {
-            return None;
-        }
-        let selected_path = model
+        match model
             .vcs
-            .selected_change()
-            .map(|change| change.path.clone());
-        model.vcs.changes_refreshing = false;
-        model.vcs.changes = match self.result {
-            Ok(changes) => {
-                model.vcs.selected_change = selected_path
-                    .and_then(|path| changes.iter().position(|change| change.path == path))
-                    .or_else(|| (!changes.is_empty()).then_some(0));
-                ChangesState::Ready(changes)
-            }
-            Err(error) => {
-                model.vcs.selected_change = None;
-                ChangesState::Failed(error)
-            }
-        };
-        if model.vcs.changes_dirty {
-            model.vcs.changes_dirty = false;
-            return refresh_changes(model);
+            .changes
+            .complete(self.target, self.revision, self.result)
+        {
+            ChangesApply::Ignored | ChangesApply::Applied => None,
+            ChangesApply::Refresh => refresh_changes(model),
         }
-        None
     }
 }
 
@@ -1574,7 +1511,7 @@ mod tests {
     fn complete_changes(model: &mut Model, target: PathBuf, changes: Vec<FileChange>) {
         Box::new(ChangesCompletion {
             target,
-            revision: model.vcs.changes_revision,
+            revision: model.vcs.changes.revision,
             result: Ok(changes),
         })
         .update(model);
@@ -1589,7 +1526,7 @@ mod tests {
         };
         assert!(refresh_changes(&mut model).is_some());
         assert!(refresh_changes(&mut model).is_none());
-        let revision = model.vcs.changes_revision;
+        let revision = model.vcs.changes.revision;
 
         Box::new(ChangesCompletion {
             target: root.clone(),
@@ -1610,14 +1547,14 @@ mod tests {
         })
         .update(&mut model);
         assert_eq!(model.vcs.changes(), &ChangesState::Ready(changes));
-        assert_eq!(model.vcs.selected_change, Some(0));
+        assert_eq!(model.vcs.changes.selected, Some(0));
 
         select_change(&mut model, SelectionDirection::Next);
-        assert_eq!(model.vcs.selected_change, Some(1));
+        assert_eq!(model.vcs.changes.selected, Some(1));
         select_change(&mut model, SelectionDirection::Next);
-        assert_eq!(model.vcs.selected_change, Some(0));
+        assert_eq!(model.vcs.changes.selected, Some(0));
         select_change(&mut model, SelectionDirection::Previous);
-        assert_eq!(model.vcs.selected_change, Some(1));
+        assert_eq!(model.vcs.changes.selected, Some(1));
     }
 
     #[test]
@@ -1628,9 +1565,9 @@ mod tests {
             ..Model::default()
         };
         assert!(sync_changes(&mut model).is_some());
-        let first_revision = model.vcs.changes_revision;
+        let first_revision = model.vcs.changes.revision;
         assert!(sync_changes(&mut model).is_none());
-        assert!(model.vcs.changes_dirty);
+        assert!(model.vcs.changes.dirty);
 
         let trailing = Box::new(ChangesCompletion {
             target: root.clone(),
@@ -1639,17 +1576,17 @@ mod tests {
         })
         .update(&mut model);
         assert!(matches!(trailing, Some(Effect::Feature(_))));
-        assert!(!model.vcs.changes_dirty);
-        assert!(model.vcs.changes_refreshing);
-        assert!(model.vcs.changes_revision > first_revision);
+        assert!(!model.vcs.changes.dirty);
+        assert!(model.vcs.changes.refreshing);
+        assert!(model.vcs.changes.revision > first_revision);
 
         Box::new(ChangesCompletion {
             target: root,
-            revision: model.vcs.changes_revision,
+            revision: model.vcs.changes.revision,
             result: Ok(Vec::new()),
         })
         .update(&mut model);
-        assert!(!model.vcs.changes_refreshing);
+        assert!(!model.vcs.changes.refreshing);
     }
 
     #[test]
@@ -1661,8 +1598,9 @@ mod tests {
         model.context_stack.push(Context::AppNormal);
         model.active_page = AppPage::Vcs;
         model.context_stack.push(Context::VCS);
-        model.vcs.changes = ChangesState::Ready(vec![change(path.clone(), ChangeKind::Modified)]);
-        model.vcs.selected_change = Some(0);
+        model.vcs.changes.state =
+            ChangesState::Ready(vec![change(path.clone(), ChangeKind::Modified)]);
+        model.vcs.changes.selected = Some(0);
 
         let Some(Effect::OpenDocument(request)) =
             handle_command(&mut model, CommandId("open_vcs_change"))
@@ -1687,16 +1625,16 @@ mod tests {
             workspace: Some(Workspace::new(root.clone())),
             ..Model::default()
         };
-        model.vcs.changes = ChangesState::Ready(vec![
+        model.vcs.changes.state = ChangesState::Ready(vec![
             change(root.join("a.txt"), ChangeKind::Modified),
             change(root.join("b.txt"), ChangeKind::Modified),
         ]);
-        model.vcs.selected_change = Some(0);
+        model.vcs.changes.selected = Some(0);
 
         assert!(handle_command(&mut model, CommandId("vcs_stage")).is_some());
         let revision = model.vcs.operation_revision;
         assert!(model.vcs.operation_in_flight);
-        model.vcs.selected_change = Some(1);
+        model.vcs.changes.selected = Some(1);
 
         assert!(handle_command(&mut model, CommandId("vcs_stage")).is_none());
         assert!(handle_command(&mut model, CommandId("vcs_stage_all")).is_none());
@@ -1726,9 +1664,9 @@ mod tests {
             workspace: Some(Workspace::new(root.clone())),
             ..Model::default()
         };
-        model.vcs.changes =
+        model.vcs.changes.state =
             ChangesState::Ready(vec![change(root.join("note.txt"), ChangeKind::Modified)]);
-        model.vcs.selected_change = Some(0);
+        model.vcs.changes.selected = Some(0);
 
         assert!(handle_command(&mut model, CommandId("vcs_stage")).is_some());
         let revision = model.vcs.operation_revision;
@@ -1779,12 +1717,12 @@ mod tests {
             change.staged = true;
             change
         };
-        model.vcs.changes = ChangesState::Ready(vec![
+        model.vcs.changes.state = ChangesState::Ready(vec![
             staged("a.txt", ChangeKind::Added),
             change(root.join("b.txt"), ChangeKind::Modified),
             change(root.join("c.txt"), ChangeKind::Untracked),
         ]);
-        model.vcs.selected_change = Some(1);
+        model.vcs.changes.selected = Some(1);
 
         assert!(handle_command(&mut model, CommandId("vcs_stage_all")).is_some());
         let refresh = Box::new(BulkOperationCompletion {
@@ -1804,12 +1742,12 @@ mod tests {
                 staged("c.txt", ChangeKind::Added),
             ],
         );
-        let ChangesState::Ready(changes) = &model.vcs.changes else {
+        let ChangesState::Ready(changes) = model.vcs.changes() else {
             panic!("expected ready changes");
         };
         assert!(changes.iter().all(|change| change.staged));
         assert_eq!(changes[2].kind, ChangeKind::Added);
-        assert_eq!(model.vcs.selected_change, Some(1));
+        assert_eq!(model.vcs.changes.selected, Some(1));
         assert_eq!(model.vcs.notice.as_deref(), Some("Staged all changes"));
 
         assert!(handle_command(&mut model, CommandId("vcs_unstage_all")).is_some());
@@ -1830,13 +1768,13 @@ mod tests {
                 change(root.join("c.txt"), ChangeKind::Untracked),
             ],
         );
-        let ChangesState::Ready(changes) = &model.vcs.changes else {
+        let ChangesState::Ready(changes) = model.vcs.changes() else {
             panic!("expected ready changes");
         };
         assert!(changes.iter().all(|change| !change.staged));
         assert_eq!(changes[0].kind, ChangeKind::Untracked);
         assert_eq!(changes[2].kind, ChangeKind::Untracked);
-        assert_eq!(model.vcs.selected_change, Some(1));
+        assert_eq!(model.vcs.changes.selected, Some(1));
         assert_eq!(model.vcs.notice.as_deref(), Some("Unstaged all changes"));
     }
 
@@ -1847,9 +1785,9 @@ mod tests {
             workspace: Some(Workspace::new(root.clone())),
             ..Model::default()
         };
-        model.vcs.changes =
+        model.vcs.changes.state =
             ChangesState::Ready(vec![change(root.join("note.txt"), ChangeKind::Modified)]);
-        model.vcs.selected_change = Some(0);
+        model.vcs.changes.selected = Some(0);
         assert!(handle_command(&mut model, CommandId("vcs_stage")).is_some());
 
         let effect = Box::new(OperationCompletion {
@@ -1873,22 +1811,22 @@ mod tests {
             workspace: Some(Workspace::new(root.clone())),
             ..Model::default()
         };
-        model.vcs.changes_target = Some(root.clone());
-        model.vcs.changes =
+        model.vcs.changes.target = Some(root.clone());
+        model.vcs.changes.state =
             ChangesState::Ready(vec![change(root.join("note.txt"), ChangeKind::Modified)]);
 
         assert!(refresh_changes(&mut model).is_some());
         assert!(matches!(model.vcs.changes(), ChangesState::Ready(_)));
-        assert!(model.vcs.changes_refreshing);
+        assert!(model.vcs.changes.refreshing);
         assert!(refresh_changes(&mut model).is_none());
 
         Box::new(ChangesCompletion {
             target: root,
-            revision: model.vcs.changes_revision,
+            revision: model.vcs.changes.revision,
             result: Ok(Vec::new()),
         })
         .update(&mut model);
-        assert!(!model.vcs.changes_refreshing);
+        assert!(!model.vcs.changes.refreshing);
     }
 
     #[test]
@@ -1899,8 +1837,8 @@ mod tests {
             ..Model::default()
         };
         let selected = change(root.join("note.txt"), ChangeKind::Modified);
-        model.vcs.changes = ChangesState::Ready(vec![selected.clone()]);
-        model.vcs.selected_change = Some(0);
+        model.vcs.changes.state = ChangesState::Ready(vec![selected.clone()]);
+        model.vcs.changes.selected = Some(0);
 
         assert!(handle_command(&mut model, CommandId("vcs_toggle_diff")).is_some());
         let revision = model.vcs.diff_revision;
@@ -2295,11 +2233,11 @@ mod tests {
     #[test]
     fn deleted_change_does_not_create_a_buffer() {
         let mut model = Model::default();
-        model.vcs.changes = ChangesState::Ready(vec![change(
+        model.vcs.changes.state = ChangesState::Ready(vec![change(
             PathBuf::from("/workspace/deleted.txt"),
             ChangeKind::Deleted,
         )]);
-        model.vcs.selected_change = Some(0);
+        model.vcs.changes.selected = Some(0);
 
         assert!(handle_command(&mut model, CommandId("open_vcs_change")).is_none());
         assert!(model.editor.is_empty());

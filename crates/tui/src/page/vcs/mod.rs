@@ -1,4 +1,5 @@
 mod change_section;
+mod merge_popup;
 
 use ratatui::{
     Frame,
@@ -9,13 +10,16 @@ use ratatui::{
 };
 
 use crate::{
-    component::{commit_message, picker, text_input::TextInput},
+    component::commit_message,
     data_object::Model,
-    theme::{Theme, UiTheme},
+    theme::UiTheme,
     vcs::{ChangesState, HistoryState},
 };
 
-use self::change_section::{ChangeSection, ChangeSectionProps};
+use self::{
+    change_section::{ChangeSection, ChangeSectionProps},
+    merge_popup::{MergePopup, MergePopupProps},
+};
 
 #[derive(Debug, Default)]
 pub struct Vcs;
@@ -64,7 +68,7 @@ impl Vcs {
             ChangesState::Ready(_) => {
                 let props = ChangeSectionProps {
                     changes: model.vcs.changes(),
-                    selected: model.vcs.selected_change,
+                    selected: model.vcs.changes.selected,
                     expanded: model
                         .vcs
                         .expanded_change
@@ -82,19 +86,16 @@ impl Vcs {
             render_help(model, frame, areas.bottom);
         }
         if model.vcs.merge.is_active() {
-            render_merge_popup(
-                MergePopupProps {
-                    query: model.vcs.merge.query(),
-                    targets: model.vcs.merge.filtered_targets(),
-                    selected: model.vcs.merge.selected(),
-                    loading: model.vcs.merge.is_loading(),
-                    merging: model.vcs.merge.is_merging(),
-                    error: model.vcs.merge.error(),
-                    theme: &model.theme,
-                },
-                frame,
-                frame.area(),
-            );
+            MergePopup::new(MergePopupProps {
+                query: model.vcs.merge.query(),
+                targets: model.vcs.merge.filtered_targets(),
+                selected: model.vcs.merge.selected(),
+                loading: model.vcs.merge.is_loading(),
+                merging: model.vcs.merge.is_merging(),
+                error: model.vcs.merge.error(),
+                theme: &model.theme,
+            })
+            .render(frame, frame.area());
         }
     }
 }
@@ -150,87 +151,6 @@ fn render_help(model: &Model, frame: &mut Frame, area: Rect) {
     frame.render_widget(help.style(styles.base), area);
 }
 
-struct MergePopupProps<'a> {
-    query: &'a str,
-    targets: Vec<&'a str>,
-    selected: Option<usize>,
-    loading: bool,
-    merging: bool,
-    error: Option<&'a str>,
-    theme: &'a Theme,
-}
-
-fn render_merge_popup(props: MergePopupProps<'_>, frame: &mut Frame, area: Rect) {
-    let styles = props.theme.ui();
-    let width = area.width.min(64);
-    let height = area.height.min(12);
-    let popup = Rect::new(
-        area.x + area.width.saturating_sub(width) / 2,
-        area.y + area.height.saturating_sub(height) / 3,
-        width,
-        height,
-    );
-    let block = Block::new()
-        .title("Switch & fast-forward")
-        .borders(Borders::ALL)
-        .border_style(styles.base.patch(styles.focused_border));
-    let inner = block.inner(popup);
-    frame.render_widget(block.style(styles.base), popup);
-    let [query_area, list_area, status_area] = Layout::vertical([
-        Constraint::Length(3),
-        Constraint::Fill(1),
-        Constraint::Length(1),
-    ])
-    .areas(inner);
-
-    let input = TextInput::new(props.query, styles);
-    let cursor = input.cursor_position(query_area);
-    frame.render_widget(input, query_area);
-
-    let targets = props.targets;
-    let lines = if props.loading {
-        vec![Line::styled("Loading branches…", styles.muted)]
-    } else if props.merging {
-        vec![Line::styled("Fast-forwarding…", styles.muted)]
-    } else if targets.is_empty() {
-        vec![Line::styled("No matching branches", styles.muted)]
-    } else {
-        targets
-            .iter()
-            .enumerate()
-            .map(|(index, target)| {
-                let selected = props.selected == Some(index);
-                let marker = if selected { "> " } else { "  " };
-                Line::styled(
-                    format!("{marker}{target}"),
-                    if selected {
-                        styles
-                            .base
-                            .patch(styles.key_hint)
-                            .add_modifier(Modifier::BOLD)
-                    } else {
-                        styles.base
-                    },
-                )
-            })
-            .collect()
-    };
-    let lines = picker::visible_lines(lines, props.selected, list_area.height);
-    frame.render_widget(Paragraph::new(lines).style(styles.base), list_area);
-
-    let (status, style) = props.error.map_or(
-        (
-            "Type to filter  Up/Down select  Enter switch  Esc close".to_string(),
-            styles.base.patch(styles.muted),
-        ),
-        |error| (error.to_string(), styles.base.patch(styles.error)),
-    );
-    frame.render_widget(Paragraph::new(status).style(style), status_area);
-    if let Some(cursor) = cursor {
-        frame.set_cursor_position(cursor);
-    }
-}
-
 fn head_line(model: &Model, styles: &UiTheme) -> Line<'static> {
     let head = model.vcs.head().unwrap_or("--");
     match model.vcs.history() {
@@ -277,9 +197,9 @@ mod tests {
             timestamp: relative_time::now(),
             branches: Vec::new(),
         }]);
-        model.vcs.changes =
+        model.vcs.changes.state =
             ChangesState::Ready(vec![change("note.rs", ChangeKind::Modified, false)]);
-        model.vcs.selected_change = Some(0);
+        model.vcs.changes.selected = Some(0);
         model.vcs.expanded_change = Some((std::path::PathBuf::from("/workspace/note.rs"), false));
         model.vcs.diff = DiffState::Ready {
             lines: vec![
@@ -359,46 +279,9 @@ mod tests {
     }
 
     #[test]
-    fn merge_picker_filters_branches_and_shows_errors_in_the_popup() {
-        let theme = Theme::default();
-        let backend = TestBackend::new(80, 12);
-        let mut terminal = Terminal::new(backend).unwrap();
-
-        terminal
-            .draw(|frame| {
-                render_merge_popup(
-                    MergePopupProps {
-                        query: "ori",
-                        targets: vec!["origin/main"],
-                        selected: Some(0),
-                        loading: false,
-                        merging: false,
-                        error: Some("not a fast-forward"),
-                        theme: &theme,
-                    },
-                    frame,
-                    frame.area(),
-                )
-            })
-            .unwrap();
-
-        let content = terminal
-            .backend()
-            .buffer()
-            .content()
-            .iter()
-            .map(|cell| cell.symbol())
-            .collect::<String>();
-        assert!(content.contains("Switch & fast-forward"));
-        assert!(content.contains("> origin/main"));
-        assert!(!content.contains("> main"));
-        assert!(content.contains("not a fast-forward"));
-    }
-
-    #[test]
     fn empty_state_uses_the_dark_theme_background() {
         let mut model = Model::default();
-        model.vcs.changes = ChangesState::Ready(Vec::new());
+        model.vcs.changes.state = ChangesState::Ready(Vec::new());
         let backend = TestBackend::new(60, 10);
         let mut terminal = Terminal::new(backend).unwrap();
 
