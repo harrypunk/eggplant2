@@ -4,112 +4,224 @@ This document defines keyboard terminology and keeps terminal input compatible w
 
 ## Default keymap
 
+Bindings are grouped by active context and workflow. A slash separates alternatives or related pairs shown in the action column. `[count]` denotes an optional numeric prefix where supported.
+
+### Application and tools
+
+Available in Normal and Explorer contexts unless noted otherwise.
+
+| Action | Default binding |
+| --- | --- |
+| Quit | `Space q q` |
+| Show/hide explorer | `Space e` |
+| Find/open a file | `Space Space` or `Space f f` |
+| Select a UI theme | `Space u t` |
+| Jump in the visible buffer | `Space c j` |
+| Search the current file | `Space s c` |
+| Search the project | `Space s p` |
+| Open full-screen Git status | `Space g g` |
+
+### Buffers
+
 | Context | Action | Default binding |
 | --- | --- | --- |
-| Normal / Explorer | Quit | `Space q q` |
 | Normal / Explorer | Next / previous buffer | `Space b n` / `Space b p` |
 | Normal | Next / previous buffer | `]b` / `[b` |
-| Pending buffer navigation | Cancel | `Esc` |
 | Normal / Explorer | Close current buffer | `Space b c` |
 | Normal / Explorer | Close other buffers / buffers to the right | `Space b o` / `Space b r` |
 | Normal / Explorer | Close all buffers | `Space b a` |
-| Normal / Explorer | Show/hide explorer | `Space e` |
-| Normal / Explorer | Find/open a file | `Space Space` or `Space f f` |
-| Normal / Explorer | Select a UI theme | `Space u t` |
-| Normal / Explorer | Jump in the visible buffer | `Space c j` |
-| Normal / Explorer | Search the current file | `Space s c` |
-| Normal / Explorer | Search the project | `Space s p` |
-| Normal / Explorer | Open full-screen Git status | `Space g g` |
-| VCS page | Close and return to editor | `q` / `Esc` |
-| VCS page | Select previous / next changed file | `k` / `j` |
-| VCS page | Open selected changed file | `Enter` |
-| VCS page | Stage / unstage selected file | `s` / `u` |
-| VCS page | Stage all / unstage all | `Ctrl-S` / `U` |
-| VCS page | Toggle bottom help panel / dismiss help | `?` / `Esc` |
-| VCS page | Toggle inline diff for selected file | `Tab` |
-| VCS page | Open history page | `l` |
-| VCS page | Open commit-message page for staged changes | `c` |
-| VCS page | Open branch picker for switch & fast-forward (requires clean status) | `m` |
-| VCS page | Open bottom branch actions | `b` |
-| VCS branch menu | Create new branch / switch existing branch | `c` / `s` |
-| VCS branch menu | Close branch actions | `Esc` |
-| VCS branch picker | Filter branches or enter a short/full commit start point | Printable characters |
-| VCS branch picker | Select next / previous start point or branch | `Down` / `Up` |
-| VCS branch picker | Accept selection or submit new branch name | `Enter` |
-| VCS branch picker | Close before repository mutation starts | `Esc` |
-| VCS branch picker | Delete previous filter/name character | `Backspace` |
-| VCS merge picker | Type to filter branches | Printable characters |
-| VCS merge picker | Select next / previous branch | `Down` / `Up` |
-| VCS merge picker | Submit selected target | `Enter` |
-| VCS merge picker | Close without merging | `Esc` |
-| VCS merge picker | Delete previous filter character | `Backspace` |
-| VCS history page | Close and return to Git status | `q` / `Esc` |
-| VCS history page | Select previous / next commit | `k` / `j` |
-| VCS history page | Jump to first / last commit or detail file | `gg` / `G` (no counts) |
-| VCS history page | Toggle commit's changed-file list / selected detail-file diff | `Tab` |
-| VCS history page | Open selected commit's right-side detail | `Enter` |
-| VCS commit detail | Copy short / full commit hash to system clipboard | `c` / `C` |
-| VCS history page | Load the next 20 commits when available | `n` |
-| VCS commit page | Commit staged changes from Normal or Insert | `Ctrl-S` |
-| VCS commit page | Close in Normal mode and preserve the draft | `q` |
-| VCS commit page | Discard the draft from Normal or Insert | `Ctrl-C` |
-| VCS commit page | Enter Insert / return to Normal | `i` / `Esc` |
-| VCS commit Normal | Movement, word motions, insert variants, undo/redo | `h`/`j`/`k`/`l`, `w`/`b`/`e`, `0`/`$`, `a`/`A`/`I`, `o`/`O`, `u`/`Ctrl-R` |
-| VCS commit Normal | Delete grapheme / line / word | `x` / `dd` / `dw` |
-| VCS commit Normal | Yank current line / paste after / paste before | `yy` / `p` / `P` |
-| VCS commit page | Insert newline / backspace | `Enter` / `Backspace` |
-| VCS page | Placeholder discard | `x` |
-| Explorer | Jump to first / last visible entry | `gg` / `G` (no counts) |
-| Normal / Explorer | Scroll down / up | `Ctrl-F` / `Ctrl-U` |
-| Normal / Explorer | Focus left / right | `Ctrl-H` / `Ctrl-L` |
-| Normal / Explorer | Focus up / down (reserved) | `Ctrl-K` / `Ctrl-J` |
-| Normal | Enter Insert | `i` |
-| Normal | Insert after cursor / line end / first non-blank | `a` / `Shift-A` / `Shift-I` |
-| Normal | Open indented line below / above | `o` / `Shift-O` |
-| Normal | Line start / line end | `0` / `$` |
-| Normal | Start characterwise / linewise Visual selection | `v` / `V` |
-| Visual | Extend selection with existing movement keys / return to Normal | `h`/`j`/`k`/`l`, `w`/`b`/`e`, `0`/`$`, `[count]gg`/`G` / `Esc` |
-| Normal | Delete grapheme / line / word | `x` / `dd` / `dw` |
-| Normal | Change line / word and enter Insert | `cc` / `cw` |
-| Visual | Delete selection / change selection | `x` or `d` / `c` |
-| Pending delete/change | Cancel | `Esc` |
-| Normal | Yank current line | `yy` |
-| Normal | Paste after / before cursor (shared register, with system clipboard read-back when available) | `p` / `P` |
-| Visual | Yank selection and return to Normal | `y` |
-| Pending yank | Cancel | `Esc` |
-| Normal | Move | `h`, `j`, `k`, `l` |
-| Normal | Next word / previous word / word end | `w` / `b` / `e` |
-| Normal | First line / line N | `gg` / `[count]gg` |
-| Normal | Last line / line N | `G` / `[count]G` |
-| Pending line jump | Cancel | `Esc` |
-| Normal | Center / top / bottom cursor line | `zz` / `zt` / `zb` |
-| Pending viewport alignment | Cancel | `Esc` |
-| Normal | Undo / redo | `u` / `Ctrl-R` |
-| Insert | Return to Normal | `Esc` |
-| Insert | Backspace / newline | `Backspace` / `Enter` |
-| Insert | Move | Arrow keys |
-| Explorer | Move selection | `j` / `k` |
-| Explorer | Open file / unfold folder | `Enter` |
-| Explorer | Fold / unfold folder | `h` / `l` |
-| Explorer | Refresh tree | `r` |
-| Explorer | Show/hide ignored entries | `Shift-I` |
-| File picker | Edit query | Printable input / `Backspace` |
-| File picker | Next / previous result | `Down` / `Ctrl-N`; `Up` / `Ctrl-P` |
-| File picker | Open / close | `Enter` / `Esc` |
-| Theme picker | Next / previous theme | `Down` / `Ctrl-N`; `Up` / `Ctrl-P` |
-| Theme picker | Apply / close | `Enter` / `Esc` |
-| Buffer jump | Enter smart-case two-character pattern, then label | Printable input |
-| Buffer jump | Edit input / cancel | `Backspace` / `Esc` |
-| Buffer grep | Edit smart-case regex | Printable input / `Backspace` |
-| Buffer grep | Next / previous result | `Down` / `Ctrl-N`; `Up` / `Ctrl-P` |
-| Buffer grep | Jump to match / close | `Enter` / `Esc` |
-| Project grep | Edit smart-case regex | Printable input / `Backspace` |
-| Project grep | Next / previous result | `Down` / `Ctrl-N`; `Up` / `Ctrl-P` |
-| Project grep | Open match / close | `Enter` / `Esc` |
+| Pending buffer navigation | Cancel | `Esc` |
 
-File/theme pickers and both live-grep lists wrap from first to last and last to first. Their rendered list window follows the selection so the selected row remains visible, including after wraparound and in small terminals. Ctrl-N/Ctrl-P are built-in aliases for the configured Down/Up navigation actions; an explicit Ctrl-N/Ctrl-P binding in the same context takes priority.
+### Focus and scrolling
+
+Available in Normal and Explorer contexts.
+
+| Action | Default binding |
+| --- | --- |
+| Focus left / right | `Ctrl-H` / `Ctrl-L` |
+| Focus up / down (reserved) | `Ctrl-K` / `Ctrl-J` |
+| Scroll down / up | `Ctrl-F` / `Ctrl-U` |
+
+### Normal mode: movement and viewport
+
+| Action | Default binding |
+| --- | --- |
+| Move cursor | `h`, `j`, `k`, `l` |
+| Next word / previous word / word end | `w` / `b` / `e` |
+| Line start / line end | `0` / `$` |
+| First line / line N | `gg` / `[count]gg` |
+| Last line / line N | `G` / `[count]G` |
+| Center / top / bottom cursor line | `zz` / `zt` / `zb` |
+| Cancel pending line jump | `Esc` |
+| Cancel pending viewport alignment | `Esc` |
+
+### Normal mode: editing and selection
+
+| Action | Default binding |
+| --- | --- |
+| Enter Insert | `i` |
+| Insert after cursor / line end / first non-blank | `a` / `Shift-A` / `Shift-I` |
+| Open indented line below / above | `o` / `Shift-O` |
+| Start characterwise / linewise Visual selection | `v` / `V` |
+| Delete grapheme / line / word | `x` / `dd` / `dw` |
+| Change line / word and enter Insert | `cc` / `cw` |
+| Cancel pending delete/change | `Esc` |
+| Yank current line | `yy` |
+| Cancel pending yank | `Esc` |
+| Paste after / before cursor | `p` / `P` |
+| Undo / redo | `u` / `Ctrl-R` |
+
+Paste uses the shared register and reads the system clipboard when available.
+
+### Insert mode
+
+| Action | Default binding |
+| --- | --- |
+| Return to Normal | `Esc` |
+| Backspace / newline | `Backspace` / `Enter` |
+| Move cursor | Arrow keys |
+
+### Visual mode
+
+| Action | Default binding |
+| --- | --- |
+| Extend selection with movement keys | `h`/`j`/`k`/`l`, `w`/`b`/`e`, `0`/`$`, `[count]gg`/`G` |
+| Return to Normal | `Esc` |
+| Delete selection | `x` or `d` |
+| Change selection | `c` |
+| Yank selection and return to Normal | `y` |
+
+### Explorer
+
+| Action | Default binding |
+| --- | --- |
+| Move selection | `j` / `k` |
+| Jump to first / last visible entry | `gg` / `G` (no counts) |
+| Open file / unfold folder | `Enter` |
+| Fold / unfold folder | `h` / `l` |
+| Refresh tree | `r` |
+| Show/hide ignored entries | `Shift-I` |
+
+### File picker
+
+| Action | Default binding |
+| --- | --- |
+| Edit query | Printable input / `Backspace` |
+| Next / previous result | `Down` / `Ctrl-N`; `Up` / `Ctrl-P` |
+| Open / close | `Enter` / `Esc` |
+
+### Theme picker
+
+| Action | Default binding |
+| --- | --- |
+| Next / previous theme | `Down` / `Ctrl-N`; `Up` / `Ctrl-P` |
+| Apply / close | `Enter` / `Esc` |
+
+### Buffer jump
+
+| Action | Default binding |
+| --- | --- |
+| Enter smart-case two-character pattern, then label | Printable input |
+| Edit input / cancel | `Backspace` / `Esc` |
+
+### Current-buffer grep
+
+| Action | Default binding |
+| --- | --- |
+| Edit smart-case regex | Printable input / `Backspace` |
+| Next / previous result | `Down` / `Ctrl-N`; `Up` / `Ctrl-P` |
+| Jump to match / close | `Enter` / `Esc` |
+
+### Project grep
+
+| Action | Default binding |
+| --- | --- |
+| Edit smart-case regex | Printable input / `Backspace` |
+| Next / previous result | `Down` / `Ctrl-N`; `Up` / `Ctrl-P` |
+| Open match / close | `Enter` / `Esc` |
+
+#### Shared picker and search navigation
+
+File/theme pickers and both live-grep lists wrap from first to last and last to first. Their rendered list window follows the selection so the selected row remains visible, including after wraparound and in small terminals.
+
+`Ctrl-N`/`Ctrl-P` are built-in aliases for the configured Down/Up navigation actions. An explicit `Ctrl-N`/`Ctrl-P` binding in the same context takes priority.
+
+### VCS status page
+
+| Action | Default binding |
+| --- | --- |
+| Close and return to editor | `q` / `Esc` |
+| Select previous / next changed file | `k` / `j` |
+| Open selected changed file | `Enter` |
+| Stage / unstage selected file | `s` / `u` |
+| Stage all / unstage all | `Ctrl-S` / `U` |
+| Toggle inline diff for selected file | `Tab` |
+| Toggle bottom help panel / dismiss help | `?` / `Esc` |
+| Open history page | `l` |
+| Open commit-message page for staged changes | `c` |
+| Open bottom branch actions | `b` |
+| Open switch-and-fast-forward picker (requires clean status) | `m` |
+| Placeholder discard | `x` |
+
+### VCS branch menu
+
+| Action | Default binding |
+| --- | --- |
+| Create new branch / switch existing branch | `c` / `s` |
+| Close branch actions | `Esc` |
+
+### VCS branch selector
+
+| Action | Default binding |
+| --- | --- |
+| Filter branches or enter a short/full commit start point | Printable characters |
+| Select next / previous start point or branch | `Down` / `Up` |
+| Accept selection or submit new branch name | `Enter` |
+| Delete previous filter/name character | `Backspace` |
+| Close before repository mutation starts | `Esc` |
+
+### VCS merge selector
+
+| Action | Default binding |
+| --- | --- |
+| Type to filter branches | Printable characters |
+| Select next / previous branch | `Down` / `Up` |
+| Delete previous filter character | `Backspace` |
+| Submit selected target | `Enter` |
+| Close without merging | `Esc` |
+
+### VCS history and commit detail
+
+| Context | Action | Default binding |
+| --- | --- | --- |
+| History | Close and return to Git status | `q` / `Esc` |
+| History | Select previous / next commit | `k` / `j` |
+| History / detail | Jump to first / last commit or detail file | `gg` / `G` (no counts) |
+| History / detail | Toggle commit files / selected detail-file diff | `Tab` |
+| History | Open selected commit's right-side detail | `Enter` |
+| Ready commit detail | Copy short / full hash to system clipboard | `c` / `C` |
+| History | Load the next 20 commits when available | `n` |
+
+### VCS commit-message editor
+
+| Action | Default binding |
+| --- | --- |
+| Commit staged changes from Normal or Insert | `Ctrl-S` |
+| Close in Normal mode and preserve the draft | `q` |
+| Discard the draft from Normal or Insert | `Ctrl-C` |
+| Enter Insert / return to Normal | `i` / `Esc` |
+| Insert newline / backspace | `Enter` / `Backspace` |
+| Normal movement | `h`/`j`/`k`/`l`, `w`/`b`/`e`, `0`/`$` |
+| Normal insert variants | `a`/`A`/`I`, `o`/`O` |
+| Delete grapheme / line / word | `x` / `dd` / `dw` |
+| Yank current line / paste after / paste before | `yy` / `p` / `P` |
+| Undo / redo | `u` / `Ctrl-R` |
+
+## Configuration
 
 Custom `[keymap]` entries merge with defaults by context and action, so only overrides need to be specified. Built-in Space leader sequences are not configured in TOML. Explicit unbinding is not implemented.
+
+See [`config.example.toml`](../config.example.toml) for every configurable action name and its default binding.
 
 ## Terminology
 
