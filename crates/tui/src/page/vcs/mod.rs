@@ -11,7 +11,7 @@ use ratatui::{
 use crate::{
     component::{commit_message, picker, text_input::TextInput},
     data_object::Model,
-    theme::UiTheme,
+    theme::{Theme, UiTheme},
     vcs::{ChangesState, HistoryState},
 };
 
@@ -82,7 +82,19 @@ impl Vcs {
             render_help(model, frame, areas.bottom);
         }
         if model.vcs.merge.is_active() {
-            render_merge_popup(model, frame, frame.area());
+            render_merge_popup(
+                MergePopupProps {
+                    query: &model.vcs.merge.query,
+                    targets: model.vcs.merge.filtered_targets(),
+                    selected: model.vcs.merge.selected,
+                    loading: model.vcs.merge.is_loading(),
+                    merging: model.vcs.merge.is_merging(),
+                    error: model.vcs.merge.error.as_deref(),
+                    theme: &model.theme,
+                },
+                frame,
+                frame.area(),
+            );
         }
     }
 }
@@ -138,8 +150,18 @@ fn render_help(model: &Model, frame: &mut Frame, area: Rect) {
     frame.render_widget(help.style(styles.base), area);
 }
 
-fn render_merge_popup(model: &Model, frame: &mut Frame, area: Rect) {
-    let styles = model.theme.ui();
+struct MergePopupProps<'a> {
+    query: &'a str,
+    targets: Vec<&'a str>,
+    selected: Option<usize>,
+    loading: bool,
+    merging: bool,
+    error: Option<&'a str>,
+    theme: &'a Theme,
+}
+
+fn render_merge_popup(props: MergePopupProps<'_>, frame: &mut Frame, area: Rect) {
+    let styles = props.theme.ui();
     let width = area.width.min(64);
     let height = area.height.min(12);
     let popup = Rect::new(
@@ -161,14 +183,14 @@ fn render_merge_popup(model: &Model, frame: &mut Frame, area: Rect) {
     ])
     .areas(inner);
 
-    let input = TextInput::new(&model.vcs.merge.query, styles);
+    let input = TextInput::new(props.query, styles);
     let cursor = input.cursor_position(query_area);
     frame.render_widget(input, query_area);
 
-    let targets = model.vcs.merge.filtered_targets();
-    let lines = if model.vcs.merge.is_loading() {
+    let targets = props.targets;
+    let lines = if props.loading {
         vec![Line::styled("Loading branches…", styles.muted)]
-    } else if model.vcs.merge.is_merging() {
+    } else if props.merging {
         vec![Line::styled("Fast-forwarding…", styles.muted)]
     } else if targets.is_empty() {
         vec![Line::styled("No matching branches", styles.muted)]
@@ -177,7 +199,7 @@ fn render_merge_popup(model: &Model, frame: &mut Frame, area: Rect) {
             .iter()
             .enumerate()
             .map(|(index, target)| {
-                let selected = model.vcs.merge.selected == Some(index);
+                let selected = props.selected == Some(index);
                 let marker = if selected { "> " } else { "  " };
                 Line::styled(
                     format!("{marker}{target}"),
@@ -193,15 +215,15 @@ fn render_merge_popup(model: &Model, frame: &mut Frame, area: Rect) {
             })
             .collect()
     };
-    let lines = picker::visible_lines(lines, model.vcs.merge.selected, list_area.height);
+    let lines = picker::visible_lines(lines, props.selected, list_area.height);
     frame.render_widget(Paragraph::new(lines).style(styles.base), list_area);
 
-    let (status, style) = model.vcs.merge.error.as_ref().map_or(
+    let (status, style) = props.error.map_or(
         (
             "Type to filter  Up/Down select  Enter switch  Esc close".to_string(),
             styles.base.patch(styles.muted),
         ),
-        |error| (error.clone(), styles.base.patch(styles.error)),
+        |error| (error.to_string(), styles.base.patch(styles.error)),
     );
     frame.render_widget(Paragraph::new(status).style(style), status_area);
     if let Some(cursor) = cursor {
@@ -338,16 +360,27 @@ mod tests {
 
     #[test]
     fn merge_picker_filters_branches_and_shows_errors_in_the_popup() {
-        let mut model = Model::default();
-        model.vcs.merge.show_for_test();
-        model.vcs.merge.query = "ori".to_string();
-        model.vcs.merge.targets = vec!["main".to_string(), "origin/main".to_string()];
-        model.vcs.merge.selected = Some(0);
-        model.vcs.merge.error = Some("not a fast-forward".to_string());
+        let theme = Theme::default();
         let backend = TestBackend::new(80, 12);
         let mut terminal = Terminal::new(backend).unwrap();
 
-        terminal.draw(|frame| Vcs.view(&model, frame)).unwrap();
+        terminal
+            .draw(|frame| {
+                render_merge_popup(
+                    MergePopupProps {
+                        query: "ori",
+                        targets: vec!["origin/main"],
+                        selected: Some(0),
+                        loading: false,
+                        merging: false,
+                        error: Some("not a fast-forward"),
+                        theme: &theme,
+                    },
+                    frame,
+                    frame.area(),
+                )
+            })
+            .unwrap();
 
         let content = terminal
             .backend()

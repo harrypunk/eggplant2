@@ -56,11 +56,6 @@ impl MergeState {
         self.phase == MergePhase::Selecting
     }
 
-    #[cfg(test)]
-    pub(crate) fn show_for_test(&mut self) {
-        self.phase = MergePhase::Selecting;
-    }
-
     pub(crate) fn filtered_targets(&self) -> Vec<&str> {
         let query = self.query.to_lowercase();
         self.targets
