@@ -131,6 +131,7 @@ pub mod data_object {
         pub document_open: DocumentOpening,
         pub deferred_action: Option<DeferredAction>,
         pub command_menu: CommandMenuState,
+        pub modal: ModalController,
         pub file_picker: FilePickerState,
         pub theme_picker: ThemePickerState,
         pub page_scroll: PageScroll,
@@ -165,6 +166,7 @@ pub mod data_object {
                 document_open: DocumentOpening::default(),
                 deferred_action: None,
                 command_menu: CommandMenuState::default(),
+                modal: ModalController::default(),
                 file_picker: FilePickerState::default(),
                 theme_picker: ThemePickerState::default(),
                 page_scroll: PageScroll::default(),
@@ -263,6 +265,47 @@ pub mod data_object {
             if slot.as_ref().is_some_and(|pending| pending.is_owner(owner)) {
                 *slot = None;
             }
+        }
+    }
+
+    #[derive(Debug, Default)]
+    pub struct ModalController {
+        active: Option<Context>,
+    }
+
+    impl ModalController {
+        pub fn open(&mut self, context: Context) -> bool {
+            if self.active.is_some_and(|active| active != context) {
+                return false;
+            }
+            self.active = Some(context);
+            true
+        }
+
+        pub fn close(&mut self, context: Context) {
+            if self.active == Some(context) {
+                self.active = None;
+            }
+        }
+
+        pub fn is_active(&self, context: Context) -> bool {
+            self.active == Some(context)
+        }
+    }
+
+    #[cfg(test)]
+    mod modal_tests {
+        use super::*;
+
+        #[test]
+        fn one_modal_owns_input_until_its_owner_closes() {
+            let mut modal = ModalController::default();
+            assert!(modal.open(Context::FilePicker));
+            assert!(!modal.open(Context::ThemePicker));
+            modal.close(Context::ThemePicker);
+            assert!(modal.is_active(Context::FilePicker));
+            modal.close(Context::FilePicker);
+            assert!(modal.open(Context::ThemePicker));
         }
     }
 

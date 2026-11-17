@@ -50,6 +50,7 @@ pub(crate) fn insert_char(model: &mut Model, character: char) -> Option<Effect> 
 
 pub(crate) fn close(model: &mut Model) {
     model.file_picker.close();
+    model.modal.close(Context::FilePicker);
     model
         .context_stack
         .pop_if(|context| context == &Context::FilePicker);
@@ -65,6 +66,9 @@ fn open(model: &mut Model) -> Option<Effect> {
         return None;
     };
     let root = workspace.root().to_path_buf();
+    if !model.modal.open(Context::FilePicker) {
+        return None;
+    }
     if model.context_stack.last() != Some(&Context::FilePicker) {
         model.context_stack.push(Context::FilePicker);
     }
@@ -88,6 +92,24 @@ mod tests {
             panic!("expected an open-document effect");
         };
         manager.update(model, Message::FileOpened(request.perform()));
+    }
+
+    #[test]
+    fn another_modal_prevents_picker_composition() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(directory.path().join("note.txt"), "hello").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        assert!(model.modal.open(Context::BufferGrep));
+
+        let effect = MessageManager::default().update(
+            &mut model,
+            Message::InvokeCommand(CommandId("open_file_picker")),
+        );
+
+        assert!(effect.is_none());
+        assert_eq!(model.file_picker.visibility, Visibility::Hidden);
+        assert!(model.modal.is_active(Context::BufferGrep));
+        assert_ne!(model.current_focus, FocusTarget::FilePicker);
     }
 
     #[test]

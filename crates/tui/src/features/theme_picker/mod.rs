@@ -5,7 +5,7 @@ pub use component::{ThemePicker, overlay};
 pub use state::ThemePickerState;
 
 use crate::{
-    data_object::{CommandId, Context, Model, StatusMessage},
+    data_object::{CommandId, Context, ModalController, Model, StatusMessage},
     manager::effect::Effect,
     theme::Theme,
 };
@@ -15,6 +15,7 @@ struct ThemePickerAdapter<'a> {
     state: &'a mut ThemePickerState,
     theme: &'a mut Theme,
     contexts: &'a mut Vec<Context>,
+    modal: &'a mut ModalController,
     status: &'a mut Option<StatusMessage>,
 }
 
@@ -36,6 +37,9 @@ impl ThemePickerAdapter<'_> {
     }
 
     fn open(&mut self) {
+        if !self.modal.open(Context::ThemePicker) {
+            return;
+        }
         self.state.open(self.theme.name());
         if self.contexts.last() != Some(&Context::ThemePicker) {
             self.contexts.push(Context::ThemePicker);
@@ -44,6 +48,7 @@ impl ThemePickerAdapter<'_> {
 
     fn close(&mut self) {
         self.state.close();
+        self.modal.close(Context::ThemePicker);
         self.contexts
             .pop_if(|context| context == &Context::ThemePicker);
     }
@@ -72,6 +77,7 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         theme_picker,
         theme,
         context_stack,
+        modal,
         status,
         ..
     } = model;
@@ -79,6 +85,7 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         state: theme_picker,
         theme,
         contexts: context_stack,
+        modal,
         status,
     }
     .handle(id);
