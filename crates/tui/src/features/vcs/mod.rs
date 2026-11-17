@@ -1,40 +1,59 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use ::vcs::{ChangeKind, CommitDetails, CommitSummary, Diff, FileChange, HistoryPage};
-use editor::{BufferId, DocumentFactory};
+use ::vcs::{CommitDetails, Diff, FileChange};
+use editor::DocumentFactory;
 
 use crate::{
-    data_object::{AppPage, CommandId, Context, Message, Model, StatusMessage},
-    document,
+    data_object::{AppPage, CommandId, Context, Model, StatusMessage},
     manager::{
         command_registry::{Command, CommandRegistry},
-        effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
+        effect::Effect,
     },
 };
 
 pub(crate) mod buffer_diff;
+mod change_workflow;
 pub(crate) mod changes;
 pub(crate) mod commit;
+pub(crate) mod history;
 pub(crate) mod merge;
 pub(crate) mod navigation;
+mod repository;
 
-use buffer_diff::{BufferDiffApply, BufferDiffState};
-use changes::{ChangesApply, ChangesController, ChangesRequest};
+use buffer_diff::BufferDiffState;
+use change_workflow::{
+    mutate_all_changes, mutate_selected_change, open_selected_change, select_change, toggle_diff,
+};
+use changes::ChangesController;
 use commit::CommitState;
+use history::{
+    close_history, load_history_more, open_history, open_history_detail, refresh_history,
+    select_history, toggle_history_file_diff, toggle_history_files,
+};
 use merge::MergeState;
 
 pub use crate::component::diff::DiffState;
+pub(crate) use change_workflow::{refresh_changes, sync_changes};
 pub use changes::ChangesState;
+pub(crate) use history::HistoryPane;
+pub use history::{CommitDetailsState, HistoryMoreState, HistoryState};
+pub(crate) use repository::repository_target;
+pub use repository::{refresh, refresh_buffer_base, repository_changed, sync_active_buffer};
+
+#[cfg(test)]
+use change_workflow::{
+    BulkOperationCompletion, ChangesCompletion, DiffCompletion, OperationCompletion, OperationKind,
+};
+#[cfg(test)]
+use history::{
+    HistoryCompletion, HistoryDetailCompletion, HistoryFileDiffCompletion, HistoryFilesCompletion,
+};
+
+#[cfg(test)]
+use repository::{BufferDiffCompletion, HeadCompletion};
 
 const HISTORY_PAGE_SIZE: usize = 20;
 const DIFF_LIMIT: usize = 200;
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum HistoryPane {
-    #[default]
-    List,
-    Detail,
-}
 
 #[derive(Debug)]
 pub struct VcsState {
@@ -63,9 +82,6 @@ pub struct VcsState {
     history_target: Option<PathBuf>,
     history_revision: u64,
     pub(crate) changes: ChangesController,
-    operation_target: Option<PathBuf>,
-    operation_revision: u64,
-    operation_in_flight: bool,
     pub(crate) expanded_change: Option<(PathBuf, bool)>,
     pub(crate) diff: DiffState,
     diff_target: Option<PathBuf>,
@@ -107,9 +123,6 @@ impl Default for VcsState {
             history_target: None,
             history_revision: 0,
             changes: ChangesController::default(),
-            operation_target: None,
-            operation_revision: 0,
-            operation_in_flight: false,
             expanded_change: None,
             diff: DiffState::Idle,
             diff_target: None,
@@ -123,32 +136,6 @@ impl Default for VcsState {
             documents: DocumentFactory::new(),
         }
     }
-}
-
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub enum HistoryState {
-    #[default]
-    Idle,
-    Loading,
-    Ready(Vec<CommitSummary>),
-    Failed(String),
-}
-
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub enum HistoryMoreState {
-    #[default]
-    Idle,
-    Loading,
-    Failed(String),
-}
-
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
-pub enum CommitDetailsState {
-    #[default]
-    Idle,
-    Loading,
-    Ready(CommitDetails),
-    Failed(String),
 }
 
 impl VcsState {
@@ -355,30 +342,8 @@ fn close_page(model: &mut Model) -> Option<Effect> {
     None
 }
 
-fn open_history(model: &mut Model) -> Option<Effect> {
-    if model.active_page != AppPage::Vcs {
-        return None;
-    }
-    model.active_page = AppPage::VcsHistory;
-    model.context_stack.push(Context::VcsHistory);
-    refresh_history(model)
-}
-
-fn close_history(model: &mut Model) -> Option<Effect> {
-    if model.vcs.history_pane == HistoryPane::Detail {
-        model.vcs.history_pane = HistoryPane::List;
-        model.vcs.history_detail = CommitDetailsState::Idle;
-        model.vcs.history_detail_selected_file = None;
-        model.vcs.history_detail_expanded_file = None;
-        model.vcs.history_detail_diff = DiffState::Idle;
-        model.vcs.history_detail_commit_id = None;
-        model.vcs.history_detail_revision = model.vcs.history_detail_revision.wrapping_add(1);
-        return None;
-    }
-    model.active_page = AppPage::Vcs;
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::VcsHistory);
+fn placeholder(model: &mut Model, message: &str) -> Option<Effect> {
+    model.vcs.notice = Some(message.to_string());
     None
 }
 
@@ -386,26 +351,6 @@ fn close_history(model: &mut Model) -> Option<Effect> {
 enum SelectionDirection {
     Next,
     Previous,
-}
-
-fn select_history(model: &mut Model, direction: SelectionDirection) -> Option<Effect> {
-    if model.vcs.history_pane == HistoryPane::Detail {
-        let CommitDetailsState::Ready(details) = &model.vcs.history_detail else {
-            return None;
-        };
-        model.vcs.history_detail_selected_file = wrapped_index(
-            model.vcs.history_detail_selected_file,
-            details.files.len(),
-            direction,
-        );
-        return None;
-    }
-    let HistoryState::Ready(commits) = &model.vcs.history else {
-        return None;
-    };
-    model.vcs.history_selected =
-        wrapped_index(model.vcs.history_selected, commits.len(), direction);
-    None
 }
 
 fn wrapped_index(
@@ -423,890 +368,14 @@ fn wrapped_index(
     })
 }
 
-fn load_history_more(model: &mut Model) -> Option<Effect> {
-    let HistoryState::Ready(commits) = &model.vcs.history else {
-        return None;
-    };
-    if !model.vcs.history_has_more || model.vcs.history_more == HistoryMoreState::Loading {
-        return None;
-    }
-    let offset = commits.len();
-    let target = repository_target(model)?;
-    model.vcs.history_target = Some(target.clone());
-    model.vcs.history_more = HistoryMoreState::Loading;
-    model.vcs.history_revision = model.vcs.history_revision.wrapping_add(1);
-    Some(Effect::feature(HistoryRequest {
-        target,
-        offset,
-        revision: model.vcs.history_revision,
-    }))
-}
-
-fn toggle_history_files(model: &mut Model) -> Option<Effect> {
-    let commit = selected_history_commit(model)?;
-    let commit_id = commit.id;
-    if model.vcs.history_expanded.as_ref() == Some(&commit_id) {
-        model.vcs.history_expanded = None;
-        model.vcs.history_files = CommitDetailsState::Idle;
-        model.vcs.history_files_revision = model.vcs.history_files_revision.wrapping_add(1);
-        return None;
-    }
-    if let Some(details) = model.vcs.history_commit_cache.get(&commit_id).cloned() {
-        model.vcs.history_expanded = Some(commit_id);
-        model.vcs.history_files = CommitDetailsState::Ready(details);
-        return None;
-    }
-    let target = repository_target(model)?;
-    model.vcs.history_expanded = Some(commit_id.clone());
-    model.vcs.history_files = CommitDetailsState::Loading;
-    model.vcs.history_files_target = Some(target.clone());
-    model.vcs.history_files_revision = model.vcs.history_files_revision.wrapping_add(1);
-    Some(Effect::feature(HistoryFilesRequest {
-        commit_id,
-        target,
-        revision: model.vcs.history_files_revision,
-    }))
-}
-
-fn open_history_detail(model: &mut Model) -> Option<Effect> {
-    let commit = selected_history_commit(model)?;
-    if matches!(model.vcs.history_detail, CommitDetailsState::Ready(_)) {
-        return None;
-    }
-    let cached = model.vcs.history_commit_cache.get(&commit.id).cloned();
-    let target = if cached.is_none() {
-        Some(repository_target(model)?)
-    } else {
-        None
-    };
-    model.vcs.history_pane = HistoryPane::Detail;
-    model.vcs.history_detail_selected_file = None;
-    model.vcs.history_detail_expanded_file = None;
-    model.vcs.history_detail_diff = DiffState::Idle;
-    model.vcs.history_detail_commit_id = Some(commit.id.clone());
-    model.vcs.history_detail_revision = model.vcs.history_detail_revision.wrapping_add(1);
-    if let Some(details) = cached {
-        model.vcs.history_detail_selected_file = (!details.files.is_empty()).then_some(0);
-        model.vcs.history_detail = CommitDetailsState::Ready(details);
-        return None;
-    }
-    let target = target.expect("an uncached detail requires a repository target");
-    model.vcs.history_detail = CommitDetailsState::Loading;
-    model.vcs.history_detail_target = Some(target.clone());
-    Some(Effect::feature(HistoryDetailRequest {
-        commit_id: commit.id,
-        target,
-        revision: model.vcs.history_detail_revision,
-    }))
-}
-
-fn toggle_history_file_diff(model: &mut Model) -> Option<Effect> {
-    let CommitDetailsState::Ready(details) = &model.vcs.history_detail else {
-        return None;
-    };
-    let file = details
-        .files
-        .get(model.vcs.history_detail_selected_file?)?
-        .clone();
-    let commit_id = details.full_id.clone();
-    let file_path = file.path.clone();
-    if model.vcs.history_detail_expanded_file.as_ref() == Some(&file_path) {
-        model.vcs.history_detail_expanded_file = None;
-        model.vcs.history_detail_diff = DiffState::Idle;
-        model.vcs.history_detail_revision = model.vcs.history_detail_revision.wrapping_add(1);
-        return None;
-    }
-    let cache_key = (commit_id.clone(), file_path.clone());
-    if let Some(diff) = model.vcs.history_detail_diff_cache.get(&cache_key).cloned() {
-        model.vcs.history_detail_expanded_file = Some(file_path);
-        model.vcs.history_detail_diff = DiffState::Ready {
-            lines: diff.lines,
-            truncated: diff.truncated,
-        };
-        return None;
-    }
-    let target = repository_target(model)?;
-    model.vcs.history_detail_expanded_file = Some(file_path.clone());
-    model.vcs.history_detail_diff = DiffState::Loading;
-    model.vcs.history_detail_target = Some(target.clone());
-    model.vcs.history_detail_revision = model.vcs.history_detail_revision.wrapping_add(1);
-    Some(Effect::feature(HistoryFileDiffRequest {
-        commit_id,
-        file_path,
-        target,
-        revision: model.vcs.history_detail_revision,
-    }))
-}
-
-fn selected_history_commit(model: &Model) -> Option<CommitSummary> {
-    let HistoryState::Ready(commits) = &model.vcs.history else {
-        return None;
-    };
-    commits.get(model.vcs.history_selected?).cloned()
-}
-
-fn select_change(model: &mut Model, direction: SelectionDirection) -> Option<Effect> {
-    let ChangesState::Ready(changes) = model.vcs.changes() else {
-        return None;
-    };
-    model.vcs.changes.selected =
-        wrapped_index(model.vcs.changes.selected, changes.len(), direction);
-    None
-}
-
-fn open_selected_change(model: &mut Model) -> Option<Effect> {
-    let change = model.vcs.selected_change()?.clone();
-    if change.kind == ChangeKind::Deleted {
-        model.status = Some(StatusMessage::info("Cannot open a deleted file"));
-        return None;
-    }
-    let documents = model.vcs.documents().clone();
-    close_page(model);
-    document::open_file(&documents, model, &change.path)
-}
-
-fn toggle_diff(model: &mut Model) -> Option<Effect> {
-    let change = model.vcs.selected_change()?.clone();
-    let expanded = (change.path.clone(), change.staged);
-    if model.vcs.expanded_change.as_ref() == Some(&expanded) {
-        model.vcs.expanded_change = None;
-        model.vcs.diff = DiffState::Idle;
-        model.vcs.diff_revision = model.vcs.diff_revision.wrapping_add(1);
-        return None;
-    }
-    if let Some(diff) = model.vcs.diff_cache.get(&expanded).cloned() {
-        model.vcs.expanded_change = Some(expanded);
-        model.vcs.diff = DiffState::Ready {
-            lines: diff.lines,
-            truncated: diff.truncated,
-        };
-        return None;
-    }
-    let target = repository_target(model)?;
-    model.vcs.expanded_change = Some(expanded);
-    model.vcs.diff = DiffState::Loading;
-    model.vcs.diff_target = Some(target.clone());
-    model.vcs.diff_revision = model.vcs.diff_revision.wrapping_add(1);
-    Some(Effect::feature(DiffRequest {
-        change,
-        target,
-        revision: model.vcs.diff_revision,
-    }))
-}
-
-fn placeholder(model: &mut Model, message: &str) -> Option<Effect> {
-    model.vcs.notice = Some(message.to_string());
-    None
-}
-
-fn reject_if_operation_in_progress(model: &mut Model) -> bool {
-    if !model.vcs.operation_in_flight {
-        return false;
-    }
-    model.vcs.notice = Some("Git operation in progress".to_string());
-    true
-}
-
-fn begin_operation(model: &mut Model, target: PathBuf) -> u64 {
-    model.vcs.changes.invalidate();
-    model.vcs.operation_target = Some(target);
-    model.vcs.operation_in_flight = true;
-    model.vcs.operation_revision = model.vcs.operation_revision.wrapping_add(1);
-    model.vcs.notice = None;
-    model.vcs.operation_revision
-}
-
-fn accept_operation_completion(model: &mut Model, target: &std::path::Path, revision: u64) -> bool {
-    if !model.vcs.operation_in_flight
-        || model.vcs.operation_revision != revision
-        || model.vcs.operation_target.as_deref() != Some(target)
-    {
-        return false;
-    }
-    model.vcs.operation_in_flight = false;
-    true
-}
-
-fn mutate_selected_change(model: &mut Model, stage: bool) -> Option<Effect> {
-    if reject_if_operation_in_progress(model) {
-        return None;
-    }
-    let change = model.vcs.selected_change()?.clone();
-    if stage == change.staged {
-        let message = if stage {
-            "File is already staged"
-        } else {
-            "File is not staged"
-        };
-        return placeholder(model, message);
-    }
-    if model.editor.has_modified_buffers() || model.editor.has_saving_buffers() {
-        return placeholder(model, "Wait for pending saves before changing the index");
-    }
-    let target = repository_target(model)?;
-    let revision = begin_operation(model, target.clone());
-    Some(Effect::feature(OperationRequest {
-        kind: if stage {
-            OperationKind::Stage
-        } else {
-            OperationKind::Unstage
-        },
-        path: change.path,
-        target,
-        revision,
-    }))
-}
-
-fn mutate_all_changes(model: &mut Model, stage: bool) -> Option<Effect> {
-    if reject_if_operation_in_progress(model) {
-        return None;
-    }
-    let ChangesState::Ready(changes) = model.vcs.changes() else {
-        return None;
-    };
-    if !changes.iter().any(|change| change.staged != stage) {
-        return placeholder(
-            model,
-            match stage {
-                true => "No unstaged changes",
-                false => "No staged changes",
-            },
-        );
-    }
-    if model.editor.has_modified_buffers() || model.editor.has_saving_buffers() {
-        return placeholder(model, "Wait for pending saves before changing the index");
-    }
-    let target = repository_target(model)?;
-    let revision = begin_operation(model, target.clone());
-    Some(Effect::feature(BulkOperationRequest {
-        stage,
-        target,
-        revision,
-    }))
-}
-
-/// Load the active buffer's HEAD base once, without blocking the editor.
-pub fn sync_active_buffer(model: &mut Model) -> Option<Effect> {
-    let (buffer_id, revision) = model.editor.active_revision()?;
-    if !model.vcs.buffer_diff.needs_load(buffer_id, revision) {
-        return None;
-    }
-    let path = model.editor.buffer_path(buffer_id)?.to_path_buf();
-    let generation = model.vcs.buffer_diff.begin(buffer_id, revision);
-    Some(Effect::feature(BufferDiffRequest {
-        buffer_id,
-        revision,
-        generation,
-        path,
-    }))
-}
-
-/// Invalidate one externally reloaded buffer and refresh it if active.
-pub fn refresh_buffer_base(model: &mut Model, buffer_id: BufferId) -> Option<Effect> {
-    model.vcs.buffer_diff.invalidate(buffer_id);
-    if model.editor.active_buffer() == Some(buffer_id) {
-        return sync_active_buffer(model);
-    }
-    None
-}
-
-/// Invalidate Git metadata and schedule fresh HEAD, status, and active-buffer state.
-pub fn repository_changed(model: &mut Model) -> Option<Effect> {
-    model.vcs.buffer_diff.invalidate_all();
-    model.vcs.refreshing = false;
-    model.vcs.changes.cancel();
-    if model.vcs.history == HistoryState::Loading {
-        model.vcs.history = HistoryState::Idle;
-    }
-    Effect::combine(
-        Effect::combine(refresh(model), refresh_history(model)),
-        Effect::combine(refresh_changes(model), sync_active_buffer(model)),
-    )
-}
-
-/// Start one background HEAD lookup, preserving the previous label until completion.
-pub fn refresh(model: &mut Model) -> Option<Effect> {
-    let target = repository_target(model);
-    let Some(target) = target else {
-        model.vcs.target = None;
-        model.vcs.head = None;
-        model.vcs.refreshing = false;
-        model.vcs.revision = model.vcs.revision.wrapping_add(1);
-        return None;
-    };
-    if model.vcs.target.as_ref() == Some(&target) && model.vcs.refreshing {
-        return None;
-    }
-
-    model.vcs.target = Some(target.clone());
-    model.vcs.refreshing = true;
-    model.vcs.revision = model.vcs.revision.wrapping_add(1);
-    Some(Effect::feature(HeadRequest {
-        target,
-        revision: model.vcs.revision,
-    }))
-}
-
-fn repository_target(model: &Model) -> Option<PathBuf> {
-    model
-        .workspace
-        .as_ref()
-        .map(|workspace| workspace.root().to_path_buf())
-        .or_else(|| {
-            model
-                .editor
-                .active_buffer()
-                .and_then(|id| model.editor.buffer_path(id))
-                .map(PathBuf::from)
-        })
-}
-
-fn refresh_history(model: &mut Model) -> Option<Effect> {
-    model.vcs.history_has_more = false;
-    model.vcs.history_more = HistoryMoreState::Idle;
-    model.vcs.history_expanded = None;
-    model.vcs.history_files = CommitDetailsState::Idle;
-    model.vcs.history_files_revision = model.vcs.history_files_revision.wrapping_add(1);
-    model.vcs.history_commit_cache.clear();
-    model.vcs.history_pane = HistoryPane::List;
-    model.vcs.history_detail = CommitDetailsState::Idle;
-    model.vcs.history_detail_selected_file = None;
-    model.vcs.history_detail_expanded_file = None;
-    model.vcs.history_detail_diff = DiffState::Idle;
-    model.vcs.history_detail_commit_id = None;
-    model.vcs.history_detail_revision = model.vcs.history_detail_revision.wrapping_add(1);
-    model.vcs.history_detail_diff_cache.clear();
-    let Some(target) = repository_target(model) else {
-        model.vcs.history_target = None;
-        model.vcs.history = HistoryState::Failed("not a Git repository".to_string());
-        model.vcs.history_revision = model.vcs.history_revision.wrapping_add(1);
-        return None;
-    };
-    if model.vcs.history_target.as_ref() == Some(&target)
-        && model.vcs.history == HistoryState::Loading
-    {
-        return None;
-    }
-
-    model.vcs.history_target = Some(target.clone());
-    model.vcs.history = HistoryState::Loading;
-    model.vcs.history_revision = model.vcs.history_revision.wrapping_add(1);
-    Some(Effect::feature(HistoryRequest {
-        target,
-        offset: 0,
-        revision: model.vcs.history_revision,
-    }))
-}
-
-pub(crate) fn sync_changes(model: &mut Model) -> Option<Effect> {
-    let target = repository_target(model);
-    if model.vcs.changes.sync_in_flight(&target) {
-        model.vcs.changes.mark_dirty();
-        return None;
-    }
-    refresh_changes(model)
-}
-
-pub(crate) fn refresh_changes(model: &mut Model) -> Option<Effect> {
-    model.vcs.expanded_change = None;
-    model.vcs.diff = DiffState::Idle;
-    model.vcs.diff_cache.clear();
-    model.vcs.diff_revision = model.vcs.diff_revision.wrapping_add(1);
-    model
-        .vcs
-        .changes
-        .refresh(repository_target(model))
-        .map(Effect::feature)
-}
-
-struct DiffRequest {
-    change: FileChange,
-    target: PathBuf,
-    revision: u64,
-}
-
-impl FeatureEffect for DiffRequest {
-    fn perform(self: Box<Self>) -> Message {
-        let result = ::vcs::diff(&self.change, DIFF_LIMIT).map_err(|error| error.to_string());
-        Message::FeatureCompletion(FeatureCompletion::new(DiffCompletion {
-            change: self.change,
-            target: self.target,
-            revision: self.revision,
-            result,
-        }))
-    }
-}
-
-struct DiffCompletion {
-    change: FileChange,
-    target: PathBuf,
-    revision: u64,
-    result: Result<Diff, String>,
-}
-
-impl Completion for DiffCompletion {
-    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        let expanded = (self.change.path.clone(), self.change.staged);
-        if model.vcs.diff_revision != self.revision
-            || model.vcs.diff_target.as_ref() != Some(&self.target)
-            || model.vcs.expanded_change.as_ref() != Some(&expanded)
-        {
-            return None;
-        }
-        model.vcs.diff = match self.result {
-            Ok(diff) => {
-                model.vcs.diff_cache.insert(expanded, diff.clone());
-                DiffState::Ready {
-                    lines: diff.lines,
-                    truncated: diff.truncated,
-                }
-            }
-            Err(error) => DiffState::Failed(error),
-        };
-        None
-    }
-}
-
-#[derive(Clone, Copy)]
-enum OperationKind {
-    Stage,
-    Unstage,
-}
-
-struct OperationRequest {
-    kind: OperationKind,
-    path: PathBuf,
-    target: PathBuf,
-    revision: u64,
-}
-
-impl FeatureEffect for OperationRequest {
-    fn perform(self: Box<Self>) -> Message {
-        let result = match self.kind {
-            OperationKind::Stage => ::vcs::stage(&self.path),
-            OperationKind::Unstage => ::vcs::unstage(&self.path),
-        }
-        .map_err(|error| error.to_string());
-        Message::FeatureCompletion(FeatureCompletion::new(OperationCompletion {
-            kind: self.kind,
-            target: self.target,
-            revision: self.revision,
-            result,
-        }))
-    }
-}
-
-struct OperationCompletion {
-    kind: OperationKind,
-    target: PathBuf,
-    revision: u64,
-    result: Result<(), String>,
-}
-
-impl Completion for OperationCompletion {
-    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        if !accept_operation_completion(model, &self.target, self.revision) {
-            return None;
-        }
-        match self.result {
-            Ok(()) => {
-                model.vcs.notice = Some(match self.kind {
-                    OperationKind::Stage => "Staged file".to_string(),
-                    OperationKind::Unstage => "Unstaged file".to_string(),
-                });
-                model.vcs.changes.finish_operation();
-                refresh_changes(model)
-            }
-            Err(error) => {
-                model.vcs.notice = Some(error);
-                None
-            }
-        }
-    }
-}
-
-struct BulkOperationRequest {
-    stage: bool,
-    target: PathBuf,
-    revision: u64,
-}
-
-impl FeatureEffect for BulkOperationRequest {
-    fn perform(self: Box<Self>) -> Message {
-        let result = match self.stage {
-            true => ::vcs::stage_all(&self.target),
-            false => ::vcs::unstage_all(&self.target),
-        }
-        .map_err(|error| error.to_string());
-        Message::FeatureCompletion(FeatureCompletion::new(BulkOperationCompletion {
-            stage: self.stage,
-            target: self.target,
-            revision: self.revision,
-            result,
-        }))
-    }
-}
-
-struct BulkOperationCompletion {
-    stage: bool,
-    target: PathBuf,
-    revision: u64,
-    result: Result<(), String>,
-}
-
-impl Completion for BulkOperationCompletion {
-    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        if !accept_operation_completion(model, &self.target, self.revision) {
-            return None;
-        }
-        if let Err(error) = self.result {
-            model.vcs.notice = Some(error);
-            return None;
-        }
-        model.vcs.notice = Some(match self.stage {
-            true => "Staged all changes".to_string(),
-            false => "Unstaged all changes".to_string(),
-        });
-        model.vcs.changes.finish_operation();
-        refresh_changes(model)
-    }
-}
-
-impl FeatureEffect for ChangesRequest {
-    fn perform(self: Box<Self>) -> Message {
-        let result = ::vcs::changes(&self.target).map_err(|error| error.to_string());
-        Message::FeatureCompletion(FeatureCompletion::new(ChangesCompletion {
-            target: self.target,
-            revision: self.revision,
-            result,
-        }))
-    }
-}
-
-struct ChangesCompletion {
-    target: PathBuf,
-    revision: u64,
-    result: Result<Vec<FileChange>, String>,
-}
-
-impl Completion for ChangesCompletion {
-    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        match model
-            .vcs
-            .changes
-            .complete(self.target, self.revision, self.result)
-        {
-            ChangesApply::Ignored | ChangesApply::Applied => None,
-            ChangesApply::Refresh => refresh_changes(model),
-        }
-    }
-}
-
-struct HistoryRequest {
-    target: PathBuf,
-    offset: usize,
-    revision: u64,
-}
-
-impl FeatureEffect for HistoryRequest {
-    fn perform(self: Box<Self>) -> Message {
-        let result = ::vcs::history(&self.target, self.offset, HISTORY_PAGE_SIZE)
-            .map_err(|error| error.to_string());
-        Message::FeatureCompletion(FeatureCompletion::new(HistoryCompletion {
-            target: self.target,
-            offset: self.offset,
-            revision: self.revision,
-            result,
-        }))
-    }
-}
-
-struct HistoryCompletion {
-    target: PathBuf,
-    offset: usize,
-    revision: u64,
-    result: Result<HistoryPage, String>,
-}
-
-impl Completion for HistoryCompletion {
-    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        if model.vcs.history_revision != self.revision
-            || model.vcs.history_target.as_ref() != Some(&self.target)
-        {
-            return None;
-        }
-        if self.offset == 0 {
-            model.vcs.history_more = HistoryMoreState::Idle;
-            model.vcs.history = match self.result {
-                Ok(page) => {
-                    model.vcs.history_selected = (!page.commits.is_empty()).then_some(0);
-                    model.vcs.history_has_more = page.has_more;
-                    HistoryState::Ready(page.commits)
-                }
-                Err(error) => {
-                    model.vcs.history_selected = None;
-                    model.vcs.history_has_more = false;
-                    HistoryState::Failed(error)
-                }
-            };
-            return None;
-        }
-        let HistoryState::Ready(commits) = &mut model.vcs.history else {
-            return None;
-        };
-        match self.result {
-            Ok(page) => {
-                commits.extend(page.commits);
-                model.vcs.history_has_more = page.has_more;
-                model.vcs.history_more = HistoryMoreState::Idle;
-            }
-            Err(error) => model.vcs.history_more = HistoryMoreState::Failed(error),
-        }
-        None
-    }
-}
-
-struct HistoryFilesRequest {
-    commit_id: String,
-    target: PathBuf,
-    revision: u64,
-}
-
-impl FeatureEffect for HistoryFilesRequest {
-    fn perform(self: Box<Self>) -> Message {
-        let result =
-            ::vcs::commit_details(&self.target, &self.commit_id).map_err(|error| error.to_string());
-        Message::FeatureCompletion(FeatureCompletion::new(HistoryFilesCompletion {
-            commit_id: self.commit_id,
-            target: self.target,
-            revision: self.revision,
-            result,
-        }))
-    }
-}
-
-struct HistoryFilesCompletion {
-    commit_id: String,
-    target: PathBuf,
-    revision: u64,
-    result: Result<CommitDetails, String>,
-}
-
-impl Completion for HistoryFilesCompletion {
-    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        if model.vcs.history_files_revision != self.revision
-            || model.vcs.history_files_target.as_ref() != Some(&self.target)
-            || model.vcs.history_expanded.as_ref() != Some(&self.commit_id)
-        {
-            return None;
-        }
-        model.vcs.history_files = match self.result {
-            Ok(details) => {
-                model
-                    .vcs
-                    .history_commit_cache
-                    .insert(self.commit_id, details.clone());
-                CommitDetailsState::Ready(details)
-            }
-            Err(error) => CommitDetailsState::Failed(error),
-        };
-        None
-    }
-}
-
-struct HistoryDetailRequest {
-    commit_id: String,
-    target: PathBuf,
-    revision: u64,
-}
-
-impl FeatureEffect for HistoryDetailRequest {
-    fn perform(self: Box<Self>) -> Message {
-        let result =
-            ::vcs::commit_details(&self.target, &self.commit_id).map_err(|error| error.to_string());
-        Message::FeatureCompletion(FeatureCompletion::new(HistoryDetailCompletion {
-            commit_id: self.commit_id,
-            target: self.target,
-            revision: self.revision,
-            result,
-        }))
-    }
-}
-
-struct HistoryDetailCompletion {
-    commit_id: String,
-    target: PathBuf,
-    revision: u64,
-    result: Result<CommitDetails, String>,
-}
-
-impl Completion for HistoryDetailCompletion {
-    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        if model.vcs.history_detail_revision != self.revision
-            || model.vcs.history_detail_target.as_ref() != Some(&self.target)
-            || model.vcs.history_detail_commit_id.as_deref() != Some(self.commit_id.as_str())
-        {
-            return None;
-        }
-        model.vcs.history_detail = match self.result {
-            Ok(details) => {
-                model.vcs.history_detail_selected_file = (!details.files.is_empty()).then_some(0);
-                model
-                    .vcs
-                    .history_commit_cache
-                    .insert(self.commit_id, details.clone());
-                CommitDetailsState::Ready(details)
-            }
-            Err(error) => CommitDetailsState::Failed(error),
-        };
-        None
-    }
-}
-
-struct HistoryFileDiffRequest {
-    commit_id: String,
-    file_path: String,
-    target: PathBuf,
-    revision: u64,
-}
-
-impl FeatureEffect for HistoryFileDiffRequest {
-    fn perform(self: Box<Self>) -> Message {
-        let result =
-            ::vcs::commit_file_diff(&self.target, &self.commit_id, &self.file_path, DIFF_LIMIT)
-                .map_err(|error| error.to_string());
-        Message::FeatureCompletion(FeatureCompletion::new(HistoryFileDiffCompletion {
-            commit_id: self.commit_id,
-            file_path: self.file_path,
-            target: self.target,
-            revision: self.revision,
-            result,
-        }))
-    }
-}
-
-struct HistoryFileDiffCompletion {
-    commit_id: String,
-    file_path: String,
-    target: PathBuf,
-    revision: u64,
-    result: Result<Diff, String>,
-}
-
-impl Completion for HistoryFileDiffCompletion {
-    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        if model.vcs.history_detail_revision != self.revision
-            || model.vcs.history_detail_target.as_ref() != Some(&self.target)
-            || model.vcs.history_detail_expanded_file.as_ref() != Some(&self.file_path)
-        {
-            return None;
-        }
-        model.vcs.history_detail_diff = match self.result {
-            Ok(diff) => {
-                model
-                    .vcs
-                    .history_detail_diff_cache
-                    .insert((self.commit_id, self.file_path), diff.clone());
-                DiffState::Ready {
-                    lines: diff.lines,
-                    truncated: diff.truncated,
-                }
-            }
-            Err(error) => DiffState::Failed(error),
-        };
-        None
-    }
-}
-
-struct BufferDiffRequest {
-    buffer_id: BufferId,
-    revision: i32,
-    generation: u64,
-    path: PathBuf,
-}
-
-impl FeatureEffect for BufferDiffRequest {
-    fn perform(self: Box<Self>) -> Message {
-        let result = ::vcs::diff_base(&self.path).map_err(|error| error.to_string());
-        Message::FeatureCompletion(FeatureCompletion::new(BufferDiffCompletion {
-            buffer_id: self.buffer_id,
-            revision: self.revision,
-            generation: self.generation,
-            result,
-        }))
-    }
-}
-
-struct BufferDiffCompletion {
-    buffer_id: BufferId,
-    revision: i32,
-    generation: u64,
-    result: Result<Option<Vec<u8>>, String>,
-}
-
-impl Completion for BufferDiffCompletion {
-    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        let BufferDiffApply::Apply {
-            buffer_id,
-            revision,
-            base,
-        } = model.vcs.buffer_diff.complete(
-            self.buffer_id,
-            self.revision,
-            self.generation,
-            self.result,
-        )
-        else {
-            return None;
-        };
-        if let Ok(true) = model.editor.set_buffer_diff_base(buffer_id, revision, base) {
-            model.vcs.buffer_diff.mark_loaded(buffer_id);
-        }
-        None
-    }
-}
-
-struct HeadRequest {
-    target: PathBuf,
-    revision: u64,
-}
-
-impl FeatureEffect for HeadRequest {
-    fn perform(self: Box<Self>) -> Message {
-        let head = ::vcs::current_head(&self.target);
-        Message::FeatureCompletion(FeatureCompletion::new(HeadCompletion {
-            target: self.target,
-            revision: self.revision,
-            head,
-        }))
-    }
-}
-
-struct HeadCompletion {
-    target: PathBuf,
-    revision: u64,
-    head: Option<String>,
-}
-
-impl Completion for HeadCompletion {
-    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        if model.vcs.revision != self.revision || model.vcs.target.as_ref() != Some(&self.target) {
-            return None;
-        }
-        model.vcs.refreshing = false;
-        model.vcs.head = self.head;
-        None
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use ::vcs::CommitFile;
+    use ::vcs::{ChangeKind, CommitFile, CommitSummary, HistoryPage};
 
     use super::*;
     use crate::{
         data_object::{Message, Workspace},
-        manager::message_manager::MessageManager,
+        manager::{effect::Completion, message_manager::MessageManager},
         navigation::VerticalNavigation,
         test_utils::open_file,
     };
@@ -1632,18 +701,18 @@ mod tests {
         model.vcs.changes.selected = Some(0);
 
         assert!(handle_command(&mut model, CommandId("vcs_stage")).is_some());
-        let revision = model.vcs.operation_revision;
-        assert!(model.vcs.operation_in_flight);
+        let revision = model.vcs.changes.operation_revision();
+        assert!(model.vcs.changes.operation_in_progress());
         model.vcs.changes.selected = Some(1);
 
         assert!(handle_command(&mut model, CommandId("vcs_stage")).is_none());
         assert!(handle_command(&mut model, CommandId("vcs_stage_all")).is_none());
-        assert_eq!(model.vcs.operation_revision, revision);
+        assert_eq!(model.vcs.changes.operation_revision(), revision);
         assert_eq!(
             model.vcs.notice.as_deref(),
             Some("Git operation in progress")
         );
-        assert!(model.vcs.operation_in_flight);
+        assert!(model.vcs.changes.operation_in_progress());
 
         let refresh = Box::new(OperationCompletion {
             kind: OperationKind::Stage,
@@ -1653,7 +722,7 @@ mod tests {
         })
         .update(&mut model);
         assert!(matches!(refresh, Some(Effect::Feature(_))));
-        assert!(!model.vcs.operation_in_flight);
+        assert!(!model.vcs.changes.operation_in_progress());
         assert!(handle_command(&mut model, CommandId("vcs_stage")).is_some());
     }
 
@@ -1669,7 +738,7 @@ mod tests {
         model.vcs.changes.selected = Some(0);
 
         assert!(handle_command(&mut model, CommandId("vcs_stage")).is_some());
-        let revision = model.vcs.operation_revision;
+        let revision = model.vcs.changes.operation_revision();
         let stale = Box::new(OperationCompletion {
             kind: OperationKind::Stage,
             target: root.clone(),
@@ -1679,7 +748,7 @@ mod tests {
         .update(&mut model);
         assert!(stale.is_none());
         assert_eq!(model.vcs.notice, None);
-        assert!(model.vcs.operation_in_flight);
+        assert!(model.vcs.changes.operation_in_progress());
 
         let refresh = Box::new(OperationCompletion {
             kind: OperationKind::Stage,
@@ -1690,7 +759,7 @@ mod tests {
         .update(&mut model);
         assert!(matches!(refresh, Some(Effect::Feature(_))));
         assert_eq!(model.vcs.notice.as_deref(), Some("Staged file"));
-        assert!(!model.vcs.operation_in_flight);
+        assert!(!model.vcs.changes.operation_in_progress());
         let ChangesState::Ready(changes) = model.vcs.changes() else {
             panic!("previous status should remain visible during refresh");
         };
@@ -1728,7 +797,7 @@ mod tests {
         let refresh = Box::new(BulkOperationCompletion {
             stage: true,
             target: root.clone(),
-            revision: model.vcs.operation_revision,
+            revision: model.vcs.changes.operation_revision(),
             result: Ok(()),
         })
         .update(&mut model);
@@ -1754,7 +823,7 @@ mod tests {
         let refresh = Box::new(BulkOperationCompletion {
             stage: false,
             target: root.clone(),
-            revision: model.vcs.operation_revision,
+            revision: model.vcs.changes.operation_revision(),
             result: Ok(()),
         })
         .update(&mut model);
@@ -1793,13 +862,13 @@ mod tests {
         let effect = Box::new(OperationCompletion {
             kind: OperationKind::Stage,
             target: root,
-            revision: model.vcs.operation_revision,
+            revision: model.vcs.changes.operation_revision(),
             result: Err("index locked".to_string()),
         })
         .update(&mut model);
 
         assert!(effect.is_none());
-        assert!(!model.vcs.operation_in_flight);
+        assert!(!model.vcs.changes.operation_in_progress());
         assert_eq!(model.vcs.notice.as_deref(), Some("index locked"));
         assert!(handle_command(&mut model, CommandId("vcs_stage")).is_some());
     }

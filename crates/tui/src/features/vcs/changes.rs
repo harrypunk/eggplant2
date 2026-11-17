@@ -24,6 +24,12 @@ pub(crate) enum ChangesApply {
 }
 
 #[derive(Debug)]
+struct IndexOperation {
+    target: PathBuf,
+    revision: u64,
+}
+
+#[derive(Debug)]
 pub struct ChangesController {
     pub(crate) state: ChangesState,
     pub(crate) selected: Option<usize>,
@@ -31,6 +37,8 @@ pub struct ChangesController {
     pub(super) revision: u64,
     pub(super) refreshing: bool,
     pub(super) dirty: bool,
+    operation: Option<IndexOperation>,
+    operation_revision: u64,
 }
 
 impl Default for ChangesController {
@@ -42,6 +50,8 @@ impl Default for ChangesController {
             revision: 0,
             refreshing: false,
             dirty: false,
+            operation: None,
+            operation_revision: 0,
         }
     }
 }
@@ -56,6 +66,39 @@ impl ChangesController {
             return None;
         };
         changes.get(self.selected?)
+    }
+
+    pub(super) fn begin_operation(&mut self, target: PathBuf) -> Option<u64> {
+        if self.operation.is_some() {
+            return None;
+        }
+        self.invalidate();
+        self.operation_revision = self.operation_revision.wrapping_add(1);
+        self.operation = Some(IndexOperation {
+            target,
+            revision: self.operation_revision,
+        });
+        Some(self.operation_revision)
+    }
+
+    pub(super) fn accept_operation(&mut self, target: &std::path::Path, revision: u64) -> bool {
+        let matches = self.operation.as_ref().is_some_and(|operation| {
+            operation.revision == revision && operation.target.as_path() == target
+        });
+        if !matches {
+            return false;
+        }
+        self.operation = None;
+        true
+    }
+
+    pub(crate) fn operation_in_progress(&self) -> bool {
+        self.operation.is_some()
+    }
+
+    #[cfg(test)]
+    pub(super) fn operation_revision(&self) -> u64 {
+        self.operation_revision
     }
 
     pub(super) fn refresh(&mut self, target: Option<PathBuf>) -> Option<ChangesRequest> {
@@ -139,6 +182,8 @@ impl ChangesController {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use ::vcs::ChangeKind;
 
     use super::*;
@@ -150,6 +195,21 @@ mod tests {
             path: PathBuf::from(path),
             previous_path: None,
         }
+    }
+
+    #[test]
+    fn index_operation_is_single_flight_and_released_by_matching_completion() {
+        let root = PathBuf::from("/workspace");
+        let mut controller = ChangesController::default();
+        let revision = controller.begin_operation(root.clone()).unwrap();
+
+        assert!(controller.begin_operation(root.clone()).is_none());
+        assert!(!controller.accept_operation(Path::new("/other"), revision));
+        assert!(!controller.accept_operation(&root, revision.wrapping_sub(1)));
+        assert!(controller.operation_in_progress());
+        assert!(controller.accept_operation(&root, revision));
+        assert!(!controller.operation_in_progress());
+        assert!(controller.begin_operation(root).unwrap() > revision);
     }
 
     #[test]

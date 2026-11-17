@@ -20,7 +20,7 @@ The following slices have landed and are covered by the workspace test suite:
 - Commit attempts owning repository, message, revision, and save/Git phases.
 - History-detail request identity and explicit List/Detail command routing.
 - Dedicated active-buffer diff-base state and stale-generation validation.
-- `ChangesController` ownership of changed files, selection, refresh generations, trailing-dirty state, and status completion.
+- `ChangesController` ownership of changed files, selection, refresh generations, trailing-dirty state, status completion, and single-flight index operation identity.
 - Independent page-scroll capability, short-lived theme adapter, typed buffer switching, and model-free prefix parsers.
 - Owner-tagged pending input with active-context rendering.
 - Typed file/project/buffer-search completions and feature-owned buffer-search previews.
@@ -30,11 +30,12 @@ The following slices have landed and are covered by the workspace test suite:
 - Single-owner fail-fast save policy: active commits reject close/quit, and pending close/quit rejects commit submission without changing drafts or owners.
 - Worktree/index/save status synchronization with one-in-flight-plus-trailing-read coalescing.
 - File-picker entry/preview invalidation on external changes.
+- History, working-change, and repository workflows have separate implementation modules; `vcs/mod.rs` is reduced to composed state, registration/dispatch, shared selection math, and API re-exports.
 - Typed VCS list/detail/change/header/popup props and shared presentation-owned `DiffState`.
 
 Remaining structural work:
 
-- Move VCS stage/unstage tokens and working-tree diff state into `ChangesController`; split history and repository/HEAD state into controller-sized modules.
+- Move VCS working-tree diff state into `ChangesController`; split history and repository/HEAD state into controller-sized modules.
 - Replace remaining broad editing/page adapters with composed targets rather than wildcard fallback behavior.
 - Introduce shell-owned modal/session coordination and finish registry/page cleanup.
 - Move explorer tree traversal behind effects if responsiveness measurements justify it.
