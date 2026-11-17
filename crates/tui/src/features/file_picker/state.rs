@@ -53,6 +53,7 @@ pub struct FilePickerState {
     pending_preview_path: Option<PathBuf>,
     filter_revision: u64,
     preview_revision: u64,
+    session_revision: u64,
 }
 
 impl Default for FilePickerState {
@@ -71,6 +72,7 @@ impl Default for FilePickerState {
             pending_preview_path: None,
             filter_revision: 0,
             preview_revision: 0,
+            session_revision: 0,
         }
     }
 }
@@ -78,6 +80,10 @@ impl Default for FilePickerState {
 impl FilePickerState {
     pub fn documents(&self) -> &DocumentFactory {
         &self.documents
+    }
+
+    pub fn session_revision(&self) -> u64 {
+        self.session_revision
     }
 
     /// Seed an immediate top-level cache from data already loaded at startup.
@@ -90,6 +96,7 @@ impl FilePickerState {
 
     /// Reuse ready entries on reopen; otherwise start with a top-level scan.
     pub fn open(&mut self, root: &Path) -> Option<FilePickerRequest> {
+        self.session_revision = self.session_revision.wrapping_add(1);
         self.visibility = Visibility::Displayed;
         self.query.clear();
         self.filter_revision = self.filter_revision.wrapping_add(1);

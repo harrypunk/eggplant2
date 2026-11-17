@@ -19,7 +19,14 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         "open_picker_file" => {
             let path = model.file_picker.selected_entry()?.path.clone();
             let documents = model.file_picker.documents().clone();
-            document::open_file(&documents, model, &path)
+            let session = model.file_picker.session_revision();
+            document::open_file_at_with_origin(
+                &documents,
+                model,
+                &path,
+                None,
+                document::OpenOrigin::FilePicker { session },
+            )
         }
         "file_picker_next" => model.file_picker.select_next().map(Effect::feature),
         "file_picker_previous" => model.file_picker.select_previous().map(Effect::feature),
@@ -81,6 +88,39 @@ mod tests {
             panic!("expected an open-document effect");
         };
         manager.update(model, Message::FileOpened(request.perform()));
+    }
+
+    #[test]
+    fn old_open_does_not_close_a_reopened_picker_session() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(directory.path().join("note.txt"), "hello").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let manager = MessageManager::default();
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("open_file_picker")),
+        );
+        let completion = match manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("open_picker_file")),
+        ) {
+            Some(Effect::OpenDocument(request)) => request.perform(),
+            _ => panic!("expected an open-document effect"),
+        };
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("close_file_picker")),
+        );
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("open_file_picker")),
+        );
+
+        manager.update(&mut model, Message::FileOpened(completion));
+
+        assert_eq!(model.file_picker.visibility, Visibility::Displayed);
+        assert_eq!(model.current_focus, FocusTarget::FilePicker);
+        assert_eq!(model.context_stack.last(), Some(&Context::FilePicker));
     }
 
     #[test]

@@ -113,12 +113,21 @@ impl MessageManager {
         model: &mut Model,
         completion: document::OpenFileCompletion,
     ) -> Option<Effect> {
-        document::finish_open_file(model, completion)?;
-        match model.file_picker.visibility {
-            Visibility::Displayed => file_picker::close(model),
-            Visibility::Hidden => {}
+        let opened = document::finish_open_file(model, completion)?;
+        let reconcile = model.context_stack.last() == opened.context.as_ref()
+            && match opened.origin {
+                document::OpenOrigin::FilePicker { session } => {
+                    model.file_picker.visibility == Visibility::Displayed
+                        && model.file_picker.session_revision() == session
+                }
+                document::OpenOrigin::Other => true,
+            };
+        if reconcile {
+            if matches!(opened.origin, document::OpenOrigin::FilePicker { .. }) {
+                file_picker::close(model);
+            }
+            focus::focus_editor(model);
         }
-        focus::focus_editor(model);
         crate::vcs::sync_active_buffer(model)
     }
 }
@@ -146,6 +155,29 @@ mod tests {
             panic!("expected an open-document effect");
         };
         manager.update(model, Message::FileOpened(request.perform()));
+    }
+
+    #[test]
+    fn old_open_completion_does_not_displace_a_newer_picker() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(directory.path().join("note.txt"), "hello").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let manager = MessageManager::default();
+        let completion = match manager.update(&mut model, Message::OpenSelected) {
+            Some(Effect::OpenDocument(request)) => request.perform(),
+            _ => panic!("expected an open-document effect"),
+        };
+
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("open_file_picker")),
+        );
+        assert_eq!(model.current_focus, FocusTarget::FilePicker);
+        manager.update(&mut model, Message::FileOpened(completion));
+
+        assert_eq!(model.file_picker.visibility, Visibility::Displayed);
+        assert_eq!(model.current_focus, FocusTarget::FilePicker);
+        assert_eq!(model.context_stack.last(), Some(&Context::FilePicker));
     }
 
     #[tokio::test]

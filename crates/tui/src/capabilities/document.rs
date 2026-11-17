@@ -1,13 +1,13 @@
 use std::path::Path;
 
 use editor::{
-    BufferId, DocumentFactory, DocumentOpenCompletion as EditorDocumentOpenCompletion,
-    DocumentOpenRequest, DocumentPosition,
+    DocumentFactory, DocumentOpenCompletion as EditorDocumentOpenCompletion, DocumentOpenRequest,
+    DocumentPosition,
 };
 
 use crate::{
     buffer,
-    data_object::{Model, OpenLocation, StatusMessage},
+    data_object::{Context, Model, OpenLocation, StatusMessage},
     manager::effect::Effect,
 };
 
@@ -17,10 +17,23 @@ pub struct DocumentOpening {
     pending: Option<PendingOpen>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OpenOrigin {
+    FilePicker { session: u64 },
+    Other,
+}
+
 #[derive(Debug)]
 struct PendingOpen {
     id: OpenRequestId,
     location: OpenLocation,
+    origin: OpenOrigin,
+    context: Option<Context>,
+}
+
+pub(crate) struct OpenedFile {
+    pub origin: OpenOrigin,
+    pub context: Option<Context>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,19 +60,29 @@ impl OpenFileRequest {
 }
 
 impl DocumentOpening {
-    fn begin(&mut self, location: OpenLocation) -> OpenRequestId {
+    fn begin(
+        &mut self,
+        location: OpenLocation,
+        origin: OpenOrigin,
+        context: Option<Context>,
+    ) -> OpenRequestId {
         self.next_id = self.next_id.wrapping_add(1);
         let id = OpenRequestId(self.next_id);
-        self.pending = Some(PendingOpen { id, location });
+        self.pending = Some(PendingOpen {
+            id,
+            location,
+            origin,
+            context,
+        });
         id
     }
 
-    fn complete(&mut self, id: OpenRequestId, path: &Path) -> Option<OpenLocation> {
+    fn complete(&mut self, id: OpenRequestId, path: &Path) -> Option<PendingOpen> {
         let pending = self.pending.as_ref()?;
         if pending.id != id || pending.location.path.as_path() != path {
             return None;
         }
-        self.pending.take().map(|pending| pending.location)
+        self.pending.take()
     }
 
     #[cfg(test)]
@@ -74,7 +97,7 @@ pub(crate) fn open_file(
     model: &mut Model,
     path: &Path,
 ) -> Option<Effect> {
-    open_file_at(documents, model, path, None)
+    open_file_at_with_origin(documents, model, path, None, OpenOrigin::Other)
 }
 
 /// Open a document and optionally move its cursor after the normal safe insertion flow.
@@ -84,10 +107,24 @@ pub(crate) fn open_file_at(
     path: &Path,
     position: Option<DocumentPosition>,
 ) -> Option<Effect> {
-    let id = model.document_open.begin(OpenLocation {
-        path: path.to_path_buf(),
-        position,
-    });
+    open_file_at_with_origin(documents, model, path, position, OpenOrigin::Other)
+}
+
+pub(crate) fn open_file_at_with_origin(
+    documents: &DocumentFactory,
+    model: &mut Model,
+    path: &Path,
+    position: Option<DocumentPosition>,
+    origin: OpenOrigin,
+) -> Option<Effect> {
+    let id = model.document_open.begin(
+        OpenLocation {
+            path: path.to_path_buf(),
+            position,
+        },
+        origin,
+        model.context_stack.last().copied(),
+    );
     Some(Effect::OpenDocument(OpenFileRequest {
         id,
         request: DocumentOpenRequest::new(documents.clone(), path),
@@ -99,11 +136,11 @@ pub(crate) fn open_file_at(
 pub(crate) fn finish_open_file(
     model: &mut Model,
     completion: OpenFileCompletion,
-) -> Option<BufferId> {
+) -> Option<OpenedFile> {
     let OpenFileCompletion { id, completion } = completion;
-    let location = model.document_open.complete(id, completion.path())?;
+    let pending = model.document_open.complete(id, completion.path())?;
     let path = completion.path().to_path_buf();
-    let position = location.position;
+    let position = pending.location.position;
     let opened = match completion.into_result() {
         Ok(opened) => opened,
         Err(error) => {
@@ -129,7 +166,10 @@ pub(crate) fn finish_open_file(
             model.status = Some(StatusMessage::error(error.to_string()));
         }
     }
-    Some(id)
+    Some(OpenedFile {
+        origin: pending.origin,
+        context: pending.context,
+    })
 }
 
 fn report_error(model: &mut Model, action: &str, path: &Path, error: impl std::fmt::Display) {
