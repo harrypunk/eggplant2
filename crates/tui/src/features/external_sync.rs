@@ -19,20 +19,17 @@ pub fn file_changed(model: &mut Model, path: &Path, kind: ExternalChangeKind) ->
         return crate::vcs::repository_changed(model);
     }
     if is_repository_index_change(path) {
-        return crate::vcs::refresh_changes(model);
+        return crate::vcs::sync_changes(model);
     }
     match kind {
         ExternalChangeKind::Structure => crate::explorer::refresh_changed(model, path),
         ExternalChangeKind::Content => {}
     }
-    Effect::combine(
-        crate::vcs::refresh_changes(model),
-        reload_buffer(model, path),
-    )
+    Effect::combine(crate::vcs::sync_changes(model), reload_buffer(model, path))
 }
 
 pub(crate) fn save_completed(model: &mut Model) -> Option<Effect> {
-    crate::vcs::refresh_changes(model)
+    crate::vcs::sync_changes(model)
 }
 
 /// Schedule a revision-checked reload for one open path, if it has a buffer.

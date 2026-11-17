@@ -64,6 +64,7 @@ pub struct VcsState {
     changes_target: Option<PathBuf>,
     changes_revision: u64,
     changes_refreshing: bool,
+    changes_dirty: bool,
     operation_target: Option<PathBuf>,
     operation_revision: u64,
     operation_in_flight: bool,
@@ -112,6 +113,7 @@ impl Default for VcsState {
             changes_target: None,
             changes_revision: 0,
             changes_refreshing: false,
+            changes_dirty: false,
             operation_target: None,
             operation_revision: 0,
             operation_in_flight: false,
@@ -626,6 +628,7 @@ fn reject_if_operation_in_progress(model: &mut Model) -> bool {
 fn begin_operation(model: &mut Model, target: PathBuf) -> u64 {
     model.vcs.changes_revision = model.vcs.changes_revision.wrapping_add(1);
     model.vcs.changes_refreshing = false;
+    model.vcs.changes_dirty = false;
     model.vcs.operation_target = Some(target);
     model.vcs.operation_in_flight = true;
     model.vcs.operation_revision = model.vcs.operation_revision.wrapping_add(1);
@@ -732,6 +735,7 @@ pub fn repository_changed(model: &mut Model) -> Option<Effect> {
     model.vcs.buffer_diff.invalidate_all();
     model.vcs.refreshing = false;
     model.vcs.changes_refreshing = false;
+    model.vcs.changes_dirty = false;
     if model.vcs.history == HistoryState::Loading {
         model.vcs.history = HistoryState::Idle;
     }
@@ -815,6 +819,15 @@ fn refresh_history(model: &mut Model) -> Option<Effect> {
     }))
 }
 
+pub(crate) fn sync_changes(model: &mut Model) -> Option<Effect> {
+    let target = repository_target(model);
+    if model.vcs.changes_refreshing && model.vcs.changes_target == target {
+        model.vcs.changes_dirty = true;
+        return None;
+    }
+    refresh_changes(model)
+}
+
 pub(crate) fn refresh_changes(model: &mut Model) -> Option<Effect> {
     model.vcs.expanded_change = None;
     model.vcs.diff = DiffState::Idle;
@@ -825,6 +838,7 @@ pub(crate) fn refresh_changes(model: &mut Model) -> Option<Effect> {
         model.vcs.changes = ChangesState::Failed("not a Git repository".to_string());
         model.vcs.selected_change = None;
         model.vcs.changes_refreshing = false;
+        model.vcs.changes_dirty = false;
         model.vcs.changes_revision = model.vcs.changes_revision.wrapping_add(1);
         return None;
     };
@@ -1043,6 +1057,10 @@ impl Completion for ChangesCompletion {
                 ChangesState::Failed(error)
             }
         };
+        if model.vcs.changes_dirty {
+            model.vcs.changes_dirty = false;
+            return refresh_changes(model);
+        }
         None
     }
 }
@@ -1600,6 +1618,38 @@ mod tests {
         assert_eq!(model.vcs.selected_change, Some(0));
         select_change(&mut model, SelectionDirection::Previous);
         assert_eq!(model.vcs.selected_change, Some(1));
+    }
+
+    #[test]
+    fn external_status_refreshes_coalesce_with_one_trailing_request() {
+        let root = PathBuf::from("/workspace");
+        let mut model = Model {
+            workspace: Some(Workspace::new(root.clone())),
+            ..Model::default()
+        };
+        assert!(sync_changes(&mut model).is_some());
+        let first_revision = model.vcs.changes_revision;
+        assert!(sync_changes(&mut model).is_none());
+        assert!(model.vcs.changes_dirty);
+
+        let trailing = Box::new(ChangesCompletion {
+            target: root.clone(),
+            revision: first_revision,
+            result: Ok(Vec::new()),
+        })
+        .update(&mut model);
+        assert!(matches!(trailing, Some(Effect::Feature(_))));
+        assert!(!model.vcs.changes_dirty);
+        assert!(model.vcs.changes_refreshing);
+        assert!(model.vcs.changes_revision > first_revision);
+
+        Box::new(ChangesCompletion {
+            target: root,
+            revision: model.vcs.changes_revision,
+            result: Ok(Vec::new()),
+        })
+        .update(&mut model);
+        assert!(!model.vcs.changes_refreshing);
     }
 
     #[test]
