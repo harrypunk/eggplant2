@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use ::vcs::{BranchStartPoint, BranchSwitchOutcome};
 
 use crate::{
-    data_object::{CommandId, Context, Message, Model},
+    data_object::{CommandId, Context, Message, Model, StatusMessage},
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
@@ -11,7 +11,7 @@ use crate::{
     },
 };
 
-use super::{repository_mutation_completed, repository_target};
+use super::{report, repository_mutation_completed, repository_target};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 enum BranchPhase {
@@ -602,12 +602,15 @@ impl Completion for BranchCompletion {
 
         close_branch_context(model);
         let id = outcome.commit.to_hex_with_len(7);
-        model.vcs.notice = Some(if outcome.created {
+        let status = StatusMessage::info(if outcome.created {
             format!("Created and switched to {} at {id}", outcome.branch)
         } else {
             format!("Switched to {}", outcome.branch)
         });
-        repository_mutation_completed(model)
+        Effect::combine(
+            repository_mutation_completed(model),
+            Some(report(model, status)),
+        )
     }
 }
 

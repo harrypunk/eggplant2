@@ -67,6 +67,15 @@ pub(crate) fn with_active<R>(
     }
 }
 
+fn record_explicit_yank(model: &mut Model, text: String) -> Option<Effect> {
+    let register = model.register.record(text);
+    let notification = crate::notifications::publish(
+        model,
+        crate::capabilities::notification::Notification::info("Yanked text").with_title("Yank"),
+    );
+    Effect::combine(register, Some(notification))
+}
+
 struct MainEditingTarget<'a> {
     model: &'a mut Model,
 }
@@ -94,6 +103,10 @@ impl EditingTarget for MainEditingTarget<'_> {
 
     fn record_deleted(&mut self, text: String) -> Option<Effect> {
         self.model.register.record(text)
+    }
+
+    fn record_yanked(&mut self, text: String) -> Option<Effect> {
+        record_explicit_yank(self.model, text)
     }
 
     fn after_edit(&mut self) -> Option<Effect> {
@@ -135,7 +148,7 @@ impl EditingTarget for CommitEditingTarget<'_> {
     }
 
     fn record_yanked(&mut self, text: String) -> Option<Effect> {
-        self.model.register.record(text)
+        record_explicit_yank(self.model, text)
     }
 
     fn after_edit(&mut self) -> Option<Effect> {

@@ -31,6 +31,13 @@ pub fn report_status(model: &mut Model, status: StatusMessage) -> Effect {
     publish_status(model, status, None)
 }
 
+/// Preserve status while marking a one-shot rejection explicitly.
+pub fn report_rejection(model: &mut Model, message: impl Into<String>) -> Effect {
+    let status = StatusMessage::info(message);
+    model.status = Some(status.clone());
+    publish_status(model, status, Some("Rejected"))
+}
+
 /// Render above the active page without changing focus, context, or modality.
 pub fn render(model: &Model, frame: &mut Frame) {
     let Some(notification) = model.notifications.current() else {

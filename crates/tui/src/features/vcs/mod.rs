@@ -318,9 +318,13 @@ fn close_page(model: &mut Model) -> Option<Effect> {
     None
 }
 
+pub(crate) fn report(model: &mut Model, status: StatusMessage) -> Effect {
+    model.vcs.notice = Some(status.text.clone());
+    crate::notifications::publish_status(model, status, Some("Git"))
+}
+
 fn placeholder(model: &mut Model, message: &str) -> Option<Effect> {
-    model.vcs.notice = Some(message.to_string());
-    None
+    Some(report(model, StatusMessage::info(message)))
 }
 
 #[derive(Clone, Copy)]
@@ -683,8 +687,8 @@ mod tests {
         assert!(model.vcs.changes.operation_in_progress());
         model.vcs.changes.selected = Some(1);
 
-        assert!(handle_command(&mut model, CommandId("vcs_stage")).is_none());
-        assert!(handle_command(&mut model, CommandId("vcs_stage_all")).is_none());
+        assert!(handle_command(&mut model, CommandId("vcs_stage")).is_some());
+        assert!(handle_command(&mut model, CommandId("vcs_stage_all")).is_some());
         assert_eq!(model.vcs.changes.operation_revision(), revision);
         assert_eq!(
             model.vcs.notice.as_deref(),
@@ -699,7 +703,7 @@ mod tests {
             result: Ok(()),
         })
         .update(&mut model);
-        assert!(matches!(refresh, Some(Effect::Feature(_))));
+        assert!(matches!(refresh, Some(Effect::Batch(_))));
         assert!(!model.vcs.changes.operation_in_progress());
         assert!(handle_command(&mut model, CommandId("vcs_stage")).is_some());
     }
@@ -735,8 +739,13 @@ mod tests {
             result: Ok(()),
         })
         .update(&mut model);
-        assert!(matches!(refresh, Some(Effect::Feature(_))));
+        assert!(matches!(refresh, Some(Effect::Batch(_))));
         assert_eq!(model.vcs.notice.as_deref(), Some("Staged file"));
+        assert_eq!(model.notifications.current().unwrap().title(), Some("Git"));
+        assert_eq!(
+            model.notifications.current().unwrap().message(),
+            "Staged file"
+        );
         assert!(!model.vcs.changes.operation_in_progress());
         let ChangesState::Ready(changes) = model.vcs.changes() else {
             panic!("previous status should remain visible during refresh");
@@ -779,7 +788,7 @@ mod tests {
             result: Ok(()),
         })
         .update(&mut model);
-        assert!(matches!(refresh, Some(Effect::Feature(_))));
+        assert!(matches!(refresh, Some(Effect::Batch(_))));
         complete_changes(
             &mut model,
             root.clone(),
@@ -805,7 +814,7 @@ mod tests {
             result: Ok(()),
         })
         .update(&mut model);
-        assert!(matches!(refresh, Some(Effect::Feature(_))));
+        assert!(matches!(refresh, Some(Effect::Batch(_))));
         complete_changes(
             &mut model,
             root.clone(),
@@ -845,7 +854,7 @@ mod tests {
         })
         .update(&mut model);
 
-        assert!(effect.is_none());
+        assert!(effect.is_some());
         assert!(!model.vcs.changes.operation_in_progress());
         assert_eq!(model.vcs.notice.as_deref(), Some("index locked"));
         assert!(handle_command(&mut model, CommandId("vcs_stage")).is_some());
@@ -1265,7 +1274,7 @@ mod tests {
     #[test]
     fn discard_placeholder_explains_that_it_does_not_mutate() {
         let mut model = Model::default();
-        assert!(handle_command(&mut model, CommandId("vcs_discard_placeholder")).is_none());
+        assert!(handle_command(&mut model, CommandId("vcs_discard_placeholder")).is_some());
         assert_eq!(
             model.vcs.notice.as_deref(),
             Some("Discard is not implemented")

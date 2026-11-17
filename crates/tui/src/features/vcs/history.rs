@@ -445,11 +445,16 @@ impl Completion for HistoryCopyCompletion {
             HashFormat::Short => "short hash",
             HashFormat::Full => "full hash",
         };
-        model.vcs.history.notice = Some(match outcome.result {
+        let status = match outcome.result {
             Ok(()) => StatusMessage::info(format!("Copied {label} {}", outcome.text)),
             Err(error) => StatusMessage::error(format!("System clipboard unavailable: {error}")),
-        });
-        None
+        };
+        model.vcs.history.notice = Some(status.clone());
+        Some(crate::notifications::publish_status(
+            model,
+            status,
+            Some("Git"),
+        ))
     }
 }
 
@@ -815,5 +820,8 @@ mod tests {
         );
         assert_eq!(model.register.unnamed(), "keep register");
         assert!(model.status.is_none());
+        let notification = model.notifications.current().unwrap();
+        assert_eq!(notification.title(), Some("Git"));
+        assert_eq!(notification.message(), format!("Copied full hash {full}"));
     }
 }

@@ -75,9 +75,10 @@ struct ClipboardCompletion(Result<(), String>);
 impl Completion for ClipboardCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
         if let Err(error) = self.0 {
-            model.status = Some(StatusMessage::error(format!(
-                "System clipboard unavailable: {error}"
-            )));
+            return Some(crate::notifications::report_status(
+                model,
+                StatusMessage::error(format!("System clipboard unavailable: {error}")),
+            ));
         }
         None
     }
@@ -106,9 +107,14 @@ mod tests {
         assert!(
             model
                 .status
+                .as_ref()
                 .unwrap()
                 .text
                 .contains("System clipboard unavailable")
+        );
+        assert_eq!(
+            model.notifications.current().unwrap().kind(),
+            crate::capabilities::notification::NotificationKind::Error
         );
     }
 }

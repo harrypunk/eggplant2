@@ -11,7 +11,7 @@ use crate::{
 use super::{
     ChangesState, DIFF_LIMIT, SelectionDirection,
     changes::{ChangesApply, ChangesRequest, DiffRequest},
-    close_page, placeholder, repository_target, wrapped_index,
+    close_page, placeholder, report, repository_target, wrapped_index,
 };
 
 pub(super) fn select_change(model: &mut Model, direction: SelectionDirection) -> Option<Effect> {
@@ -43,12 +43,14 @@ pub(super) fn toggle_diff(model: &mut Model) -> Option<Effect> {
         .map(Effect::feature)
 }
 
-fn reject_if_operation_in_progress(model: &mut Model) -> bool {
+fn reject_if_operation_in_progress(model: &mut Model) -> Option<Effect> {
     if !model.vcs.changes.operation_in_progress() {
-        return false;
+        return None;
     }
-    model.vcs.notice = Some("Git operation in progress".to_string());
-    true
+    Some(report(
+        model,
+        StatusMessage::info("Git operation in progress"),
+    ))
 }
 
 fn begin_operation(model: &mut Model, target: PathBuf) -> Option<u64> {
@@ -62,8 +64,8 @@ fn accept_operation_completion(model: &mut Model, target: &Path, revision: u64) 
 }
 
 pub(super) fn mutate_selected_change(model: &mut Model, stage: bool) -> Option<Effect> {
-    if reject_if_operation_in_progress(model) {
-        return None;
+    if let Some(effect) = reject_if_operation_in_progress(model) {
+        return Some(effect);
     }
     let change = model.vcs.selected_change()?.clone();
     if stage == change.staged {
@@ -92,8 +94,8 @@ pub(super) fn mutate_selected_change(model: &mut Model, stage: bool) -> Option<E
 }
 
 pub(super) fn mutate_all_changes(model: &mut Model, stage: bool) -> Option<Effect> {
-    if reject_if_operation_in_progress(model) {
-        return None;
+    if let Some(effect) = reject_if_operation_in_progress(model) {
+        return Some(effect);
     }
     let ChangesState::Ready(changes) = model.vcs.changes() else {
         return None;
@@ -213,17 +215,14 @@ impl Completion for OperationCompletion {
         }
         match self.result {
             Ok(()) => {
-                model.vcs.notice = Some(match self.kind {
-                    OperationKind::Stage => "Staged file".to_string(),
-                    OperationKind::Unstage => "Unstaged file".to_string(),
+                let status = StatusMessage::info(match self.kind {
+                    OperationKind::Stage => "Staged file",
+                    OperationKind::Unstage => "Unstaged file",
                 });
                 model.vcs.changes.finish_operation();
-                refresh_changes(model)
+                Effect::combine(refresh_changes(model), Some(report(model, status)))
             }
-            Err(error) => {
-                model.vcs.notice = Some(error);
-                None
-            }
+            Err(error) => Some(report(model, StatusMessage::error(error))),
         }
     }
 }
@@ -263,15 +262,14 @@ impl Completion for BulkOperationCompletion {
             return None;
         }
         if let Err(error) = self.result {
-            model.vcs.notice = Some(error);
-            return None;
+            return Some(report(model, StatusMessage::error(error)));
         }
-        model.vcs.notice = Some(match self.stage {
-            true => "Staged all changes".to_string(),
-            false => "Unstaged all changes".to_string(),
+        let status = StatusMessage::info(match self.stage {
+            true => "Staged all changes",
+            false => "Unstaged all changes",
         });
         model.vcs.changes.finish_operation();
-        refresh_changes(model)
+        Effect::combine(refresh_changes(model), Some(report(model, status)))
     }
 }
 

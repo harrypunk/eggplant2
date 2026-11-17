@@ -3,14 +3,14 @@ use std::path::PathBuf;
 use editor::EditorSession;
 
 use crate::{
-    data_object::{AppPage, CommandId, Context, Message, Model},
+    data_object::{AppPage, CommandId, Context, Message, Model, StatusMessage},
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
     },
 };
 
-use super::{ChangesState, repository_changed, repository_target};
+use super::{ChangesState, report, repository_changed, repository_target};
 
 #[derive(Debug, Default)]
 pub(crate) struct CommitState {
@@ -100,12 +100,10 @@ pub(crate) fn open(model: &mut Model) -> Option<Effect> {
         return None;
     }
     if repository_target(model).is_none() {
-        model.vcs.notice = Some("not a Git repository".to_string());
-        return None;
+        return Some(report(model, StatusMessage::error("not a Git repository")));
     }
     if staged_count(model) == 0 {
-        model.vcs.notice = Some("No staged changes".to_string());
-        return None;
+        return Some(report(model, StatusMessage::info("No staged changes")));
     }
     if model.vcs.commit.editor.is_empty() {
         let document = model.vcs.documents.create("");
@@ -129,8 +127,10 @@ fn close(model: &mut Model) -> Option<Effect> {
     }
     model.vcs.commit.editor.enter_normal_mode();
     return_to_status(model);
-    model.vcs.notice = Some("Commit message preserved".to_string());
-    None
+    Some(report(
+        model,
+        StatusMessage::info("Commit message preserved"),
+    ))
 }
 
 fn discard(model: &mut Model) -> Option<Effect> {
@@ -139,8 +139,10 @@ fn discard(model: &mut Model) -> Option<Effect> {
     }
     model.vcs.commit.clear();
     return_to_status(model);
-    model.vcs.notice = Some("Commit message discarded".to_string());
-    None
+    Some(report(
+        model,
+        StatusMessage::info("Commit message discarded"),
+    ))
 }
 
 fn return_to_status(model: &mut Model) {
@@ -158,8 +160,10 @@ fn submit(model: &mut Model) -> Option<Effect> {
         return None;
     }
     if model.deferred_action.is_some() {
-        model.vcs.notice = Some("Wait for the pending close/quit operation to finish".to_string());
-        return None;
+        return Some(report(
+            model,
+            StatusMessage::info("Wait for the pending close/quit operation to finish"),
+        ));
     }
     let message = model
         .vcs
@@ -169,16 +173,16 @@ fn submit(model: &mut Model) -> Option<Effect> {
         .map(|snapshot| snapshot.text)
         .unwrap_or_default();
     if message.trim().is_empty() {
-        model.vcs.notice = Some("Commit message must not be empty".to_string());
-        return None;
+        return Some(report(
+            model,
+            StatusMessage::info("Commit message must not be empty"),
+        ));
     }
     if staged_count(model) == 0 {
-        model.vcs.notice = Some("No staged changes".to_string());
-        return None;
+        return Some(report(model, StatusMessage::info("No staged changes")));
     }
     let Some(target) = repository_target(model) else {
-        model.vcs.notice = Some("not a Git repository".to_string());
-        return None;
+        return Some(report(model, StatusMessage::error("not a Git repository")));
     };
     model.vcs.commit.revision = model.vcs.commit.revision.wrapping_add(1);
     model.vcs.commit.phase = CommitPhase::Saving(CommitAttempt {
@@ -273,13 +277,12 @@ impl Completion for CommitCompletion {
             Ok(id) => {
                 model.vcs.commit.clear();
                 return_to_status(model);
-                model.vcs.notice = Some(format!("Created commit {id}"));
-                repository_changed(model)
+                let status = StatusMessage::info(format!("Created commit {id}"));
+                Effect::combine(repository_changed(model), Some(report(model, status)))
             }
             Err(error) => {
                 model.vcs.commit.phase = CommitPhase::Editing;
-                model.vcs.notice = Some(error);
-                None
+                Some(report(model, StatusMessage::error(error)))
             }
         }
     }
@@ -361,12 +364,12 @@ mod tests {
         );
         assert_eq!(model.vcs.commit.editor.mode(), EditMode::Normal);
 
-        assert!(close(&mut model).is_none());
+        assert!(close(&mut model).is_some());
         assert_eq!(model.active_page, AppPage::Vcs);
         assert_eq!(message(&model), "subject");
         open(&mut model);
         assert_eq!(message(&model), "subject");
-        assert!(discard(&mut model).is_none());
+        assert!(discard(&mut model).is_some());
         assert!(model.vcs.commit.editor.is_empty());
         assert_eq!(model.editor.buffer_version(main_id), main_revision);
         assert_eq!(
@@ -381,7 +384,7 @@ mod tests {
         model.vcs.commit.resize_active_view(60, 10);
         open(&mut model);
         type_text(&mut model, "first");
-        assert!(discard(&mut model).is_none());
+        assert!(discard(&mut model).is_some());
 
         open(&mut model);
         type_text(&mut model, "second");
@@ -407,7 +410,7 @@ mod tests {
         ] {
             let effect = MessageManager::default()
                 .update(&mut model, Message::InvokeCommand(CommandId(command)));
-            assert!(effect.is_none());
+            assert!(matches!(effect, Some(Effect::Feature(_))));
             assert_eq!(model.deferred_action, None);
             assert!(matches!(
                 model.running_state,
@@ -417,6 +420,10 @@ mod tests {
             assert_eq!(
                 model.status.as_ref().unwrap().text,
                 "Commit in progress; try again after it finishes"
+            );
+            assert_eq!(
+                model.notifications.current().unwrap().title(),
+                Some("Rejected")
             );
         }
     }
@@ -428,7 +435,7 @@ mod tests {
         open(&mut model);
         type_text(&mut model, "subject");
 
-        assert!(submit(&mut model).is_none());
+        assert!(submit(&mut model).is_some());
 
         assert!(model.vcs.commit.is_editing());
         assert_eq!(message(&model), "subject");
@@ -445,7 +452,7 @@ mod tests {
         open(&mut model);
         type_text(&mut model, "  ");
 
-        assert!(submit(&mut model).is_none());
+        assert!(submit(&mut model).is_some());
         assert!(model.vcs.commit.is_editing());
         assert_eq!(
             model.vcs.notice.as_deref(),
@@ -552,7 +559,7 @@ mod tests {
         assert!(
             MessageManager::default()
                 .update(&mut model, Message::InvokeCommand(CommandId("quit")))
-                .is_none()
+                .is_some()
         );
         assert!(matches!(model.vcs.commit.phase, CommitPhase::Saving(_)));
         assert_eq!(model.deferred_action, None);

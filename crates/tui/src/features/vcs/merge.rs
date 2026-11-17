@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::{
-    data_object::{CommandId, Context, Message, Model},
+    data_object::{CommandId, Context, Message, Model, StatusMessage},
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
@@ -9,7 +9,7 @@ use crate::{
     },
 };
 
-use super::{ChangesState, repository_mutation_completed, repository_target};
+use super::{ChangesState, report, repository_mutation_completed, repository_target};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 enum MergePhase {
@@ -266,8 +266,10 @@ fn start(model: &mut Model) -> Option<Effect> {
         return None;
     }
     if !status_is_clean(model) {
-        model.vcs.notice = Some("Git status must be clean before merge".to_string());
-        return None;
+        return Some(report(
+            model,
+            StatusMessage::info("Git status must be clean before merge"),
+        ));
     }
     let repository = repository_target(model)?;
     if !model.modal.open(Context::VcsMerge) {
@@ -431,11 +433,14 @@ impl Completion for MergeCompletion {
         };
 
         close_merge_context(model);
-        model.vcs.notice = Some(match updated {
+        let status = StatusMessage::info(match updated {
             Some(id) => format!("Switched to {target} and fast-forwarded to {id}"),
             None => format!("Switched to {target}; already up to date"),
         });
-        repository_mutation_completed(model)
+        Effect::combine(
+            repository_mutation_completed(model),
+            Some(report(model, status)),
+        )
     }
 }
 
@@ -554,7 +559,7 @@ mod tests {
             previous_path: None,
         }]);
 
-        assert!(start(&mut model).is_none());
+        assert!(start(&mut model).is_some());
         assert!(!model.vcs.merge.is_active());
         assert_eq!(
             model.vcs.notice.as_deref(),
@@ -571,7 +576,7 @@ mod tests {
             .insert_text("!")
             .unwrap();
         unsaved_model.editor.enter_normal_mode();
-        assert!(start(&mut unsaved_model).is_none());
+        assert!(start(&mut unsaved_model).is_some());
         assert!(!unsaved_model.vcs.merge.is_active());
     }
 

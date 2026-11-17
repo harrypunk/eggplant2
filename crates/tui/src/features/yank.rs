@@ -535,7 +535,10 @@ mod tests {
             "hello"
         );
         assert_eq!(model.editor.active_revision(), revision);
-        assert!(effect.is_some());
+        assert!(matches!(effect, Some(Effect::Batch(_))));
+        let notification = model.notifications.current().unwrap();
+        assert_eq!(notification.title(), Some("Yank"));
+        assert_eq!(notification.message(), "Yanked text");
     }
 
     #[test]

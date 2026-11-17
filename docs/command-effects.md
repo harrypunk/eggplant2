@@ -45,6 +45,7 @@ Updates remain pure. A feature returns an effect request; the runtime locates th
 | Document open | Blocking read/syntax preparation; generated `OpenRequestId` carried through the TUI request/completion envelope; main-thread construction of non-`Send` Helix `Document`. |
 | Explorer tree work | Folding is immediate in-memory projection. Unfolding reads only the selected subtree; full refreshes use an owned root/expansion/ignore snapshot. Background results carry generation checks and apply entries and selection transactionally. |
 | Theme selection | Pure update; no effect. |
+| Notification expiry | Async timer with notification ID validation; stale expiry cannot dismiss a replacement. |
 | Dynamic theme discovery/load | Filesystem effect with request ID, complete validation, and previous-theme preservation on failure. |
 
 An effect registration connects request execution to completion routing. The runtime should not need a new domain-specific match arm for every feature, but it must distinguish async, blocking, and main-thread requirements rather than treating all effects as arbitrary closures.

@@ -153,6 +153,8 @@ Background work follows the same rule:
 
 A save-dependent workflow must use an explicit completion state machine, as the commit save barrier does.
 
+For source-independent transient feedback, `NotificationSink` and the application notification adapter follow the same owned-request/generation-checked pattern. See [Transient notifications](notifications.md).
+
 ## 4. Keep ownership boundaries clear
 
 - `editor` owns document text, cursor, revisions, view geometry, and persistence invariants.

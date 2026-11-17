@@ -70,17 +70,16 @@ impl MessageManager {
         id: crate::data_object::CommandId,
     ) -> Option<Effect> {
         let Some(command) = self.commands.get(id.as_str()) else {
-            model.status = Some(StatusMessage::error(format!(
-                "unknown command `{}`",
-                id.as_str()
-            )));
-            return None;
+            return Some(crate::notifications::report_status(
+                model,
+                StatusMessage::error(format!("unknown command `{}`", id.as_str())),
+            ));
         };
         if Self::lifecycle_blocked_by_commit(model, id) {
-            model.status = Some(StatusMessage::info(
+            return Some(crate::notifications::report_rejection(
+                model,
                 "Commit in progress; try again after it finishes",
             ));
-            return None;
         }
         match &command.handler {
             CommandHandler::Message(message) => self.update(model, message()),

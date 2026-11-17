@@ -47,6 +47,7 @@ The VCS integration is an **addon**, not a requirement of the core editor. Editi
 - [Themes](docs/theme.md) — built-in themes and resolved styles.
 - [Milestone history](docs/milestone-history.md) — implemented architecture and editing slices.
 - [Command and effect routing](docs/command-effects.md) — semantic commands and worker completion boundaries.
+- [Transient notifications](docs/notifications.md) — source-independent one-shot feedback and expiry composition.
 - [UI contributions](docs/ui-contributions.md) — panels, overlays, status slots, and cursor policy.
 - [Smoke test](docs/smoke-test.md) — automated and real-terminal validation procedures.
 - [Roadmap](PLAN.md) — current state and upcoming reviewable slices.

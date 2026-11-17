@@ -7,6 +7,7 @@ The shell page owns layout and composition:
 - Modal/input precedence and the context stack, with `ModalController` enforcing one owning modal context across picker/search/jump/merge workflows.
 - Focus relationships and terminal cursor suppression.
 - Status area and shared theme propagation.
+- Top-right transient notifications, rendered above every page without focus, cursor, or modal ownership.
 
 Features own concrete components and receive resolved props. They register contributions only in explicit slots:
 
