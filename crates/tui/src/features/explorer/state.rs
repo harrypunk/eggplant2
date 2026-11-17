@@ -90,18 +90,10 @@ impl ExplorerState {
         )
     }
 
-    pub(crate) fn expansion_request(
-        &mut self,
-        root: &Path,
-        target: ExpansionState,
-    ) -> Option<ExplorerRequest> {
+    pub(crate) fn unfold_request(&mut self, root: &Path) -> Option<ExplorerRequest> {
         let path = self.selected_directory()?;
         let mut expanded_directories = self.expanded_directories.clone();
-        let changed = match target {
-            ExpansionState::Expanded => expanded_directories.insert(path.clone()),
-            ExpansionState::Collapsed => expanded_directories.remove(&path),
-        };
-        if !changed {
+        if !expanded_directories.insert(path.clone()) {
             return None;
         }
         Some(self.request(
@@ -110,6 +102,34 @@ impl ExplorerState {
             self.ignore_mode,
             ExplorerAction::Expansion { path },
         ))
+    }
+
+    /// Collapse the selected directory without touching the filesystem.
+    pub(crate) fn fold_selected(&mut self) -> bool {
+        let Some(index) = self.selected else {
+            return false;
+        };
+        let Some(entry) = self.entries.get(index) else {
+            return false;
+        };
+        if entry.kind != ExplorerEntryKind::Directory {
+            return false;
+        }
+        let path = entry.path.clone();
+        let depth = entry.depth;
+        if !self.expanded_directories.remove(&path) {
+            return false;
+        }
+
+        self.refresh_generation = self.refresh_generation.wrapping_add(1);
+        let end = self.entries[index + 1..]
+            .iter()
+            .position(|entry| entry.depth <= depth)
+            .map(|offset| index + 1 + offset)
+            .unwrap_or(self.entries.len());
+        self.entries.drain(index + 1..end);
+        self.entries[index].expansion = ExpansionState::Collapsed;
+        true
     }
 
     pub(crate) fn toggle_ignore_request(&mut self, root: &Path) -> ExplorerRequest {
@@ -208,17 +228,7 @@ impl ExplorerState {
     /// Unfold the selected directory in synchronous component/state tests.
     #[cfg(test)]
     pub fn unfold_selected(&mut self, root: &Path) -> io::Result<bool> {
-        let Some(request) = self.expansion_request(root, ExpansionState::Expanded) else {
-            return Ok(false);
-        };
-        self.complete_test_request(request)?;
-        Ok(true)
-    }
-
-    /// Fold the selected directory in synchronous component/state tests.
-    #[cfg(test)]
-    pub fn fold_selected(&mut self, root: &Path) -> io::Result<bool> {
-        let Some(request) = self.expansion_request(root, ExpansionState::Collapsed) else {
+        let Some(request) = self.unfold_request(root) else {
             return Ok(false);
         };
         self.complete_test_request(request)?;
@@ -389,11 +399,11 @@ mod tests {
         assert_eq!(explorer.entries[1].depth, 1);
         assert_eq!(explorer.selected, Some(0));
 
-        assert!(explorer.fold_selected(directory.path()).unwrap());
+        assert!(explorer.fold_selected());
         assert_eq!(explorer.entries.len(), 1);
         assert_eq!(explorer.entries[0].expansion, ExpansionState::Collapsed);
         assert_eq!(explorer.selected, Some(0));
-        assert!(!explorer.fold_selected(directory.path()).unwrap());
+        assert!(!explorer.fold_selected());
     }
 
     #[test]

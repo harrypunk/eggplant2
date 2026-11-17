@@ -27,11 +27,15 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
 }
 
 fn change_expansion(model: &mut Model, target: ExpansionState) -> Option<Effect> {
+    if target == ExpansionState::Collapsed {
+        if model.explorer.fold_selected() {
+            model.status = None;
+        }
+        return None;
+    }
+
     let root = model.workspace.as_ref()?.root().to_path_buf();
-    model
-        .explorer
-        .expansion_request(&root, target)
-        .map(Effect::feature)
+    model.explorer.unfold_request(&root).map(Effect::feature)
 }
 
 fn refresh(model: &mut Model) -> Option<Effect> {
@@ -106,9 +110,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("explorer_fold")),
         );
-        if let Some(effect) = effect {
-            apply(&mut model, effect);
-        }
+        assert!(effect.is_none());
         assert_eq!(model.explorer.entries.len(), 1);
         let effect = manager.update(
             &mut model,

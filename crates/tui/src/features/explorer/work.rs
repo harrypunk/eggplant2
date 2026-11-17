@@ -131,6 +131,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn folding_is_immediate_and_invalidates_pending_refreshes() {
+        let directory = tempfile::tempdir().unwrap();
+        let folder = directory.path().join("folder");
+        std::fs::create_dir(&folder).unwrap();
+        std::fs::write(folder.join("child.txt"), "child").unwrap();
+        let root = directory.path().to_path_buf();
+        let mut state = ExplorerState::load(&root).unwrap();
+        assert!(state.unfold_selected(&root).unwrap());
+        let refresh = state.reload_request(&root, ExplorerRefreshKind::Manual);
+
+        assert!(state.fold_selected());
+        let collapsed = state.entries.clone();
+        assert_eq!(collapsed.len(), 1);
+        assert!(matches!(
+            state.complete(refresh.execute()),
+            ExplorerApply::Ignored
+        ));
+        assert_eq!(state.entries, collapsed);
+    }
+
+    #[test]
     fn stale_reload_does_not_replace_newer_entries() {
         let directory = tempfile::tempdir().unwrap();
         std::fs::write(directory.path().join("first.txt"), "first").unwrap();
