@@ -1,4 +1,6 @@
-use helix_view::clipboard::{ClipboardProvider, ClipboardType};
+use helix_view::clipboard::ClipboardProvider;
+
+use super::clipboard::ClipboardWriter;
 
 use crate::{
     data_object::{Message, Model, StatusMessage},
@@ -35,31 +37,36 @@ impl RegisterState {
         self.provider = provider;
     }
 
+    pub(crate) fn clipboard_write(&self, text: String) -> ClipboardWrite {
+        ClipboardWrite {
+            text,
+            clipboard: self.provider.clone(),
+        }
+    }
+
     /// Update the local register immediately and mirror it in a blocking effect.
     pub fn record(&mut self, text: String) -> Option<Effect> {
         self.unnamed = text.clone();
-        Some(Effect::feature(ClipboardWrite {
-            text,
-            provider: self.provider.clone(),
-        }))
+        Some(Effect::feature(self.clipboard_write(text)))
     }
 }
 
-struct ClipboardWrite {
+pub(crate) struct ClipboardWrite<C = ClipboardProvider> {
     text: String,
-    provider: ClipboardProvider,
+    clipboard: C,
+}
+
+impl<C: ClipboardWriter> ClipboardWrite<C> {
+    pub(crate) fn execute(self) -> Result<(), String> {
+        self.clipboard.write_text(&self.text)
+    }
 }
 
 impl FeatureEffect for ClipboardWrite {
     fn perform(self: Box<Self>) -> Message {
-        let result = if matches!(&self.provider, ClipboardProvider::None) {
-            Err("no system clipboard provider is available".to_string())
-        } else {
-            self.provider
-                .set_contents(&self.text, ClipboardType::Clipboard)
-                .map_err(|error| error.to_string())
-        };
-        Message::FeatureCompletion(FeatureCompletion::new(ClipboardCompletion(result)))
+        Message::FeatureCompletion(FeatureCompletion::new(ClipboardCompletion(
+            ClipboardWrite::execute(*self),
+        )))
     }
 }
 
@@ -89,7 +96,7 @@ mod tests {
 
         let write = ClipboardWrite {
             text: "hello".to_string(),
-            provider: ClipboardProvider::None,
+            clipboard: ClipboardProvider::None,
         };
         let Message::FeatureCompletion(completion) = Box::new(write).perform() else {
             panic!("expected clipboard completion");

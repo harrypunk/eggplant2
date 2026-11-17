@@ -40,6 +40,7 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | VCS history page | Jump to first / last commit or detail file | `gg` / `G` (no counts) |
 | VCS history page | Toggle commit's changed-file list / selected detail-file diff | `Tab` |
 | VCS history page | Open selected commit's right-side detail | `Enter` |
+| VCS commit detail | Copy short / full commit hash to system clipboard | `c` / `C` |
 | VCS history page | Load the next 20 commits when available | `n` |
 | VCS commit page | Commit staged changes from Normal or Insert | `Ctrl-S` |
 | VCS commit page | Close in Normal mode and preserve the draft | `q` |

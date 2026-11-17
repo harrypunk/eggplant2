@@ -25,8 +25,9 @@ use change_workflow::{
 use changes::ChangesController;
 use commit::CommitState;
 use history::{
-    HistoryController, close_history, load_history_more, open_history, open_history_detail,
-    refresh_history, select_history, toggle_history_file_diff, toggle_history_files,
+    HistoryController, close_history, copy_history_hash, load_history_more, open_history,
+    open_history_detail, refresh_history, select_history, toggle_history_file_diff,
+    toggle_history_files,
 };
 use merge::MergeState;
 use repository::RepositoryState;
@@ -148,6 +149,16 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
             handle_command,
         ),
         Command::feature(
+            CommandId("vcs_history_copy_short"),
+            "copy short commit hash",
+            handle_command,
+        ),
+        Command::feature(
+            CommandId("vcs_history_copy_full"),
+            "copy full commit hash",
+            handle_command,
+        ),
+        Command::feature(
             CommandId("vcs_history_load_more"),
             "load more commits",
             handle_command,
@@ -232,6 +243,8 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
             HistoryPane::List => toggle_history_files(model),
         },
         "open_vcs_commit_detail" => open_history_detail(model),
+        "vcs_history_copy_short" => copy_history_hash(model, crate::copy_hash::HashFormat::Short),
+        "vcs_history_copy_full" => copy_history_hash(model, crate::copy_hash::HashFormat::Full),
         "vcs_history_load_more" => load_history_more(model),
         "close_vcs_page" => {
             if model.vcs.help_visible {

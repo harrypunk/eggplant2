@@ -100,6 +100,12 @@ This is the interface boundary to prefer: shared behavior in the operation, vary
 
 Feature availability comes from composition—the editor's Normal keymap and adapter—not from page checks inside the reusable capability. A page that does not need scrolling simply does not compose it.
 
+### Example: environment-independent hash copying
+
+`capabilities/copy_hash.rs` accepts hash text, `HashFormat`, and any `ClipboardWriter`. `CopyHash<C>` returns a `CopyHashOutcome` containing the selected text and copy result; it imports no page, VCS, `Model`, message, or effect types. Tests inject an in-memory clipboard, and other callers can provide a different output implementation.
+
+The history adapter only resolves whether a visible ready detail supplies a full hash, injects the system clipboard at composition, and maps the outcome to history feedback. Hash formatting and clipboard behavior do not live in `HistoryController`. Copying does not overwrite the editor's unnamed yank register.
+
 ### Example: a short-lived theme-picker adapter
 
 `ThemePickerAdapter` is constructed per command by destructuring only `ThemePickerState`, `Theme`, the context stack, and status from `Model`. Its methods perform open/close/select/apply transitions, then the adapter is discarded. Pure theme commands return no effect, and picker visibility is private behind `is_open`. The registered `handle_command` is the only function that needs the global model; the widget continues to receive only picker state and theme.

@@ -21,11 +21,16 @@ pub struct VcsHistory;
 impl VcsHistory {
     pub fn view(&self, model: &Model, frame: &mut Frame) {
         let detail_open = model.vcs.history.pane == crate::vcs::HistoryPane::Detail;
-        let areas = VcsHistoryLayout::new(frame.area(), detail_open);
+        let more = history_more_line(model);
+        let notice = history_notice_line(model);
+        let header_height =
+            (1 + usize::from(more.is_some()) + usize::from(notice.is_some())).max(2) as u16;
+        let areas = VcsHistoryLayout::new(frame.area(), detail_open, header_height);
         let styles = model.theme.ui();
         let header_lines =
             std::iter::once(Line::styled("History", styles.base.patch(styles.key_hint)))
-                .chain(history_more_line(model))
+                .chain(more)
+                .chain(notice)
                 .collect::<Vec<_>>();
         frame.render_widget(
             Paragraph::new(header_lines).style(styles.base),
@@ -59,16 +64,17 @@ struct VcsHistoryLayout {
 }
 
 impl VcsHistoryLayout {
-    fn new(area: Rect, detail_open: bool) -> Self {
+    fn new(area: Rect, detail_open: bool, header_height: u16) -> Self {
         let [history_area, detail_area] = match detail_open {
             true => Layout::horizontal([Constraint::Fill(1), Constraint::Fill(1)])
                 .flex(Flex::Start)
                 .areas(area),
             false => [area, Rect::default()],
         };
-        let [header, body] = Layout::vertical([Constraint::Length(2), Constraint::Fill(1)])
-            .flex(Flex::Start)
-            .areas(history_area);
+        let [header, body] =
+            Layout::vertical([Constraint::Length(header_height), Constraint::Fill(1)])
+                .flex(Flex::Start)
+                .areas(history_area);
         Self {
             header,
             body,
@@ -94,6 +100,16 @@ fn history_more_line(model: &Model) -> Option<Line<'static>> {
             styles.base.patch(styles.error),
         )),
     }
+}
+
+fn history_notice_line(model: &Model) -> Option<Line<'static>> {
+    let notice = model.vcs.history.notice.as_ref()?;
+    let styles = model.theme.ui();
+    let style = match notice.kind {
+        crate::data_object::StatusKind::Info => styles.action_hint,
+        crate::data_object::StatusKind::Error => styles.error,
+    };
+    Some(Line::styled(notice.text.clone(), styles.base.patch(style)))
 }
 
 fn change_marker(kind: ::vcs::ChangeKind) -> &'static str {
@@ -145,6 +161,9 @@ mod tests {
         model.vcs.history.detail = model.vcs.history.files.clone();
         model.vcs.history.pane = crate::vcs::HistoryPane::Detail;
         model.vcs.history.selected_file = Some(0);
+        model.vcs.history.notice = Some(crate::data_object::StatusMessage::info(
+            "Copied short hash abc1234",
+        ));
         let backend = TestBackend::new(120, 12);
         let mut terminal = Terminal::new(backend).unwrap();
 
@@ -169,6 +188,8 @@ mod tests {
         assert!(content.contains("[main]"), "{content}");
         assert!(content.contains("2026-11-16 10:30:00 +0000"));
         assert!(content.contains("n load more"));
+        assert!(content.contains("c copy short  C copy full"));
+        assert!(content.contains("Copied short hash abc1234"));
         let load_more = &terminal.backend().buffer()[(0, 1)];
         assert_eq!(load_more.symbol(), "n");
         assert_eq!(

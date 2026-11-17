@@ -330,6 +330,7 @@ mod tests {
             (KeyCode::Char('k'), "vcs_history_previous"),
             (KeyCode::Tab, "vcs_history_toggle_diff"),
             (KeyCode::Enter, "open_vcs_commit_detail"),
+            (KeyCode::Char('c'), "vcs_history_copy_short"),
             (KeyCode::Char('n'), "vcs_history_load_more"),
         ] {
             let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
@@ -338,6 +339,11 @@ mod tests {
                 Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
             ));
         }
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('C'), KeyModifiers::SHIFT));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::InvokeCommand(CommandId("vcs_history_copy_full")))
+        ));
     }
 
     #[test]

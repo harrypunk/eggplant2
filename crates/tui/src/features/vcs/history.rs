@@ -3,7 +3,9 @@ use std::path::PathBuf;
 use ::vcs::{CommitDetails, CommitSummary, Diff, HistoryPage};
 
 use crate::{
-    data_object::{AppPage, Context, Message, Model},
+    clipboard::ClipboardWriter,
+    copy_hash::{CopyHash, CopyHashOutcome, HashFormat},
+    data_object::{AppPage, Context, Message, Model, StatusMessage},
     manager::effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
 };
 
@@ -64,6 +66,7 @@ pub struct HistoryController {
     pub(crate) selected_file: Option<usize>,
     pub(crate) expanded_file: Option<String>,
     pub(crate) diff: DiffState,
+    pub(crate) notice: Option<StatusMessage>,
     pub(super) detail_target: Option<PathBuf>,
     pub(super) detail_commit_id: Option<String>,
     pub(super) detail_revision: u64,
@@ -89,6 +92,7 @@ impl Default for HistoryController {
             selected_file: None,
             expanded_file: None,
             diff: DiffState::Idle,
+            notice: None,
             detail_target: None,
             detail_commit_id: None,
             detail_revision: 0,
@@ -105,6 +109,7 @@ impl HistoryController {
     }
 
     pub(super) fn refresh(&mut self, target: Option<PathBuf>) -> Option<HistoryRequest> {
+        self.notice = None;
         self.has_more = false;
         self.more = HistoryMoreState::Idle;
         self.expanded = None;
@@ -349,6 +354,7 @@ pub(super) fn open_history_detail(model: &mut Model) -> Option<Effect> {
         None
     };
     model.vcs.history.pane = HistoryPane::Detail;
+    model.vcs.history.notice = None;
     model.vcs.history.selected_file = None;
     model.vcs.history.expanded_file = None;
     model.vcs.history.diff = DiffState::Idle;
@@ -402,6 +408,49 @@ pub(super) fn toggle_history_file_diff(model: &mut Model) -> Option<Effect> {
         target,
         revision: model.vcs.history.detail_revision,
     }))
+}
+
+pub(super) fn copy_history_hash(model: &mut Model, format: HashFormat) -> Option<Effect> {
+    if model.vcs.history.pane != HistoryPane::Detail {
+        return None;
+    }
+    let CommitDetailsState::Ready(details) = &model.vcs.history.detail else {
+        return None;
+    };
+    let copy = CopyHash::new(details.full_id.clone(), format, model.register.provider());
+    model.vcs.history.notice = None;
+    Some(Effect::feature(HistoryCopyRequest { copy }))
+}
+
+struct HistoryCopyRequest<C> {
+    copy: CopyHash<C>,
+}
+
+impl<C: ClipboardWriter + Send + 'static> FeatureEffect for HistoryCopyRequest<C> {
+    fn perform(self: Box<Self>) -> Message {
+        Message::FeatureCompletion(FeatureCompletion::new(HistoryCopyCompletion {
+            outcome: self.copy.execute(),
+        }))
+    }
+}
+
+struct HistoryCopyCompletion {
+    outcome: CopyHashOutcome,
+}
+
+impl Completion for HistoryCopyCompletion {
+    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
+        let outcome = self.outcome;
+        let label = match outcome.format {
+            HashFormat::Short => "short hash",
+            HashFormat::Full => "full hash",
+        };
+        model.vcs.history.notice = Some(match outcome.result {
+            Ok(()) => StatusMessage::info(format!("Copied {label} {}", outcome.text)),
+            Err(error) => StatusMessage::error(format!("System clipboard unavailable: {error}")),
+        });
+        None
+    }
 }
 
 fn selected_history_commit(model: &Model) -> Option<CommitSummary> {
@@ -715,5 +764,56 @@ mod tests {
             HistoryApply::Applied
         ));
         assert!(matches!(state.diff, DiffState::Ready { .. }));
+    }
+
+    #[test]
+    fn copy_adapter_requires_visible_detail_and_preserves_the_yank_register() {
+        let full = "0123456789abcdef0123456789abcdef01234567";
+        let mut model = Model::default();
+        model
+            .register
+            .update_from_clipboard("keep register".to_string());
+        model
+            .register
+            .set_provider(helix_view::clipboard::ClipboardProvider::None);
+        model.vcs.history.detail = CommitDetailsState::Ready(CommitDetails {
+            full_id: full.to_string(),
+            message: "message".to_string(),
+            author: "Eggplant".to_string(),
+            date: "date".to_string(),
+            files: Vec::new(),
+        });
+        assert!(copy_history_hash(&mut model, HashFormat::Short).is_none());
+
+        model.vcs.history.pane = HistoryPane::Detail;
+        let Some(Effect::Feature(request)) = copy_history_hash(&mut model, HashFormat::Short)
+        else {
+            panic!("ready detail should compose a clipboard request");
+        };
+        assert_eq!(model.register.unnamed(), "keep register");
+        let Message::FeatureCompletion(completion) = request.perform() else {
+            panic!("expected history copy completion");
+        };
+        completion.update(&mut model);
+        assert_eq!(model.register.unnamed(), "keep register");
+        assert_eq!(
+            model.vcs.history.notice.as_ref().unwrap().kind,
+            crate::data_object::StatusKind::Error
+        );
+
+        Box::new(HistoryCopyCompletion {
+            outcome: CopyHashOutcome {
+                format: HashFormat::Full,
+                text: full.to_string(),
+                result: Ok(()),
+            },
+        })
+        .update(&mut model);
+        assert_eq!(
+            model.vcs.history.notice.as_ref().unwrap().text,
+            format!("Copied full hash {full}")
+        );
+        assert_eq!(model.register.unnamed(), "keep register");
+        assert!(model.status.is_none());
     }
 }

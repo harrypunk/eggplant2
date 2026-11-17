@@ -48,6 +48,7 @@ impl<'a> CommitDetail<'a> {
             CommitDetailsState::Ready(details) => {
                 let header = [
                     Line::styled(details.full_id.clone(), styles.key_hint),
+                    Line::styled("c copy short  C copy full", styles.action_hint),
                     Line::styled(
                         format!("{}  {}", details.author, details.date),
                         styles.base.patch(styles.muted),
@@ -144,8 +145,8 @@ mod tests {
         };
 
         let (lines, selected) = CommitDetail::new(props).lines();
-        assert_eq!(lines.len(), 30);
-        assert_eq!(selected, Some(29));
+        assert_eq!(lines.len(), 31);
+        assert_eq!(selected, Some(30));
 
         let backend = TestBackend::new(80, 6);
         let mut terminal = Terminal::new(backend).unwrap();
