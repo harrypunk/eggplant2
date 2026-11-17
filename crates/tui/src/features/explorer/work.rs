@@ -18,6 +18,7 @@ pub(crate) enum ExplorerAction {
     Refresh(ExplorerRefreshKind),
     Expansion { path: PathBuf },
     Ignore(IgnoreMode),
+    Reveal { path: PathBuf },
 }
 
 #[derive(Debug)]
@@ -37,6 +38,7 @@ pub(crate) struct ExplorerCompletion {
 
 pub(crate) enum ExplorerApply {
     Ignored,
+    Unchanged,
     Applied(ExplorerAction),
     Failed(ExplorerAction, io::Error),
 }
@@ -72,11 +74,20 @@ impl ExplorerState {
             Ok(entries) => entries,
             Err(error) => return ExplorerApply::Failed(request.action, error),
         };
+        let selected_path = match &request.action {
+            ExplorerAction::Reveal { path } => {
+                if !entries.iter().any(|entry| &entry.path == path) {
+                    return ExplorerApply::Unchanged;
+                }
+                Some(path.clone())
+            }
+            _ => request.selected_path.clone(),
+        };
         self.replace_tree(
             entries,
             request.expanded_directories,
             request.ignore_mode,
-            request.selected_path,
+            selected_path,
         );
         ExplorerApply::Applied(request.action)
     }
@@ -86,10 +97,11 @@ impl Completion for ExplorerCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
         let root = self.request.root.clone();
         match model.explorer.complete(*self) {
-            ExplorerApply::Ignored => {}
+            ExplorerApply::Ignored | ExplorerApply::Unchanged => {}
             ExplorerApply::Applied(ExplorerAction::Refresh(ExplorerRefreshKind::Manual))
             | ExplorerApply::Applied(ExplorerAction::Expansion { .. }) => model.status = None,
-            ExplorerApply::Applied(ExplorerAction::Refresh(ExplorerRefreshKind::External)) => {}
+            ExplorerApply::Applied(ExplorerAction::Refresh(ExplorerRefreshKind::External))
+            | ExplorerApply::Applied(ExplorerAction::Reveal { .. }) => {}
             ExplorerApply::Applied(ExplorerAction::Ignore(mode)) => {
                 let text = match mode {
                     IgnoreMode::HideIgnored => "Hiding ignored files",
@@ -102,6 +114,7 @@ impl Completion for ExplorerCompletion {
                     ExplorerAction::Refresh(_) => ("failed to refresh", root),
                     ExplorerAction::Expansion { path } => ("failed to update directory tree", path),
                     ExplorerAction::Ignore(_) => ("failed to toggle ignored files", root),
+                    ExplorerAction::Reveal { path } => ("failed to update file explorer", path),
                 };
                 model.status = Some(StatusMessage::error(format!(
                     "{action} `{}`: {error}",

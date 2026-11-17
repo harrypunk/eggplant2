@@ -38,10 +38,14 @@ pub(crate) fn switch(model: &mut Model, movement: BufferMovement) -> Option<Effe
             let _ = model.editor.activate_previous_buffer();
         }
     }
-    if let Some(id) = model.editor.active_buffer() {
-        reveal_buffer(model, id);
-    }
-    Effect::combine(effect, crate::vcs::sync_active_buffer(model))
+    let reveal = model
+        .editor
+        .active_buffer()
+        .and_then(|id| reveal_buffer(model, id));
+    Effect::combine(
+        effect,
+        Effect::combine(reveal, crate::vcs::sync_active_buffer(model)),
+    )
 }
 
 pub(crate) fn auto_save_active(model: &mut Model) -> Option<Effect> {
@@ -74,24 +78,16 @@ pub(crate) fn start_save(model: &mut Model, id: BufferId) -> Option<Effect> {
     }
 }
 
-pub(crate) fn reveal_buffer(model: &mut Model, id: BufferId) {
-    let Some(path) = model
+pub(crate) fn reveal_buffer(model: &mut Model, id: BufferId) -> Option<Effect> {
+    let path = model
         .editor
         .buffer_path(id)
-        .map(std::path::Path::to_path_buf)
-    else {
-        return;
-    };
-    let Some(workspace) = &model.workspace else {
-        return;
-    };
-    let root = workspace.root().to_path_buf();
-    if let Err(error) = model.explorer.reveal(&root, &path) {
-        model.status = Some(StatusMessage::error(format!(
-            "failed to update file explorer `{}`: {error}",
-            path.display()
-        )));
-    }
+        .map(std::path::Path::to_path_buf)?;
+    let root = model.workspace.as_ref()?.root().to_path_buf();
+    model
+        .explorer
+        .reveal_request(&root, &path)
+        .map(Effect::feature)
 }
 
 #[cfg(test)]
@@ -106,6 +102,20 @@ mod tests {
         startup::initial_model,
         test_utils::{create_buffer, open_file},
     };
+
+    fn apply(model: &mut Model, effect: Effect) {
+        match effect {
+            Effect::Feature(request) => {
+                MessageManager::default().update(model, request.perform());
+            }
+            Effect::Batch(effects) => {
+                for effect in effects {
+                    apply(model, effect);
+                }
+            }
+            _ => {}
+        }
+    }
 
     fn expect_save(effect: Option<Effect>) -> SaveRequest {
         match effect {
@@ -166,7 +176,10 @@ mod tests {
         let manager = MessageManager::default();
 
         for key in [' ', 'b', 'n'] {
-            manager.update(&mut model, Message::CommandMenuKey(KeyCode::Char(key)));
+            let effect = manager.update(&mut model, Message::CommandMenuKey(KeyCode::Char(key)));
+            if let Some(effect) = effect {
+                apply(&mut model, effect);
+            }
         }
         assert_eq!(model.editor.active_buffer(), Some(first));
         assert_eq!(
@@ -178,7 +191,10 @@ mod tests {
         );
 
         for key in [' ', 'b', 'p'] {
-            manager.update(&mut model, Message::CommandMenuKey(KeyCode::Char(key)));
+            let effect = manager.update(&mut model, Message::CommandMenuKey(KeyCode::Char(key)));
+            if let Some(effect) = effect {
+                apply(&mut model, effect);
+            }
         }
         assert_eq!(model.editor.active_buffer(), Some(second));
         assert_eq!(

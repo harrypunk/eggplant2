@@ -34,6 +34,7 @@ struct PendingOpen {
 pub(crate) struct OpenedFile {
     pub origin: OpenOrigin,
     pub context: Option<Context>,
+    pub effect: Option<Effect>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -156,7 +157,7 @@ pub(crate) fn finish_open_file(
         }
     };
     model.status = None;
-    buffer::reveal_buffer(model, id);
+    let effect = buffer::reveal_buffer(model, id);
     if let Some(position) = position {
         let result = model
             .editor
@@ -169,6 +170,7 @@ pub(crate) fn finish_open_file(
     Some(OpenedFile {
         origin: pending.origin,
         context: pending.context,
+        effect,
     })
 }
 
@@ -245,6 +247,36 @@ mod tests {
         let snapshot = model.editor.active_snapshot().unwrap();
         assert_eq!(snapshot.cursor.unwrap().row, 1);
         assert_eq!(snapshot.cursor.unwrap().column, 0);
+    }
+
+    #[test]
+    fn open_completion_composes_nested_explorer_reveal() {
+        let directory = tempfile::tempdir().unwrap();
+        let nested = directory.path().join("nested");
+        std::fs::create_dir(&nested).unwrap();
+        let path = nested.join("note.txt");
+        std::fs::write(&path, "hello").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let documents = DocumentFactory::new();
+
+        let effect = open_file(&documents, &mut model, &path);
+        let Some(Effect::OpenDocument(request)) = effect else {
+            panic!("expected an open-document effect");
+        };
+        let opened = finish_open_file(&mut model, request.perform()).unwrap();
+        let Some(Effect::Feature(request)) = opened.effect else {
+            panic!("expected an explorer reveal effect");
+        };
+        crate::manager::message_manager::MessageManager::default()
+            .update(&mut model, request.perform());
+
+        assert_eq!(
+            model
+                .explorer
+                .selected_entry()
+                .map(|entry| entry.path.as_path()),
+            Some(std::fs::canonicalize(path).unwrap().as_path())
+        );
     }
 
     #[test]

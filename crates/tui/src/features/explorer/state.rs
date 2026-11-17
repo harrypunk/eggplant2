@@ -125,6 +125,27 @@ impl ExplorerState {
         )
     }
 
+    pub(crate) fn reveal_request(&mut self, root: &Path, path: &Path) -> Option<ExplorerRequest> {
+        let relative = path.strip_prefix(root).ok()?;
+        let mut expanded_directories = self.expanded_directories.clone();
+        expanded_directories.extend(
+            relative
+                .parent()
+                .into_iter()
+                .flat_map(Path::ancestors)
+                .filter(|ancestor| !ancestor.as_os_str().is_empty())
+                .map(|ancestor| root.join(ancestor)),
+        );
+        Some(self.request(
+            root,
+            expanded_directories,
+            self.ignore_mode,
+            ExplorerAction::Reveal {
+                path: path.to_path_buf(),
+            },
+        ))
+    }
+
     fn request(
         &mut self,
         root: &Path,
@@ -207,7 +228,9 @@ impl ExplorerState {
     #[cfg(test)]
     fn complete_test_request(&mut self, request: ExplorerRequest) -> io::Result<()> {
         match self.complete(request.execute()) {
-            super::work::ExplorerApply::Applied(_) => Ok(()),
+            super::work::ExplorerApply::Applied(_) | super::work::ExplorerApply::Unchanged => {
+                Ok(())
+            }
             super::work::ExplorerApply::Failed(_, error) => Err(error),
             super::work::ExplorerApply::Ignored => {
                 unreachable!("a single synchronous test request cannot become stale")
@@ -215,32 +238,13 @@ impl ExplorerState {
         }
     }
 
-    /// Expand ancestors and select an opened file when it is visible.
-    ///
-    /// Paths outside the workspace or hidden by ignore rules leave the current
-    /// tree unchanged. Read failures are transactional as well.
+    /// Expand ancestors and select an opened file in synchronous state tests.
+    #[cfg(test)]
     pub fn reveal(&mut self, root: &Path, path: &Path) -> io::Result<()> {
-        let Ok(relative) = path.strip_prefix(root) else {
+        let Some(request) = self.reveal_request(root, path) else {
             return Ok(());
         };
-        let mut expanded_directories = self.expanded_directories.clone();
-        expanded_directories.extend(
-            relative
-                .parent()
-                .into_iter()
-                .flat_map(Path::ancestors)
-                .filter(|ancestor| !ancestor.as_os_str().is_empty())
-                .map(|ancestor| root.join(ancestor)),
-        );
-
-        let entries = fs::read_visible_entries(root, &expanded_directories, self.ignore_mode)?;
-        let Some(selected) = entries.iter().position(|entry| entry.path == path) else {
-            return Ok(());
-        };
-        self.expanded_directories = expanded_directories;
-        self.entries = entries;
-        self.selected = Some(selected);
-        Ok(())
+        self.complete_test_request(request)
     }
 
     pub fn select_next(&mut self) {

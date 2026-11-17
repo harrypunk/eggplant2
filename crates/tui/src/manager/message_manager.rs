@@ -151,7 +151,7 @@ impl MessageManager {
             }
             focus::focus_editor(model);
         }
-        crate::vcs::sync_active_buffer(model)
+        Effect::combine(opened.effect, crate::vcs::sync_active_buffer(model))
     }
 }
 

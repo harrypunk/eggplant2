@@ -87,11 +87,28 @@ mod tests {
         startup::initial_model,
     };
 
+    fn apply(model: &mut Model, manager: &MessageManager, effect: Effect) {
+        match effect {
+            Effect::Feature(request) => {
+                manager.update(model, request.perform());
+            }
+            Effect::Batch(effects) => {
+                for effect in effects {
+                    apply(model, manager, effect);
+                }
+            }
+            _ => {}
+        }
+    }
+
     fn complete_open(model: &mut Model, manager: &MessageManager, effect: Option<Effect>) {
         let Some(Effect::OpenDocument(request)) = effect else {
             panic!("expected an open-document effect");
         };
-        manager.update(model, Message::FileOpened(request.perform()));
+        let effect = manager.update(model, Message::FileOpened(request.perform()));
+        if let Some(effect) = effect {
+            apply(model, manager, effect);
+        }
     }
 
     #[test]
