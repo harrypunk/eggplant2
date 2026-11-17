@@ -1,6 +1,4 @@
-use std::{collections::HashMap, path::PathBuf};
-
-use ::vcs::{CommitDetails, Diff, FileChange};
+use ::vcs::FileChange;
 use editor::DocumentFactory;
 
 use crate::{
@@ -27,8 +25,8 @@ use change_workflow::{
 use changes::ChangesController;
 use commit::CommitState;
 use history::{
-    close_history, load_history_more, open_history, open_history_detail, refresh_history,
-    select_history, toggle_history_file_diff, toggle_history_files,
+    HistoryController, close_history, load_history_more, open_history, open_history_detail,
+    refresh_history, select_history, toggle_history_file_diff, toggle_history_files,
 };
 use merge::MergeState;
 use repository::RepositoryState;
@@ -59,26 +57,7 @@ const DIFF_LIMIT: usize = 200;
 #[derive(Debug)]
 pub struct VcsState {
     repository: RepositoryState,
-    pub(crate) history: HistoryState,
-    pub(crate) history_pane: HistoryPane,
-    pub(crate) history_has_more: bool,
-    pub(crate) history_more: HistoryMoreState,
-    pub(crate) history_selected: Option<usize>,
-    pub(crate) history_expanded: Option<String>,
-    pub(crate) history_files: CommitDetailsState,
-    history_files_target: Option<PathBuf>,
-    history_files_revision: u64,
-    history_commit_cache: HashMap<String, CommitDetails>,
-    pub(crate) history_detail: CommitDetailsState,
-    pub(crate) history_detail_selected_file: Option<usize>,
-    pub(crate) history_detail_expanded_file: Option<String>,
-    pub(crate) history_detail_diff: DiffState,
-    history_detail_target: Option<PathBuf>,
-    history_detail_commit_id: Option<String>,
-    history_detail_revision: u64,
-    history_detail_diff_cache: HashMap<(String, String), Diff>,
-    history_target: Option<PathBuf>,
-    history_revision: u64,
+    pub(crate) history: HistoryController,
     pub(crate) changes: ChangesController,
     buffer_diff: BufferDiffState,
     pub(crate) notice: Option<String>,
@@ -92,26 +71,7 @@ impl Default for VcsState {
     fn default() -> Self {
         Self {
             repository: RepositoryState::default(),
-            history: HistoryState::Idle,
-            history_pane: HistoryPane::List,
-            history_has_more: false,
-            history_more: HistoryMoreState::Idle,
-            history_selected: None,
-            history_expanded: None,
-            history_files: CommitDetailsState::Idle,
-            history_files_target: None,
-            history_files_revision: 0,
-            history_commit_cache: HashMap::new(),
-            history_detail: CommitDetailsState::Idle,
-            history_detail_selected_file: None,
-            history_detail_expanded_file: None,
-            history_detail_diff: DiffState::Idle,
-            history_detail_target: None,
-            history_detail_commit_id: None,
-            history_detail_revision: 0,
-            history_detail_diff_cache: HashMap::new(),
-            history_target: None,
-            history_revision: 0,
+            history: HistoryController::default(),
             changes: ChangesController::default(),
             buffer_diff: BufferDiffState::default(),
             notice: None,
@@ -129,7 +89,7 @@ impl VcsState {
     }
 
     pub fn history(&self) -> &HistoryState {
-        &self.history
+        self.history.state()
     }
 
     pub fn changes(&self) -> &ChangesState {
@@ -267,7 +227,7 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         "close_vcs_history" | "close_vcs_history_q" => close_history(model),
         "vcs_history_next" => select_history(model, SelectionDirection::Next),
         "vcs_history_previous" => select_history(model, SelectionDirection::Previous),
-        "vcs_history_toggle_diff" => match model.vcs.history_pane {
+        "vcs_history_toggle_diff" => match model.vcs.history.pane {
             HistoryPane::Detail => toggle_history_file_diff(model),
             HistoryPane::List => toggle_history_files(model),
         },
@@ -355,7 +315,9 @@ fn wrapped_index(
 
 #[cfg(test)]
 mod tests {
-    use ::vcs::{ChangeKind, CommitFile, CommitSummary, HistoryPage};
+    use std::path::PathBuf;
+
+    use ::vcs::{ChangeKind, CommitDetails, CommitFile, CommitSummary, Diff, HistoryPage};
 
     use super::*;
     use crate::{
@@ -430,7 +392,7 @@ mod tests {
         };
         assert!(refresh_history(&mut model).is_some());
         assert!(refresh_history(&mut model).is_none());
-        let revision = model.vcs.history_revision;
+        let revision = model.vcs.history.revision;
 
         Box::new(HistoryCompletion {
             target: root.clone(),
@@ -478,14 +440,14 @@ mod tests {
             timestamp: 1_800_000_000,
             branches: Vec::new(),
         };
-        model.vcs.history = HistoryState::Ready(vec![commit("first")]);
-        model.vcs.history_selected = Some(0);
-        model.vcs.history_has_more = true;
+        model.vcs.history.state = HistoryState::Ready(vec![commit("first")]);
+        model.vcs.history.selected = Some(0);
+        model.vcs.history.has_more = true;
 
         assert!(handle_command(&mut model, CommandId("vcs_history_load_more")).is_some());
-        assert_eq!(model.vcs.history_more, HistoryMoreState::Loading);
+        assert_eq!(model.vcs.history.more, HistoryMoreState::Loading);
         assert!(handle_command(&mut model, CommandId("vcs_history_load_more")).is_none());
-        let revision = model.vcs.history_revision;
+        let revision = model.vcs.history.revision;
         Box::new(HistoryCompletion {
             target: root.clone(),
             offset: 1,
@@ -507,14 +469,14 @@ mod tests {
         })
         .update(&mut model);
 
-        let HistoryState::Ready(commits) = &model.vcs.history else {
+        let HistoryState::Ready(commits) = model.vcs.history() else {
             panic!("history should remain ready");
         };
         assert_eq!(commits.len(), 2);
         assert_eq!(commits[1].id, "second");
-        assert_eq!(model.vcs.history_selected, Some(0));
-        assert_eq!(model.vcs.history_more, HistoryMoreState::Idle);
-        assert!(!model.vcs.history_has_more);
+        assert_eq!(model.vcs.history.selected, Some(0));
+        assert_eq!(model.vcs.history.more, HistoryMoreState::Idle);
+        assert!(!model.vcs.history.has_more);
         assert!(handle_command(&mut model, CommandId("vcs_history_load_more")).is_none());
     }
 
@@ -525,32 +487,32 @@ mod tests {
             workspace: Some(Workspace::new(root.clone())),
             ..Model::default()
         };
-        model.vcs.history = HistoryState::Ready(vec![CommitSummary {
+        model.vcs.history.state = HistoryState::Ready(vec![CommitSummary {
             id: "first".to_string(),
             subject: "first".to_string(),
             author: "Eggplant".to_string(),
             timestamp: 1_800_000_000,
             branches: Vec::new(),
         }]);
-        model.vcs.history_selected = Some(0);
-        model.vcs.history_has_more = true;
+        model.vcs.history.selected = Some(0);
+        model.vcs.history.has_more = true;
 
         assert!(handle_command(&mut model, CommandId("vcs_history_load_more")).is_some());
         Box::new(HistoryCompletion {
             target: root,
             offset: 1,
-            revision: model.vcs.history_revision,
+            revision: model.vcs.history.revision,
             result: Err("network unavailable".to_string()),
         })
         .update(&mut model);
 
         assert_eq!(
-            model.vcs.history_more,
+            model.vcs.history.more,
             HistoryMoreState::Failed("network unavailable".to_string())
         );
-        assert!(matches!(model.vcs.history, HistoryState::Ready(_)));
+        assert!(matches!(model.vcs.history.state, HistoryState::Ready(_)));
         assert!(handle_command(&mut model, CommandId("vcs_history_load_more")).is_some());
-        assert_eq!(model.vcs.history_more, HistoryMoreState::Loading);
+        assert_eq!(model.vcs.history.more, HistoryMoreState::Loading);
     }
 
     fn change(path: PathBuf, kind: ChangeKind) -> FileChange {
@@ -987,14 +949,14 @@ mod tests {
             timestamp: 1_800_000_000,
             branches: Vec::new(),
         };
-        model.vcs.history = HistoryState::Ready(vec![commit("first"), commit("second")]);
-        model.vcs.history_selected = Some(0);
+        model.vcs.history.state = HistoryState::Ready(vec![commit("first"), commit("second")]);
+        model.vcs.history.selected = Some(0);
         select_history(&mut model, SelectionDirection::Next);
-        assert_eq!(model.vcs.history_selected, Some(1));
+        assert_eq!(model.vcs.history.selected, Some(1));
         select_history(&mut model, SelectionDirection::Next);
-        assert_eq!(model.vcs.history_selected, Some(0));
+        assert_eq!(model.vcs.history.selected, Some(0));
         select_history(&mut model, SelectionDirection::Previous);
-        assert_eq!(model.vcs.history_selected, Some(1));
+        assert_eq!(model.vcs.history.selected, Some(1));
     }
 
     #[test]
@@ -1011,23 +973,23 @@ mod tests {
             timestamp: 0,
             branches: Vec::new(),
         };
-        model.vcs.history = HistoryState::Ready(vec![commit("first"), commit("second")]);
-        model.vcs.history_selected = Some(0);
+        model.vcs.history.state = HistoryState::Ready(vec![commit("first"), commit("second")]);
+        model.vcs.history.selected = Some(0);
         assert!(open_history_detail(&mut model).is_some());
 
         for detail in [
             CommitDetailsState::Loading,
             CommitDetailsState::Failed("failed".to_string()),
         ] {
-            model.vcs.history_detail = detail;
+            model.vcs.history.detail = detail;
             assert!(handle_command(&mut model, CommandId("vcs_history_toggle_diff")).is_none());
             select_history(&mut model, SelectionDirection::Next);
             {
                 let mut navigation = navigation::HistoryNavigation::new(&mut model.vcs);
                 navigation.move_to_end();
             }
-            assert_eq!(model.vcs.history_selected, Some(0));
-            assert_eq!(model.vcs.history_expanded, None);
+            assert_eq!(model.vcs.history.selected, Some(0));
+            assert_eq!(model.vcs.history.expanded, None);
         }
     }
 
@@ -1045,8 +1007,8 @@ mod tests {
             timestamp: 1_800_000_000,
             branches: Vec::new(),
         };
-        model.vcs.history = HistoryState::Ready(vec![commit.clone()]);
-        model.vcs.history_selected = Some(0);
+        model.vcs.history.state = HistoryState::Ready(vec![commit.clone()]);
+        model.vcs.history.selected = Some(0);
         let details = CommitDetails {
             full_id: commit.id.clone(),
             message: "complete message".to_string(),
@@ -1063,21 +1025,21 @@ mod tests {
         Box::new(HistoryFilesCompletion {
             commit_id: commit.id.clone(),
             target: root,
-            revision: model.vcs.history_files_revision,
+            revision: model.vcs.history.files_revision,
             result: Ok(details),
         })
         .update(&mut model);
         assert!(matches!(
-            model.vcs.history_files,
+            model.vcs.history.files,
             CommitDetailsState::Ready(_)
         ));
 
         assert!(handle_command(&mut model, CommandId("vcs_history_toggle_diff")).is_none());
-        assert_eq!(model.vcs.history_expanded, None);
+        assert_eq!(model.vcs.history.expanded, None);
         assert!(handle_command(&mut model, CommandId("vcs_history_toggle_diff")).is_none());
-        assert_eq!(model.vcs.history_expanded, Some(commit.id));
+        assert_eq!(model.vcs.history.expanded, Some(commit.id));
         assert!(matches!(
-            model.vcs.history_files,
+            model.vcs.history.files,
             CommitDetailsState::Ready(_)
         ));
     }
@@ -1096,8 +1058,8 @@ mod tests {
             timestamp: 1_800_000_000,
             branches: Vec::new(),
         };
-        model.vcs.history = HistoryState::Ready(vec![commit]);
-        model.vcs.history_selected = Some(0);
+        model.vcs.history.state = HistoryState::Ready(vec![commit]);
+        model.vcs.history.selected = Some(0);
         let details = CommitDetails {
             full_id: "full-commit-id".to_string(),
             message: "complete message".to_string(),
@@ -1114,32 +1076,29 @@ mod tests {
         Box::new(HistoryDetailCompletion {
             commit_id: "abc1234".to_string(),
             target: root.clone(),
-            revision: model.vcs.history_detail_revision,
+            revision: model.vcs.history.detail_revision,
             result: Ok(details),
         })
         .update(&mut model);
         assert!(matches!(
-            model.vcs.history_detail,
+            model.vcs.history.detail,
             CommitDetailsState::Ready(_)
         ));
-        assert_eq!(model.vcs.history_detail_selected_file, Some(0));
+        assert_eq!(model.vcs.history.selected_file, Some(0));
 
         assert!(handle_command(&mut model, CommandId("vcs_history_toggle_diff")).is_some());
         Box::new(HistoryFileDiffCompletion {
             commit_id: "full-commit-id".to_string(),
             file_path: "note.txt".to_string(),
             target: root,
-            revision: model.vcs.history_detail_revision,
+            revision: model.vcs.history.detail_revision,
             result: Ok(Diff {
                 lines: vec!["+changed".to_string()],
                 truncated: false,
             }),
         })
         .update(&mut model);
-        assert!(matches!(
-            model.vcs.history_detail_diff,
-            DiffState::Ready { .. }
-        ));
+        assert!(matches!(model.vcs.history.diff, DiffState::Ready { .. }));
     }
 
     #[test]
@@ -1163,19 +1122,20 @@ mod tests {
             date: "2026-11-16 10:00:00 +0000".to_string(),
             files: Vec::new(),
         };
-        model.vcs.history = HistoryState::Ready(vec![summary("a"), summary("b")]);
-        model.vcs.history_selected = Some(0);
+        model.vcs.history.state = HistoryState::Ready(vec![summary("a"), summary("b")]);
+        model.vcs.history.selected = Some(0);
         model
             .vcs
-            .history_commit_cache
+            .history
+            .commit_cache
             .insert("b".to_string(), details("b"));
 
         assert!(open_history_detail(&mut model).is_some());
-        let stale_revision = model.vcs.history_detail_revision;
-        model.vcs.history_selected = Some(1);
+        let stale_revision = model.vcs.history.detail_revision;
+        model.vcs.history.selected = Some(1);
         assert!(open_history_detail(&mut model).is_none());
         assert!(matches!(
-            &model.vcs.history_detail,
+            &model.vcs.history.detail,
             CommitDetailsState::Ready(details) if details.full_id == "full-b"
         ));
 
@@ -1188,11 +1148,11 @@ mod tests {
         .update(&mut model);
 
         assert!(matches!(
-            &model.vcs.history_detail,
+            &model.vcs.history.detail,
             CommitDetailsState::Ready(details) if details.full_id == "full-b"
         ));
-        assert!(!model.vcs.history_commit_cache.contains_key("a"));
-        assert!(model.vcs.history_detail_revision > stale_revision);
+        assert!(!model.vcs.history.commit_cache.contains_key("a"));
+        assert!(model.vcs.history.detail_revision > stale_revision);
     }
 
     #[test]
@@ -1214,9 +1174,9 @@ mod tests {
             path: path.to_string(),
             previous_path: None,
         };
-        model.vcs.history = HistoryState::Ready(vec![commit.clone()]);
-        model.vcs.history_selected = Some(0);
-        model.vcs.history_commit_cache.insert(
+        model.vcs.history.state = HistoryState::Ready(vec![commit.clone()]);
+        model.vcs.history.selected = Some(0);
+        model.vcs.history.commit_cache.insert(
             commit.id,
             CommitDetails {
                 full_id: "full-commit-id".to_string(),
@@ -1228,15 +1188,15 @@ mod tests {
         );
 
         assert!(handle_command(&mut model, CommandId("open_vcs_commit_detail")).is_none());
-        assert_eq!(model.vcs.history_detail_selected_file, Some(0));
+        assert_eq!(model.vcs.history.selected_file, Some(0));
         select_history(&mut model, SelectionDirection::Next);
-        assert_eq!(model.vcs.history_detail_selected_file, Some(1));
+        assert_eq!(model.vcs.history.selected_file, Some(1));
         assert!(handle_command(&mut model, CommandId("vcs_history_toggle_diff")).is_some());
         Box::new(HistoryFileDiffCompletion {
             commit_id: "full-commit-id".to_string(),
             file_path: "second.txt".to_string(),
             target: root,
-            revision: model.vcs.history_detail_revision,
+            revision: model.vcs.history.detail_revision,
             result: Ok(Diff {
                 lines: vec!["+second".to_string()],
                 truncated: false,
@@ -1245,13 +1205,10 @@ mod tests {
         .update(&mut model);
 
         assert_eq!(
-            model.vcs.history_detail_expanded_file.as_deref(),
+            model.vcs.history.expanded_file.as_deref(),
             Some("second.txt")
         );
-        assert!(matches!(
-            model.vcs.history_detail_diff,
-            DiffState::Ready { .. }
-        ));
+        assert!(matches!(model.vcs.history.diff, DiffState::Ready { .. }));
     }
 
     #[test]

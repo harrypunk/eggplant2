@@ -523,7 +523,7 @@ mod tests {
         assert_eq!(model.active_page, AppPage::Vcs);
         assert!(model.vcs.commit.editor.is_empty());
         assert_eq!(model.vcs.notice.as_deref(), Some("Created commit abc1234"));
-        assert_eq!(model.vcs.history, HistoryState::Loading);
+        assert_eq!(model.vcs.history.state, HistoryState::Loading);
     }
 
     #[tokio::test]

@@ -114,7 +114,7 @@ mod tests {
             previous_path: None,
         };
         let mut state = VcsState::default();
-        state.history_detail = CommitDetailsState::Ready(CommitDetails {
+        state.history.detail = CommitDetailsState::Ready(CommitDetails {
             full_id: "abc1234".to_string(),
             message: (0..20)
                 .map(|index| format!("message-{index}"))
@@ -124,9 +124,9 @@ mod tests {
             date: "2026-11-16 10:30:00 +0000".to_string(),
             files: vec![file("first.txt"), file("second.txt")],
         });
-        state.history_detail_selected_file = Some(1);
-        state.history_detail_expanded_file = Some("first.txt".to_string());
-        state.history_detail_diff = DiffState::Ready {
+        state.history.selected_file = Some(1);
+        state.history.expanded_file = Some("first.txt".to_string());
+        state.history.diff = DiffState::Ready {
             lines: vec![
                 "-old".to_string(),
                 "+new".to_string(),
@@ -136,10 +136,10 @@ mod tests {
         };
         let theme = Theme::default();
         let props = CommitDetailProps {
-            detail: &state.history_detail,
-            selected_file: state.history_detail_selected_file,
-            expanded_file: state.history_detail_expanded_file.as_deref(),
-            diff: &state.history_detail_diff,
+            detail: &state.history.detail,
+            selected_file: state.history.selected_file,
+            expanded_file: state.history.expanded_file.as_deref(),
+            diff: &state.history.diff,
             theme: &theme,
         };
 

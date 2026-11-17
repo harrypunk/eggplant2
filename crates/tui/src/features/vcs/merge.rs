@@ -643,6 +643,6 @@ mod tests {
             model.vcs.notice.as_deref(),
             Some("Switched to other and fast-forwarded to abc1234")
         );
-        assert_eq!(model.vcs.history, HistoryState::Loading);
+        assert_eq!(model.vcs.history.state, HistoryState::Loading);
     }
 }

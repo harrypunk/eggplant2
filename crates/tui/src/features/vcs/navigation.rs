@@ -14,22 +14,22 @@ impl<'a> HistoryNavigation<'a> {
 
 impl VerticalNavigation for HistoryNavigation<'_> {
     fn item_count(&self) -> usize {
-        if self.state.history_pane == HistoryPane::Detail {
-            return match &self.state.history_detail {
+        if self.state.history.pane == HistoryPane::Detail {
+            return match &self.state.history.detail {
                 CommitDetailsState::Ready(details) => details.files.len(),
                 _ => 0,
             };
         }
-        match &self.state.history {
+        match self.state.history.state() {
             HistoryState::Ready(commits) => commits.len(),
             _ => 0,
         }
     }
 
     fn move_to(&mut self, index: usize) {
-        if self.state.history_pane == HistoryPane::Detail {
-            if let CommitDetailsState::Ready(details) = &self.state.history_detail {
-                self.state.history_detail_selected_file = details
+        if self.state.history.pane == HistoryPane::Detail {
+            if let CommitDetailsState::Ready(details) = &self.state.history.detail {
+                self.state.history.selected_file = details
                     .files
                     .len()
                     .checked_sub(1)
@@ -37,9 +37,9 @@ impl VerticalNavigation for HistoryNavigation<'_> {
             }
             return;
         }
-        let HistoryState::Ready(commits) = &self.state.history else {
+        let HistoryState::Ready(commits) = &mut self.state.history.state else {
             return;
         };
-        self.state.history_selected = commits.len().checked_sub(1).map(|last| index.min(last));
+        self.state.history.selected = commits.len().checked_sub(1).map(|last| index.min(last));
     }
 }

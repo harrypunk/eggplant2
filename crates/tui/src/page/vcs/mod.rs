@@ -186,7 +186,7 @@ mod tests {
             workspace: Some(Workspace::new(std::path::PathBuf::from("/workspace"))),
             ..Model::default()
         };
-        model.vcs.history = HistoryState::Ready(vec![::vcs::CommitSummary {
+        model.vcs.history.state = HistoryState::Ready(vec![::vcs::CommitSummary {
             id: "abc1234".to_string(),
             subject: "current commit".to_string(),
             author: "Eggplant".to_string(),

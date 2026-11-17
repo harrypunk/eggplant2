@@ -101,10 +101,10 @@ mod tests {
             branches: Vec::new(),
         };
         let mut state = VcsState::default();
-        state.history = HistoryState::Ready(vec![commit("first"), commit("second")]);
-        state.history_selected = Some(1);
-        state.history_expanded = Some("first".to_string());
-        state.history_files = CommitDetailsState::Ready(CommitDetails {
+        state.history.state = HistoryState::Ready(vec![commit("first"), commit("second")]);
+        state.history.selected = Some(1);
+        state.history.expanded = Some("first".to_string());
+        state.history.files = CommitDetailsState::Ready(CommitDetails {
             full_id: "first".to_string(),
             message: "message".to_string(),
             author: "Eggplant".to_string(),
@@ -126,9 +126,9 @@ mod tests {
 
         let (lines, selected) = HistoryList::new(HistoryListProps {
             history: state.history(),
-            selected: state.history_selected,
-            expanded: state.history_expanded.as_deref(),
-            files: &state.history_files,
+            selected: state.history.selected,
+            expanded: state.history.expanded.as_deref(),
+            files: &state.history.files,
             theme: &theme,
         })
         .lines();

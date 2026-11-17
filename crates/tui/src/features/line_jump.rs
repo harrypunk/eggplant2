@@ -419,39 +419,39 @@ mod tests {
             ..Model::default()
         };
         model.context_stack.push(Context::VcsHistory);
-        model.vcs.history = crate::vcs::HistoryState::Ready(vec![
+        model.vcs.history.state = crate::vcs::HistoryState::Ready(vec![
             commit("first"),
             commit("second"),
             commit("third"),
         ]);
-        model.vcs.history_selected = Some(1);
+        model.vcs.history.selected = Some(1);
         let manager = MessageManager::default();
 
         input(&mut model, &manager, "G");
-        assert_eq!(model.vcs.history_selected, Some(2));
+        assert_eq!(model.vcs.history.selected, Some(2));
         input(&mut model, &manager, "gg");
-        assert_eq!(model.vcs.history_selected, Some(0));
+        assert_eq!(model.vcs.history.selected, Some(0));
         input(&mut model, &manager, "2G");
-        assert_eq!(model.vcs.history_selected, Some(2));
+        assert_eq!(model.vcs.history.selected, Some(2));
 
         let file = |path: &str| ::vcs::CommitFile {
             kind: ::vcs::ChangeKind::Modified,
             path: path.to_string(),
             previous_path: None,
         };
-        model.vcs.history_detail = crate::vcs::CommitDetailsState::Ready(::vcs::CommitDetails {
+        model.vcs.history.detail = crate::vcs::CommitDetailsState::Ready(::vcs::CommitDetails {
             full_id: "third".to_string(),
             message: "message".to_string(),
             author: "Eggplant".to_string(),
             date: "2026-11-16 10:30:00 +0000".to_string(),
             files: vec![file("first.txt"), file("second.txt")],
         });
-        model.vcs.history_pane = crate::vcs::HistoryPane::Detail;
-        model.vcs.history_detail_selected_file = Some(0);
+        model.vcs.history.pane = crate::vcs::HistoryPane::Detail;
+        model.vcs.history.selected_file = Some(0);
         input(&mut model, &manager, "G");
-        assert_eq!(model.vcs.history_detail_selected_file, Some(1));
+        assert_eq!(model.vcs.history.selected_file, Some(1));
         input(&mut model, &manager, "2gg");
-        assert_eq!(model.vcs.history_detail_selected_file, Some(0));
+        assert_eq!(model.vcs.history.selected_file, Some(0));
         assert_eq!(model.pending_input, None);
     }
 }

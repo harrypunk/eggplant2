@@ -22,6 +22,7 @@ The following slices have landed and are covered by the workspace test suite:
 - Dedicated active-buffer diff-base state and stale-generation validation.
 - `ChangesController` ownership of changed files, selection, refresh generations, trailing-dirty state, status completion, single-flight index operation identity, and working-tree diff state.
 - `RepositoryState` ownership of HEAD label, repository target, refresh generation, and HEAD completion identity.
+- `HistoryController` ownership of history list/detail state, request identities, refresh, and pagination completion.
 - Independent page-scroll capability, short-lived theme adapter, typed buffer switching, and model-free prefix parsers.
 - Owner-tagged pending input with active-context rendering.
 - Typed file/project/buffer-search completions and feature-owned buffer-search previews.
@@ -36,7 +37,6 @@ The following slices have landed and are covered by the workspace test suite:
 
 Remaining structural work:
 
-- Split VCS history state into a controller-sized module.
 - Replace remaining broad editing/page adapters with composed targets rather than wildcard fallback behavior.
 - Introduce shell-owned modal/session coordination and finish registry/page cleanup.
 - Move explorer tree traversal behind effects if responsiveness measurements justify it.

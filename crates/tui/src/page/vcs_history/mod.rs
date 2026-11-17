@@ -20,7 +20,7 @@ pub struct VcsHistory;
 
 impl VcsHistory {
     pub fn view(&self, model: &Model, frame: &mut Frame) {
-        let detail_open = model.vcs.history_pane == crate::vcs::HistoryPane::Detail;
+        let detail_open = model.vcs.history.pane == crate::vcs::HistoryPane::Detail;
         let areas = VcsHistoryLayout::new(frame.area(), detail_open);
         let styles = model.theme.ui();
         let header_lines =
@@ -33,18 +33,18 @@ impl VcsHistory {
         );
         HistoryList::new(HistoryListProps {
             history: model.vcs.history(),
-            selected: model.vcs.history_selected,
-            expanded: model.vcs.history_expanded.as_deref(),
-            files: &model.vcs.history_files,
+            selected: model.vcs.history.selected,
+            expanded: model.vcs.history.expanded.as_deref(),
+            files: &model.vcs.history.files,
             theme: &model.theme,
         })
         .render(areas.body, frame);
         if let Some(detail) = areas.detail {
             CommitDetail::new(CommitDetailProps {
-                detail: &model.vcs.history_detail,
-                selected_file: model.vcs.history_detail_selected_file,
-                expanded_file: model.vcs.history_detail_expanded_file.as_deref(),
-                diff: &model.vcs.history_detail_diff,
+                detail: &model.vcs.history.detail,
+                selected_file: model.vcs.history.selected_file,
+                expanded_file: model.vcs.history.expanded_file.as_deref(),
+                diff: &model.vcs.history.diff,
                 theme: &model.theme,
             })
             .render(detail, frame);
@@ -79,8 +79,8 @@ impl VcsHistoryLayout {
 
 fn history_more_line(model: &Model) -> Option<Line<'static>> {
     let styles = model.theme.ui();
-    match &model.vcs.history_more {
-        HistoryMoreState::Idle if model.vcs.history_has_more => Some(Line::styled(
+    match &model.vcs.history.more {
+        HistoryMoreState::Idle if model.vcs.history.has_more => Some(Line::styled(
             "n load more",
             styles.base.patch(styles.action_hint),
         )),
@@ -121,17 +121,17 @@ mod tests {
     #[test]
     fn renders_history_files_and_right_commit_detail() {
         let mut model = Model::default();
-        model.vcs.history = HistoryState::Ready(vec![::vcs::CommitSummary {
+        model.vcs.history.state = HistoryState::Ready(vec![::vcs::CommitSummary {
             id: "abc1234".to_string(),
             subject: "current commit".to_string(),
             author: "Eggplant".to_string(),
             timestamp: relative_time::now(),
             branches: vec!["main".to_string()],
         }]);
-        model.vcs.history_selected = Some(0);
-        model.vcs.history_has_more = true;
-        model.vcs.history_expanded = Some("abc1234".to_string());
-        model.vcs.history_files = CommitDetailsState::Ready(CommitDetails {
+        model.vcs.history.selected = Some(0);
+        model.vcs.history.has_more = true;
+        model.vcs.history.expanded = Some("abc1234".to_string());
+        model.vcs.history.files = CommitDetailsState::Ready(CommitDetails {
             full_id: "abc1234".to_string(),
             message: "complete message\nsecond line".to_string(),
             author: "Eggplant".to_string(),
@@ -142,9 +142,9 @@ mod tests {
                 previous_path: None,
             }],
         });
-        model.vcs.history_detail = model.vcs.history_files.clone();
-        model.vcs.history_pane = crate::vcs::HistoryPane::Detail;
-        model.vcs.history_detail_selected_file = Some(0);
+        model.vcs.history.detail = model.vcs.history.files.clone();
+        model.vcs.history.pane = crate::vcs::HistoryPane::Detail;
+        model.vcs.history.selected_file = Some(0);
         let backend = TestBackend::new(120, 12);
         let mut terminal = Terminal::new(backend).unwrap();
 

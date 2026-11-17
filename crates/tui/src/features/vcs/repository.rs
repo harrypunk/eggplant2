@@ -93,8 +93,8 @@ pub fn repository_changed(model: &mut Model) -> Option<Effect> {
     model.vcs.buffer_diff.invalidate_all();
     model.vcs.repository.cancel();
     model.vcs.changes.cancel();
-    if model.vcs.history == super::HistoryState::Loading {
-        model.vcs.history = super::HistoryState::Idle;
+    if model.vcs.history.state == super::HistoryState::Loading {
+        model.vcs.history.state = super::HistoryState::Idle;
     }
     Effect::combine(
         Effect::combine(refresh(model), refresh_history(model)),
