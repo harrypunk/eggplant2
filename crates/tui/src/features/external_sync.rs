@@ -18,11 +18,17 @@ pub fn file_changed(model: &mut Model, path: &Path, kind: ExternalChangeKind) ->
     if is_repository_head_change(path) {
         return crate::vcs::repository_changed(model);
     }
+    if is_repository_index_change(path) {
+        return crate::vcs::refresh_changes(model);
+    }
     match kind {
         ExternalChangeKind::Structure => crate::explorer::refresh_changed(model, path),
         ExternalChangeKind::Content => {}
     }
-    reload_buffer(model, path)
+    Effect::combine(
+        crate::vcs::refresh_changes(model),
+        reload_buffer(model, path),
+    )
 }
 
 /// Schedule a revision-checked reload for one open path, if it has a buffer.
@@ -59,6 +65,12 @@ pub(crate) fn reload_open_buffers(model: &mut Model) -> Option<Effect> {
             };
             Effect::combine(combined, reload_buffer(model, &path))
         })
+}
+
+fn is_repository_index_change(path: &Path) -> bool {
+    path.components()
+        .any(|component| component.as_os_str() == ".git")
+        && path.file_name().is_some_and(|name| name == "index")
 }
 
 fn is_repository_head_change(path: &Path) -> bool {
@@ -132,11 +144,23 @@ mod tests {
     };
 
     fn change_file(model: &mut Model, path: &Path) {
-        let Some(Effect::Feature(request)) = file_changed(model, path, ExternalChangeKind::Content)
-        else {
-            return;
-        };
-        MessageManager::default().update(model, request.perform());
+        if let Some(effect) = file_changed(model, path, ExternalChangeKind::Content) {
+            apply(model, effect);
+        }
+    }
+
+    fn apply(model: &mut Model, effect: Effect) {
+        match effect {
+            Effect::Feature(request) => {
+                MessageManager::default().update(model, request.perform());
+            }
+            Effect::Batch(effects) => {
+                for effect in effects {
+                    apply(model, effect);
+                }
+            }
+            _ => {}
+        }
     }
 
     #[test]
@@ -149,7 +173,33 @@ mod tests {
             assert!(is_repository_head_change(Path::new(path)));
         }
         assert!(!is_repository_head_change(Path::new("/repo/.git/index")));
+        assert!(is_repository_index_change(Path::new("/repo/.git/index")));
+        assert!(!is_repository_index_change(Path::new("/repo/.git/HEAD")));
         assert!(!is_repository_head_change(Path::new("/repo/note.txt")));
+    }
+
+    #[test]
+    fn worktree_and_index_events_schedule_status_refreshes() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("note.txt");
+        std::fs::write(&path, "hello").unwrap();
+        let mut model =
+            crate::startup::initial_model(Some(directory.path().to_path_buf())).unwrap();
+        assert!(matches!(
+            file_changed(&mut model, &path, ExternalChangeKind::Content),
+            Some(Effect::Feature(_))
+        ));
+
+        let mut model =
+            crate::startup::initial_model(Some(directory.path().to_path_buf())).unwrap();
+        assert!(matches!(
+            file_changed(
+                &mut model,
+                &directory.path().join(".git/index"),
+                ExternalChangeKind::Content
+            ),
+            Some(Effect::Feature(_))
+        ));
     }
 
     #[test]

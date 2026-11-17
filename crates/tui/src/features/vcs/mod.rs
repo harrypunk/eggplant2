@@ -815,7 +815,7 @@ fn refresh_history(model: &mut Model) -> Option<Effect> {
     }))
 }
 
-fn refresh_changes(model: &mut Model) -> Option<Effect> {
+pub(crate) fn refresh_changes(model: &mut Model) -> Option<Effect> {
     model.vcs.expanded_change = None;
     model.vcs.diff = DiffState::Idle;
     model.vcs.diff_cache.clear();
