@@ -40,6 +40,7 @@ This document defines keyboard terminology and keeps terminal input compatible w
 | VCS commit page | Discard the draft from Normal or Insert | `Ctrl-C` |
 | VCS commit page | Enter Insert / return to Normal | `i` / `Esc` |
 | VCS commit Normal | Movement, word motions, insert variants, undo/redo | `h`/`j`/`k`/`l`, `w`/`b`/`e`, `0`/`$`, `a`/`A`/`I`, `o`/`O`, `u`/`Ctrl-R` |
+| VCS commit Normal | Delete grapheme / line / word | `x` / `dd` / `dw` |
 | VCS commit page | Insert newline / backspace | `Enter` / `Backspace` |
 | VCS page | Placeholder discard | `x` |
 | Explorer | Jump to first / last visible entry | `gg` / `G` (no counts) |

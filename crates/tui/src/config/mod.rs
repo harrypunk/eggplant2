@@ -215,6 +215,8 @@ impl Default for Config {
                         ("move_next_word_start", "w"),
                         ("move_previous_word_start", "b"),
                         ("move_next_word_end", "e"),
+                        ("delete_grapheme", "x"),
+                        ("delete_line_pending", "d"),
                         ("undo", "u"),
                         ("redo", "ctrl-r"),
                     ],

@@ -347,6 +347,12 @@ mod tests {
         for (key, modifiers, command) in [
             (KeyCode::Char('q'), KeyModifiers::NONE, "vcs_commit_close"),
             (KeyCode::Char('i'), KeyModifiers::NONE, "enter_insert_mode"),
+            (KeyCode::Char('x'), KeyModifiers::NONE, "delete_grapheme"),
+            (
+                KeyCode::Char('d'),
+                KeyModifiers::NONE,
+                "delete_line_pending",
+            ),
             (
                 KeyCode::Char('s'),
                 KeyModifiers::CONTROL,

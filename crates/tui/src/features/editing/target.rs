@@ -9,6 +9,9 @@ use crate::{
 /// Page-independent capabilities required by reusable editing commands.
 pub(crate) trait EditingTarget {
     fn session(&mut self) -> &mut EditorSession;
+    fn normal_context(&self) -> Context {
+        Context::AppNormal
+    }
     fn input_context(&self) -> Context;
     fn push_context(&mut self, context: Context);
     fn pop_context(&mut self, context: Context);
@@ -19,6 +22,11 @@ pub(crate) trait EditingTarget {
 
     fn is_editing_enabled(&self) -> bool {
         true
+    }
+
+    /// Register policy applied to deleted text.
+    fn record_deleted(&mut self, _text: String) -> Option<Effect> {
+        None
     }
 
     /// Persistence policy applied after a successful text mutation.
@@ -50,6 +58,10 @@ impl EditingTarget for MainEditingTarget<'_> {
         self.model.context_stack.pop_if(|active| *active == context);
     }
 
+    fn record_deleted(&mut self, text: String) -> Option<Effect> {
+        self.model.register.record(text)
+    }
+
     fn after_edit(&mut self) -> Option<Effect> {
         buffer::auto_save_active(self.model)
     }
@@ -66,6 +78,10 @@ struct CommitEditingTarget<'a> {
 impl EditingTarget for CommitEditingTarget<'_> {
     fn session(&mut self) -> &mut EditorSession {
         &mut self.model.vcs.commit.editor
+    }
+
+    fn normal_context(&self) -> Context {
+        Context::VcsCommit
     }
 
     fn input_context(&self) -> Context {

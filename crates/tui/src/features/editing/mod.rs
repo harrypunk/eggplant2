@@ -1,4 +1,4 @@
-mod target;
+pub(crate) mod target;
 
 use editor::{CursorMovement, InsertPosition, LineBoundary, OpenLineDirection, WordMovement};
 
@@ -7,7 +7,7 @@ use crate::{
     manager::effect::Effect,
 };
 
-use self::target::EditingTarget;
+pub(crate) use self::target::EditingTarget;
 
 /// Dispatch physical-page-independent editing commands through the active adapter.
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {

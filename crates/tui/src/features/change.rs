@@ -1,7 +1,7 @@
 use crate::{
     buffer,
-    data_object::{CommandId, Context, Model, StatusMessage},
-    editing,
+    data_object::{AppPage, CommandId, Context, Model, StatusMessage},
+    editing::{self, EditingTarget, target},
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::Effect,
@@ -108,9 +108,13 @@ pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
 
 fn start(model: &mut Model, pending: PendingChange) {
     // Normal d/c are prefixes; Visual d/c use direct selection commands instead.
-    let Some(Context::AppNormal) = model.context_stack.last() else {
-        return;
+    let normal_context = match model.active_page {
+        AppPage::VcsCommit => target::commit_message(model).normal_context(),
+        _ => target::main_editor(model).normal_context(),
     };
+    if model.context_stack.last() != Some(&normal_context) {
+        return;
+    }
     model.change.pending = Some(pending);
     model.pending_input = Some(pending.key().to_string());
     model.context_stack.push(Context::EditorChange);
@@ -125,15 +129,25 @@ fn reset(model: &mut Model) {
 }
 
 fn delete_grapheme(model: &mut Model) -> Option<Effect> {
-    let text = match model.editor.active_editor() {
+    match model.active_page {
+        AppPage::VcsCommit => delete_grapheme_with(&mut target::commit_message(model)),
+        _ => delete_grapheme_with(&mut target::main_editor(model)),
+    }
+}
+
+fn delete_grapheme_with(target: &mut impl EditingTarget) -> Option<Effect> {
+    if !target.is_editing_enabled() {
+        return None;
+    }
+    let text = match target.session().active_editor() {
         Ok(editor) => editor.cursor_grapheme_text(),
         Err(_) => return None,
     };
-    let register = model.register.record(text);
-    if let Ok(mut editor) = model.editor.active_editor() {
+    let register = target.record_deleted(text);
+    if let Ok(mut editor) = target.session().active_editor() {
         let _ = editor.delete_grapheme_forward();
     }
-    Effect::combine(register, buffer::auto_save_active(model))
+    Effect::combine(register, target.after_edit())
 }
 
 fn delete_selection(model: &mut Model, insert: bool) -> Option<Effect> {
@@ -162,19 +176,26 @@ fn delete_selection(model: &mut Model, insert: bool) -> Option<Effect> {
 }
 
 fn delete_line(model: &mut Model) -> Option<Effect> {
-    let text = match model.editor.active_editor() {
-        Ok(editor) => editor.current_line_text(),
-        Err(_) => {
-            reset(model);
-            return None;
-        }
-    };
     reset(model);
-    let register = model.register.record(text);
-    if let Ok(mut editor) = model.editor.active_editor() {
+    match model.active_page {
+        AppPage::VcsCommit => delete_line_with(&mut target::commit_message(model)),
+        _ => delete_line_with(&mut target::main_editor(model)),
+    }
+}
+
+fn delete_line_with(target: &mut impl EditingTarget) -> Option<Effect> {
+    if !target.is_editing_enabled() {
+        return None;
+    }
+    let text = match target.session().active_editor() {
+        Ok(editor) => editor.current_line_text(),
+        Err(_) => return None,
+    };
+    let register = target.record_deleted(text);
+    if let Ok(mut editor) = target.session().active_editor() {
         let _ = editor.delete_current_line();
     }
-    Effect::combine(register, buffer::auto_save_active(model))
+    Effect::combine(register, target.after_edit())
 }
 
 fn change_line(model: &mut Model) -> Option<Effect> {
@@ -195,19 +216,26 @@ fn change_line(model: &mut Model) -> Option<Effect> {
 }
 
 fn delete_word(model: &mut Model) -> Option<Effect> {
-    let text = match model.editor.active_editor() {
-        Ok(editor) => editor.current_word_text(),
-        Err(_) => {
-            reset(model);
-            return None;
-        }
-    };
     reset(model);
-    let register = model.register.record(text);
-    if let Ok(mut editor) = model.editor.active_editor() {
+    match model.active_page {
+        AppPage::VcsCommit => delete_word_with(&mut target::commit_message(model)),
+        _ => delete_word_with(&mut target::main_editor(model)),
+    }
+}
+
+fn delete_word_with(target: &mut impl EditingTarget) -> Option<Effect> {
+    if !target.is_editing_enabled() {
+        return None;
+    }
+    let text = match target.session().active_editor() {
+        Ok(editor) => editor.current_word_text(),
+        Err(_) => return None,
+    };
+    let register = target.record_deleted(text);
+    if let Ok(mut editor) = target.session().active_editor() {
         let _ = editor.delete_word();
     }
-    Effect::combine(register, buffer::auto_save_active(model))
+    Effect::combine(register, target.after_edit())
 }
 
 fn change_word(model: &mut Model) -> Option<Effect> {
@@ -231,8 +259,80 @@ fn change_word(model: &mut Model) -> Option<Effect> {
 mod tests {
     use super::*;
     use crate::{
-        data_object::Message, manager::message_manager::MessageManager, test_utils::create_buffer,
+        data_object::{Message, Workspace},
+        manager::message_manager::MessageManager,
+        test_utils::create_buffer,
+        vcs::ChangesState,
     };
+    use ::vcs::{ChangeKind, FileChange};
+
+    fn commit_model(text: &str) -> Model {
+        let root = std::path::PathBuf::from("/workspace");
+        let mut model = Model {
+            active_page: AppPage::Vcs,
+            workspace: Some(Workspace::new(root.clone())),
+            ..Model::default()
+        };
+        model.context_stack.push(Context::VCS);
+        model.vcs.changes = ChangesState::Ready(vec![FileChange {
+            kind: ChangeKind::Modified,
+            staged: true,
+            path: root.join("note.txt"),
+            previous_path: None,
+        }]);
+        crate::vcs::commit::open(&mut model);
+        for character in text.chars() {
+            editing::insert_char(&mut model, character);
+        }
+        editing::handle_command(&mut model, CommandId("exit_insert_mode"));
+        model
+    }
+
+    fn commit_text(model: &Model) -> String {
+        model.vcs.commit.editor.active_text_snapshot().unwrap().text
+    }
+
+    #[test]
+    fn commit_editor_reuses_grapheme_word_and_line_deletion() {
+        let manager = MessageManager::default();
+        let mut model = commit_model("hello");
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("move_line_start")),
+        );
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("delete_grapheme")),
+        );
+        assert_eq!(commit_text(&model), "ello");
+        assert!(model.editor.is_empty());
+        assert_eq!(model.register.unnamed(), "");
+
+        let mut model = commit_model("hello world");
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("move_line_start")),
+        );
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("delete_line_pending")),
+        );
+        manager.update(&mut model, Message::TextInput('w'));
+        assert_eq!(commit_text(&model), "world");
+        assert_eq!(model.pending_input, None);
+        assert_eq!(model.context_stack.last(), Some(&Context::VcsCommit));
+        assert_eq!(model.register.unnamed(), "");
+
+        let mut model = commit_model("first");
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("delete_line_pending")),
+        );
+        manager.update(&mut model, Message::TextInput('d'));
+        assert_eq!(commit_text(&model), "");
+        assert!(model.editor.is_empty());
+        assert_eq!(model.register.unnamed(), "");
+    }
 
     #[test]
     fn pending_dd_and_cc_use_status_and_cancel_cleanly() {
