@@ -14,6 +14,40 @@ pub struct ChangeState {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ChangeAction {
+    Ignored,
+    Cancelled,
+    DeleteLine,
+    DeleteWord,
+    ChangeLine,
+    ChangeWord,
+}
+
+impl ChangeState {
+    fn begin(&mut self, pending: PendingChange) -> char {
+        self.pending = Some(pending);
+        pending.key()
+    }
+
+    fn update(&mut self, character: char) -> ChangeAction {
+        let Some(pending) = self.pending.take() else {
+            return ChangeAction::Ignored;
+        };
+        match (pending, character) {
+            (PendingChange::Delete, 'd') => ChangeAction::DeleteLine,
+            (PendingChange::Delete, 'w') => ChangeAction::DeleteWord,
+            (PendingChange::Change, 'c') => ChangeAction::ChangeLine,
+            (PendingChange::Change, 'w') => ChangeAction::ChangeWord,
+            _ => ChangeAction::Cancelled,
+        }
+    }
+
+    fn clear(&mut self) {
+        self.pending = None;
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum PendingChange {
     Delete,
     Change,
@@ -101,14 +135,13 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
 }
 
 pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
-    let pending = model.change.pending;
-    match (pending, character) {
-        (Some(PendingChange::Delete), 'd') => return delete_line(model),
-        (Some(PendingChange::Delete), 'w') => return delete_word(model),
-        (Some(PendingChange::Change), 'c') => return change_line(model),
-        (Some(PendingChange::Change), 'w') => return change_word(model),
-        (Some(_), _) => reset(model),
-        (None, _) => {}
+    match model.change.update(character) {
+        ChangeAction::DeleteLine => return delete_line(model),
+        ChangeAction::DeleteWord => return delete_word(model),
+        ChangeAction::ChangeLine => return change_line(model),
+        ChangeAction::ChangeWord => return change_word(model),
+        ChangeAction::Cancelled => reset(model),
+        ChangeAction::Ignored => {}
     }
     None
 }
@@ -122,13 +155,13 @@ fn start(model: &mut Model, pending: PendingChange) {
     if model.context_stack.last() != Some(&normal_context) {
         return;
     }
-    model.change.pending = Some(pending);
-    model.pending_input = Some(pending.key().to_string());
+    let pending = model.change.begin(pending);
+    model.pending_input = Some(pending.to_string());
     model.context_stack.push(Context::EditorChange);
 }
 
 fn reset(model: &mut Model) {
-    model.change.pending = None;
+    model.change.clear();
     model.pending_input = None;
     model
         .context_stack
@@ -329,6 +362,29 @@ mod tests {
 
     fn commit_text(model: &Model) -> String {
         model.vcs.commit.editor.active_text_snapshot().unwrap().text
+    }
+
+    #[test]
+    fn state_parses_operator_actions_without_a_model() {
+        let mut state = ChangeState::default();
+        assert_eq!(state.update('d'), ChangeAction::Ignored);
+
+        for (pending, prompt, input, expected) in [
+            (PendingChange::Delete, 'd', 'd', ChangeAction::DeleteLine),
+            (PendingChange::Delete, 'd', 'w', ChangeAction::DeleteWord),
+            (PendingChange::Change, 'c', 'c', ChangeAction::ChangeLine),
+            (PendingChange::Change, 'c', 'w', ChangeAction::ChangeWord),
+        ] {
+            assert_eq!(state.begin(pending), prompt);
+            assert_eq!(state.update(input), expected);
+            assert_eq!(state.pending, None);
+        }
+
+        state.begin(PendingChange::Delete);
+        assert_eq!(state.update('x'), ChangeAction::Cancelled);
+        state.begin(PendingChange::Change);
+        state.clear();
+        assert_eq!(state.pending, None);
     }
 
     #[test]
