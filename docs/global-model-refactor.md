@@ -11,6 +11,34 @@ Related contracts:
 - [Command and effect routing](command-effects.md)
 - [UI contributions](ui-contributions.md)
 
+## Implementation checkpoint
+
+The following slices have landed and are covered by the workspace test suite:
+
+- Single-flight VCS index mutation with authoritative status reconciliation.
+- Explicit merge phases and feature-owned command/completion transitions.
+- Commit attempts owning repository, message, revision, and save/Git phases.
+- History-detail request identity and explicit List/Detail command routing.
+- Dedicated active-buffer diff-base state and stale-generation validation.
+- Independent page-scroll capability, short-lived theme adapter, typed buffer switching, and model-free prefix parsers.
+- Owner-tagged pending input with active-context rendering.
+- Typed file/project/buffer-search completions and feature-owned buffer-search previews.
+- Buffer-jump source revision validation.
+- Generated document-open request IDs, origin contexts, and picker-session continuation guards.
+- Save continuation routing at the application root; generic lifecycle no longer imports VCS.
+- Worktree/index/save status synchronization with one-in-flight-plus-trailing-read coalescing.
+- File-picker entry/preview invalidation on external changes.
+- Typed VCS list/detail/change/header/popup props and shared presentation-owned `DiffState`.
+
+Remaining structural work:
+
+- Finish splitting VCS changes, history, and repository/HEAD state into controller-sized modules.
+- Replace remaining broad editing/page adapters with composed targets rather than wildcard fallback behavior.
+- Introduce shell-owned modal/session coordination and finish registry/page cleanup.
+- Move explorer tree traversal behind effects if responsiveness measurements justify it.
+
+One behavioral decision remains before save coordination can be completed: when commit saving overlaps close/quit, the product must explicitly choose to reject, queue, or cancel one workflow. The current linear behavior is preserved; no implicit policy was selected during the mechanical refactor.
+
 ## 1. Executive summary
 
 The concern is valid, but the precise problem is **unrestricted authority over global mutable state**, not the use of free functions by itself.
