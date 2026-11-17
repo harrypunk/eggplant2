@@ -27,6 +27,13 @@ pub use crate::component::diff::DiffState;
 const HISTORY_PAGE_SIZE: usize = 20;
 const DIFF_LIMIT: usize = 200;
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum HistoryPane {
+    #[default]
+    List,
+    Detail,
+}
+
 #[derive(Debug)]
 pub struct VcsState {
     head: Option<String>,
@@ -34,6 +41,7 @@ pub struct VcsState {
     revision: u64,
     refreshing: bool,
     pub(crate) history: HistoryState,
+    pub(crate) history_pane: HistoryPane,
     pub(crate) history_has_more: bool,
     pub(crate) history_more: HistoryMoreState,
     pub(crate) history_selected: Option<usize>,
@@ -83,6 +91,7 @@ impl Default for VcsState {
             revision: 0,
             refreshing: false,
             history: HistoryState::Idle,
+            history_pane: HistoryPane::List,
             history_has_more: false,
             history_more: HistoryMoreState::Idle,
             history_selected: None,
@@ -308,9 +317,9 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         "close_vcs_history" | "close_vcs_history_q" => close_history(model),
         "vcs_history_next" => select_history(model, SelectionDirection::Next),
         "vcs_history_previous" => select_history(model, SelectionDirection::Previous),
-        "vcs_history_toggle_diff" => match model.vcs.history_detail {
-            CommitDetailsState::Ready(_) => toggle_history_file_diff(model),
-            _ => toggle_history_files(model),
+        "vcs_history_toggle_diff" => match model.vcs.history_pane {
+            HistoryPane::Detail => toggle_history_file_diff(model),
+            HistoryPane::List => toggle_history_files(model),
         },
         "open_vcs_commit_detail" => open_history_detail(model),
         "vcs_history_load_more" => load_history_more(model),
@@ -378,7 +387,8 @@ fn open_history(model: &mut Model) -> Option<Effect> {
 }
 
 fn close_history(model: &mut Model) -> Option<Effect> {
-    if model.vcs.history_detail != CommitDetailsState::Idle {
+    if model.vcs.history_pane == HistoryPane::Detail {
+        model.vcs.history_pane = HistoryPane::List;
         model.vcs.history_detail = CommitDetailsState::Idle;
         model.vcs.history_detail_selected_file = None;
         model.vcs.history_detail_expanded_file = None;
@@ -401,7 +411,10 @@ enum SelectionDirection {
 }
 
 fn select_history(model: &mut Model, direction: SelectionDirection) -> Option<Effect> {
-    if let CommitDetailsState::Ready(details) = &model.vcs.history_detail {
+    if model.vcs.history_pane == HistoryPane::Detail {
+        let CommitDetailsState::Ready(details) = &model.vcs.history_detail else {
+            return None;
+        };
         model.vcs.history_detail_selected_file = wrapped_index(
             model.vcs.history_detail_selected_file,
             details.files.len(),
@@ -488,6 +501,7 @@ fn open_history_detail(model: &mut Model) -> Option<Effect> {
     } else {
         None
     };
+    model.vcs.history_pane = HistoryPane::Detail;
     model.vcs.history_detail_selected_file = None;
     model.vcs.history_detail_expanded_file = None;
     model.vcs.history_detail_diff = DiffState::Idle;
@@ -787,6 +801,7 @@ fn refresh_history(model: &mut Model) -> Option<Effect> {
     model.vcs.history_files = CommitDetailsState::Idle;
     model.vcs.history_files_revision = model.vcs.history_files_revision.wrapping_add(1);
     model.vcs.history_commit_cache.clear();
+    model.vcs.history_pane = HistoryPane::List;
     model.vcs.history_detail = CommitDetailsState::Idle;
     model.vcs.history_detail_selected_file = None;
     model.vcs.history_detail_expanded_file = None;
@@ -1353,6 +1368,7 @@ mod tests {
     use crate::{
         data_object::{Message, Workspace},
         manager::message_manager::MessageManager,
+        navigation::VerticalNavigation,
         test_utils::open_file,
     };
 
@@ -1953,6 +1969,40 @@ mod tests {
         assert_eq!(model.vcs.history_selected, Some(0));
         select_history(&mut model, SelectionDirection::Previous);
         assert_eq!(model.vcs.history_selected, Some(1));
+    }
+
+    #[test]
+    fn loading_and_failed_details_keep_commands_out_of_the_commit_list() {
+        let root = PathBuf::from("/workspace");
+        let mut model = Model {
+            workspace: Some(Workspace::new(root)),
+            ..Model::default()
+        };
+        let commit = |id: &str| CommitSummary {
+            id: id.to_string(),
+            subject: id.to_string(),
+            author: "Eggplant".to_string(),
+            timestamp: 0,
+            branches: Vec::new(),
+        };
+        model.vcs.history = HistoryState::Ready(vec![commit("first"), commit("second")]);
+        model.vcs.history_selected = Some(0);
+        assert!(open_history_detail(&mut model).is_some());
+
+        for detail in [
+            CommitDetailsState::Loading,
+            CommitDetailsState::Failed("failed".to_string()),
+        ] {
+            model.vcs.history_detail = detail;
+            assert!(handle_command(&mut model, CommandId("vcs_history_toggle_diff")).is_none());
+            select_history(&mut model, SelectionDirection::Next);
+            {
+                let mut navigation = navigation::HistoryNavigation::new(&mut model.vcs);
+                navigation.move_to_end();
+            }
+            assert_eq!(model.vcs.history_selected, Some(0));
+            assert_eq!(model.vcs.history_expanded, None);
+        }
     }
 
     #[test]

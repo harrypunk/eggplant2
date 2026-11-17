@@ -446,6 +446,7 @@ mod tests {
             date: "2026-11-16 10:30:00 +0000".to_string(),
             files: vec![file("first.txt"), file("second.txt")],
         });
+        model.vcs.history_pane = crate::vcs::HistoryPane::Detail;
         model.vcs.history_detail_selected_file = Some(0);
         input(&mut model, &manager, "G");
         assert_eq!(model.vcs.history_detail_selected_file, Some(1));

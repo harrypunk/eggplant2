@@ -8,10 +8,7 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-use crate::{
-    data_object::Model,
-    vcs::{CommitDetailsState, HistoryMoreState},
-};
+use crate::{data_object::Model, vcs::HistoryMoreState};
 
 use self::{
     commit_detail::{CommitDetail, CommitDetailProps},
@@ -23,7 +20,7 @@ pub struct VcsHistory;
 
 impl VcsHistory {
     pub fn view(&self, model: &Model, frame: &mut Frame) {
-        let detail_open = model.vcs.history_detail != CommitDetailsState::Idle;
+        let detail_open = model.vcs.history_pane == crate::vcs::HistoryPane::Detail;
         let areas = VcsHistoryLayout::new(frame.area(), detail_open);
         let styles = model.theme.ui();
         let header_lines =
@@ -115,7 +112,10 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend, style::Modifier};
 
     use super::*;
-    use crate::{component::relative_time, vcs::HistoryState};
+    use crate::{
+        component::relative_time,
+        vcs::{CommitDetailsState, HistoryState},
+    };
     use ::vcs::{ChangeKind, CommitDetails, CommitFile};
 
     #[test]
@@ -143,6 +143,7 @@ mod tests {
             }],
         });
         model.vcs.history_detail = model.vcs.history_files.clone();
+        model.vcs.history_pane = crate::vcs::HistoryPane::Detail;
         model.vcs.history_detail_selected_file = Some(0);
         let backend = TestBackend::new(120, 12);
         let mut terminal = Terminal::new(backend).unwrap();
