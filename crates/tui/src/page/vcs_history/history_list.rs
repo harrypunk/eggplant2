@@ -2,33 +2,41 @@ use ratatui::{Frame, layout::Rect, text::Line, widgets::Paragraph};
 
 use crate::{
     component::{commit_message, picker},
-    data_object::Model,
+    theme::{Theme, UiTheme},
     vcs::{CommitDetailsState, HistoryState},
 };
 
 use super::change_marker;
 
+pub(super) struct HistoryListProps<'a> {
+    pub history: &'a HistoryState,
+    pub selected: Option<usize>,
+    pub expanded: Option<&'a str>,
+    pub files: &'a CommitDetailsState,
+    pub theme: &'a Theme,
+}
+
 pub(super) struct HistoryList<'a> {
-    model: &'a Model,
+    props: HistoryListProps<'a>,
 }
 
 impl<'a> HistoryList<'a> {
-    pub(super) fn new(model: &'a Model) -> Self {
-        Self { model }
+    pub(super) fn new(props: HistoryListProps<'a>) -> Self {
+        Self { props }
     }
 
     pub(super) fn render(&self, area: Rect, frame: &mut Frame) {
         let (lines, selected) = self.lines();
         let lines = picker::visible_lines(lines, selected, area.height);
         frame.render_widget(
-            Paragraph::new(lines).style(self.model.theme.ui().base),
+            Paragraph::new(lines).style(self.props.theme.ui().base),
             area,
         );
     }
 
     fn lines(&self) -> (Vec<Line<'static>>, Option<usize>) {
-        let styles = self.model.theme.ui();
-        match self.model.vcs.history() {
+        let styles = self.props.theme.ui();
+        match self.props.history {
             HistoryState::Idle | HistoryState::Loading => {
                 (vec![Line::styled("Loading history…", styles.muted)], None)
             }
@@ -39,12 +47,13 @@ impl<'a> HistoryList<'a> {
             HistoryState::Ready(commits) => commits.iter().enumerate().fold(
                 (Vec::new(), None),
                 |(mut lines, mut selected), (index, commit)| {
-                    if self.model.vcs.history_selected == Some(index) {
+                    let is_selected = self.props.selected == Some(index);
+                    if is_selected {
                         selected = Some(lines.len());
                     }
-                    lines.push(commit_line(self.model, index, commit));
-                    if self.model.vcs.history_expanded.as_ref() == Some(&commit.id) {
-                        lines.extend(history_file_lines(self.model));
+                    lines.push(commit_line(commit, is_selected, styles));
+                    if self.props.expanded == Some(commit.id.as_str()) {
+                        lines.extend(history_file_lines(self.props.files, styles));
                     }
                     (lines, selected)
                 },
@@ -53,15 +62,13 @@ impl<'a> HistoryList<'a> {
     }
 }
 
-fn commit_line(model: &Model, index: usize, commit: &::vcs::CommitSummary) -> Line<'static> {
-    let selected = model.vcs.history_selected == Some(index);
+fn commit_line(commit: &::vcs::CommitSummary, selected: bool, styles: &UiTheme) -> Line<'static> {
     let prefix = if selected { "> " } else { "  " };
-    commit_message::line(commit, prefix.to_string(), selected, model.theme.ui())
+    commit_message::line(commit, prefix.to_string(), selected, styles)
 }
 
-fn history_file_lines(model: &Model) -> Vec<Line<'static>> {
-    let styles = model.theme.ui();
-    match &model.vcs.history_files {
+fn history_file_lines(files: &CommitDetailsState, styles: &UiTheme) -> Vec<Line<'static>> {
+    match files {
         CommitDetailsState::Idle => Vec::new(),
         CommitDetailsState::Loading => vec![Line::styled("  Loading files…", styles.muted)],
         CommitDetailsState::Failed(error) => vec![Line::styled(error.clone(), styles.error)],
@@ -81,6 +88,7 @@ fn history_file_lines(model: &Model) -> Vec<Line<'static>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::vcs::VcsState;
     use ::vcs::{ChangeKind, CommitDetails, CommitFile, CommitSummary};
 
     #[test]
@@ -92,11 +100,11 @@ mod tests {
             timestamp: 0,
             branches: Vec::new(),
         };
-        let mut model = Model::default();
-        model.vcs.history = HistoryState::Ready(vec![commit("first"), commit("second")]);
-        model.vcs.history_selected = Some(1);
-        model.vcs.history_expanded = Some("first".to_string());
-        model.vcs.history_files = CommitDetailsState::Ready(CommitDetails {
+        let mut state = VcsState::default();
+        state.history = HistoryState::Ready(vec![commit("first"), commit("second")]);
+        state.history_selected = Some(1);
+        state.history_expanded = Some("first".to_string());
+        state.history_files = CommitDetailsState::Ready(CommitDetails {
             full_id: "first".to_string(),
             message: "message".to_string(),
             author: "Eggplant".to_string(),
@@ -114,8 +122,16 @@ mod tests {
                 },
             ],
         });
+        let theme = Theme::default();
 
-        let (lines, selected) = HistoryList::new(&model).lines();
+        let (lines, selected) = HistoryList::new(HistoryListProps {
+            history: state.history(),
+            selected: state.history_selected,
+            expanded: state.history_expanded.as_deref(),
+            files: &state.history_files,
+            theme: &theme,
+        })
+        .lines();
 
         assert_eq!(lines.len(), 4);
         assert_eq!(selected, Some(3));

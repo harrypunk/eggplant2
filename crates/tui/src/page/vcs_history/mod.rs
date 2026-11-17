@@ -13,7 +13,10 @@ use crate::{
     vcs::{CommitDetailsState, HistoryMoreState},
 };
 
-use self::{commit_detail::CommitDetail, history_list::HistoryList};
+use self::{
+    commit_detail::CommitDetail,
+    history_list::{HistoryList, HistoryListProps},
+};
 
 #[derive(Debug, Default)]
 pub struct VcsHistory;
@@ -31,7 +34,14 @@ impl VcsHistory {
             Paragraph::new(header_lines).style(styles.base),
             areas.header,
         );
-        HistoryList::new(model).render(areas.body, frame);
+        HistoryList::new(HistoryListProps {
+            history: model.vcs.history(),
+            selected: model.vcs.history_selected,
+            expanded: model.vcs.history_expanded.as_deref(),
+            files: &model.vcs.history_files,
+            theme: &model.theme,
+        })
+        .render(areas.body, frame);
         if let Some(detail) = areas.detail {
             CommitDetail::new(model).render(detail, frame);
         }
