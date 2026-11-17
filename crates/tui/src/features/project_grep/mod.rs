@@ -109,6 +109,9 @@ fn open(model: &mut Model) {
         model.status = Some(StatusMessage::info("No folder open"));
         return;
     };
+    if !model.modal.open(Context::ProjectGrep) {
+        return;
+    }
     model.status = None;
     model.project_grep.open(root);
     model.context_stack.push(Context::ProjectGrep);
@@ -116,6 +119,7 @@ fn open(model: &mut Model) {
 
 fn close(model: &mut Model) {
     model.project_grep.close();
+    model.modal.close(Context::ProjectGrep);
     model
         .context_stack
         .pop_if(|context| context == &Context::ProjectGrep);

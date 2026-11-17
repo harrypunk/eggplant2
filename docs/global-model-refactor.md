@@ -32,6 +32,7 @@ The following slices have landed and are covered by the workspace test suite:
 - Single-owner fail-fast save policy: active commits reject close/quit, and pending close/quit rejects commit submission without changing drafts or owners.
 - Editing composition through one `EditingTargetKind`/`with_active` adapter; reusable operations and direct/asynchronous paste share the same target policy, with no hidden-main fallback.
 - Page-owned resize/cursor policy and startup-owned initial feature effects; runtime and message coordination no longer contain page/VCS implementation details.
+- Single-owner `ModalController` for picker/search/jump/merge composition; rejected opens preserve state and status, and close paths release only their own context. Duplicate registration rejection preserves existing handlers.
 - Worktree/index/save status synchronization with one-in-flight-plus-trailing-read coalescing.
 - File-picker entry/preview invalidation on external changes.
 - History, working-change, and repository workflows have separate implementation modules; `vcs/mod.rs` is reduced to composed state, registration/dispatch, shared selection math, and API re-exports.
@@ -39,7 +40,6 @@ The following slices have landed and are covered by the workspace test suite:
 
 Remaining structural work:
 
-- Introduce shell-owned modal/session coordination and finish registry/page cleanup.
 - Move explorer tree traversal behind effects if responsiveness measurements justify it.
 
 

@@ -4,7 +4,7 @@ The shell page owns layout and composition:
 
 - Explorer/editor/tools rectangles and visibility.
 - Popup placement and clamping.
-- Modal/input precedence and the context stack.
+- Modal/input precedence and the context stack, with `ModalController` enforcing one owning modal context across picker/search/jump/merge workflows.
 - Focus relationships and terminal cursor suppression.
 - Status area and shared theme propagation.
 

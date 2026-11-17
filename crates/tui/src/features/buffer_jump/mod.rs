@@ -128,6 +128,9 @@ fn start(model: &mut Model) {
         model.status = Some(StatusMessage::info("No active buffer"));
         return;
     };
+    if !model.modal.open(Context::BufferJump) {
+        return;
+    }
     model.status = None;
     model.buffer_jump.start(source);
     model.context_stack.push(Context::BufferJump);
@@ -135,6 +138,7 @@ fn start(model: &mut Model) {
 
 fn close(model: &mut Model) {
     model.buffer_jump.close();
+    model.modal.close(Context::BufferJump);
     model
         .context_stack
         .pop_if(|context| context == &Context::BufferJump);

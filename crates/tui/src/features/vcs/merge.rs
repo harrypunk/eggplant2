@@ -270,6 +270,9 @@ fn start(model: &mut Model) -> Option<Effect> {
         return None;
     }
     let repository = repository_target(model)?;
+    if !model.modal.open(Context::VcsMerge) {
+        return None;
+    }
     let revision = model.vcs.merge.start(repository.clone())?;
     model.vcs.help_visible = false;
     model.context_stack.push(Context::VcsMerge);
@@ -288,6 +291,7 @@ fn cancel(model: &mut Model) -> Option<Effect> {
 }
 
 fn close_merge_context(model: &mut Model) {
+    model.modal.close(Context::VcsMerge);
     model
         .context_stack
         .pop_if(|context| context == &Context::VcsMerge);

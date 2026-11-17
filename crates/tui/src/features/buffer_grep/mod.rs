@@ -113,6 +113,9 @@ fn open(model: &mut Model) {
         model.status = Some(StatusMessage::info("No active buffer"));
         return;
     };
+    if !model.modal.open(Context::BufferGrep) {
+        return;
+    }
     model.status = None;
     model.buffer_grep.open(source);
     model.context_stack.push(Context::BufferGrep);
@@ -120,6 +123,7 @@ fn open(model: &mut Model) {
 
 fn close(model: &mut Model) {
     model.buffer_grep.close();
+    model.modal.close(Context::BufferGrep);
     model
         .context_stack
         .pop_if(|context| context == &Context::BufferGrep);
