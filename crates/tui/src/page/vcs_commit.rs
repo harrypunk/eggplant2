@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use editor::{EditMode, EditorSnapshot};
 use ratatui::{
     Frame,
@@ -15,11 +17,19 @@ use crate::{
         status_bar::StatusBar,
     },
     data_object::{FocusState, Model},
+    theme::Theme,
     vcs::ChangesState,
 };
 
 #[derive(Debug, Default)]
 pub struct VcsCommit;
+
+struct CommitHeaderProps<'a> {
+    changes: &'a ChangesState,
+    workspace_root: Option<&'a Path>,
+    notice: Option<&'a str>,
+    theme: &'a Theme,
+}
 
 struct PageLayout {
     header: Rect,
@@ -31,8 +41,14 @@ impl VcsCommit {
     pub fn view(&self, model: &Model, frame: &mut Frame) {
         let areas = layout_areas(frame.area());
         let styles = model.theme.ui();
+        let header = CommitHeaderProps {
+            changes: model.vcs.changes(),
+            workspace_root: model.workspace.as_ref().map(|workspace| workspace.root()),
+            notice: model.vcs.notice.as_deref(),
+            theme: &model.theme,
+        };
         frame.render_widget(
-            Paragraph::new(header_lines(model)).style(styles.base),
+            Paragraph::new(header_lines(header)).style(styles.base),
             areas.header,
         );
         let snapshot = model.vcs.commit.editor.active_snapshot();
@@ -84,9 +100,9 @@ pub fn message_content_area(area: Rect, snapshot: Option<&EditorSnapshot>) -> Re
     }
 }
 
-fn header_lines(model: &Model) -> Vec<Line<'static>> {
-    let styles = model.theme.ui();
-    let (count, summary) = staged_summary(model);
+fn header_lines(props: CommitHeaderProps<'_>) -> Vec<Line<'static>> {
+    let styles = props.theme.ui();
+    let (count, summary) = staged_summary(props.changes, props.workspace_root);
     vec![
         Line::styled(
             format!("Commit {count} staged files"),
@@ -100,12 +116,12 @@ fn header_lines(model: &Model) -> Vec<Line<'static>> {
             "Ctrl-s commit  q close  Ctrl-c discard",
             styles.base.patch(styles.action_hint),
         ),
-        Line::styled(model.vcs.notice.clone().unwrap_or_default(), styles.base),
+        Line::styled(props.notice.unwrap_or_default().to_string(), styles.base),
     ]
 }
 
-fn staged_summary(model: &Model) -> (usize, String) {
-    let ChangesState::Ready(changes) = model.vcs.changes() else {
+fn staged_summary(changes: &ChangesState, workspace_root: Option<&Path>) -> (usize, String) {
+    let ChangesState::Ready(changes) = changes else {
         return (0, "Staged changes unavailable".to_string());
     };
     let staged = changes
@@ -114,13 +130,13 @@ fn staged_summary(model: &Model) -> (usize, String) {
         .collect::<Vec<_>>();
     let summary = staged
         .iter()
-        .map(|change| change_summary(model, change))
+        .map(|change| change_summary(change, workspace_root))
         .collect::<Vec<_>>()
         .join("  ");
     (staged.len(), summary)
 }
 
-fn change_summary(model: &Model, change: &FileChange) -> String {
+fn change_summary(change: &FileChange, workspace_root: Option<&Path>) -> String {
     let marker = match change.kind {
         ChangeKind::Added => "A",
         ChangeKind::Untracked => "?",
@@ -129,10 +145,8 @@ fn change_summary(model: &Model, change: &FileChange) -> String {
         ChangeKind::Deleted => "D",
         ChangeKind::Renamed => "R",
     };
-    let path = model
-        .workspace
-        .as_ref()
-        .and_then(|workspace| change.path.strip_prefix(workspace.root()).ok())
+    let path = workspace_root
+        .and_then(|root| change.path.strip_prefix(root).ok())
         .unwrap_or(&change.path)
         .to_string_lossy()
         .into_owned();
@@ -146,6 +160,21 @@ mod tests {
 
     use super::*;
     use crate::data_object::Workspace;
+
+    #[test]
+    fn staged_summary_uses_explicit_inputs() {
+        let changes = ChangesState::Ready(vec![FileChange {
+            kind: ChangeKind::Modified,
+            staged: true,
+            path: std::path::PathBuf::from("/workspace/note.txt"),
+            previous_path: None,
+        }]);
+
+        assert_eq!(
+            staged_summary(&changes, Some(Path::new("/workspace"))),
+            (1, "M note.txt".to_string())
+        );
+    }
 
     #[test]
     fn renders_staged_summary_hints_message_and_editor_mode() {
