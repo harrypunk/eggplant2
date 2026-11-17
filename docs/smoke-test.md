@@ -62,6 +62,7 @@ Use a repository containing both staged and unstaged changes, then open the Git 
 - [ ] `Ctrl-s` stages every supported unstaged file and deletion. `U` unstages everything without changing worktree contents.
 - [ ] `?` toggles a bordered bottom help panel; Escape dismisses only the panel, while `q` retains its normal page-close behavior.
 - [ ] Repeated operations preserve a usable selection without a full-page loading flash.
+- [ ] While a mutation is running, another stage/unstage command is rejected with `Git operation in progress`. After completion, the sections match `git status` and another operation can start.
 - [ ] `x` shows a placeholder notice only and does not mutate the repository.
 - [ ] `c` opens the commit-message page when staged changes exist.
 

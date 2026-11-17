@@ -378,7 +378,7 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 #### M9.2 — Changed-file model and read-only panel
 
 - [x] Adapt Git status into a feature-owned staged/unstaged model, including added, modified, untracked, deleted, renamed, and conflicted states where the backend exposes them.
-- [x] Add dynamic staged/unstaged sections to the Git page, with real `s`/`u` stage/unstage operations, optimistic state updates without a full status rescan, inline `Tab` diffs, and non-mutating placeholders for future discard/commit/help workflows.
+- [x] Add dynamic staged/unstaged sections to the Git page, with real `s`/`u` stage/unstage operations, single-flight index mutations followed by authoritative status refreshes, inline `Tab` diffs, and non-mutating placeholders for future discard/commit/help workflows.
 - [x] Open selected paths through the existing safe document-opening and explorer-reveal path.
 - [x] Test path handling, unusual filenames, empty status, panel navigation, and safe file opening.
 

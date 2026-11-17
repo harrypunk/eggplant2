@@ -56,6 +56,7 @@ pub struct VcsState {
     changes_refreshing: bool,
     operation_target: Option<PathBuf>,
     operation_revision: u64,
+    operation_in_flight: bool,
     pub(crate) expanded_change: Option<(PathBuf, bool)>,
     pub(crate) diff: DiffState,
     diff_target: Option<PathBuf>,
@@ -103,6 +104,7 @@ impl Default for VcsState {
             changes_refreshing: false,
             operation_target: None,
             operation_revision: 0,
+            operation_in_flight: false,
             expanded_change: None,
             diff: DiffState::Idle,
             diff_target: None,
@@ -604,7 +606,39 @@ fn placeholder(model: &mut Model, message: &str) -> Option<Effect> {
     None
 }
 
+fn reject_if_operation_in_progress(model: &mut Model) -> bool {
+    if !model.vcs.operation_in_flight {
+        return false;
+    }
+    model.vcs.notice = Some("Git operation in progress".to_string());
+    true
+}
+
+fn begin_operation(model: &mut Model, target: PathBuf) -> u64 {
+    model.vcs.changes_revision = model.vcs.changes_revision.wrapping_add(1);
+    model.vcs.changes_refreshing = false;
+    model.vcs.operation_target = Some(target);
+    model.vcs.operation_in_flight = true;
+    model.vcs.operation_revision = model.vcs.operation_revision.wrapping_add(1);
+    model.vcs.notice = None;
+    model.vcs.operation_revision
+}
+
+fn accept_operation_completion(model: &mut Model, target: &std::path::Path, revision: u64) -> bool {
+    if !model.vcs.operation_in_flight
+        || model.vcs.operation_revision != revision
+        || model.vcs.operation_target.as_deref() != Some(target)
+    {
+        return false;
+    }
+    model.vcs.operation_in_flight = false;
+    true
+}
+
 fn mutate_selected_change(model: &mut Model, stage: bool) -> Option<Effect> {
+    if reject_if_operation_in_progress(model) {
+        return None;
+    }
     let change = model.vcs.selected_change()?.clone();
     if stage == change.staged {
         let message = if stage {
@@ -618,11 +652,7 @@ fn mutate_selected_change(model: &mut Model, stage: bool) -> Option<Effect> {
         return placeholder(model, "Wait for pending saves before changing the index");
     }
     let target = repository_target(model)?;
-    model.vcs.changes_revision = model.vcs.changes_revision.wrapping_add(1);
-    model.vcs.changes_refreshing = false;
-    model.vcs.operation_target = Some(target.clone());
-    model.vcs.operation_revision = model.vcs.operation_revision.wrapping_add(1);
-    model.vcs.notice = None;
+    let revision = begin_operation(model, target.clone());
     Some(Effect::feature(OperationRequest {
         kind: if stage {
             OperationKind::Stage
@@ -631,11 +661,14 @@ fn mutate_selected_change(model: &mut Model, stage: bool) -> Option<Effect> {
         },
         path: change.path,
         target,
-        revision: model.vcs.operation_revision,
+        revision,
     }))
 }
 
 fn mutate_all_changes(model: &mut Model, stage: bool) -> Option<Effect> {
+    if reject_if_operation_in_progress(model) {
+        return None;
+    }
     let ChangesState::Ready(changes) = &model.vcs.changes else {
         return None;
     };
@@ -652,15 +685,11 @@ fn mutate_all_changes(model: &mut Model, stage: bool) -> Option<Effect> {
         return placeholder(model, "Wait for pending saves before changing the index");
     }
     let target = repository_target(model)?;
-    model.vcs.changes_revision = model.vcs.changes_revision.wrapping_add(1);
-    model.vcs.changes_refreshing = false;
-    model.vcs.operation_target = Some(target.clone());
-    model.vcs.operation_revision = model.vcs.operation_revision.wrapping_add(1);
-    model.vcs.notice = None;
+    let revision = begin_operation(model, target.clone());
     Some(Effect::feature(BulkOperationRequest {
         stage,
         target,
-        revision: model.vcs.operation_revision,
+        revision,
     }))
 }
 
@@ -885,7 +914,6 @@ impl FeatureEffect for OperationRequest {
         .map_err(|error| error.to_string());
         Message::FeatureCompletion(FeatureCompletion::new(OperationCompletion {
             kind: self.kind,
-            path: self.path,
             target: self.target,
             revision: self.revision,
             result,
@@ -895,7 +923,6 @@ impl FeatureEffect for OperationRequest {
 
 struct OperationCompletion {
     kind: OperationKind,
-    path: PathBuf,
     target: PathBuf,
     revision: u64,
     result: Result<(), String>,
@@ -903,9 +930,7 @@ struct OperationCompletion {
 
 impl Completion for OperationCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        if model.vcs.operation_revision != self.revision
-            || model.vcs.operation_target.as_ref() != Some(&self.target)
-        {
+        if !accept_operation_completion(model, &self.target, self.revision) {
             return None;
         }
         match self.result {
@@ -914,11 +939,8 @@ impl Completion for OperationCompletion {
                     OperationKind::Stage => "Staged file".to_string(),
                     OperationKind::Unstage => "Unstaged file".to_string(),
                 });
-                if apply_operation_to_changes(model, self.kind, &self.path) {
-                    None
-                } else {
-                    refresh_changes(model)
-                }
+                model.vcs.changes_refreshing = false;
+                refresh_changes(model)
             }
             Err(error) => {
                 model.vcs.notice = Some(error);
@@ -959,9 +981,7 @@ struct BulkOperationCompletion {
 
 impl Completion for BulkOperationCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        if model.vcs.operation_revision != self.revision
-            || model.vcs.operation_target.as_ref() != Some(&self.target)
-        {
+        if !accept_operation_completion(model, &self.target, self.revision) {
             return None;
         }
         if let Err(error) = self.result {
@@ -972,79 +992,9 @@ impl Completion for BulkOperationCompletion {
             true => "Staged all changes".to_string(),
             false => "Unstaged all changes".to_string(),
         });
-        let selected_path = model
-            .vcs
-            .selected_change()
-            .map(|change| change.path.clone());
-        let kind = match self.stage {
-            true => OperationKind::Stage,
-            false => OperationKind::Unstage,
-        };
-        let ChangesState::Ready(changes) = &model.vcs.changes else {
-            return refresh_changes(model);
-        };
-        let paths = changes
-            .iter()
-            .filter(|change| change.staged != self.stage)
-            .map(|change| change.path.clone())
-            .collect::<Vec<_>>();
-        let mut updated = true;
-        for path in paths {
-            updated &= apply_operation_to_changes(model, kind, &path);
-        }
-        if let Some(selected_path) = selected_path {
-            let ChangesState::Ready(changes) = &model.vcs.changes else {
-                return refresh_changes(model);
-            };
-            model.vcs.selected_change = changes
-                .iter()
-                .position(|change| change.path == selected_path);
-        }
-        match updated {
-            true => None,
-            false => refresh_changes(model),
-        }
+        model.vcs.changes_refreshing = false;
+        refresh_changes(model)
     }
-}
-
-fn apply_operation_to_changes(
-    model: &mut Model,
-    kind: OperationKind,
-    path: &std::path::Path,
-) -> bool {
-    let ChangesState::Ready(changes) = &mut model.vcs.changes else {
-        return false;
-    };
-    let staged = matches!(kind, OperationKind::Stage);
-    let Some(mut change) = changes
-        .iter()
-        .find(|change| change.path == *path && change.staged != staged)
-        .cloned()
-    else {
-        return false;
-    };
-    change.staged = staged;
-    change.kind = match (kind, change.kind) {
-        (OperationKind::Stage, ChangeKind::Untracked) => ChangeKind::Added,
-        (OperationKind::Unstage, ChangeKind::Added) => ChangeKind::Untracked,
-        (_, kind) => kind,
-    };
-    changes.retain(|candidate| candidate.path != *path);
-    changes.push(change);
-    changes.sort_by(|left, right| {
-        right
-            .staged
-            .cmp(&left.staged)
-            .then_with(|| left.path.cmp(&right.path))
-    });
-    model.vcs.selected_change = changes
-        .iter()
-        .position(|candidate| candidate.path == *path && candidate.staged == staged);
-    model.vcs.expanded_change = None;
-    model.vcs.diff = DiffState::Idle;
-    model.vcs.diff_cache.clear();
-    model.vcs.diff_revision = model.vcs.diff_revision.wrapping_add(1);
-    true
 }
 
 struct ChangesRequest {
@@ -1076,10 +1026,16 @@ impl Completion for ChangesCompletion {
         {
             return None;
         }
+        let selected_path = model
+            .vcs
+            .selected_change()
+            .map(|change| change.path.clone());
         model.vcs.changes_refreshing = false;
         model.vcs.changes = match self.result {
             Ok(changes) => {
-                model.vcs.selected_change = (!changes.is_empty()).then_some(0);
+                model.vcs.selected_change = selected_path
+                    .and_then(|path| changes.iter().position(|change| change.path == path))
+                    .or_else(|| (!changes.is_empty()).then_some(0));
                 ChangesState::Ready(changes)
             }
             Err(error) => {
@@ -1595,6 +1551,15 @@ mod tests {
         }
     }
 
+    fn complete_changes(model: &mut Model, target: PathBuf, changes: Vec<FileChange>) {
+        Box::new(ChangesCompletion {
+            target,
+            revision: model.vcs.changes_revision,
+            result: Ok(changes),
+        })
+        .update(model);
+    }
+
     #[test]
     fn changes_refresh_selects_and_wraps_and_rejects_stale_results() {
         let root = PathBuf::from("/workspace");
@@ -1664,7 +1629,46 @@ mod tests {
     }
 
     #[test]
-    fn stage_completion_updates_changes_and_stale_results_are_ignored() {
+    fn overlapping_index_mutations_are_rejected_until_the_current_operation_completes() {
+        let root = PathBuf::from("/workspace");
+        let mut model = Model {
+            workspace: Some(Workspace::new(root.clone())),
+            ..Model::default()
+        };
+        model.vcs.changes = ChangesState::Ready(vec![
+            change(root.join("a.txt"), ChangeKind::Modified),
+            change(root.join("b.txt"), ChangeKind::Modified),
+        ]);
+        model.vcs.selected_change = Some(0);
+
+        assert!(handle_command(&mut model, CommandId("vcs_stage")).is_some());
+        let revision = model.vcs.operation_revision;
+        assert!(model.vcs.operation_in_flight);
+        model.vcs.selected_change = Some(1);
+
+        assert!(handle_command(&mut model, CommandId("vcs_stage")).is_none());
+        assert!(handle_command(&mut model, CommandId("vcs_stage_all")).is_none());
+        assert_eq!(model.vcs.operation_revision, revision);
+        assert_eq!(
+            model.vcs.notice.as_deref(),
+            Some("Git operation in progress")
+        );
+        assert!(model.vcs.operation_in_flight);
+
+        let refresh = Box::new(OperationCompletion {
+            kind: OperationKind::Stage,
+            target: root,
+            revision,
+            result: Ok(()),
+        })
+        .update(&mut model);
+        assert!(matches!(refresh, Some(Effect::Feature(_))));
+        assert!(!model.vcs.operation_in_flight);
+        assert!(handle_command(&mut model, CommandId("vcs_stage")).is_some());
+    }
+
+    #[test]
+    fn stage_completion_refreshes_changes_and_stale_results_are_ignored() {
         let root = PathBuf::from("/workspace");
         let mut model = Model {
             workspace: Some(Workspace::new(root.clone())),
@@ -1676,55 +1680,78 @@ mod tests {
 
         assert!(handle_command(&mut model, CommandId("vcs_stage")).is_some());
         let revision = model.vcs.operation_revision;
-        Box::new(OperationCompletion {
+        let stale = Box::new(OperationCompletion {
             kind: OperationKind::Stage,
-            path: root.join("note.txt"),
             target: root.clone(),
             revision: revision.wrapping_sub(1),
             result: Ok(()),
         })
         .update(&mut model);
+        assert!(stale.is_none());
         assert_eq!(model.vcs.notice, None);
+        assert!(model.vcs.operation_in_flight);
 
-        Box::new(OperationCompletion {
+        let refresh = Box::new(OperationCompletion {
             kind: OperationKind::Stage,
-            path: root.join("note.txt"),
-            target: root,
+            target: root.clone(),
             revision,
             result: Ok(()),
         })
         .update(&mut model);
+        assert!(matches!(refresh, Some(Effect::Feature(_))));
         assert_eq!(model.vcs.notice.as_deref(), Some("Staged file"));
+        assert!(!model.vcs.operation_in_flight);
         let ChangesState::Ready(changes) = model.vcs.changes() else {
-            panic!("expected optimistic changed-file state");
+            panic!("previous status should remain visible during refresh");
+        };
+        assert!(!changes[0].staged, "status must not be inferred in the UI");
+
+        let mut staged = change(root.join("note.txt"), ChangeKind::Modified);
+        staged.staged = true;
+        complete_changes(&mut model, root, vec![staged]);
+        let ChangesState::Ready(changes) = model.vcs.changes() else {
+            panic!("expected authoritative changed-file state");
         };
         assert!(changes[0].staged);
     }
 
     #[test]
-    fn bulk_completions_update_all_changes_and_preserve_selection() {
+    fn bulk_completions_refresh_all_changes_and_preserve_selection() {
         let root = PathBuf::from("/workspace");
         let mut model = Model {
             workspace: Some(Workspace::new(root.clone())),
             ..Model::default()
         };
-        let mut added = change(root.join("a.txt"), ChangeKind::Added);
-        added.staged = true;
+        let staged = |path: &str, kind| {
+            let mut change = change(root.join(path), kind);
+            change.staged = true;
+            change
+        };
         model.vcs.changes = ChangesState::Ready(vec![
-            added,
+            staged("a.txt", ChangeKind::Added),
             change(root.join("b.txt"), ChangeKind::Modified),
             change(root.join("c.txt"), ChangeKind::Untracked),
         ]);
         model.vcs.selected_change = Some(1);
 
         assert!(handle_command(&mut model, CommandId("vcs_stage_all")).is_some());
-        Box::new(BulkOperationCompletion {
+        let refresh = Box::new(BulkOperationCompletion {
             stage: true,
             target: root.clone(),
             revision: model.vcs.operation_revision,
             result: Ok(()),
         })
         .update(&mut model);
+        assert!(matches!(refresh, Some(Effect::Feature(_))));
+        complete_changes(
+            &mut model,
+            root.clone(),
+            vec![
+                staged("a.txt", ChangeKind::Added),
+                staged("b.txt", ChangeKind::Modified),
+                staged("c.txt", ChangeKind::Added),
+            ],
+        );
         let ChangesState::Ready(changes) = &model.vcs.changes else {
             panic!("expected ready changes");
         };
@@ -1734,13 +1761,23 @@ mod tests {
         assert_eq!(model.vcs.notice.as_deref(), Some("Staged all changes"));
 
         assert!(handle_command(&mut model, CommandId("vcs_unstage_all")).is_some());
-        Box::new(BulkOperationCompletion {
+        let refresh = Box::new(BulkOperationCompletion {
             stage: false,
-            target: root,
+            target: root.clone(),
             revision: model.vcs.operation_revision,
             result: Ok(()),
         })
         .update(&mut model);
+        assert!(matches!(refresh, Some(Effect::Feature(_))));
+        complete_changes(
+            &mut model,
+            root.clone(),
+            vec![
+                change(root.join("a.txt"), ChangeKind::Untracked),
+                change(root.join("b.txt"), ChangeKind::Modified),
+                change(root.join("c.txt"), ChangeKind::Untracked),
+            ],
+        );
         let ChangesState::Ready(changes) = &model.vcs.changes else {
             panic!("expected ready changes");
         };
@@ -1752,26 +1789,29 @@ mod tests {
     }
 
     #[test]
-    fn unstage_merges_duplicate_entries_without_a_refresh() {
-        let path = PathBuf::from("/workspace/note.txt");
-        let mut staged = change(path.clone(), ChangeKind::Modified);
-        staged.staged = true;
-        let unstaged = change(path.clone(), ChangeKind::Modified);
-        let mut model = Model::default();
-        model.vcs.changes = ChangesState::Ready(vec![staged, unstaged]);
-        model.vcs.selected_change = Some(1);
-
-        assert!(apply_operation_to_changes(
-            &mut model,
-            OperationKind::Unstage,
-            &path
-        ));
-        let ChangesState::Ready(changes) = model.vcs.changes() else {
-            panic!("expected ready changes");
+    fn failed_index_operation_releases_the_single_flight_guard() {
+        let root = PathBuf::from("/workspace");
+        let mut model = Model {
+            workspace: Some(Workspace::new(root.clone())),
+            ..Model::default()
         };
-        assert_eq!(changes.len(), 1);
-        assert!(!changes[0].staged);
-        assert_eq!(model.vcs.selected_change, Some(0));
+        model.vcs.changes =
+            ChangesState::Ready(vec![change(root.join("note.txt"), ChangeKind::Modified)]);
+        model.vcs.selected_change = Some(0);
+        assert!(handle_command(&mut model, CommandId("vcs_stage")).is_some());
+
+        let effect = Box::new(OperationCompletion {
+            kind: OperationKind::Stage,
+            target: root,
+            revision: model.vcs.operation_revision,
+            result: Err("index locked".to_string()),
+        })
+        .update(&mut model);
+
+        assert!(effect.is_none());
+        assert!(!model.vcs.operation_in_flight);
+        assert_eq!(model.vcs.notice.as_deref(), Some("index locked"));
+        assert!(handle_command(&mut model, CommandId("vcs_stage")).is_some());
     }
 
     #[test]

@@ -52,9 +52,10 @@ Real stage/unstage operations use filtered worktree-to-blob conversion and locke
 Operations:
 
 - Run in revisioned background effects.
+- Allow only one stage/unstage mutation in flight; overlapping commands report `Git operation in progress` without starting more work.
 - Stage/unstage refuse pending-save states; commit and merge save first.
 - Preserve worktree contents when unstaging.
-- Merge successful changes into the current staged-first model instead of rescanning the repository.
+- Refresh authoritative Git status after every successful mutation instead of inferring index transitions in the UI. Older status reads are invalidated, and selection follows the same path when it remains present.
 - Reject conflicts and unsupported file types explicitly.
 - Preserve ready content during background status refreshes.
 
