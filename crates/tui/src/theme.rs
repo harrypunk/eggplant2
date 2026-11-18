@@ -1,4 +1,5 @@
-mod provider;
+pub mod ghostty;
+pub mod provider;
 
 use color_eyre::eyre::bail;
 use helix_core::syntax::Highlight;

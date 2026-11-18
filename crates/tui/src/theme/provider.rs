@@ -6,7 +6,7 @@ use ratatui::style::Style;
 use super::{Theme, ThemeName, UiTheme, syntax_styles};
 
 #[derive(Debug, Clone, Default)]
-pub(crate) struct UiThemePatch {
+pub struct UiThemePatch {
     pub(crate) base: Option<Style>,
     pub(crate) muted: Option<Style>,
     pub(crate) selection: Option<Style>,
@@ -81,7 +81,7 @@ impl UiThemePatch {
 }
 
 #[derive(Debug)]
-pub(crate) struct ThemeDraft {
+pub struct ThemeDraft {
     pub name: String,
     pub builtin: Option<ThemeName>,
     pub ui: UiThemePatch,
@@ -89,7 +89,7 @@ pub(crate) struct ThemeDraft {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ThemeAdapterError(pub String);
+pub struct ThemeAdapterError(pub String);
 
 impl Display for ThemeAdapterError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -99,13 +99,13 @@ impl Display for ThemeAdapterError {
 
 impl Error for ThemeAdapterError {}
 
-pub(crate) trait ThemeAdapter {
+pub trait ThemeAdapter {
     type Document;
 
     fn adapt(&self, document: &Self::Document) -> Result<ThemeDraft, ThemeAdapterError>;
 }
 
-pub(crate) struct HelixThemeAdapter {
+pub struct HelixThemeAdapter {
     name: ThemeName,
 }
 
@@ -129,7 +129,7 @@ impl ThemeAdapter for HelixThemeAdapter {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum ThemeResolutionError {
+pub enum ThemeResolutionError {
     MissingUiFallback,
     MissingSyntaxFallback,
 }
@@ -145,7 +145,7 @@ impl Display for ThemeResolutionError {
 
 impl Error for ThemeResolutionError {}
 
-pub(crate) struct ThemeResolver;
+pub struct ThemeResolver;
 
 impl ThemeResolver {
     pub fn resolve(
