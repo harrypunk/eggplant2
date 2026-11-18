@@ -209,7 +209,9 @@ mod tests {
             .command_menu
             .handle_key(crossterm::event::KeyCode::Char(' '));
         model.file_picker.visibility = Visibility::Displayed;
-        model.theme_picker.open(crate::theme::ThemeName::TokyoNight);
+        model
+            .theme_picker
+            .open(Some(crate::theme::ThemeName::TokyoNight), "tokyonight");
         for (width, height) in sizes {
             manager.update(&mut model, Message::Resize(width, height));
             let backend = TestBackend::new(width, height);
@@ -264,7 +266,9 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
         let mut model = Model::default();
         create_buffer(&mut model, "hello");
-        model.theme_picker.open(crate::theme::ThemeName::TokyoNight);
+        model
+            .theme_picker
+            .open(Some(crate::theme::ThemeName::TokyoNight), "tokyonight");
         let page = Editor::default();
 
         terminal.draw(|frame| page.view(&model, frame)).unwrap();

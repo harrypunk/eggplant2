@@ -1,7 +1,9 @@
+mod discovery;
 pub mod ghostty;
 mod loader;
 pub mod provider;
 
+pub use discovery::start_discovery;
 pub use loader::{ThemeLoadState, start_loading};
 
 use color_eyre::eyre::bail;

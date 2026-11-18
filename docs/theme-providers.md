@@ -1,6 +1,6 @@
 # Theme providers and adapter design
 
-Status: Helix and Ghostty providers, configuration, and generation-checked file loading are implemented. Additional provider formats are pending.
+Status: Helix and Ghostty providers, configuration, generation-checked file loading, and local theme discovery in the picker are implemented. Additional provider formats are pending.
 
 ## Purpose
 
@@ -298,6 +298,9 @@ Construct `UiTheme` directly from semantic roles. Components must not load provi
 - `ThemeConfig` accepts existing built-in strings or a Ghostty provider table with path and fallback.
 - `start_loading` performs a bounded background read and resolves the result through the same adapter/resolver path.
 - `ThemeLoadState` rejects stale completions and preserves the previous theme on errors.
+- `ThemePickerEntry` supports built-in and local Ghostty entries with stable selection identity.
+- Opening the picker discovers user themes before system themes, suppresses duplicate names, and renders a `ghostty` section.
+- Applying a discovered entry uses the same bounded loader and active-theme fallback as startup.
 - Built-in selection keeps its existing identity; external themes may have independent display names.
 - Component-facing `Theme` and `UiTheme` APIs remain unchanged.
 
