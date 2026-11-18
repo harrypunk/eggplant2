@@ -1,6 +1,6 @@
 use crossterm::event::KeyCode;
 
-use crate::manager::command_registry::CommandId;
+use crate::{manager::command_registry::CommandId, theme_picker::ThemePickerCommand};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CommandMenuOutcome {
@@ -115,7 +115,7 @@ const UI_CONTEXT: CommandMenuContext = CommandMenuContext {
     items: &[CommandMenuItem {
         key: 't',
         description: "theme",
-        target: CommandMenuTarget::Action(CommandId("open_theme_picker")),
+        target: CommandMenuTarget::Action(ThemePickerCommand::Open.id()),
     }],
 };
 
@@ -370,7 +370,7 @@ mod tests {
         assert_eq!(menu.context_title(), "Leader > ui");
         assert_eq!(
             menu.handle_key(KeyCode::Char('t')),
-            CommandMenuOutcome::Action(CommandId("open_theme_picker"))
+            CommandMenuOutcome::Action(ThemePickerCommand::Open.id())
         );
     }
 

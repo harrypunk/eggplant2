@@ -6,6 +6,7 @@ pub use crate::data_object::CommandId;
 use crate::{
     data_object::{Message, Model},
     manager::effect::Effect,
+    theme_picker::ThemePickerCommand,
 };
 
 pub type FeatureHandler = fn(&mut Model, CommandId) -> Option<Effect>;
@@ -344,32 +345,32 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
             crate::file_picker::handle_command,
         ),
         Command::feature(
-            CommandId("open_theme_picker"),
+            ThemePickerCommand::Open.id(),
             "theme",
             crate::theme_picker::handle_command,
         ),
         Command::feature(
-            CommandId("close_theme_picker"),
+            ThemePickerCommand::Close.id(),
             "close theme picker",
             crate::theme_picker::handle_command,
         ),
         Command::feature(
-            CommandId("theme_picker_next"),
+            ThemePickerCommand::Next.id(),
             "next theme",
             crate::theme_picker::handle_command,
         ),
         Command::feature(
-            CommandId("theme_picker_previous"),
+            ThemePickerCommand::Previous.id(),
             "previous theme",
             crate::theme_picker::handle_command,
         ),
         Command::feature(
-            CommandId("theme_picker_backspace"),
+            ThemePickerCommand::Backspace.id(),
             "edit theme filter",
             crate::theme_picker::handle_command,
         ),
         Command::feature(
-            CommandId("apply_theme"),
+            ThemePickerCommand::Apply.id(),
             "apply theme",
             crate::theme_picker::handle_command,
         ),

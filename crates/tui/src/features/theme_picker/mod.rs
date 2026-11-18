@@ -13,6 +13,42 @@ use crate::{
     theme::{Theme, ThemePersistenceState},
 };
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ThemePickerCommand {
+    Open,
+    Close,
+    Next,
+    Previous,
+    Apply,
+    Backspace,
+}
+
+impl ThemePickerCommand {
+    const ALL: [Self; 6] = [
+        Self::Open,
+        Self::Close,
+        Self::Next,
+        Self::Previous,
+        Self::Apply,
+        Self::Backspace,
+    ];
+
+    pub(crate) const fn id(self) -> CommandId {
+        match self {
+            Self::Open => CommandId("open_theme_picker"),
+            Self::Close => CommandId("close_theme_picker"),
+            Self::Next => CommandId("theme_picker_next"),
+            Self::Previous => CommandId("theme_picker_previous"),
+            Self::Apply => CommandId("apply_theme"),
+            Self::Backspace => CommandId("theme_picker_backspace"),
+        }
+    }
+
+    fn from_id(id: CommandId) -> Option<Self> {
+        Self::ALL.into_iter().find(|command| command.id() == id)
+    }
+}
+
 /// The only application capabilities needed by theme-picker commands.
 struct ThemePickerAdapter<'a> {
     state: &'a mut ThemePickerState,
@@ -24,31 +60,24 @@ struct ThemePickerAdapter<'a> {
 }
 
 impl ThemePickerAdapter<'_> {
-    fn handle(&mut self, id: CommandId) -> Option<Effect> {
-        match id.as_str() {
-            "open_theme_picker" => self.open(),
-            "close_theme_picker" => {
+    fn handle(&mut self, command: ThemePickerCommand) -> Option<Effect> {
+        match command {
+            ThemePickerCommand::Open => self.open(),
+            ThemePickerCommand::Close => {
                 self.close();
                 None
             }
-            "theme_picker_next" => {
+            ThemePickerCommand::Next => {
                 self.state.select_next();
                 None
             }
-            "theme_picker_previous" => {
+            ThemePickerCommand::Previous => {
                 self.state.select_previous();
                 None
             }
-            "apply_theme" => self.apply(),
-            "theme_picker_backspace" => {
+            ThemePickerCommand::Apply => self.apply(),
+            ThemePickerCommand::Backspace => {
                 self.state.backspace_query();
-                None
-            }
-            _ => {
-                *self.status = Some(StatusMessage::error(format!(
-                    "unknown theme command `{}`",
-                    id.as_str()
-                )));
                 None
             }
         }
@@ -106,10 +135,17 @@ fn insert_char(model: &mut Model, character: char) -> Option<Effect> {
 
 /// Registered composition-root adapter for theme-picker commands.
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    if id.as_str() == "apply_theme" && !model.theme_picker.selection_is_visible() {
+    let Some(command) = ThemePickerCommand::from_id(id) else {
+        model.status = Some(StatusMessage::error(format!(
+            "unknown theme command `{}`",
+            id.as_str()
+        )));
+        return None;
+    };
+    if command == ThemePickerCommand::Apply && !model.theme_picker.selection_is_visible() {
         return None;
     }
-    if id.as_str() == "apply_theme"
+    if command == ThemePickerCommand::Apply
         && let Some(path) = model
             .theme_picker
             .selected()
@@ -163,7 +199,7 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         modal,
         status,
     }
-    .handle(id)
+    .handle(command)
 }
 
 #[cfg(test)]
@@ -172,6 +208,17 @@ mod tests {
 
     use super::*;
     use crate::{data_object::Message, manager::message_manager::MessageManager, theme::ThemeName};
+
+    #[test]
+    fn command_ids_convert_to_typed_commands() {
+        for command in ThemePickerCommand::ALL {
+            assert_eq!(ThemePickerCommand::from_id(command.id()), Some(command));
+        }
+        assert_eq!(
+            ThemePickerCommand::from_id(CommandId("unknown_theme_command")),
+            None
+        );
+    }
 
     #[test]
     fn theme_menu_applies_selection_and_escape_preserves_the_active_theme() {
@@ -199,7 +246,7 @@ mod tests {
 
         manager.update(
             &mut model,
-            Message::InvokeCommand(CommandId("theme_picker_next")),
+            Message::InvokeCommand(ThemePickerCommand::Next.id()),
         );
         assert_eq!(
             model.theme_picker.selected(),
@@ -207,7 +254,10 @@ mod tests {
         );
         assert!(
             manager
-                .update(&mut model, Message::InvokeCommand(CommandId("apply_theme")))
+                .update(
+                    &mut model,
+                    Message::InvokeCommand(ThemePickerCommand::Apply.id())
+                )
                 .is_some()
         );
         assert_eq!(model.theme.builtin(), Some(ThemeName::TokyoNight));
@@ -216,7 +266,7 @@ mod tests {
 
         manager.update(
             &mut model,
-            Message::InvokeCommand(CommandId("open_theme_picker")),
+            Message::InvokeCommand(ThemePickerCommand::Open.id()),
         );
         assert_eq!(
             model.theme_picker.selected(),
@@ -224,7 +274,7 @@ mod tests {
         );
         manager.update(
             &mut model,
-            Message::InvokeCommand(CommandId("theme_picker_next")),
+            Message::InvokeCommand(ThemePickerCommand::Next.id()),
         );
         assert_eq!(
             model.theme_picker.selected(),
@@ -232,7 +282,7 @@ mod tests {
         );
         manager.update(
             &mut model,
-            Message::InvokeCommand(CommandId("close_theme_picker")),
+            Message::InvokeCommand(ThemePickerCommand::Close.id()),
         );
         assert_eq!(model.theme.builtin(), Some(ThemeName::TokyoNight));
         assert!(!model.theme_picker.is_open());
@@ -253,14 +303,17 @@ mod tests {
         assert!(model.theme_picker.visible_entries().is_empty());
         assert!(
             manager
-                .update(&mut model, Message::InvokeCommand(CommandId("apply_theme")))
+                .update(
+                    &mut model,
+                    Message::InvokeCommand(ThemePickerCommand::Apply.id())
+                )
                 .is_none()
         );
 
         for _ in 0..3 {
             manager.update(
                 &mut model,
-                Message::InvokeCommand(CommandId("theme_picker_backspace")),
+                Message::InvokeCommand(ThemePickerCommand::Backspace.id()),
             );
         }
         for character in "tokyo".chars() {
@@ -270,7 +323,10 @@ mod tests {
             model.theme_picker.selected(),
             &state::ThemePickerEntry::builtin(ThemeName::TokyoNight)
         );
-        manager.update(&mut model, Message::InvokeCommand(CommandId("apply_theme")));
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(ThemePickerCommand::Apply.id()),
+        );
         assert_eq!(model.theme.builtin(), Some(ThemeName::TokyoNight));
     }
 
@@ -297,7 +353,10 @@ mod tests {
             model.theme_picker.select_next();
         }
 
-        let effect = manager.update(&mut model, Message::InvokeCommand(CommandId("apply_theme")));
+        let effect = manager.update(
+            &mut model,
+            Message::InvokeCommand(ThemePickerCommand::Apply.id()),
+        );
         assert!(!model.theme_picker.is_open());
         let Some(Effect::Feature(request)) = effect else {
             panic!("expected Ghostty load effect");
