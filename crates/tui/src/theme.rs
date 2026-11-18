@@ -1,3 +1,5 @@
+mod provider;
+
 use color_eyre::eyre::bail;
 use helix_core::syntax::Highlight;
 use helix_view::{
@@ -7,14 +9,16 @@ use helix_view::{
     },
     theme::Loader as HelixThemeLoader,
 };
+use provider::{HelixThemeAdapter, ThemeAdapter, ThemeResolver};
 use ratatui::style::{Color, Modifier, Style};
 
 const DEFAULT: &str = include_str!("../themes/default.toml");
 const TOKYONIGHT: &str = include_str!("../themes/tokyonight.toml");
 const CATPPUCCIN_MOCHA: &str = include_str!("../themes/catppuccin_mocha.toml");
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum ThemeName {
+    #[default]
     Default,
     TokyoNight,
     CatppuccinMocha,
@@ -41,7 +45,8 @@ impl ThemeName {
 /// A fully resolved application theme. Parsing and scope lookup stay out of components.
 #[derive(Debug, Clone)]
 pub struct Theme {
-    name: ThemeName,
+    name: String,
+    builtin: Option<ThemeName>,
     ui: UiTheme,
     // Resolved in the same order as the editor's recognized Helix scopes.
     syntax: Vec<Style>,
@@ -64,13 +69,16 @@ impl Theme {
         };
         let value: toml::Value = toml::from_str(source)?;
         let source = HelixTheme::from(value);
-        let ui = UiTheme::from_helix(&source);
-        let syntax = syntax_styles(&source);
-        Ok(Self { name, ui, syntax })
+        let draft = HelixThemeAdapter::new(name).adapt(&source)?;
+        Ok(ThemeResolver::resolve(draft, None).expect("built-in themes must be complete"))
     }
 
-    pub fn name(&self) -> ThemeName {
-        self.name
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn builtin(&self) -> Option<ThemeName> {
+        self.builtin
     }
 
     pub fn ui(&self) -> &UiTheme {

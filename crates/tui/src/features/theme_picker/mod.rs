@@ -40,7 +40,7 @@ impl ThemePickerAdapter<'_> {
         if !self.modal.open(Context::ThemePicker) {
             return;
         }
-        self.state.open(self.theme.name());
+        self.state.open(self.theme.builtin().unwrap_or_default());
         if self.contexts.last() != Some(&Context::ThemePicker) {
             self.contexts.push(Context::ThemePicker);
         }
@@ -125,7 +125,7 @@ mod tests {
                 .update(&mut model, Message::InvokeCommand(CommandId("apply_theme")))
                 .is_none()
         );
-        assert_eq!(model.theme.name(), ThemeName::TokyoNight);
+        assert_eq!(model.theme.builtin(), Some(ThemeName::TokyoNight));
         assert!(!model.theme_picker.is_open());
         assert_eq!(model.context_stack.last(), None);
 
@@ -143,7 +143,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("close_theme_picker")),
         );
-        assert_eq!(model.theme.name(), ThemeName::TokyoNight);
+        assert_eq!(model.theme.builtin(), Some(ThemeName::TokyoNight));
         assert!(!model.theme_picker.is_open());
         assert_eq!(model.context_stack.last(), None);
     }

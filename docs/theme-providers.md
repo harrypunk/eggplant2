@@ -1,6 +1,6 @@
 # Theme providers and adapter design
 
-Status: proposed architecture only. This document does not change the current three built-in themes or schedule a provider implementation.
+Status: provider-neutral drafts and resolution are implemented for existing built-ins. External provider adapters and source loading are pending.
 
 ## Purpose
 
@@ -287,13 +287,20 @@ Construct `UiTheme` directly from semantic roles. Components must not load provi
 
 ## Incremental migration path
 
-1. **Inventory the canonical model.** Document current UI roles and exact Helix syntax requirements without changing behavior.
-2. **Wrap the current Helix loader.** Put existing built-ins behind the same pure adapter boundary and verify equivalent output.
-3. **Introduce draft and resolver types.** Move fallback and validation there, not into components.
-4. **Migrate built-in selection.** Preserve current theme names, rendering, and stale-completion behavior.
-5. **Prove a second provider.** Start with a static UI-only source such as Ghostty and explicit syntax fallback.
-6. **Add richer formats as needed.** VS Code workbench/TextMate and Neovim highlight exports can be independent adapters and loading sources.
-7. **Add configuration only when a real provider works.** Avoid speculative provider options before the adapter contract is proven.
+### Current checkpoint
+
+- `UiThemePatch` represents sparse provider-neutral UI roles.
+- `ThemeDraft` carries optional exact syntax and provider display metadata.
+- `HelixThemeAdapter` converts each embedded Helix theme through the shared path.
+- `ThemeResolver` fills only missing UI/syntax values from an explicit fallback.
+- Built-in selection keeps its existing identity; external themes may have independent display names.
+- Component-facing `Theme` and `UiTheme` APIs remain unchanged.
+
+### Next steps
+
+1. **Prove a second provider.** Start with a static UI-only source such as Ghostty and explicit syntax fallback.
+2. **Add richer formats as needed.** VS Code workbench/TextMate and Neovim highlight exports can be independent adapters and loading sources.
+3. **Add configuration only when a real provider works.** Avoid speculative provider options before the adapter contract is proven.
 
 Every provider slice should be independently reviewable and should not require edits to page components.
 
