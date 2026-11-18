@@ -48,7 +48,7 @@ pub fn run(
                 .map(|path| path.to_path_buf())
         });
     let _file_watcher = file_watcher::start(watch_root.as_deref(), message_sender.clone())?;
-    if let Some(effect) = crate::startup::initial_effects(&mut model) {
+    if let Some(effect) = crate::startup::initial_effects(&mut model, &config.theme) {
         apply_effect(effect, &message_sender);
     }
 

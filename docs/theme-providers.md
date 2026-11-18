@@ -1,6 +1,6 @@
 # Theme providers and adapter design
 
-Status: Helix and static Ghostty adapters are implemented with shared draft/fallback resolution. External source loading and configuration are pending.
+Status: Helix and Ghostty providers, configuration, and generation-checked file loading are implemented. Additional provider formats are pending.
 
 ## Purpose
 
@@ -295,13 +295,16 @@ Construct `UiTheme` directly from semantic roles. Components must not load provi
 - `HelixThemeAdapter` converts each embedded Helix theme through the shared path.
 - `GhosttyThemeAdapter` parses static Ghostty config into the same provider-neutral UI draft.
 - `ThemeResolver` fills only missing UI/syntax values from an explicit fallback.
+- `ThemeConfig` accepts existing built-in strings or a Ghostty provider table with path and fallback.
+- `start_loading` performs a bounded background read and resolves the result through the same adapter/resolver path.
+- `ThemeLoadState` rejects stale completions and preserves the previous theme on errors.
 - Built-in selection keeps its existing identity; external themes may have independent display names.
 - Component-facing `Theme` and `UiTheme` APIs remain unchanged.
 
 ### Next steps
 
-1. **Add source loading and configuration.** Compose owned effects around the pure Ghostty adapter, preserving the previous theme on failure.
-2. **Add richer formats as needed.** VS Code workbench/TextMate and Neovim highlight exports can be independent adapters and loading sources.
+1. **Add richer formats as needed.** VS Code workbench/TextMate and Neovim highlight exports can be independent adapters and loading sources.
+2. **Keep source policy explicit.** Additional loading sources must retain bounded reads, pure adaptation, explicit fallback, and previous-theme preservation.
 
 Every provider slice should be independently reviewable and should not require edits to page components.
 

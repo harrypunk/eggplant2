@@ -3,6 +3,8 @@ use std::{ffi::OsString, path::PathBuf};
 use color_eyre::eyre::{WrapErr, bail};
 use editor::DocumentFactory;
 
+use crate::config::ThemeConfig;
+
 use crate::{
     data_object::{Context, FocusTarget, Model, Workspace},
     explorer::{ExplorerEntryKind, ExplorerState},
@@ -61,10 +63,13 @@ pub fn initial_model(path: Option<PathBuf>) -> color_eyre::Result<Model> {
 }
 
 /// Compose initial feature work without embedding optional addons in the terminal runtime.
-pub fn initial_effects(model: &mut Model) -> Option<Effect> {
+pub fn initial_effects(model: &mut Model, source: &ThemeConfig) -> Option<Effect> {
     Effect::combine(
-        crate::vcs::refresh(model),
-        crate::vcs::sync_active_buffer(model),
+        crate::theme::start_loading(source, model),
+        Effect::combine(
+            crate::vcs::refresh(model),
+            crate::vcs::sync_active_buffer(model),
+        ),
     )
 }
 

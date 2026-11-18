@@ -1,5 +1,8 @@
 pub mod ghostty;
+mod loader;
 pub mod provider;
+
+pub use loader::{ThemeLoadState, start_loading};
 
 use color_eyre::eyre::bail;
 use helix_core::syntax::Highlight;

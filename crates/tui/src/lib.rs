@@ -37,13 +37,25 @@ pub mod data_object {
     use crate::manager::effect::FeatureCompletion;
 
     use crate::{
-        buffer_grep::BufferGrepState, buffer_jump::BufferJumpState,
-        buffer_navigation::BufferNavigationState, capabilities::document::DocumentOpening,
-        capabilities::notification::NotificationCenter, capabilities::page_scroll::PageScroll,
-        change::ChangeState, command_menu::CommandMenuState, explorer::ExplorerState,
-        file_picker::FilePickerState, line_jump::LineJumpState, project_grep::ProjectGrepState,
-        register::RegisterState, theme::Theme, theme_picker::ThemePickerState,
-        tools::ToolsPanelState, vcs::VcsState, view_align::ViewAlignSession, yank::YankState,
+        buffer_grep::BufferGrepState,
+        buffer_jump::BufferJumpState,
+        buffer_navigation::BufferNavigationState,
+        capabilities::document::DocumentOpening,
+        capabilities::notification::NotificationCenter,
+        capabilities::page_scroll::PageScroll,
+        change::ChangeState,
+        command_menu::CommandMenuState,
+        explorer::ExplorerState,
+        file_picker::FilePickerState,
+        line_jump::LineJumpState,
+        project_grep::ProjectGrepState,
+        register::RegisterState,
+        theme::{Theme, ThemeLoadState},
+        theme_picker::ThemePickerState,
+        tools::ToolsPanelState,
+        vcs::VcsState,
+        view_align::ViewAlignSession,
+        yank::YankState,
     };
 
     /// Stable semantic command identity shared by keymaps and feature handlers.
@@ -124,6 +136,7 @@ pub mod data_object {
         pub current_focus: FocusTarget,
         pub context_stack: Vec<Context>,
         pub theme: Theme,
+        pub theme_loading: ThemeLoadState,
 
         // Transient feedback, popup, and save-dependent workflows.
         pub status: Option<StatusMessage>,
@@ -162,6 +175,7 @@ pub mod data_object {
                 current_focus: FocusTarget::Editor,
                 context_stack: Vec::new(),
                 theme: Theme::default(),
+                theme_loading: ThemeLoadState::default(),
                 status: None,
                 notifications: NotificationCenter::default(),
                 pending_input: None,
