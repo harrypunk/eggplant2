@@ -45,6 +45,7 @@ The VCS integration is an **addon**, not a requirement of the core editor. Editi
 - [VCS addon](docs/vcs.md) — optional Git status, staging, and diff workflows.
 - [Filesystem](docs/filesystem.md) — opening, previews, background work, and mutation rules.
 - [Themes](docs/theme.md) — built-in themes and resolved styles.
+- [Theme providers](docs/theme-providers.md) — proposed adapter architecture for external theme formats.
 - [Milestone history](docs/milestone-history.md) — implemented architecture and editing slices.
 - [Command and effect routing](docs/command-effects.md) — semantic commands and worker completion boundaries.
 - [Transient notifications](docs/notifications.md) — source-independent one-shot feedback and expiry composition.
