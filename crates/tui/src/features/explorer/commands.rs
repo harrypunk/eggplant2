@@ -121,6 +121,16 @@ mod tests {
         }
         assert_eq!(model.explorer.entries.len(), 2);
         assert_eq!(model.workspace.as_ref().unwrap().root(), workspace_root);
+
+        model.explorer.selected = Some(1);
+        let effect = manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("explorer_fold")),
+        );
+        assert!(effect.is_none());
+        assert_eq!(model.explorer.entries.len(), 1);
+        assert_eq!(model.explorer.selected, Some(0));
+        assert_eq!(model.workspace.as_ref().unwrap().root(), workspace_root);
     }
 
     #[test]

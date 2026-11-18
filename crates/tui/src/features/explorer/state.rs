@@ -76,6 +76,48 @@ impl Default for ExplorerState {
     }
 }
 
+struct FoldPlan {
+    index: usize,
+    end: usize,
+    path: PathBuf,
+}
+
+fn fold_plan(
+    entries: &[ExplorerEntry],
+    selected: usize,
+    expanded_directories: &HashSet<PathBuf>,
+) -> Option<FoldPlan> {
+    let entry = entries.get(selected)?;
+    let index = if entry.kind == ExplorerEntryKind::Directory
+        && expanded_directories.contains(&entry.path)
+    {
+        selected
+    } else {
+        parent_directory_index(entries, selected)?
+    };
+    let target = entries.get(index)?;
+    if !expanded_directories.contains(&target.path) {
+        return None;
+    }
+    let end = entries[index + 1..]
+        .iter()
+        .position(|entry| entry.depth <= target.depth)
+        .map(|offset| index + 1 + offset)
+        .unwrap_or(entries.len());
+    Some(FoldPlan {
+        index,
+        end,
+        path: target.path.clone(),
+    })
+}
+
+fn parent_directory_index(entries: &[ExplorerEntry], selected: usize) -> Option<usize> {
+    let depth = entries.get(selected)?.depth.checked_sub(1)?;
+    entries[..selected]
+        .iter()
+        .rposition(|entry| entry.depth == depth && entry.kind == ExplorerEntryKind::Directory)
+}
+
 impl ExplorerState {
     pub(crate) fn reload_request(
         &mut self,
@@ -109,31 +151,19 @@ impl ExplorerState {
         ))
     }
 
-    /// Collapse the selected directory without touching the filesystem.
+    /// Fold the selected directory or nearest visible parent without touching the filesystem.
     pub(crate) fn fold_selected(&mut self) -> bool {
-        let Some(index) = self.selected else {
+        let Some(selected) = self.selected else {
             return false;
         };
-        let Some(entry) = self.entries.get(index) else {
+        let Some(plan) = fold_plan(&self.entries, selected, &self.expanded_directories) else {
             return false;
         };
-        if entry.kind != ExplorerEntryKind::Directory {
-            return false;
-        }
-        let path = entry.path.clone();
-        let depth = entry.depth;
-        if !self.expanded_directories.remove(&path) {
-            return false;
-        }
-
+        self.expanded_directories.remove(&plan.path);
         self.refresh_generation = self.refresh_generation.wrapping_add(1);
-        let end = self.entries[index + 1..]
-            .iter()
-            .position(|entry| entry.depth <= depth)
-            .map(|offset| index + 1 + offset)
-            .unwrap_or(self.entries.len());
-        self.entries.drain(index + 1..end);
-        self.entries[index].expansion = ExpansionState::Collapsed;
+        self.entries.drain(plan.index + 1..plan.end);
+        self.entries[plan.index].expansion = ExpansionState::Collapsed;
+        self.selected = Some(plan.index);
         true
     }
 
@@ -435,6 +465,51 @@ mod tests {
         assert_eq!(explorer.entries[0].expansion, ExpansionState::Collapsed);
         assert_eq!(explorer.selected, Some(0));
         assert!(!explorer.fold_selected());
+    }
+
+    #[test]
+    fn file_or_collapsed_directory_folds_the_nearest_visible_parent() {
+        let directory = tempfile::tempdir().unwrap();
+        let parent = directory.path().join("parent");
+        let child = parent.join("child");
+        let note = child.join("note.txt");
+        let root_file = directory.path().join("root.txt");
+        std::fs::create_dir_all(&child).unwrap();
+        std::fs::write(&note, "note").unwrap();
+        std::fs::write(&root_file, "root").unwrap();
+        let mut explorer = ExplorerState::load(directory.path()).unwrap();
+
+        assert!(explorer.unfold_selected(directory.path()).unwrap());
+        explorer.selected = explorer
+            .entries
+            .iter()
+            .position(|entry| entry.path == child);
+        assert!(explorer.unfold_selected(directory.path()).unwrap());
+        explorer.selected = explorer.entries.iter().position(|entry| entry.path == note);
+
+        assert!(explorer.fold_selected());
+        assert_eq!(explorer.selected_entry().unwrap().path, child);
+        assert!(!explorer.entries.iter().any(|entry| entry.path == note));
+        assert_eq!(
+            explorer.selected_entry().unwrap().expansion,
+            ExpansionState::Collapsed
+        );
+
+        assert!(explorer.fold_selected());
+        assert_eq!(explorer.selected_entry().unwrap().path, parent);
+        assert!(!explorer.entries.iter().any(|entry| entry.path == child));
+        assert_eq!(
+            explorer.selected_entry().unwrap().expansion,
+            ExpansionState::Collapsed
+        );
+
+        assert!(!explorer.fold_selected());
+        explorer.selected = explorer
+            .entries
+            .iter()
+            .position(|entry| entry.path == root_file);
+        assert!(!explorer.fold_selected());
+        assert_eq!(explorer.selected_entry().unwrap().path, root_file);
     }
 
     #[test]

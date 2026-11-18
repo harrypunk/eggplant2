@@ -103,6 +103,8 @@ Paste uses the shared register and reads the system clipboard when available.
 | Refresh tree | `r` |
 | Show/hide ignored entries | `Shift-I` |
 
+On an expanded directory, `h` folds that directory. On a file or collapsed directory, `h` folds the nearest visible parent and selects it. Root-level entries cannot fold the workspace root.
+
 ### File picker
 
 | Action | Default binding |
