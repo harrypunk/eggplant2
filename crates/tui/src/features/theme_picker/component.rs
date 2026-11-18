@@ -128,24 +128,42 @@ fn result_lines(
     styles: &UiTheme,
     height: u16,
 ) -> Vec<Line<'static>> {
-    let mut lines = Vec::new();
-    let mut selected_row = None;
-    for section in state.visible_sections() {
-        let offset = lines.len();
-        let discovering = state.discovering_provider() == Some(section.provider);
-        let (mut section_lines, section_selected) = section_lines(
-            section,
-            state.selected_index(),
-            surface,
-            styles,
-            discovering,
-        );
-        selected_row = selected_row.or(section_selected.map(|row| row + offset));
-        lines.append(&mut section_lines);
-    }
-    if lines.is_empty() {
-        lines.push(Line::styled("No matches", surface.patch(styles.muted)));
-    }
+    let discovering_provider = state.discovering_provider();
+    let sections = state
+        .visible_sections()
+        .into_iter()
+        .map(|section| {
+            let discovering = discovering_provider == Some(section.provider);
+            section_lines(
+                section,
+                state.selected_index(),
+                surface,
+                styles,
+                discovering,
+            )
+        })
+        .collect::<Vec<_>>();
+    let selected_row =
+        sections
+            .iter()
+            .enumerate()
+            .find_map(|(section_index, (_, selected_row))| {
+                (*selected_row).map(|row| {
+                    row + sections[..section_index]
+                        .iter()
+                        .map(|(lines, _)| lines.len())
+                        .sum::<usize>()
+                })
+            });
+    let lines = sections
+        .into_iter()
+        .flat_map(|(lines, _)| lines)
+        .collect::<Vec<_>>();
+    let lines = if lines.is_empty() {
+        vec![Line::styled("No matches", surface.patch(styles.muted))]
+    } else {
+        lines
+    };
     picker::visible_lines(lines, selected_row, height)
 }
 
@@ -161,20 +179,16 @@ fn section_lines(
         .iter()
         .position(|(index, _)| *index == selected_index)
         .map(|row| row + 1);
-    let mut lines = Vec::with_capacity(section.entries.len() + 2);
-    lines.push(Line::styled(
+    let title = std::iter::once(Line::styled(
         section.title,
         surface.patch(styles.action_hint),
     ));
-    lines.extend(
-        section
-            .entries
-            .into_iter()
-            .map(|(index, entry)| entry_line(index, entry, selected_index, surface, styles)),
-    );
-    if discovering {
-        lines.push(Line::styled("Loading…", surface.patch(styles.muted)));
-    }
+    let entries = section
+        .entries
+        .into_iter()
+        .map(|(index, entry)| entry_line(index, entry, selected_index, surface, styles));
+    let loading = discovering.then(|| Line::styled("Loading…", surface.patch(styles.muted)));
+    let lines = title.chain(entries).chain(loading).collect();
     (lines, selected_row)
 }
 
