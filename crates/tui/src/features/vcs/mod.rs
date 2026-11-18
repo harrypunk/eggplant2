@@ -14,6 +14,7 @@ pub(crate) mod buffer_diff;
 mod change_workflow;
 pub(crate) mod changes;
 pub(crate) mod commit;
+pub(crate) mod diff;
 pub(crate) mod history;
 pub(crate) mod merge;
 pub(crate) mod navigation;
@@ -34,9 +35,9 @@ use history::{
 use merge::MergeState;
 use repository::RepositoryState;
 
-pub use crate::component::diff::DiffState;
 pub(crate) use change_workflow::{refresh_changes, sync_changes};
 pub use changes::ChangesState;
+pub use diff::DiffState;
 pub(crate) use history::HistoryPane;
 pub use history::{CommitDetailsState, HistoryMoreState, HistoryState};
 pub(crate) use repository::repository_target;

@@ -1,9 +1,9 @@
 use ratatui::{Frame, layout::Rect, text::Line, widgets::Paragraph};
 
 use crate::{
-    component::{diff, picker},
+    component::picker,
     theme::{Theme, UiTheme},
-    vcs::{CommitDetailsState, DiffState},
+    vcs::{CommitDetailsState, DiffState, diff},
 };
 
 use super::change_marker;

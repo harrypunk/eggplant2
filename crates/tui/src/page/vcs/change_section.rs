@@ -5,9 +5,9 @@ use ratatui::{Frame, layout::Rect, style::Modifier, text::Line, widgets::Paragra
 use ::vcs::{ChangeKind, FileChange};
 
 use crate::{
-    component::{diff, picker},
+    component::picker,
     theme::{Theme, UiTheme},
-    vcs::{ChangesState, DiffState},
+    vcs::{ChangesState, DiffState, diff},
 };
 
 #[derive(Debug, Clone, Copy)]

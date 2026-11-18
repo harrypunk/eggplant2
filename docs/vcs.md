@@ -50,7 +50,7 @@ The application coordinator routes each save outcome to either the commit barrie
 
 - `page/vcs/change_section.rs` owns section rows, selection, path formatting, and consumed height.
 - `page/vcs_history/history_list.rs` and `commit_detail.rs` own their view models and selection-following viewports.
-- `component/diff.rs` owns presentation `DiffState` and shares diff rendering without depending on the VCS feature.
+- `features/vcs/diff.rs` owns shared diff loading state and rendering; status and history pages compose it without repository work.
 - `AppPage` and `Context::VCS` provide shell navigation; closing a page restores the previous context.
 - No Gitoxide types enter application snapshots or Ratatui components.
 

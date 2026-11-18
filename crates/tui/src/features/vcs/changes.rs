@@ -5,7 +5,7 @@ use std::{
 
 use ::vcs::{Diff, FileChange};
 
-use crate::component::diff::DiffState;
+use super::DiffState;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub enum ChangesState {
