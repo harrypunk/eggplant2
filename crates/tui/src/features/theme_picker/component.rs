@@ -131,31 +131,68 @@ fn result_lines(
     let mut lines = Vec::new();
     let mut selected_row = None;
     for section in state.visible_sections() {
-        lines.push(Line::styled(
-            section.title,
-            surface.patch(styles.action_hint),
-        ));
-        for (index, entry) in section.entries {
-            if state.selected_index() == index {
-                selected_row = Some(lines.len());
-            }
-            let selected = state.selected_index() == index;
-            let marker = if selected { ">" } else { " " };
-            let style = if selected {
-                surface.patch(styles.selection)
-            } else {
-                surface
-            };
-            lines.push(Line::styled(format!("{marker} {}", entry.name()), style));
-        }
-        if state.discovering_provider() == Some(section.provider) {
-            lines.push(Line::styled("Loading…", surface.patch(styles.muted)));
-        }
+        let offset = lines.len();
+        let discovering = state.discovering_provider() == Some(section.provider);
+        let (mut section_lines, section_selected) = section_lines(
+            section,
+            state.selected_index(),
+            surface,
+            styles,
+            discovering,
+        );
+        selected_row = selected_row.or(section_selected.map(|row| row + offset));
+        lines.append(&mut section_lines);
     }
     if lines.is_empty() {
         lines.push(Line::styled("No matches", surface.patch(styles.muted)));
     }
     picker::visible_lines(lines, selected_row, height)
+}
+
+fn section_lines(
+    section: crate::theme_picker::ThemeSection<'_>,
+    selected_index: usize,
+    surface: ratatui::style::Style,
+    styles: &UiTheme,
+    discovering: bool,
+) -> (Vec<Line<'static>>, Option<usize>) {
+    let selected_row = section
+        .entries
+        .iter()
+        .position(|(index, _)| *index == selected_index)
+        .map(|row| row + 1);
+    let mut lines = Vec::with_capacity(section.entries.len() + 2);
+    lines.push(Line::styled(
+        section.title,
+        surface.patch(styles.action_hint),
+    ));
+    lines.extend(
+        section
+            .entries
+            .into_iter()
+            .map(|(index, entry)| entry_line(index, entry, selected_index, surface, styles)),
+    );
+    if discovering {
+        lines.push(Line::styled("Loading…", surface.patch(styles.muted)));
+    }
+    (lines, selected_row)
+}
+
+fn entry_line(
+    index: usize,
+    entry: &crate::theme_picker::ThemePickerEntry,
+    selected_index: usize,
+    surface: ratatui::style::Style,
+    styles: &UiTheme,
+) -> Line<'static> {
+    let selected = index == selected_index;
+    let marker = if selected { ">" } else { " " };
+    let style = if selected {
+        surface.patch(styles.selection)
+    } else {
+        surface
+    };
+    Line::styled(format!("{marker} {}", entry.name()), style)
 }
 
 #[cfg(test)]
@@ -224,6 +261,27 @@ mod tests {
             .collect::<String>();
         assert!(content.contains("ghostty"));
         assert!(content.contains("  local-theme"));
+    }
+
+    #[test]
+    fn section_lines_track_selection_and_loading() {
+        let first = ThemePickerEntry::ghostty("first", PathBuf::from("/themes/first"));
+        let second = ThemePickerEntry::ghostty("second", PathBuf::from("/themes/second"));
+        let section = crate::theme_picker::ThemeSection {
+            provider: ThemeProviderId::GHOSTTY,
+            title: "ghostty",
+            entries: vec![(0, &first), (1, &second)],
+        };
+        let theme = Theme::default();
+
+        let (lines, selected) = section_lines(section, 1, theme.ui().base, theme.ui(), true);
+
+        assert_eq!(selected, Some(2));
+        assert_eq!(lines.len(), 4);
+        assert_eq!(lines[0].to_string(), "ghostty");
+        assert_eq!(lines[1].to_string(), "  first");
+        assert_eq!(lines[2].to_string(), "> second");
+        assert_eq!(lines[3].to_string(), "Loading…");
     }
 
     #[test]
