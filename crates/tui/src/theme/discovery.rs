@@ -3,11 +3,11 @@ use std::{collections::BTreeMap, io::ErrorKind, path::PathBuf};
 use crate::{
     data_object::{Message, Model, StatusMessage},
     manager::effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
-    theme_picker::{ThemePickerEntry, ThemePickerState},
+    theme_picker::{ThemePickerEntry, ThemePickerState, ThemeProviderId},
 };
 
 pub fn start_discovery(state: &mut ThemePickerState) -> Option<Effect> {
-    let revision = state.begin_discovery()?;
+    let revision = state.begin_discovery(ThemeProviderId::GHOSTTY)?;
     Some(Effect::feature(DiscoveryRequest {
         revision,
         directories: local_theme_directories(),
@@ -93,12 +93,12 @@ fn discover_in(directories: &[PathBuf]) -> Result<Vec<ThemePickerEntry>, String>
             else {
                 continue;
             };
-            themes
-                .entry(name)
-                .or_insert_with(|| ThemePickerEntry::Ghostty {
-                    name: path.file_name().unwrap().to_string_lossy().into_owned(),
-                    path: path.clone(),
-                });
+            themes.entry(name).or_insert_with(|| {
+                ThemePickerEntry::ghostty(
+                    path.file_name().unwrap().to_string_lossy().into_owned(),
+                    path.clone(),
+                )
+            });
         }
     }
     Ok(themes.into_values().collect())
@@ -126,9 +126,7 @@ mod tests {
             .iter()
             .find(|entry| entry.name() == "shared")
             .unwrap();
-        let ThemePickerEntry::Ghostty { path, .. } = shared else {
-            panic!("expected Ghostty entry");
-        };
+        let path = shared.file_path().unwrap();
         assert_eq!(path, &user.path().join("shared"));
     }
 

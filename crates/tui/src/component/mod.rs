@@ -8,6 +8,7 @@ pub mod key_hints;
 pub mod notification;
 pub mod picker;
 pub mod popup;
+pub mod query_input;
 pub mod relative_time;
 pub mod search_highlight;
 pub mod status_bar;

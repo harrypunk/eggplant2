@@ -261,7 +261,7 @@ mod tests {
     }
 
     #[test]
-    fn shows_centered_theme_picker_and_hides_editor_cursor() {
+    fn shows_centered_theme_picker_with_query_cursor() {
         let backend = TestBackend::new(60, 10);
         let mut terminal = Terminal::new(backend).unwrap();
         let mut model = Model::default();
@@ -283,7 +283,7 @@ mod tests {
         assert!(content.contains("Theme"));
         assert!(content.contains("> tokyonight"));
         assert!(content.contains("catppuccin_mocha"));
-        assert!(!terminal.backend().cursor_visible());
+        assert!(terminal.backend().cursor_visible());
     }
 
     #[test]

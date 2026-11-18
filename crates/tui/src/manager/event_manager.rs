@@ -241,9 +241,22 @@ mod tests {
             Some(Message::InvokeCommand(CommandId("close_theme_picker")))
         ));
 
-        for key in [KeyCode::Char('j'), KeyCode::Char('k'), KeyCode::Char(' ')] {
-            assert!(translate(key).is_none());
+        for (key, character) in [
+            (KeyCode::Char('j'), 'j'),
+            (KeyCode::Char('k'), 'k'),
+            (KeyCode::Char(' '), ' '),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::TextInput(actual)) if actual == character
+            ));
         }
+        let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::InvokeCommand(CommandId("theme_picker_backspace")))
+        ));
     }
 
     #[test]

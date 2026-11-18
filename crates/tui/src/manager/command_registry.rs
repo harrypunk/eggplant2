@@ -364,6 +364,11 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
             crate::theme_picker::handle_command,
         ),
         Command::feature(
+            CommandId("theme_picker_backspace"),
+            "edit theme filter",
+            crate::theme_picker::handle_command,
+        ),
+        Command::feature(
             CommandId("apply_theme"),
             "apply theme",
             crate::theme_picker::handle_command,

@@ -1,6 +1,6 @@
 # Theme providers and adapter design
 
-Status: Helix and Ghostty providers, configuration, generation-checked file loading, and local theme discovery in the picker are implemented. Additional provider formats are pending.
+Status: Helix and Ghostty providers, configuration, generation-checked file loading, local theme discovery, case-insensitive picker filtering, and registered provider sections are implemented. Additional provider formats are pending.
 
 ## Purpose
 
@@ -301,6 +301,9 @@ Construct `UiTheme` directly from semantic roles. Components must not load provi
 - `ThemePickerEntry` supports built-in and local Ghostty entries with stable selection identity.
 - Opening the picker discovers user themes before system themes, suppresses duplicate names, and renders a `ghostty` section.
 - Applying a discovered entry uses the same bounded loader and active-theme fallback as startup.
+- `Query` and `QueryInput` provide case-insensitive filtering and a cursor-aware input without provider dependencies.
+- `ThemeProviderRegistry` assembles ordered `ThemeSection` values from `ThemeProviderId` metadata and filtered entries. Rendering has no provider-specific branches.
+- `ThemePickerEntry` carries provider identity and source capabilities; new file-backed providers can register and render without component changes.
 - Built-in selection keeps its existing identity; external themes may have independent display names.
 - Component-facing `Theme` and `UiTheme` APIs remain unchanged.
 

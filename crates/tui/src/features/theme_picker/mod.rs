@@ -1,13 +1,15 @@
+mod catalog;
 mod component;
 mod state;
 
+pub use catalog::{ThemeProviderId, ThemeProviderRegistry, ThemeProviderSpec, ThemeSection};
 pub use component::{ThemePicker, overlay};
 pub use state::{ThemePickerEntry, ThemePickerState};
 
 use crate::{
     config::ThemeConfig,
     data_object::{CommandId, Context, ModalController, Model, StatusMessage},
-    manager::effect::Effect,
+    manager::{effect::Effect, text_input_registry::TextInputRegistry},
     theme::Theme,
 };
 
@@ -37,6 +39,10 @@ impl ThemePickerAdapter<'_> {
                 None
             }
             "apply_theme" => self.apply(),
+            "theme_picker_backspace" => {
+                self.state.backspace_query();
+                None
+            }
             _ => {
                 *self.status = Some(StatusMessage::error(format!(
                     "unknown theme command `{}`",
@@ -66,10 +72,8 @@ impl ThemePickerAdapter<'_> {
     }
 
     fn apply(&mut self) -> Option<Effect> {
-        let state::ThemePickerEntry::Builtin(selected) = self.state.selected() else {
-            return None;
-        };
-        match Theme::from_builtin(*selected) {
+        let selected = self.state.selected().builtin_name()?;
+        match Theme::from_builtin(selected) {
             Ok(theme) => {
                 *self.theme = theme;
                 *self.status = None;
@@ -86,13 +90,34 @@ impl ThemePickerAdapter<'_> {
     }
 }
 
+pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
+    input.register(Context::ThemePicker, insert_char)
+}
+
+fn insert_char(model: &mut Model, character: char) -> Option<Effect> {
+    model.theme_picker.push_query(character);
+    None
+}
+
 /// Registered composition-root adapter for theme-picker commands.
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
+    if id.as_str() == "apply_theme" && !model.theme_picker.selection_is_visible() {
+        return None;
+    }
     if id.as_str() == "apply_theme"
-        && let state::ThemePickerEntry::Ghostty { path, .. } = model.theme_picker.selected().clone()
+        && let Some(path) = model
+            .theme_picker
+            .selected()
+            .file_path()
+            .map(std::path::Path::to_path_buf)
     {
         let source = ThemeConfig::Ghostty {
-            provider: "ghostty".to_string(),
+            provider: model
+                .theme_picker
+                .selected()
+                .provider()
+                .as_str()
+                .to_string(),
             path,
             fallback: model.theme.name().to_string(),
         };
@@ -156,7 +181,7 @@ mod tests {
         assert_eq!(model.context_stack.last(), Some(&Context::ThemePicker));
         assert_eq!(
             model.theme_picker.selected(),
-            &state::ThemePickerEntry::Builtin(ThemeName::Default)
+            &state::ThemePickerEntry::builtin(ThemeName::Default)
         );
 
         manager.update(
@@ -165,7 +190,7 @@ mod tests {
         );
         assert_eq!(
             model.theme_picker.selected(),
-            &state::ThemePickerEntry::Builtin(ThemeName::TokyoNight)
+            &state::ThemePickerEntry::builtin(ThemeName::TokyoNight)
         );
         assert!(
             manager
@@ -182,7 +207,7 @@ mod tests {
         );
         assert_eq!(
             model.theme_picker.selected(),
-            &state::ThemePickerEntry::Builtin(ThemeName::TokyoNight)
+            &state::ThemePickerEntry::builtin(ThemeName::TokyoNight)
         );
         manager.update(
             &mut model,
@@ -190,7 +215,7 @@ mod tests {
         );
         assert_eq!(
             model.theme_picker.selected(),
-            &state::ThemePickerEntry::Builtin(ThemeName::CatppuccinMocha)
+            &state::ThemePickerEntry::builtin(ThemeName::CatppuccinMocha)
         );
         manager.update(
             &mut model,
@@ -202,6 +227,41 @@ mod tests {
     }
 
     #[test]
+    fn query_input_filters_results_and_rejects_no_match_apply() {
+        let manager = MessageManager::default();
+        let mut model = Model::default();
+        model.theme_picker.open(Some(ThemeName::Default), "default");
+        model.context_stack.push(Context::ThemePicker);
+
+        for character in "xyz".chars() {
+            manager.update(&mut model, Message::TextInput(character));
+        }
+        assert_eq!(model.theme_picker.query(), "xyz");
+        assert!(model.theme_picker.visible_entries().is_empty());
+        assert!(
+            manager
+                .update(&mut model, Message::InvokeCommand(CommandId("apply_theme")))
+                .is_none()
+        );
+
+        for _ in 0..3 {
+            manager.update(
+                &mut model,
+                Message::InvokeCommand(CommandId("theme_picker_backspace")),
+            );
+        }
+        for character in "tokyo".chars() {
+            manager.update(&mut model, Message::TextInput(character));
+        }
+        assert_eq!(
+            model.theme_picker.selected(),
+            &state::ThemePickerEntry::builtin(ThemeName::TokyoNight)
+        );
+        manager.update(&mut model, Message::InvokeCommand(CommandId("apply_theme")));
+        assert_eq!(model.theme.builtin(), Some(ThemeName::TokyoNight));
+    }
+
+    #[test]
     fn ghostty_selection_loads_through_the_provider_effect() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("local-theme");
@@ -209,13 +269,16 @@ mod tests {
         let manager = MessageManager::default();
         let mut model = Model::default();
         model.theme_picker.open(Some(ThemeName::Default), "default");
-        let revision = model.theme_picker.begin_discovery().unwrap();
+        let revision = model
+            .theme_picker
+            .begin_discovery(ThemeProviderId::GHOSTTY)
+            .unwrap();
         assert!(model.theme_picker.complete_discovery(
             revision,
-            vec![state::ThemePickerEntry::Ghostty {
-                name: "local-theme".to_string(),
-                path: path.clone(),
-            }],
+            vec![state::ThemePickerEntry::ghostty(
+                "local-theme",
+                path.clone()
+            )],
         ));
         for _ in 0..3 {
             model.theme_picker.select_next();

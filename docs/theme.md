@@ -1,6 +1,6 @@
 # Theme architecture
 
-Status: living design. The application implements `default`, `tokyonight`, and `catppuccin_mocha`, exact layered syntax highlights, semantic UI styles, interactive built-in selection through `Space u t`, and generation-checked discovery of local Ghostty themes. Other user-provided formats and broader style/theming expansion are unscheduled TBD work.
+Status: living design. The application implements `default`, `tokyonight`, and `catppuccin_mocha`, exact layered syntax highlights, semantic UI styles, interactive built-in selection through `Space u t`, generation-checked discovery of local Ghostty themes, case-insensitive picker filtering, and registered provider sections. Other user-provided formats and broader style/theming expansion are unscheduled TBD work.
 
 For the proposed multi-provider boundary, see [Theme providers and adapter design](theme-providers.md).
 

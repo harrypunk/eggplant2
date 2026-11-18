@@ -201,6 +201,7 @@ impl Default for Config {
                     [
                         ("close_theme_picker", "esc"),
                         ("apply_theme", "enter"),
+                        ("theme_picker_backspace", "backspace"),
                         ("theme_picker_next", "down"),
                         ("theme_picker_previous", "up"),
                     ],

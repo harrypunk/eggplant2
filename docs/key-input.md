@@ -118,6 +118,7 @@ On an expanded directory, `h` folds that directory. On a file or collapsed direc
 | Action | Default binding |
 | --- | --- |
 | Next / previous theme | `Down` / `Ctrl-N`; `Up` / `Ctrl-P` |
+| Edit case-insensitive filter | Printable input / `Backspace` |
 | Apply / close | `Enter` / `Esc` |
 
 ### Buffer jump
