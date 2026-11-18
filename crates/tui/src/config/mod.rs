@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fs, io::ErrorKind};
+use std::{collections::HashMap, fs, io::ErrorKind, path::PathBuf};
 
 use serde::Deserialize;
 
@@ -41,13 +41,53 @@ impl Default for PageScrollConfig {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(untagged)]
+pub enum ThemeConfig {
+    Name(String),
+    Ghostty {
+        provider: String,
+        path: PathBuf,
+        #[serde(default = "default_theme_name")]
+        fallback: String,
+    },
+}
+
+impl Default for ThemeConfig {
+    fn default() -> Self {
+        Self::Name(default_theme_name())
+    }
+}
+
+impl ThemeConfig {
+    pub fn fallback_name(&self) -> &str {
+        match self {
+            Self::Name(name) => name,
+            Self::Ghostty { fallback, .. } => fallback,
+        }
+    }
+
+    pub fn fallback_theme(&self) -> color_eyre::Result<crate::theme::Theme> {
+        if let Self::Ghostty { provider, .. } = self
+            && provider != "ghostty"
+        {
+            color_eyre::eyre::bail!("unknown theme provider `{provider}`; expected `ghostty`");
+        }
+        crate::theme::Theme::from_name(self.fallback_name())
+    }
+}
+
+fn default_theme_name() -> String {
+    "default".to_string()
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 pub struct Config {
     /// crossterm event poll timeout in milliseconds
     pub event_poll_timeout: u64,
-    /// Name of a built-in theme, resolved by the TUI theme module.
-    pub theme: String,
+    /// Built-in theme name or a provider table with an explicit fallback.
+    pub theme: ThemeConfig,
     pub features: FeaturesConfig,
     pub keymap: KeymapConfig,
 }
@@ -56,7 +96,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             event_poll_timeout: 250,
-            theme: "default".to_string(),
+            theme: ThemeConfig::default(),
             features: FeaturesConfig::default(),
             keymap: HashMap::from([
                 keymap_context(
@@ -347,7 +387,7 @@ mod tests {
     fn empty_file_uses_defaults() {
         let config = Config::parse("").unwrap();
         assert_eq!(config.event_poll_timeout, 250);
-        assert_eq!(config.theme, "default");
+        assert_eq!(config.theme.fallback_name(), "default");
         assert_eq!(config.features.page_scroll.step, "75%");
     }
 
@@ -355,7 +395,7 @@ mod tests {
     fn partial_file_overrides_defaults() {
         let config = Config::parse("event_poll_timeout = 16").unwrap();
         assert_eq!(config.event_poll_timeout, 16);
-        assert_eq!(config.theme, "default");
+        assert_eq!(config.theme.fallback_name(), "default");
     }
 
     #[test]
@@ -372,6 +412,40 @@ mod tests {
     }
 
     #[test]
+    fn ghostty_provider_config_preserves_path_and_fallback() {
+        let config = Config::parse(
+            "theme = { provider = \"ghostty\", path = \"/tmp/ghostty-theme\", fallback = \"tokyonight\" }",
+        )
+        .unwrap();
+        let ThemeConfig::Ghostty {
+            provider,
+            path,
+            fallback,
+        } = &config.theme
+        else {
+            panic!("expected Ghostty provider config");
+        };
+        assert_eq!(provider, "ghostty");
+        assert_eq!(path, &PathBuf::from("/tmp/ghostty-theme"));
+        assert_eq!(fallback, "tokyonight");
+        assert_eq!(
+            config.theme.fallback_theme().unwrap().builtin(),
+            Some(crate::theme::ThemeName::TokyoNight)
+        );
+    }
+
+    #[test]
+    fn provider_config_defaults_fallback_and_rejects_unknown_providers() {
+        let config =
+            Config::parse("theme = { provider = \"ghostty\", path = \"/tmp/theme\" }").unwrap();
+        assert_eq!(config.theme.fallback_name(), "default");
+
+        let config =
+            Config::parse("theme = { provider = \"vscode\", path = \"/tmp/theme\" }").unwrap();
+        assert!(config.theme.fallback_theme().is_err());
+    }
+
+    #[test]
     fn example_file_matches_all_builtin_defaults() {
         let config = Config::parse(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -380,7 +454,7 @@ mod tests {
         .unwrap();
         let defaults = Config::default();
 
-        assert_eq!(config.theme, defaults.theme);
+        assert_eq!(config.theme.fallback_name(), defaults.theme.fallback_name());
         assert_eq!(config.event_poll_timeout, defaults.event_poll_timeout);
         assert_eq!(
             config.features.page_scroll.step,

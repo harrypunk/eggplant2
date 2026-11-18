@@ -8,7 +8,6 @@ use tui::{
     runtime,
     startup::{initial_model, startup_path_from},
     terminal,
-    theme::Theme,
     ui::UiRegistry,
 };
 
@@ -17,7 +16,7 @@ async fn main() -> color_eyre::Result<()> {
     let initial_path = startup_path_from(std::env::args_os().skip(1))?;
     let mut model = initial_model(initial_path)?;
     let config = Config::load()?;
-    model.theme = Theme::from_name(&config.theme)?;
+    model.theme = config.theme.fallback_theme()?;
     model.page_scroll = PageScroll::from_step(&config.features.page_scroll.step)?;
     let commands = CommandRegistry::builtin();
     let text_input = TextInputRegistry::builtin();
