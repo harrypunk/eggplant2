@@ -37,6 +37,18 @@ impl ThemeLoadState {
 }
 
 pub fn start_loading(source: &ThemeConfig, model: &mut Model) -> Option<Effect> {
+    start_loading_inner(source, model, None)
+}
+
+pub fn start_loading_and_persist(source: &ThemeConfig, model: &mut Model) -> Option<Effect> {
+    start_loading_inner(source, model, Some(source.clone()))
+}
+
+fn start_loading_inner(
+    source: &ThemeConfig,
+    model: &mut Model,
+    persist: Option<ThemeConfig>,
+) -> Option<Effect> {
     let ThemeConfig::Ghostty { path, .. } = source else {
         return None;
     };
@@ -45,6 +57,7 @@ pub fn start_loading(source: &ThemeConfig, model: &mut Model) -> Option<Effect> 
         path: path.clone(),
         fallback: model.theme.clone(),
         revision,
+        persist,
     }))
 }
 
@@ -52,6 +65,7 @@ struct ThemeLoadRequest {
     path: PathBuf,
     fallback: Theme,
     revision: u64,
+    persist: Option<ThemeConfig>,
 }
 
 impl FeatureEffect for ThemeLoadRequest {
@@ -60,6 +74,7 @@ impl FeatureEffect for ThemeLoadRequest {
         Message::FeatureCompletion(FeatureCompletion::new(ThemeLoadCompletion {
             revision: self.revision,
             result,
+            persist: self.persist,
         }))
     }
 }
@@ -67,6 +82,7 @@ impl FeatureEffect for ThemeLoadRequest {
 struct ThemeLoadCompletion {
     revision: u64,
     result: Result<Theme, String>,
+    persist: Option<ThemeConfig>,
 }
 
 impl Completion for ThemeLoadCompletion {
@@ -78,11 +94,15 @@ impl Completion for ThemeLoadCompletion {
             Ok(theme) => {
                 let name = theme.name().to_string();
                 model.theme = theme;
-                Some(crate::notifications::publish_status(
+                let notification = crate::notifications::publish_status(
                     model,
                     StatusMessage::info(format!("Loaded theme `{name}`")),
                     Some("Theme"),
-                ))
+                );
+                let persistence = self.persist.and_then(|config| {
+                    crate::theme::persist_theme(config, &mut model.theme_persistence)
+                });
+                Effect::combine(Some(notification), persistence)
             }
             Err(error) => Some(crate::notifications::report_status(
                 model,

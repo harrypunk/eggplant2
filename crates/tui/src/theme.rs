@@ -1,10 +1,12 @@
 mod discovery;
 pub mod ghostty;
 mod loader;
+mod persistence;
 pub mod provider;
 
 pub use discovery::start_discovery;
-pub use loader::{ThemeLoadState, start_loading};
+pub use loader::{ThemeLoadState, start_loading, start_loading_and_persist};
+pub use persistence::{ThemePersistenceState, persist_theme};
 
 use color_eyre::eyre::bail;
 use helix_core::syntax::Highlight;

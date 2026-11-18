@@ -1,6 +1,6 @@
 # Theme architecture
 
-Status: living design. The application implements `default`, `tokyonight`, and `catppuccin_mocha`, exact layered syntax highlights, semantic UI styles, interactive built-in selection through `Space u t`, generation-checked discovery of local Ghostty themes, case-insensitive picker filtering, and registered provider sections. Other user-provided formats and broader style/theming expansion are unscheduled TBD work.
+Status: living design. The application implements `default`, `tokyonight`, and `catppuccin_mocha`, exact layered syntax highlights, semantic UI styles, interactive built-in selection through `Space u t`, generation-checked discovery of local Ghostty themes, case-insensitive picker filtering, registered provider sections, and atomic persistence of the selected theme. Other user-provided formats and broader style/theming expansion are unscheduled TBD work.
 
 For the proposed multi-provider boundary, see [Theme providers and adapter design](theme-providers.md).
 
@@ -236,6 +236,12 @@ Space u t
 ```
 
 `ThemeName::ALL` is the single built-in catalog used by validation and list rendering. Applying a theme changes no buffer text, cursor, explorer selection, file-picker contents, or save state. Escape closes the picker without replacing the active theme. If embedded theme resolution unexpectedly fails, preserve the active theme and set an error status.
+
+### Selection persistence
+
+Built-in selection writes `theme = "name"` through `Config::save_theme`. Ghostty selection writes the provider/path and a valid built-in fallback. Writes run in the background and use a temporary file plus rename, preserving unrelated TOML keys.
+
+`ThemePersistenceState` allows one in-flight write and keeps only the newest trailing selection, so rapid selections cannot let an older write win. Failed loads are never persisted. Existing configuration and the active theme remain intact when a write fails.
 
 ### File-backed themes, if added later
 

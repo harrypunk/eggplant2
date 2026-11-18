@@ -353,7 +353,7 @@ impl Config {
     }
 }
 
-fn save_theme_to(path: &std::path::Path, theme: &ThemeConfig) -> Result<(), String> {
+pub(crate) fn save_theme_to(path: &std::path::Path, theme: &ThemeConfig) -> Result<(), String> {
     let mut document = match fs::read_to_string(path) {
         Ok(content) => {
             toml::from_str::<toml::Table>(&content).map_err(|error| error.to_string())?

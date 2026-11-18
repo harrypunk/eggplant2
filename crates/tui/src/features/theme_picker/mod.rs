@@ -10,13 +10,14 @@ use crate::{
     config::ThemeConfig,
     data_object::{CommandId, Context, ModalController, Model, StatusMessage},
     manager::{effect::Effect, text_input_registry::TextInputRegistry},
-    theme::Theme,
+    theme::{Theme, ThemePersistenceState},
 };
 
 /// The only application capabilities needed by theme-picker commands.
 struct ThemePickerAdapter<'a> {
     state: &'a mut ThemePickerState,
     theme: &'a mut Theme,
+    persistence: &'a mut ThemePersistenceState,
     contexts: &'a mut Vec<Context>,
     modal: &'a mut ModalController,
     status: &'a mut Option<StatusMessage>,
@@ -78,15 +79,19 @@ impl ThemePickerAdapter<'_> {
                 *self.theme = theme;
                 *self.status = None;
                 self.close();
+                crate::theme::persist_theme(
+                    ThemeConfig::Name(selected.as_str().to_string()),
+                    self.persistence,
+                )
             }
             Err(error) => {
                 *self.status = Some(StatusMessage::error(format!(
                     "failed to apply theme `{}`: {error}",
                     selected.as_str()
                 )));
+                None
             }
         }
-        None
     }
 }
 
@@ -119,13 +124,19 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
                 .as_str()
                 .to_string(),
             path,
-            fallback: model.theme.name().to_string(),
+            fallback: model
+                .theme
+                .builtin()
+                .unwrap_or_default()
+                .as_str()
+                .to_string(),
         };
-        let effect = crate::theme::start_loading(&source, model);
+        let effect = crate::theme::start_loading_and_persist(&source, model);
         if effect.is_some() {
             ThemePickerAdapter {
                 state: &mut model.theme_picker,
                 theme: &mut model.theme,
+                persistence: &mut model.theme_persistence,
                 contexts: &mut model.context_stack,
                 modal: &mut model.modal,
                 status: &mut model.status,
@@ -138,6 +149,7 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     let Model {
         theme_picker,
         theme,
+        theme_persistence,
         context_stack,
         modal,
         status,
@@ -146,6 +158,7 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     ThemePickerAdapter {
         state: theme_picker,
         theme,
+        persistence: theme_persistence,
         contexts: context_stack,
         modal,
         status,
@@ -195,7 +208,7 @@ mod tests {
         assert!(
             manager
                 .update(&mut model, Message::InvokeCommand(CommandId("apply_theme")))
-                .is_none()
+                .is_some()
         );
         assert_eq!(model.theme.builtin(), Some(ThemeName::TokyoNight));
         assert!(!model.theme_picker.is_open());

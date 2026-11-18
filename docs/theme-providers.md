@@ -1,6 +1,6 @@
 # Theme providers and adapter design
 
-Status: Helix and Ghostty providers, configuration, generation-checked file loading, local theme discovery, case-insensitive picker filtering, and registered provider sections are implemented. Additional provider formats are pending.
+Status: Helix and Ghostty providers, configuration, generation-checked file loading, local theme discovery, case-insensitive picker filtering, registered provider sections, and atomic selection persistence are implemented. Additional provider formats are pending.
 
 ## Purpose
 
@@ -304,6 +304,8 @@ Construct `UiTheme` directly from semantic roles. Components must not load provi
 - `Query` and `QueryInput` provide case-insensitive filtering and a cursor-aware input without provider dependencies.
 - `ThemeProviderRegistry` assembles ordered `ThemeSection` values from `ThemeProviderId` metadata and filtered entries. Rendering has no provider-specific branches.
 - `ThemePickerEntry` carries provider identity and source capabilities; new file-backed providers can register and render without component changes.
+- `Config::save_theme` atomically updates only the theme setting while preserving unrelated TOML values.
+- `ThemePersistenceState` allows one in-flight save plus a trailing latest selection, so older writes cannot win. Ghostty sources persist only after a valid load.
 - Built-in selection keeps its existing identity; external themes may have independent display names.
 - Component-facing `Theme` and `UiTheme` APIs remain unchanged.
 

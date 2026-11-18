@@ -50,7 +50,7 @@ pub mod data_object {
         line_jump::LineJumpState,
         project_grep::ProjectGrepState,
         register::RegisterState,
-        theme::{Theme, ThemeLoadState},
+        theme::{Theme, ThemeLoadState, ThemePersistenceState},
         theme_picker::ThemePickerState,
         tools::ToolsPanelState,
         vcs::VcsState,
@@ -137,6 +137,7 @@ pub mod data_object {
         pub context_stack: Vec<Context>,
         pub theme: Theme,
         pub theme_loading: ThemeLoadState,
+        pub theme_persistence: ThemePersistenceState,
 
         // Transient feedback, popup, and save-dependent workflows.
         pub status: Option<StatusMessage>,
@@ -176,6 +177,7 @@ pub mod data_object {
                 context_stack: Vec::new(),
                 theme: Theme::default(),
                 theme_loading: ThemeLoadState::default(),
+                theme_persistence: ThemePersistenceState::default(),
                 status: None,
                 notifications: NotificationCenter::default(),
                 pending_input: None,
