@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fs, io::ErrorKind, path::PathBuf};
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 const DEFAULT_FOLDER: &str = ".eggplant";
 const CONFIG_FILE: &str = "config.toml";
@@ -41,7 +41,7 @@ impl Default for PageScrollConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum ThemeConfig {
     Name(String),
@@ -344,6 +344,37 @@ impl Config {
             Err(e) => Err(e.into()),
         }
     }
+    /// Atomically replace only the theme setting, preserving unrelated TOML values.
+    pub fn save_theme(theme: ThemeConfig) -> Result<(), String> {
+        let path = std::env::home_dir()
+            .map(|home| home.join(DEFAULT_FOLDER).join(CONFIG_FILE))
+            .ok_or_else(|| "home directory is unavailable".to_string())?;
+        save_theme_to(&path, &theme)
+    }
+}
+
+fn save_theme_to(path: &std::path::Path, theme: &ThemeConfig) -> Result<(), String> {
+    let mut document = match fs::read_to_string(path) {
+        Ok(content) => {
+            toml::from_str::<toml::Table>(&content).map_err(|error| error.to_string())?
+        }
+        Err(error) if error.kind() == ErrorKind::NotFound => toml::Table::new(),
+        Err(error) => return Err(error.to_string()),
+    };
+    document.insert(
+        "theme".to_string(),
+        toml::Value::try_from(theme).map_err(|error| error.to_string())?,
+    );
+    let content = toml::to_string(&document).map_err(|error| error.to_string())?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
+    }
+    let temporary = path.with_extension("tmp");
+    fs::write(&temporary, content).map_err(|error| error.to_string())?;
+    fs::rename(&temporary, path).map_err(|error| {
+        let _ = fs::remove_file(&temporary);
+        error.to_string()
+    })
 }
 
 #[cfg(test)]
@@ -410,6 +441,46 @@ mod tests {
         let config =
             Config::parse("theme = { provider = \"vscode\", path = \"/tmp/theme\" }").unwrap();
         assert!(config.theme.fallback_theme().is_err());
+    }
+
+    #[test]
+    fn save_theme_preserves_unrelated_toml_values() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("config.toml");
+        fs::write(
+            &path,
+            "theme = \"default\"\ncustom_key = \"keep\"\n[keymap.normal]\nundo = \"ctrl-z\"\n",
+        )
+        .unwrap();
+        save_theme_to(&path, &ThemeConfig::Name("tokyonight".to_string())).unwrap();
+
+        let document = fs::read_to_string(&path).unwrap();
+        let config = Config::parse(&document).unwrap();
+        assert_eq!(config.theme.fallback_name(), "tokyonight");
+        assert!(document.contains("custom_key = \"keep\""));
+        assert_eq!(config.keymap["normal"]["undo"], "ctrl-z");
+
+        save_theme_to(
+            &path,
+            &ThemeConfig::Ghostty {
+                provider: "ghostty".to_string(),
+                path: PathBuf::from("/tmp/ghostty-theme"),
+                fallback: "catppuccin_mocha".to_string(),
+            },
+        )
+        .unwrap();
+        let config = Config::parse(&fs::read_to_string(&path).unwrap()).unwrap();
+        let ThemeConfig::Ghostty {
+            provider,
+            path,
+            fallback,
+        } = config.theme
+        else {
+            panic!("expected persisted Ghostty config");
+        };
+        assert_eq!(provider, "ghostty");
+        assert_eq!(path, PathBuf::from("/tmp/ghostty-theme"));
+        assert_eq!(fallback, "catppuccin_mocha");
     }
 
     #[test]
