@@ -9,6 +9,7 @@ event_poll_timeout = 250
 step = "75%"
 
 # Keymaps map action names to key bindings.
+# Esc and Backspace are built-in common behavior and need no entries here.
 # Supported modifiers: ctrl, alt, and shift (for example, "ctrl-q").
 # Custom bindings merge with built-in defaults by context and action. Override only
 # what you want to change; unspecified bindings remain enabled.
@@ -51,8 +52,6 @@ paste_after = "p"
 paste_before = "shift-p"
 
 [keymap.editor_input]
-exit_insert_mode = "esc"
-backspace = "backspace"
 insert_newline = "enter"
 move_left = "left"
 move_right = "right"
@@ -60,7 +59,6 @@ move_up = "up"
 move_down = "down"
 
 [keymap.visual]
-exit_visual_mode = "esc"
 move_left = "h"
 move_right = "l"
 move_up = "k"
@@ -74,12 +72,6 @@ delete_selection_x = "x"
 delete_selection_d = "d"
 change_selection = "c"
 yank_selection = "y"
-
-[keymap.change]
-change_cancel = "esc"
-
-[keymap.yank]
-yank_cancel = "esc"
 
 [keymap.explorer]
 explorer_next = "j"
@@ -95,48 +87,26 @@ refresh_explorer = "r"
 toggle_ignored_files = "shift-i"
 
 [keymap.file_picker]
-close_file_picker = "esc"
-file_picker_backspace = "backspace"
 open_picker_file = "enter"
 file_picker_next = "down"
 file_picker_previous = "up"
 
 [keymap.theme_picker]
-close_theme_picker = "esc"
 apply_theme = "enter"
-theme_picker_backspace = "backspace"
 theme_picker_next = "down"
 theme_picker_previous = "up"
 
-[keymap.buffer_jump]
-buffer_jump_cancel = "esc"
-buffer_jump_backspace = "backspace"
-
-[keymap.buffer_navigation]
-buffer_navigation_cancel = "esc"
-
 [keymap.buffer_grep]
-buffer_grep_close = "esc"
-buffer_grep_backspace = "backspace"
 buffer_grep_next = "down"
 buffer_grep_previous = "up"
 buffer_grep_accept = "enter"
 
 [keymap.project_grep]
-project_grep_close = "esc"
-project_grep_backspace = "backspace"
 project_grep_next = "down"
 project_grep_previous = "up"
 project_grep_accept = "enter"
 
-[keymap.line_jump]
-line_jump_cancel = "esc"
-
-[keymap.view_align]
-view_align_cancel = "esc"
-
 [keymap.vcs]
-close_vcs_page = "esc"
 close_vcs_page_q = "q"
 vcs_next_change = "j"
 vcs_previous_change = "k"
@@ -154,21 +124,16 @@ vcs_merge_start = "m"
 vcs_branch_menu = "b"
 
 [keymap.vcs_merge]
-vcs_merge_cancel = "esc"
 vcs_merge_submit = "enter"
-vcs_merge_backspace = "backspace"
 vcs_merge_next = "down"
 vcs_merge_previous = "up"
 
 [keymap.vcs_branch_menu]
-vcs_branch_menu_close = "esc"
 vcs_branch_create = "c"
 vcs_branch_switch = "s"
 
 [keymap.vcs_branch]
-vcs_branch_cancel = "esc"
 vcs_branch_submit = "enter"
-vcs_branch_backspace = "backspace"
 vcs_branch_next = "down"
 vcs_branch_previous = "up"
 
@@ -202,8 +167,6 @@ redo = "ctrl-r"
 [keymap.vcs_commit_input]
 vcs_commit_discard = "ctrl-c"
 vcs_commit_submit = "ctrl-s"
-exit_insert_mode = "esc"
-backspace = "backspace"
 insert_newline = "enter"
 move_left = "left"
 move_right = "right"
@@ -211,7 +174,6 @@ move_up = "up"
 move_down = "down"
 
 [keymap.vcs_history]
-close_vcs_history = "esc"
 close_vcs_history_q = "q"
 vcs_history_next = "j"
 vcs_history_previous = "k"

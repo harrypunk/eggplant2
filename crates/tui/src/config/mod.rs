@@ -10,7 +10,7 @@ const CONFIG_FILE: &str = "config.toml";
 /// Validation and conversion into runtime keybindings happen in the keymap registry.
 pub type KeymapConfig = HashMap<String, HashMap<String, String>>;
 
-fn keymap_context<const N: usize>(
+pub(crate) fn keymap_context<const N: usize>(
     name: &str,
     bindings: [(&str, &str); N],
 ) -> (String, HashMap<String, String>) {
@@ -142,8 +142,6 @@ impl Default for Config {
                 keymap_context(
                     "editor_input",
                     [
-                        ("exit_insert_mode", "esc"),
-                        ("backspace", "backspace"),
                         ("insert_newline", "enter"),
                         ("move_left", "left"),
                         ("move_right", "right"),
@@ -154,7 +152,6 @@ impl Default for Config {
                 keymap_context(
                     "visual",
                     [
-                        ("exit_visual_mode", "esc"),
                         ("move_left", "h"),
                         ("move_right", "l"),
                         ("move_up", "k"),
@@ -189,8 +186,6 @@ impl Default for Config {
                 keymap_context(
                     "file_picker",
                     [
-                        ("close_file_picker", "esc"),
-                        ("file_picker_backspace", "backspace"),
                         ("open_picker_file", "enter"),
                         ("file_picker_next", "down"),
                         ("file_picker_previous", "up"),
@@ -199,26 +194,15 @@ impl Default for Config {
                 keymap_context(
                     "theme_picker",
                     [
-                        ("close_theme_picker", "esc"),
                         ("apply_theme", "enter"),
-                        ("theme_picker_backspace", "backspace"),
                         ("theme_picker_next", "down"),
                         ("theme_picker_previous", "up"),
                     ],
                 ),
-                keymap_context(
-                    "buffer_jump",
-                    [
-                        ("buffer_jump_cancel", "esc"),
-                        ("buffer_jump_backspace", "backspace"),
-                    ],
-                ),
-                keymap_context("buffer_navigation", [("buffer_navigation_cancel", "esc")]),
+                keymap_context("buffer_jump", []),
                 keymap_context(
                     "buffer_grep",
                     [
-                        ("buffer_grep_close", "esc"),
-                        ("buffer_grep_backspace", "backspace"),
                         ("buffer_grep_next", "down"),
                         ("buffer_grep_previous", "up"),
                         ("buffer_grep_accept", "enter"),
@@ -227,17 +211,11 @@ impl Default for Config {
                 keymap_context(
                     "project_grep",
                     [
-                        ("project_grep_close", "esc"),
-                        ("project_grep_backspace", "backspace"),
                         ("project_grep_next", "down"),
                         ("project_grep_previous", "up"),
                         ("project_grep_accept", "enter"),
                     ],
                 ),
-                keymap_context("line_jump", [("line_jump_cancel", "esc")]),
-                keymap_context("view_align", [("view_align_cancel", "esc")]),
-                keymap_context("change", [("change_cancel", "esc")]),
-                keymap_context("yank", [("yank_cancel", "esc")]),
                 keymap_context(
                     "vcs_commit",
                     [
@@ -273,8 +251,6 @@ impl Default for Config {
                     [
                         ("vcs_commit_discard", "ctrl-c"),
                         ("vcs_commit_submit", "ctrl-s"),
-                        ("exit_insert_mode", "esc"),
-                        ("backspace", "backspace"),
                         ("insert_newline", "enter"),
                         ("move_left", "left"),
                         ("move_right", "right"),
@@ -285,7 +261,6 @@ impl Default for Config {
                 keymap_context(
                     "vcs_history",
                     [
-                        ("close_vcs_history", "esc"),
                         ("close_vcs_history_q", "q"),
                         ("vcs_history_next", "j"),
                         ("vcs_history_previous", "k"),
@@ -299,27 +274,19 @@ impl Default for Config {
                 keymap_context(
                     "vcs_merge",
                     [
-                        ("vcs_merge_cancel", "esc"),
                         ("vcs_merge_submit", "enter"),
-                        ("vcs_merge_backspace", "backspace"),
                         ("vcs_merge_next", "down"),
                         ("vcs_merge_previous", "up"),
                     ],
                 ),
                 keymap_context(
                     "vcs_branch_menu",
-                    [
-                        ("vcs_branch_menu_close", "esc"),
-                        ("vcs_branch_create", "c"),
-                        ("vcs_branch_switch", "s"),
-                    ],
+                    [("vcs_branch_create", "c"), ("vcs_branch_switch", "s")],
                 ),
                 keymap_context(
                     "vcs_branch",
                     [
-                        ("vcs_branch_cancel", "esc"),
                         ("vcs_branch_submit", "enter"),
-                        ("vcs_branch_backspace", "backspace"),
                         ("vcs_branch_next", "down"),
                         ("vcs_branch_previous", "up"),
                     ],
@@ -327,7 +294,6 @@ impl Default for Config {
                 keymap_context(
                     "vcs",
                     [
-                        ("close_vcs_page", "esc"),
                         ("close_vcs_page_q", "q"),
                         ("vcs_next_change", "j"),
                         ("vcs_previous_change", "k"),
@@ -444,6 +410,15 @@ mod tests {
         let config =
             Config::parse("theme = { provider = \"vscode\", path = \"/tmp/theme\" }").unwrap();
         assert!(config.theme.fallback_theme().is_err());
+    }
+
+    #[test]
+    fn defaults_omit_escape_and_backspace_bindings() {
+        assert!(Config::default().keymap.values().all(|bindings| {
+            bindings
+                .values()
+                .all(|binding| binding != "esc" && binding != "backspace")
+        }));
     }
 
     #[test]

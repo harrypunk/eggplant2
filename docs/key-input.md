@@ -30,7 +30,6 @@ Available in Normal and Explorer contexts unless noted otherwise.
 | Normal / Explorer | Close current buffer | `Space b c` |
 | Normal / Explorer | Close other buffers / buffers to the right | `Space b o` / `Space b r` |
 | Normal / Explorer | Close all buffers | `Space b a` |
-| Pending buffer navigation | Cancel | `Esc` |
 
 ### Focus and scrolling
 
@@ -53,8 +52,6 @@ Available in Normal and Explorer contexts.
 | Last line / line N | `G` / `[count]G` |
 | Center / top / bottom cursor line | `zz` / `zt` / `zb` |
 | Start visible-buffer jump | `s` |
-| Cancel pending line jump | `Esc` |
-| Cancel pending viewport alignment | `Esc` |
 
 ### Normal mode: editing and selection
 
@@ -66,9 +63,7 @@ Available in Normal and Explorer contexts.
 | Start characterwise / linewise Visual selection | `v` / `V` |
 | Delete grapheme / line / word | `x` / `dd` / `dw` |
 | Change line / word and enter Insert | `cc` / `cw` |
-| Cancel pending delete/change | `Esc` |
 | Yank current line | `yy` |
-| Cancel pending yank | `Esc` |
 | Paste after / before cursor | `p` / `P` |
 | Undo / redo | `u` / `Ctrl-R` |
 
@@ -78,8 +73,6 @@ Paste uses the shared register and reads the system clipboard when available.
 
 | Action | Default binding |
 | --- | --- |
-| Return to Normal | `Esc` |
-| Backspace / newline | `Backspace` / `Enter` |
 | Move cursor | Arrow keys |
 
 ### Visual mode
@@ -87,7 +80,6 @@ Paste uses the shared register and reads the system clipboard when available.
 | Action | Default binding |
 | --- | --- |
 | Extend selection with movement keys | `h`/`j`/`k`/`l`, `w`/`b`/`e`, `0`/`$`, `[count]gg`/`G` |
-| Return to Normal | `Esc` |
 | Delete selection | `x` or `d` |
 | Change selection | `c` |
 | Yank selection and return to Normal | `y` |
@@ -109,40 +101,31 @@ On an expanded directory, `h` folds that directory. On a file or collapsed direc
 
 | Action | Default binding |
 | --- | --- |
-| Edit query | Printable input / `Backspace` |
 | Next / previous result | `Down` / `Ctrl-N`; `Up` / `Ctrl-P` |
-| Open / close | `Enter` / `Esc` |
 
 ### Theme picker
 
 | Action | Default binding |
 | --- | --- |
 | Next / previous theme | `Down` / `Ctrl-N`; `Up` / `Ctrl-P` |
-| Edit case-insensitive filter | Printable input / `Backspace` |
-| Apply / close | `Enter` / `Esc` |
 
 ### Buffer jump
 
 | Action | Default binding |
 | --- | --- |
 | Enter smart-case pattern, then label | Printable input |
-| Edit input / cancel | `Backspace` / `Esc` |
 
 ### Current-buffer grep
 
 | Action | Default binding |
 | --- | --- |
-| Edit smart-case regex | Printable input / `Backspace` |
 | Next / previous result | `Down` / `Ctrl-N`; `Up` / `Ctrl-P` |
-| Jump to match / close | `Enter` / `Esc` |
 
 ### Project grep
 
 | Action | Default binding |
 | --- | --- |
-| Edit smart-case regex | Printable input / `Backspace` |
 | Next / previous result | `Down` / `Ctrl-N`; `Up` / `Ctrl-P` |
-| Open match / close | `Enter` / `Esc` |
 
 #### Shared picker and search navigation
 
@@ -154,13 +137,11 @@ File/theme pickers and both live-grep lists wrap from first to last and last to 
 
 | Action | Default binding |
 | --- | --- |
-| Close and return to editor | `q` / `Esc` |
 | Select previous / next changed file | `k` / `j` |
 | Open selected changed file | `Enter` |
 | Stage / unstage selected file | `s` / `u` |
 | Stage all / unstage all | `Ctrl-S` / `U` |
 | Toggle inline diff for selected file | `Tab` |
-| Toggle bottom help panel / dismiss help | `?` / `Esc` |
 | Open history page | `l` |
 | Open commit-message page for staged changes | `c` |
 | Open bottom branch actions | `b` |
@@ -172,7 +153,6 @@ File/theme pickers and both live-grep lists wrap from first to last and last to 
 | Action | Default binding |
 | --- | --- |
 | Create new branch / switch existing branch | `c` / `s` |
-| Close branch actions | `Esc` |
 
 ### VCS branch selector
 
@@ -181,8 +161,6 @@ File/theme pickers and both live-grep lists wrap from first to last and last to 
 | Filter branches or enter a short/full commit start point | Printable characters |
 | Select next / previous start point or branch | `Down` / `Up` |
 | Accept selection or submit new branch name | `Enter` |
-| Delete previous filter/name character | `Backspace` |
-| Close before repository mutation starts | `Esc` |
 
 ### VCS merge selector
 
@@ -190,15 +168,12 @@ File/theme pickers and both live-grep lists wrap from first to last and last to 
 | --- | --- |
 | Type to filter branches | Printable characters |
 | Select next / previous branch | `Down` / `Up` |
-| Delete previous filter character | `Backspace` |
 | Submit selected target | `Enter` |
-| Close without merging | `Esc` |
 
 ### VCS history and commit detail
 
 | Context | Action | Default binding |
 | --- | --- | --- |
-| History | Close and return to Git status | `q` / `Esc` |
 | History | Select previous / next commit | `k` / `j` |
 | History / detail | Jump to first / last commit or detail file | `gg` / `G` (no counts) |
 | History / detail | Toggle commit files / selected detail-file diff | `Tab` |
@@ -214,13 +189,15 @@ File/theme pickers and both live-grep lists wrap from first to last and last to 
 | Commit staged changes from Normal or Insert | `Ctrl-S` |
 | Close in Normal mode and preserve the draft | `q` |
 | Discard the draft from Normal or Insert | `Ctrl-C` |
-| Enter Insert / return to Normal | `i` / `Esc` |
-| Insert newline / backspace | `Enter` / `Backspace` |
 | Normal movement | `h`/`j`/`k`/`l`, `w`/`b`/`e`, `0`/`$` |
 | Normal insert variants | `a`/`A`/`I`, `o`/`O` |
 | Delete grapheme / line / word | `x` / `dd` / `dw` |
 | Yank current line / paste after / paste before | `yy` / `p` / `P` |
 | Undo / redo | `u` / `Ctrl-R` |
+
+## Common input behavior
+
+Escape cancels the active popup or prefix, or returns to Normal mode where appropriate. Backspace edits the current query. These common behaviors are built into input routing and require no configuration entries.
 
 ## Configuration
 

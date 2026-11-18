@@ -207,6 +207,44 @@ mod tests {
     }
 
     #[test]
+    fn common_escape_and_backspace_work_without_configured_entries() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::ThemePicker);
+        assert!(matches!(
+            manager.translate(
+                Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)),
+                &model,
+            ),
+            Some(Message::InvokeCommand(CommandId("close_theme_picker")))
+        ));
+        assert!(matches!(
+            manager.translate(
+                Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE)),
+                &model,
+            ),
+            Some(Message::InvokeCommand(CommandId("theme_picker_backspace")))
+        ));
+
+        model.context_stack.pop();
+        model.context_stack.push(Context::EditorInput);
+        assert!(matches!(
+            manager.translate(
+                Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)),
+                &model,
+            ),
+            Some(Message::InvokeCommand(CommandId("exit_insert_mode")))
+        ));
+        assert!(matches!(
+            manager.translate(
+                Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE)),
+                &model,
+            ),
+            Some(Message::InvokeCommand(CommandId("backspace")))
+        ));
+    }
+
+    #[test]
     fn routes_only_theme_picker_navigation_and_actions() {
         let manager = event_manager();
         let mut model = Model::default();

@@ -3,7 +3,7 @@ use std::collections::{HashMap, hash_map::Entry};
 use color_eyre::eyre::eyre;
 
 use crate::{
-    config::KeymapConfig,
+    config::{KeymapConfig, keymap_context},
     data_object::{CommandId, Context},
     manager::{
         command_registry::CommandRegistry,
@@ -25,7 +25,20 @@ impl Registry {
         config: &KeymapConfig,
         commands: &CommandRegistry,
     ) -> color_eyre::Result<Self> {
+        let config = common_bindings().into_iter().chain(
+            config
+                .iter()
+                .map(|(context, bindings)| (context.clone(), bindings.clone())),
+        );
         config
+            .into_iter()
+            .fold(
+                HashMap::<String, HashMap<String, String>>::new(),
+                |mut merged, (context, bindings)| {
+                    merged.entry(context).or_default().extend(bindings);
+                    merged
+                },
+            )
             .iter()
             .map(|(context_name, bindings)| {
                 parse_context_bindings(context_name, bindings, commands)
@@ -38,6 +51,77 @@ impl Registry {
     pub fn get_binding(&self, context: &Context) -> Option<&ContextBindings> {
         self.bindings.get(context)
     }
+}
+
+fn common_bindings() -> KeymapConfig {
+    HashMap::from([
+        keymap_context(
+            "editor_input",
+            [("exit_insert_mode", "esc"), ("backspace", "backspace")],
+        ),
+        keymap_context("visual", [("exit_visual_mode", "esc")]),
+        keymap_context(
+            "file_picker",
+            [
+                ("close_file_picker", "esc"),
+                ("file_picker_backspace", "backspace"),
+            ],
+        ),
+        keymap_context(
+            "theme_picker",
+            [
+                ("close_theme_picker", "esc"),
+                ("theme_picker_backspace", "backspace"),
+            ],
+        ),
+        keymap_context(
+            "buffer_jump",
+            [
+                ("buffer_jump_cancel", "esc"),
+                ("buffer_jump_backspace", "backspace"),
+            ],
+        ),
+        keymap_context("buffer_navigation", [("buffer_navigation_cancel", "esc")]),
+        keymap_context(
+            "buffer_grep",
+            [
+                ("buffer_grep_close", "esc"),
+                ("buffer_grep_backspace", "backspace"),
+            ],
+        ),
+        keymap_context(
+            "project_grep",
+            [
+                ("project_grep_close", "esc"),
+                ("project_grep_backspace", "backspace"),
+            ],
+        ),
+        keymap_context("line_jump", [("line_jump_cancel", "esc")]),
+        keymap_context("view_align", [("view_align_cancel", "esc")]),
+        keymap_context("change", [("change_cancel", "esc")]),
+        keymap_context("yank", [("yank_cancel", "esc")]),
+        keymap_context(
+            "vcs_commit_input",
+            [("exit_insert_mode", "esc"), ("backspace", "backspace")],
+        ),
+        keymap_context("vcs_history", [("close_vcs_history", "esc")]),
+        keymap_context(
+            "vcs_merge",
+            [
+                ("vcs_merge_cancel", "esc"),
+                ("vcs_merge_backspace", "backspace"),
+            ],
+        ),
+        keymap_context("vcs_branch_menu", [("vcs_branch_menu_close", "esc")]),
+        keymap_context(
+            "vcs_branch",
+            [
+                ("vcs_branch_cancel", "esc"),
+                ("vcs_branch_backspace", "backspace"),
+            ],
+        ),
+        keymap_context("vcs", [("close_vcs_page", "esc")]),
+    ])
 }
 
 fn parse_context_bindings(
