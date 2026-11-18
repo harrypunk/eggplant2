@@ -107,6 +107,7 @@ pub struct UiTheme {
     pub(crate) focused_border: Style,
     pub(crate) error: Style,
     pub(crate) file_path: Style,
+    pub(crate) vcs_branch: Style,
     pub(crate) diff_add: Style,
     pub(crate) diff_remove: Style,
     pub(crate) diff_hunk: Style,
@@ -147,6 +148,11 @@ impl UiTheme {
             file_path: source_style(source, "ui.text.directory")
                 .or_else(|| source_style(source, "ui.text"))
                 .unwrap_or_else(|| Style::new().fg(Color::Cyan)),
+            vcs_branch: source_style(source, "ui.vcs.branch")
+                .or_else(|| source_style(source, "ui.virtual.inlay-hint"))
+                .or_else(|| source_style(source, "ui.help"))
+                .unwrap_or_default()
+                .add_modifier(Modifier::BOLD),
             diff_add: source_style(source, "diff.plus")
                 .unwrap_or_else(|| Style::new().fg(Color::Green)),
             diff_remove: source_style(source, "diff.minus")

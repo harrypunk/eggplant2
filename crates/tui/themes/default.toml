@@ -20,7 +20,8 @@ error = { fg = "red" }
 "diff.delta" = { fg = "light-blue" }
 "ui.background" = { bg = "black" }
 "ui.text" = { fg = "white" }
-"ui.text.directory" = { fg = "light-blue" }
+"ui.text.directory" = { fg = "gray" }
+"ui.vcs.branch" = { fg = "light-magenta", modifiers = ["bold"] }
 "ui.linenr" = {}
 "ui.menu.selected" = { modifiers = ["reversed"] }
 "ui.popup" = {}

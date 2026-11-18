@@ -266,7 +266,7 @@ fn render_status(model: &Model, frame: &mut Frame, area: Rect) {
     frame.render_widget(
         StatusBar::new(
             model.editor.mode(),
-            model.vcs.head().unwrap_or("--"),
+            model.vcs.head(),
             &file_path,
             &time,
             model.status.as_ref(),

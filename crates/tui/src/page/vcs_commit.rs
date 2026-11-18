@@ -61,7 +61,7 @@ impl VcsCommit {
         frame.render_widget(
             StatusBar::new(
                 mode,
-                "",
+                None,
                 "Commit message",
                 "",
                 model.status.as_ref(),

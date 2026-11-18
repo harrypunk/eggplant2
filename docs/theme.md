@@ -69,9 +69,12 @@ The adapter maps existing UI scopes to Eggplant's semantic roles, for example:
 | Diff additions/deletions/hunks | `diff.plus`, `diff.minus`, `diff.delta` | Green, red, and light-blue respectively. |
 | Action hint | `ui.virtual.jump-label` | `ui.help`, then bold light-blue. |
 | File path | `ui.text.directory` | `ui.text`, then cyan. |
+| VCS branch | `ui.vcs.branch` | `ui.virtual.inlay-hint`, then `ui.help`, then bold base text. |
 | Panel border | `ui.window` | Base foreground. |
 
 The adapter owns this mapping and its fallbacks. Components still see only resolved semantic roles. Unsupported Helix features can initially produce warnings or documented fallbacks; they must not cause per-component color branches.
+
+The status bar uses `vcs_branch` for repository identity and `file_path` for the active path. Built-in themes give the path subdued palette values so it remains secondary to editor text, while the branch retains a distinct accent. An absent identity (`None`) remains muted; `--` is only the placeholder rendered for that absence.
 
 ### Preserve exact syntax scopes for faithful themes
 
@@ -128,6 +131,7 @@ struct UiTheme {
     focused_border: Style,
     error: Style,
     file_path: Style,
+    vcs_branch: Style,
     action_hint: Style,
     key_hint: Style,
 }

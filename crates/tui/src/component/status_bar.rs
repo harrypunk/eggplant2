@@ -19,7 +19,7 @@ const CLOCK_WIDTH: u16 = 6;
 #[derive(Debug, Clone, Copy)]
 pub struct StatusBar<'a> {
     mode: EditMode,
-    vcs: &'a str,
+    vcs: Option<&'a str>,
     file_path: &'a str,
     time: &'a str,
     message: Option<&'a StatusMessage>,
@@ -30,7 +30,7 @@ pub struct StatusBar<'a> {
 impl<'a> StatusBar<'a> {
     pub fn new(
         mode: EditMode,
-        vcs: &'a str,
+        vcs: Option<&'a str>,
         file_path: &'a str,
         time: &'a str,
         message: Option<&'a StatusMessage>,
@@ -61,7 +61,10 @@ impl Widget for StatusBar<'_> {
         let pending_width = self
             .pending_input
             .map_or(0, |pending| pending.len() as u16 + 1);
-        let vcs = format!(" {} ", self.vcs);
+        let vcs = format!(" {} ", self.vcs.unwrap_or("--"));
+        let vcs_style = self
+            .vcs
+            .map_or(self.styles.muted, |_| self.styles.vcs_branch);
         let vcs_width = (vcs.width() as u16).min(MAX_VCS_WIDTH);
         let [mode_area, vcs_area, path_area, pending_area, time_area] = Layout::horizontal([
             Constraint::Length(mode.len() as u16 + 2),
@@ -81,11 +84,11 @@ impl Widget for StatusBar<'_> {
                 .add_modifier(Modifier::BOLD),
         ))
         .render(mode_area, buf);
-        Paragraph::new(Span::styled(vcs, self.styles.muted)).render(vcs_area, buf);
+        Paragraph::new(Span::styled(vcs, self.styles.base.patch(vcs_style))).render(vcs_area, buf);
 
         let mut middle = vec![Span::styled(
             format!(" {}", self.file_path),
-            self.styles.muted,
+            self.styles.base.patch(self.styles.file_path),
         )];
         if let Some(message) = self.message {
             let style = match message.kind {
@@ -113,7 +116,7 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend};
 
     use super::*;
-    use crate::theme::Theme;
+    use crate::theme::{Theme, ThemeName};
 
     #[test]
     fn renders_current_mode() {
@@ -136,7 +139,7 @@ mod tests {
             terminal
                 .draw(|frame| {
                     frame.render_widget(
-                        StatusBar::new(mode, "--", "", "14:05", None, None, theme.ui()),
+                        StatusBar::new(mode, None, "", "14:05", None, None, theme.ui()),
                         frame.area(),
                     )
                 })
@@ -153,39 +156,69 @@ mod tests {
     }
 
     #[test]
-    fn path_grows_and_clock_stays_right_aligned() {
-        let theme = Theme::default();
-        let backend = TestBackend::new(60, 1);
-        let mut terminal = Terminal::new(backend).unwrap();
+    fn path_grows_and_clock_stays_right_aligned_with_semantic_styles() {
+        for name in ThemeName::ALL {
+            let theme = Theme::from_builtin(name).unwrap();
+            let backend = TestBackend::new(60, 1);
+            let mut terminal = Terminal::new(backend).unwrap();
 
+            terminal
+                .draw(|frame| {
+                    frame.render_widget(
+                        StatusBar::new(
+                            EditMode::Normal,
+                            Some("main"),
+                            "src/main.rs",
+                            "14:05",
+                            None,
+                            None,
+                            theme.ui(),
+                        ),
+                        frame.area(),
+                    );
+                })
+                .unwrap();
+
+            let content = terminal
+                .backend()
+                .buffer()
+                .content()
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect::<String>();
+            assert_eq!(&content[0..8], " NORMAL ");
+            assert_eq!(&content[8..14], " main ");
+            assert!(content[14..54].starts_with(" src/main.rs"));
+            assert_eq!(&content[54..60], " 14:05");
+            assert_eq!(
+                terminal.backend().buffer()[(8, 0)].fg,
+                theme.ui().vcs_branch.fg.unwrap()
+            );
+            assert_eq!(
+                terminal.backend().buffer()[(15, 0)].fg,
+                theme.ui().file_path.fg.unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn missing_vcs_identity_stays_muted() {
+        let theme = Theme::default();
+        let backend = TestBackend::new(20, 1);
+        let mut terminal = Terminal::new(backend).unwrap();
         terminal
             .draw(|frame| {
                 frame.render_widget(
-                    StatusBar::new(
-                        EditMode::Normal,
-                        "main",
-                        "src/main.rs",
-                        "14:05",
-                        None,
-                        None,
-                        theme.ui(),
-                    ),
+                    StatusBar::new(EditMode::Normal, None, "", "14:05", None, None, theme.ui()),
                     frame.area(),
                 );
             })
             .unwrap();
 
-        let content = terminal
-            .backend()
-            .buffer()
-            .content()
-            .iter()
-            .map(|cell| cell.symbol())
-            .collect::<String>();
-        assert_eq!(&content[0..8], " NORMAL ");
-        assert_eq!(&content[8..14], " main ");
-        assert!(content[14..54].starts_with(" src/main.rs"));
-        assert_eq!(&content[54..60], " 14:05");
+        assert_eq!(
+            terminal.backend().buffer()[(8, 0)].fg,
+            theme.ui().base.patch(theme.ui().muted).fg.unwrap()
+        );
     }
 
     #[test]
@@ -199,7 +232,7 @@ mod tests {
                 frame.render_widget(
                     StatusBar::new(
                         EditMode::Normal,
-                        "--",
+                        None,
                         "",
                         "14:05",
                         None,
@@ -233,7 +266,7 @@ mod tests {
                 frame.render_widget(
                     StatusBar::new(
                         EditMode::Normal,
-                        "--",
+                        None,
                         "",
                         "14:05",
                         Some(&message),
