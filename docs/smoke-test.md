@@ -107,7 +107,7 @@ Use a repository containing both staged and unstaged changes, then open the Git 
 - [ ] `gg`/`G` jumps to the first/last commit or detail file; digits do not start a count.
 - [ ] History loads at most 20 commits per page. When available, a bold accent-colored `n load more` appears in the header; `n` appends the next page without moving selection. Loading/retry feedback appears there and disappears at the end.
 - [ ] `Tab` toggles a commit's changed-file list without opening a diff.
-- [ ] Enter opens a right-side detail with full hash, complete message, author, full date/time/offset, and changed files.
+- [ ] Enter opens a right-side detail with full hash, complete message, author, full date/time/offset, and changed files. Enter on a selected file row closes history and opens the working-tree file in the editor with correct focus; deleted entries remain in history and show a rejection notification.
 - [ ] In a ready detail, `c` copies the seven-character hash and `C` copies the full hash to the system clipboard without changing the unnamed yank register. A transient `Git` notification reports the copied value without duplicating it in the history header; unavailable clipboards produce a visible error. List/loading/failed states do not start copy work.
 - [ ] While an uncached detail is loading, open a previously cached commit. The older completion must not replace the visible cached detail or pollute its cache entry.
 - [ ] `Tab` on a selected detail file toggles its diff and reuses the cached result on reopening.

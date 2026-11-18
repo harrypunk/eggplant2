@@ -202,6 +202,7 @@ File/theme pickers and both live-grep lists wrap from first to last and last to 
 | History / detail | Jump to first / last commit or detail file | `gg` / `G` (no counts) |
 | History / detail | Toggle commit files / selected detail-file diff | `Tab` |
 | History | Open selected commit's right-side detail | `Enter` |
+| Ready commit detail | Open selected working-tree file and close history | `Enter` |
 | Ready commit detail | Copy short / full hash to system clipboard | `c` / `C` |
 | History | Load the next 20 commits when available | `n` |
 

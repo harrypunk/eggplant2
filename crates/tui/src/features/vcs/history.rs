@@ -6,10 +6,13 @@ use crate::{
     clipboard::ClipboardWriter,
     copy_hash::{CopyHash, CopyHashOutcome, HashFormat},
     data_object::{AppPage, Context, Message, Model, StatusMessage},
+    document,
     manager::effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
 };
 
-use super::{DIFF_LIMIT, DiffState, SelectionDirection, repository_target, wrapped_index};
+use super::{
+    DIFF_LIMIT, DiffState, SelectionDirection, close_page, repository_target, wrapped_index,
+};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum HistoryPane {
@@ -369,6 +372,32 @@ pub(super) fn open_history_detail(model: &mut Model) -> Option<Effect> {
         target,
         revision: model.vcs.history.detail_revision,
     }))
+}
+
+pub(super) fn open_history_file(model: &mut Model) -> Option<Effect> {
+    let CommitDetailsState::Ready(details) = &model.vcs.history.detail else {
+        return None;
+    };
+    let file = details.files.get(model.vcs.history.selected_file?)?.clone();
+    if file.kind == ::vcs::ChangeKind::Deleted {
+        return Some(crate::notifications::report_rejection(
+            model,
+            "Cannot open a deleted file",
+        ));
+    }
+    let root = match &model.workspace {
+        Some(workspace) => workspace.root().to_path_buf(),
+        None => repository_target(model)?.parent()?.to_path_buf(),
+    };
+    let path = root.join(file.path);
+    let documents = model.vcs.documents().clone();
+
+    if model.vcs.history.pane == HistoryPane::Detail {
+        close_history(model);
+    }
+    close_history(model);
+    close_page(model);
+    document::open_file(&documents, model, &path)
 }
 
 pub(super) fn toggle_history_file_diff(model: &mut Model) -> Option<Effect> {
@@ -763,6 +792,75 @@ mod tests {
             HistoryApply::Applied
         ));
         assert!(matches!(state.diff, DiffState::Ready { .. }));
+    }
+
+    fn history_file_model(root: &std::path::Path, kind: ::vcs::ChangeKind) -> Model {
+        let mut model = Model {
+            active_page: AppPage::VcsHistory,
+            workspace: Some(crate::data_object::Workspace::new(root.to_path_buf())),
+            ..Model::default()
+        };
+        model.context_stack = vec![Context::AppNormal, Context::VcsHistory];
+        model.vcs.history.pane = HistoryPane::Detail;
+        model.vcs.history.detail = CommitDetailsState::Ready(CommitDetails {
+            full_id: "abc1234".to_string(),
+            message: "message".to_string(),
+            author: "Eggplant".to_string(),
+            date: "date".to_string(),
+            files: vec![::vcs::CommitFile {
+                kind,
+                path: "note.txt".to_string(),
+                previous_path: None,
+            }],
+        });
+        model.vcs.history.selected_file = Some(0);
+        model
+    }
+
+    #[test]
+    fn enter_on_a_detail_file_closes_history_and_opens_the_editor() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("note.txt");
+        std::fs::write(&path, "hello").unwrap();
+        let mut model = history_file_model(directory.path(), ::vcs::ChangeKind::Modified);
+
+        let Some(Effect::OpenDocument(request)) = crate::vcs::handle_command(
+            &mut model,
+            crate::data_object::CommandId("open_vcs_commit_detail"),
+        ) else {
+            panic!("expected a document-open request");
+        };
+        assert_eq!(model.active_page, AppPage::Editor);
+        assert_eq!(model.vcs.history.pane, HistoryPane::List);
+        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+
+        crate::manager::message_manager::MessageManager::default()
+            .update(&mut model, Message::FileOpened(request.perform()));
+
+        assert_eq!(model.current_focus, crate::data_object::FocusTarget::Editor);
+        assert_eq!(
+            model
+                .editor
+                .buffer_path(model.editor.active_buffer().unwrap()),
+            Some(std::fs::canonicalize(path).unwrap().as_path())
+        );
+    }
+
+    #[test]
+    fn deleted_detail_files_are_rejected_without_closing_history() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut model = history_file_model(directory.path(), ::vcs::ChangeKind::Deleted);
+
+        let effect = open_history_file(&mut model);
+
+        assert!(matches!(effect, Some(Effect::Feature(_))));
+        assert_eq!(model.active_page, AppPage::VcsHistory);
+        assert_eq!(model.context_stack.last(), Some(&Context::VcsHistory));
+        assert!(model.editor.is_empty());
+        assert_eq!(
+            model.notifications.current().unwrap().title(),
+            Some("Rejected")
+        );
     }
 
     #[test]

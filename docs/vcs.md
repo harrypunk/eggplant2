@@ -84,6 +84,7 @@ Changed files use the shared safe document-opening and explorer-reveal path. Del
 - `HistoryPane::{List, Detail}` keeps list and detail commands independent.
 - List commands cannot run behind a visible detail, including while detail data is loading or failed.
 - Each detail file can toggle its first-parent diff with shared diff colors and caching.
+- Enter on a detail file row closes history and opens the working-tree file through the safe document flow; deleted entries are rejected.
 - Merge commits intentionally use the first parent in this slice.
 - Tree changes are filtered to regular blobs; multi-file commits retain every changed path.
 
