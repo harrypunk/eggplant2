@@ -893,6 +893,20 @@ mod tests {
             manager.translate(event, &model),
             Some(Message::TextInput('x'))
         ));
+
+        model.context_stack.push(Context::ExplorerDelete);
+        for (key, command) in [
+            (KeyCode::Char('y'), "explorer_delete_confirm"),
+            (KeyCode::Esc, "close_explorer_delete"),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+        let event = Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert!(manager.translate(event, &model).is_none());
     }
 
     #[test]

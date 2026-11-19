@@ -1,6 +1,6 @@
 # Filesystem work and the file picker
 
-Eggplant owns filesystem policy. Helix provides document/editing primitives and document construction through `DocumentFactory`; it does not own picker ranking, explorer traversal, previews, or future rename/delete commands.
+Eggplant owns filesystem policy. Helix provides document/editing primitives and document construction through `DocumentFactory`; it does not own picker ranking, explorer traversal, previews, or future rename/move/copy commands.
 
 ## Responsibility boundaries
 
@@ -12,7 +12,7 @@ Eggplant owns filesystem policy. Helix provides document/editing primitives and 
 | Effect runtime | Execute blocking work with `tokio::task::spawn_blocking` and send completion messages back to the single update loop. |
 | `FilePicker` component | Render query/results and text preview inside the reusable `Popup`; perform no filesystem I/O. |
 | `DocumentFactory` / `EditorSession` | Open the selected document and manage buffers, paths, dirty state, cursor, and saving. |
-| Filesystem adapter | Share Git-ignore and built-in ignore policy; later host narrowly scoped mutation operations. |
+| Filesystem adapter | Share Git-ignore policy and own workspace-safe create/delete primitives and canonical containment checks. |
 
 No component reads a directory or file during rendering. No worker mutates `Model` directly.
 
@@ -110,9 +110,17 @@ Explorer `a` opens a revisioned path prompt. The initial path is the selected di
 
 Absolute paths and parent traversal are rejected before work starts. The blocking worker canonicalizes every existing or newly created parent component and rejects parents outside the canonical workspace, including symlink escapes. Successful files open through `document::open_file`; successful directories use `reveal_request`, which expands ancestors and selects the new directory without a separate refresh. Failures retain the entered path for correction, and stale completions cannot close or change a newer prompt.
 
+## Explorer delete
+
+Explorer `d` opens a confirmation popup for the selected workspace entry. `y` confirms and Escape cancels without filesystem changes. The blocking filesystem capability verifies the canonical parent, rejects workspace escapes, and rechecks the target type before deletion. Files and links use `remove_file`; directories use recursive `remove_dir_all`. Links are removed themselves rather than followed.
+
+Affected modified or saving buffers reject confirmation without deleting anything. After successful deletion, the application atomically closes affected clean buffers, including buffers below a deleted directory, and refreshes Explorer. Failures retain the confirmation and use notifications; revision checks ignore stale completions.
+
+Raw create/delete operations and workspace path enforcement live in `capabilities/filesystem`, while Explorer owns prompts, operation state, and application coordination.
+
 ## Future filesystem mutations
 
-Rename, move, and delete should extend the same message/effect/completion path. They should not be implemented as direct calls from explorer or picker components.
+Rename, move, and copy should extend the same message/effect/completion path. They should not be implemented as direct calls from explorer or picker components.
 
 ```text
 Command/menu selection

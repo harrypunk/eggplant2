@@ -1,14 +1,12 @@
-use std::{
-    fs,
-    io,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
+use editor::BufferId;
 use ratatui::{Frame, layout::Size, text::Line, widgets::Paragraph};
 
 use crate::{
     component::popup::Popup,
     data_object::{Context, Message, Model, StatusMessage},
+    filesystem::{self, FileKind as DeleteKind},
     manager::effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
     ui::{OverlayContribution, OverlayKind, OverlayPlacement},
 };
@@ -80,39 +78,6 @@ impl DeleteState {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum DeleteKind {
-    File,
-    Directory,
-    Link,
-}
-
-impl DeleteKind {
-    fn from_entry(kind: ExplorerEntryKind) -> Option<Self> {
-        match kind {
-            ExplorerEntryKind::File => Some(Self::File),
-            ExplorerEntryKind::Directory => Some(Self::Directory),
-            ExplorerEntryKind::Link => Some(Self::Link),
-            ExplorerEntryKind::Other => None,
-        }
-    }
-
-    fn from_file_type(kind: fs::FileType) -> io::Result<Self> {
-        if kind.is_symlink() {
-            Ok(Self::Link)
-        } else if kind.is_dir() {
-            Ok(Self::Directory)
-        } else if kind.is_file() {
-            Ok(Self::File)
-        } else {
-            Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "unsupported file type",
-            ))
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct DeleteTarget {
     path: PathBuf,
@@ -130,8 +95,14 @@ impl DeleteTarget {
         if relative.as_os_str().is_empty() {
             return Err("The workspace root cannot be deleted".to_string());
         }
-        let kind = DeleteKind::from_entry(entry.kind)
-            .ok_or_else(|| "The selected file type cannot be deleted".to_string())?;
+        let kind = match entry.kind {
+            ExplorerEntryKind::File => DeleteKind::File,
+            ExplorerEntryKind::Directory => DeleteKind::Directory,
+            ExplorerEntryKind::Link => DeleteKind::Link,
+            ExplorerEntryKind::Other => {
+                return Err("The selected file type cannot be deleted".to_string());
+            }
+        };
         Ok(Self {
             path: entry.path.clone(),
             relative,
@@ -192,6 +163,16 @@ pub(super) fn confirm(model: &mut Model) -> Option<Effect> {
         return notify(model, StatusMessage::error("No folder open"));
     };
     let target = model.explorer.delete.target()?.clone();
+    let buffers = affected_buffers(model, &target.path, target.kind);
+    if buffers
+        .iter()
+        .any(|&id| model.editor.is_saving(id) || model.editor.is_modified(id) == Some(true))
+    {
+        return notify(
+            model,
+            StatusMessage::error("Save modified buffers and wait for saves before deleting"),
+        );
+    }
     let revision = model.explorer.delete.begin_delete()?;
     Some(Effect::feature(DeleteRequest {
         root,
@@ -208,6 +189,23 @@ fn close_prompt(model: &mut Model) {
         .pop_if(|context| context == &Context::ExplorerDelete);
 }
 
+fn affected_buffers(model: &Model, path: &Path, kind: DeleteKind) -> Vec<BufferId> {
+    model
+        .editor
+        .file_buffer_ids()
+        .into_iter()
+        .filter(|&id| {
+            model
+                .editor
+                .buffer_path(id)
+                .is_some_and(|candidate| match kind {
+                    DeleteKind::Directory => candidate.starts_with(path),
+                    DeleteKind::File | DeleteKind::Link => candidate == path,
+                })
+        })
+        .collect()
+}
+
 struct DeleteRequest {
     root: PathBuf,
     target: DeleteTarget,
@@ -217,10 +215,11 @@ struct DeleteRequest {
 impl FeatureEffect for DeleteRequest {
     fn perform(self: Box<Self>) -> Message {
         let relative = self.target.relative.clone();
-        let result = delete(&self.root, &self.target)
+        let result = filesystem::delete(&self.root, &self.target.path, self.target.kind)
             .map_err(|error| format!("failed to delete `{}`: {error}", relative.display()));
         Message::FeatureCompletion(FeatureCompletion::new(DeleteCompletion {
             revision: self.revision,
+            kind: self.target.kind,
             result,
         }))
     }
@@ -228,6 +227,7 @@ impl FeatureEffect for DeleteRequest {
 
 struct DeleteCompletion {
     revision: u64,
+    kind: DeleteKind,
     result: Result<PathBuf, String>,
 }
 
@@ -236,7 +236,21 @@ impl Completion for DeleteCompletion {
         match self.result {
             Ok(path) if model.explorer.delete.accepts_completion(self.revision) => {
                 close_prompt(model);
-                super::refresh_changed(model, &path)
+                let buffers = affected_buffers(model, &path, self.kind);
+                let close_error = model.editor.close_buffers(&buffers).err();
+                let refresh = super::refresh_changed(model, &path);
+                match close_error {
+                    Some(error) => Effect::combine(
+                        refresh,
+                        notify(
+                            model,
+                            StatusMessage::error(format!(
+                                "Deleted the path, but failed to close its buffers: {error}"
+                            )),
+                        ),
+                    ),
+                    None => refresh,
+                }
             }
             Ok(_) => None,
             Err(error) => {
@@ -247,32 +261,6 @@ impl Completion for DeleteCompletion {
             }
         }
     }
-}
-
-fn delete(root: &Path, target: &DeleteTarget) -> io::Result<PathBuf> {
-    let root = fs::canonicalize(root)?;
-    let name = target.path.file_name().ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "a file or directory name is required")
-    })?;
-    let parent = fs::canonicalize(target.path.parent().ok_or_else(|| {
-        io::Error::new(io::ErrorKind::InvalidInput, "a parent directory is required")
-    })?)?;
-    if !parent.starts_with(&root) {
-        return Err(io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            "the target is outside the workspace",
-        ));
-    }
-    let path = parent.join(name);
-    let actual = DeleteKind::from_file_type(fs::symlink_metadata(&path)?.file_type())?;
-    if actual != target.kind {
-        return Err(io::Error::other("the target changed before deletion"));
-    }
-    match target.kind {
-        DeleteKind::Directory => fs::remove_dir_all(&path)?,
-        DeleteKind::File | DeleteKind::Link => fs::remove_file(&path)?,
-    }
-    Ok(path)
 }
 
 pub(crate) fn overlay(model: &Model) -> Option<OverlayContribution> {
@@ -315,6 +303,8 @@ fn render(model: &Model, frame: &mut Frame, area: ratatui::layout::Rect) {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use ratatui::{Terminal, backend::TestBackend};
 
     use super::*;
@@ -350,10 +340,7 @@ mod tests {
     fn open_delete(manager: &MessageManager, model: &mut Model) {
         assert!(
             manager
-                .update(
-                    model,
-                    Message::InvokeCommand(CommandId("explorer_delete")),
-                )
+                .update(model, Message::InvokeCommand(CommandId("explorer_delete")),)
                 .is_none()
         );
         assert!(model.explorer.delete.is_confirming());
@@ -386,6 +373,7 @@ mod tests {
         fs::write(&path, "delete").unwrap();
         fs::write(directory.path().join("other.txt"), "keep").unwrap();
         let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let buffer = crate::test_utils::open_file(&mut model, &path);
         let manager = MessageManager::default();
         open_delete(&manager, &mut model);
 
@@ -400,7 +388,14 @@ mod tests {
         assert!(!path.exists());
         assert!(!model.explorer.delete.is_open());
         apply_features(&manager, &mut model, refresh);
-        assert!(model.explorer.entries.iter().all(|entry| entry.path != path));
+        assert!(
+            model
+                .explorer
+                .entries
+                .iter()
+                .all(|entry| entry.path != path)
+        );
+        assert_eq!(model.editor.buffer_path(buffer), None);
         assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
     }
 
@@ -409,8 +404,10 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let folder = directory.path().join("folder");
         fs::create_dir_all(folder.join("nested")).unwrap();
-        fs::write(folder.join("nested/note.txt"), "delete").unwrap();
+        let nested_file = folder.join("nested/note.txt");
+        fs::write(&nested_file, "delete").unwrap();
         let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let buffer = crate::test_utils::open_file(&mut model, &nested_file);
         let manager = MessageManager::default();
         open_delete(&manager, &mut model);
 
@@ -423,33 +420,48 @@ mod tests {
         let refresh = complete_feature(&manager, &mut model, effect).unwrap();
         assert!(!folder.exists());
         apply_features(&manager, &mut model, refresh);
-        assert!(model.explorer.entries.iter().all(|entry| entry.path != folder));
+        assert!(
+            model
+                .explorer
+                .entries
+                .iter()
+                .all(|entry| entry.path != folder)
+        );
+        assert_eq!(model.editor.buffer_path(buffer), None);
     }
 
     #[test]
-    fn deletion_rejects_symlink_parent_escape_and_removes_only_links() {
-        let workspace = tempfile::tempdir().unwrap();
-        let outside = tempfile::tempdir().unwrap();
-        let outside_file = outside.path().join("important.txt");
-        fs::write(&outside_file, "keep").unwrap();
-        std::os::unix::fs::symlink(outside.path(), workspace.path().join("linked")).unwrap();
-        let root = fs::canonicalize(workspace.path()).unwrap();
-        let escape = DeleteTarget {
-            path: root.join("linked/important.txt"),
-            relative: PathBuf::from("linked/important.txt"),
-            kind: DeleteKind::File,
-        };
+    fn modified_open_buffer_blocks_deletion_without_losing_changes() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("note.txt");
+        fs::write(&path, "original").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let buffer = crate::test_utils::open_file(&mut model, &path);
+        model
+            .editor
+            .active_editor()
+            .unwrap()
+            .insert_text("changed ")
+            .unwrap();
+        let manager = MessageManager::default();
+        open_delete(&manager, &mut model);
 
-        let error = delete(&root, &escape).unwrap_err();
-        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
-        assert_eq!(fs::read_to_string(&outside_file).unwrap(), "keep");
-
-        let model = initial_model(Some(root.clone())).unwrap();
-        let link = DeleteTarget::new(&root, model.explorer.selected_entry().unwrap()).unwrap();
-        assert_eq!(link.kind, DeleteKind::Link);
-        delete(&root, &link).unwrap();
-        assert!(fs::symlink_metadata(root.join("linked")).is_err());
-        assert_eq!(fs::read_to_string(outside_file).unwrap(), "keep");
+        let notification = manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("explorer_delete_confirm")),
+        );
+        assert!(notification.is_some());
+        assert!(path.exists());
+        assert_eq!(model.editor.buffer_path(buffer), Some(path.as_path()));
+        assert_eq!(
+            model.editor.active_text_snapshot().unwrap().text,
+            "changed original"
+        );
+        assert!(model.explorer.delete.is_confirming());
+        assert_eq!(
+            model.notifications.current().unwrap().message(),
+            "Save modified buffers and wait for saves before deleting"
+        );
     }
 
     #[test]
@@ -509,4 +521,3 @@ mod tests {
         assert!(content.contains("Esc cancel"));
     }
 }
-

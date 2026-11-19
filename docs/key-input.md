@@ -96,9 +96,10 @@ Paste uses the shared register and reads the system clipboard when available.
 | Show/hide ignored entries | `Shift-I` |
 | Open keymap help | `?` |
 | Add file / directory | `a` |
-| Delete / move / copy placeholders | `d` / `m` / `c` |
+| Delete file / directory | `d` |
+| Move / copy placeholders | `m` / `c` |
 
-The help popup closes with `?` or Escape. Add opens a workspace-relative path prompt prefilled from the selected directory or the selected file's parent. Enter creates a regular file and opens it, or creates and reveals a directory when the path ends in `/`. Missing parent directories are created automatically. Absolute paths, parent traversal, existing targets, and symlink-parent escapes are rejected. Delete, move, and copy currently report that they are not implemented and never modify the filesystem.
+The help popup closes with `?` or Escape. Add opens a workspace-relative path prompt prefilled from the selected directory or the selected file's parent. Enter creates a regular file and opens it, or creates and reveals a directory when the path ends in `/`. Missing parent directories are created automatically. Absolute paths, parent traversal, existing targets, and symlink-parent escapes are rejected. Delete asks for `y` confirmation and supports Escape cancellation. Files and links are removed directly; directories are deleted recursively. Affected modified or saving buffers block deletion, while affected clean buffers close after success. Move and copy remain placeholders.
 
 On an expanded directory, `h` folds that directory. On a file or collapsed directory, `h` folds the nearest visible parent and selects it. Root-level entries cannot fold the workspace root.
 

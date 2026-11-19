@@ -67,10 +67,7 @@ fn common_bindings() -> KeymapConfig {
                 ("explorer_add_backspace", "backspace"),
             ],
         ),
-        keymap_context(
-            "explorer_delete",
-            [("close_explorer_delete", "esc")],
-        ),
+        keymap_context("explorer_delete", [("close_explorer_delete", "esc")]),
         keymap_context(
             "explorer_help",
             [("close_explorer_help", "esc"), ("explorer_help", "?")],

@@ -1,8 +1,4 @@
-use std::{
-    fs::{self, OpenOptions},
-    io,
-    path::{Component, Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use ratatui::{
     Frame,
@@ -19,6 +15,7 @@ use crate::{
     },
     data_object::{Context, Message, Model, StatusMessage},
     document,
+    filesystem::{self, CreateTarget},
     manager::{
         effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
         text_input_registry::TextInputRegistry,
@@ -104,42 +101,6 @@ impl AddState {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct AddTarget {
-    relative: PathBuf,
-    directory: bool,
-}
-
-impl AddTarget {
-    fn parse(input: &str) -> Result<Self, String> {
-        if input.is_empty() {
-            return Err("Enter a workspace-relative path".to_string());
-        }
-        let path = Path::new(input);
-        if path.is_absolute() {
-            return Err("Use a path relative to the workspace".to_string());
-        }
-
-        let mut relative = PathBuf::new();
-        for component in path.components() {
-            match component {
-                Component::Normal(part) => relative.push(part),
-                Component::CurDir => {}
-                Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
-                    return Err("The path must stay within the workspace".to_string());
-                }
-            }
-        }
-        if relative.as_os_str().is_empty() {
-            return Err("Enter a workspace-relative path".to_string());
-        }
-        Ok(Self {
-            relative,
-            directory: input.ends_with('/'),
-        })
-    }
-}
-
 fn notify(model: &mut Model, status: StatusMessage) -> Option<Effect> {
     Some(crate::notifications::report_status(model, status))
 }
@@ -188,7 +149,7 @@ pub(super) fn submit(model: &mut Model) -> Option<Effect> {
     if !model.explorer.add.is_editing() {
         return None;
     }
-    let target = match AddTarget::parse(&model.explorer.add.path) {
+    let target = match CreateTarget::parse(&model.explorer.add.path) {
         Ok(target) => target,
         Err(error) => {
             return notify(model, StatusMessage::error(error));
@@ -233,18 +194,18 @@ fn prefill(root: &Path, selected: Option<&ExplorerEntry>) -> String {
 
 struct AddRequest {
     root: PathBuf,
-    target: AddTarget,
+    target: CreateTarget,
     revision: u64,
 }
 
 impl FeatureEffect for AddRequest {
     fn perform(self: Box<Self>) -> Message {
-        let relative = self.target.relative.clone();
-        let result = create(&self.root, &self.target)
+        let relative = self.target.relative().to_path_buf();
+        let result = filesystem::create(&self.root, &self.target)
             .map_err(|error| format!("failed to create `{}`: {error}", relative.display()));
         Message::FeatureCompletion(FeatureCompletion::new(AddCompletion {
             revision: self.revision,
-            directory: self.target.directory,
+            directory: self.target.is_directory(),
             result,
         }))
     }
@@ -281,56 +242,6 @@ impl Completion for AddCompletion {
             }
         }
     }
-}
-
-fn create(root: &Path, target: &AddTarget) -> io::Result<PathBuf> {
-    let root = fs::canonicalize(root)?;
-    let parent = target
-        .relative
-        .parent()
-        .unwrap_or(Path::new(""))
-        .iter()
-        .try_fold(root.clone(), |parent, name| {
-            ensure_parent_directory(parent.join(name), &root)
-        })?;
-    let name = target.relative.file_name().ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "a file or directory name is required",
-        )
-    })?;
-    let path = parent.join(name);
-    if target.directory {
-        fs::create_dir(&path)?;
-    } else {
-        OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)?;
-    }
-    fs::canonicalize(path)
-}
-
-fn ensure_parent_directory(path: PathBuf, root: &Path) -> io::Result<PathBuf> {
-    match fs::create_dir(&path) {
-        Ok(()) => {}
-        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
-        Err(error) => return Err(error),
-    }
-    let path = fs::canonicalize(path)?;
-    if !path.starts_with(root) {
-        return Err(io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            "the parent directory is outside the workspace",
-        ));
-    }
-    if !path.is_dir() {
-        return Err(io::Error::new(
-            io::ErrorKind::NotADirectory,
-            "the parent path is not a directory",
-        ));
-    }
-    Ok(path)
 }
 
 pub(crate) fn overlay(model: &Model) -> Option<OverlayContribution> {
@@ -418,6 +329,8 @@ fn content_areas(area: Rect) -> (Rect, Rect) {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use ratatui::{Terminal, backend::TestBackend};
 
     use super::*;
@@ -485,60 +398,6 @@ mod tests {
         assert_eq!(prefill(root, Some(&file)), "folder/");
         assert_eq!(prefill(root, Some(&root_file)), "");
         assert_eq!(prefill(root, None), "");
-    }
-
-    #[test]
-    fn targets_are_relative_and_trailing_slash_selects_directories() {
-        assert_eq!(
-            AddTarget::parse("folder/new/").unwrap(),
-            AddTarget {
-                relative: PathBuf::from("folder/new"),
-                directory: true,
-            }
-        );
-        assert_eq!(
-            AddTarget::parse("./note.txt").unwrap(),
-            AddTarget {
-                relative: PathBuf::from("note.txt"),
-                directory: false,
-            }
-        );
-        for invalid in ["", ".", "/tmp/outside", "../outside", "folder/../outside"] {
-            assert!(AddTarget::parse(invalid).is_err(), "accepted {invalid}");
-        }
-    }
-
-    #[test]
-    fn creation_creates_missing_parent_directories() {
-        let workspace = tempfile::tempdir().unwrap();
-        let root = fs::canonicalize(workspace.path()).unwrap();
-        let file = AddTarget::parse("crates/tui/src/test1/test2").unwrap();
-
-        let created = create(&root, &file).unwrap();
-        assert_eq!(created, root.join("crates/tui/src/test1/test2"));
-        assert!(created.is_file());
-
-        let directory = AddTarget::parse("another/nested/folder/").unwrap();
-        let created = create(&root, &directory).unwrap();
-        assert_eq!(created, root.join("another/nested/folder"));
-        assert!(created.is_dir());
-    }
-
-    #[test]
-    fn creation_does_not_overwrite_or_follow_a_parent_symlink_outside() {
-        let workspace = tempfile::tempdir().unwrap();
-        let outside = tempfile::tempdir().unwrap();
-        let root = fs::canonicalize(workspace.path()).unwrap();
-        fs::write(root.join("note.txt"), "keep").unwrap();
-        let existing = AddTarget::parse("note.txt").unwrap();
-        assert!(create(&root, &existing).is_err());
-        assert_eq!(fs::read_to_string(root.join("note.txt")).unwrap(), "keep");
-
-        std::os::unix::fs::symlink(outside.path(), root.join("linked")).unwrap();
-        let escape = AddTarget::parse("linked/escape.txt").unwrap();
-        let error = create(&root, &escape).unwrap_err();
-        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
-        assert!(!outside.path().join("escape.txt").exists());
     }
 
     #[test]
