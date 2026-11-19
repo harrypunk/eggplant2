@@ -15,6 +15,7 @@ pub use commands::handle_command;
 pub(crate) use commands::refresh_changed;
 pub(crate) use delete::overlay as delete_overlay;
 pub(crate) use help::overlay as help_overlay;
+pub(crate) use state::TreeChange;
 pub use state::{ExpansionState, ExplorerEntry, ExplorerEntryKind, ExplorerState, IgnoreMode};
 pub(crate) use transfer::overlay as transfer_overlay;
 

@@ -6,7 +6,7 @@ use crate::{
 };
 
 use super::{
-    ExpansionState, add, delete,
+    ExpansionState, TreeChange, add, delete,
     transfer::{self, TransferOperation},
     work::ExplorerRefreshKind,
 };
@@ -46,7 +46,7 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
 
 fn change_expansion(model: &mut Model, target: ExpansionState) -> Option<Effect> {
     if target == ExpansionState::Collapsed {
-        if model.explorer.fold_selected() {
+        if model.explorer.fold_selected() == TreeChange::Changed {
             model.status = None;
         }
         return None;

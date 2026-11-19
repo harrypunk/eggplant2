@@ -48,6 +48,12 @@ pub enum IgnoreMode {
     ShowIgnored,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum TreeChange {
+    Changed,
+    Unchanged,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ExplorerEntry {
     pub name: OsString,
@@ -167,19 +173,20 @@ impl ExplorerState {
     }
 
     /// Fold the selected directory or nearest visible parent without touching the filesystem.
-    pub(crate) fn fold_selected(&mut self) -> bool {
+    /// Returns `Unchanged` for empty selections, root-level entries, and already collapsed parents.
+    pub(crate) fn fold_selected(&mut self) -> TreeChange {
         let Some(selected) = self.selected else {
-            return false;
+            return TreeChange::Unchanged;
         };
         let Some(plan) = fold_plan(&self.entries, selected, &self.expanded_directories) else {
-            return false;
+            return TreeChange::Unchanged;
         };
         self.expanded_directories.remove(&plan.path);
         self.refresh_generation = self.refresh_generation.wrapping_add(1);
         self.entries.drain(plan.index + 1..plan.end);
         self.entries[plan.index].expansion = ExpansionState::Collapsed;
         self.selected = Some(plan.index);
-        true
+        TreeChange::Changed
     }
 
     pub(crate) fn toggle_ignore_request(&mut self, root: &Path) -> ExplorerRequest {
@@ -253,19 +260,21 @@ impl ExplorerState {
         self.ignore_mode = ignore_mode;
     }
 
+    /// Apply an expansion result if the request still targets a visible directory.
+    /// A stale action, missing entry, or non-directory target is `Unchanged`.
     pub(super) fn expand_directory(
         &mut self,
         request: &ExplorerRequest,
         entries: Vec<ExplorerEntry>,
-    ) -> bool {
+    ) -> TreeChange {
         let ExplorerAction::Expansion { path, .. } = &request.action else {
-            return false;
+            return TreeChange::Unchanged;
         };
         let Some(index) = self.entries.iter().position(|entry| &entry.path == path) else {
-            return false;
+            return TreeChange::Unchanged;
         };
         if self.entries[index].kind != ExplorerEntryKind::Directory {
-            return false;
+            return TreeChange::Unchanged;
         }
 
         let depth = self.entries[index].depth;
@@ -282,7 +291,7 @@ impl ExplorerState {
             .as_ref()
             .and_then(|path| self.entries.iter().position(|entry| &entry.path == path))
             .or_else(|| (!self.entries.is_empty()).then_some(0));
-        true
+        TreeChange::Changed
     }
 
     /// Load the root's immediate children and select the first entry.
@@ -308,21 +317,20 @@ impl ExplorerState {
     }
 
     /// Unfold the selected directory in synchronous component/state tests.
+    /// Returns whether the completed request actually changed the visible tree.
     #[cfg(test)]
-    pub fn unfold_selected(&mut self, root: &Path) -> io::Result<bool> {
+    pub(crate) fn unfold_selected(&mut self, root: &Path) -> io::Result<TreeChange> {
         let Some(request) = self.unfold_request(root) else {
-            return Ok(false);
+            return Ok(TreeChange::Unchanged);
         };
-        self.complete_test_request(request)?;
-        Ok(true)
+        self.complete_test_request(request)
     }
 
     #[cfg(test)]
-    fn complete_test_request(&mut self, request: ExplorerRequest) -> io::Result<()> {
+    fn complete_test_request(&mut self, request: ExplorerRequest) -> io::Result<TreeChange> {
         match self.complete(request.execute()) {
-            super::work::ExplorerApply::Applied(_) | super::work::ExplorerApply::Unchanged => {
-                Ok(())
-            }
+            super::work::ExplorerApply::Applied(_) => Ok(TreeChange::Changed),
+            super::work::ExplorerApply::Unchanged => Ok(TreeChange::Unchanged),
             super::work::ExplorerApply::Failed(_, error) => Err(error),
             super::work::ExplorerApply::Ignored => {
                 unreachable!("a single synchronous test request cannot become stale")
@@ -336,7 +344,7 @@ impl ExplorerState {
         let Some(request) = self.reveal_request(root, path) else {
             return Ok(());
         };
-        self.complete_test_request(request)
+        self.complete_test_request(request).map(|_| ())
     }
 
     pub fn select_next(&mut self) {
@@ -485,17 +493,20 @@ mod tests {
         std::fs::write(folder.join("child.txt"), "child").unwrap();
         let mut explorer = ExplorerState::load(directory.path()).unwrap();
 
-        assert!(explorer.unfold_selected(directory.path()).unwrap());
+        assert_eq!(
+            explorer.unfold_selected(directory.path()).unwrap(),
+            TreeChange::Changed
+        );
         assert_eq!(explorer.entries.len(), 2);
         assert_eq!(explorer.entries[0].expansion, ExpansionState::Expanded);
         assert_eq!(explorer.entries[1].depth, 1);
         assert_eq!(explorer.selected, Some(0));
 
-        assert!(explorer.fold_selected());
+        assert_eq!(explorer.fold_selected(), TreeChange::Changed);
         assert_eq!(explorer.entries.len(), 1);
         assert_eq!(explorer.entries[0].expansion, ExpansionState::Collapsed);
         assert_eq!(explorer.selected, Some(0));
-        assert!(!explorer.fold_selected());
+        assert_eq!(explorer.fold_selected(), TreeChange::Unchanged);
     }
 
     #[test]
@@ -510,15 +521,21 @@ mod tests {
         std::fs::write(&root_file, "root").unwrap();
         let mut explorer = ExplorerState::load(directory.path()).unwrap();
 
-        assert!(explorer.unfold_selected(directory.path()).unwrap());
+        assert_eq!(
+            explorer.unfold_selected(directory.path()).unwrap(),
+            TreeChange::Changed
+        );
         explorer.selected = explorer
             .entries
             .iter()
             .position(|entry| entry.path == child);
-        assert!(explorer.unfold_selected(directory.path()).unwrap());
+        assert_eq!(
+            explorer.unfold_selected(directory.path()).unwrap(),
+            TreeChange::Changed
+        );
         explorer.selected = explorer.entries.iter().position(|entry| entry.path == note);
 
-        assert!(explorer.fold_selected());
+        assert_eq!(explorer.fold_selected(), TreeChange::Changed);
         assert_eq!(explorer.selected_entry().unwrap().path, child);
         assert!(!explorer.entries.iter().any(|entry| entry.path == note));
         assert_eq!(
@@ -526,7 +543,7 @@ mod tests {
             ExpansionState::Collapsed
         );
 
-        assert!(explorer.fold_selected());
+        assert_eq!(explorer.fold_selected(), TreeChange::Changed);
         assert_eq!(explorer.selected_entry().unwrap().path, parent);
         assert!(!explorer.entries.iter().any(|entry| entry.path == child));
         assert_eq!(
@@ -534,12 +551,12 @@ mod tests {
             ExpansionState::Collapsed
         );
 
-        assert!(!explorer.fold_selected());
+        assert_eq!(explorer.fold_selected(), TreeChange::Unchanged);
         explorer.selected = explorer
             .entries
             .iter()
             .position(|entry| entry.path == root_file);
-        assert!(!explorer.fold_selected());
+        assert_eq!(explorer.fold_selected(), TreeChange::Unchanged);
         assert_eq!(explorer.selected_entry().unwrap().path, root_file);
     }
 

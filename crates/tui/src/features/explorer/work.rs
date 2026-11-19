@@ -5,7 +5,7 @@ use crate::{
     manager::effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
 };
 
-use super::{ExplorerEntry, ExplorerState, IgnoreMode, fs};
+use super::{ExplorerEntry, ExplorerState, IgnoreMode, TreeChange, fs};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ExplorerRefreshKind {
@@ -82,7 +82,7 @@ impl ExplorerState {
             Err(error) => return ExplorerApply::Failed(request.action, error),
         };
         if matches!(&request.action, ExplorerAction::Expansion { .. }) {
-            if !self.expand_directory(&request, entries) {
+            if self.expand_directory(&request, entries) == TreeChange::Unchanged {
                 return ExplorerApply::Unchanged;
             }
             return ExplorerApply::Applied(request.action);
@@ -153,10 +153,10 @@ mod tests {
         std::fs::write(folder.join("child.txt"), "child").unwrap();
         let root = directory.path().to_path_buf();
         let mut state = ExplorerState::load(&root).unwrap();
-        assert!(state.unfold_selected(&root).unwrap());
+        assert_eq!(state.unfold_selected(&root).unwrap(), TreeChange::Changed);
         let refresh = state.reload_request(&root, ExplorerRefreshKind::Manual);
 
-        assert!(state.fold_selected());
+        assert_eq!(state.fold_selected(), TreeChange::Changed);
         let collapsed = state.entries.clone();
         assert_eq!(collapsed.len(), 1);
         assert!(matches!(
@@ -181,13 +181,13 @@ mod tests {
         let root = directory.path().to_path_buf();
         let mut state = ExplorerState::load(&root).unwrap();
 
-        assert!(state.unfold_selected(&root).unwrap());
+        assert_eq!(state.unfold_selected(&root).unwrap(), TreeChange::Changed);
         state.selected = state.entries.iter().position(|entry| entry.path == nested);
-        assert!(state.unfold_selected(&root).unwrap());
+        assert_eq!(state.unfold_selected(&root).unwrap(), TreeChange::Changed);
         state.selected = state.entries.iter().position(|entry| entry.path == second);
-        assert!(state.unfold_selected(&root).unwrap());
+        assert_eq!(state.unfold_selected(&root).unwrap(), TreeChange::Changed);
         state.selected = state.entries.iter().position(|entry| entry.path == first);
-        assert!(state.fold_selected());
+        assert_eq!(state.fold_selected(), TreeChange::Changed);
 
         // A full visible-tree rebuild would fail while reading this other expanded directory.
         std::fs::remove_dir_all(&second).unwrap();

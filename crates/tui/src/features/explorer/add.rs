@@ -407,7 +407,10 @@ mod tests {
         fs::write(directory.path().join("folder/existing.txt"), "old").unwrap();
         let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
         let root = model.workspace.as_ref().unwrap().root().to_path_buf();
-        assert!(model.explorer.unfold_selected(&root).unwrap());
+        assert_eq!(
+            model.explorer.unfold_selected(&root).unwrap(),
+            crate::explorer::TreeChange::Changed
+        );
         model.explorer.selected = model
             .explorer
             .entries
