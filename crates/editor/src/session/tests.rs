@@ -921,6 +921,102 @@ fn delete_grapheme_and_visual_selection_use_single_transactions() {
 }
 
 #[test]
+fn deleting_last_grapheme_moves_cursor_to_the_last_remaining_character() {
+    let mut session = EditorSession::new();
+    create_buffer(&mut session, "abcd");
+    session.resize_active_view(80, 24);
+    session
+        .active_editor()
+        .unwrap()
+        .move_cursor_to(DocumentPosition {
+            line: 0,
+            character: 3,
+        })
+        .unwrap();
+    session
+        .active_editor()
+        .unwrap()
+        .delete_grapheme_forward()
+        .unwrap();
+
+    assert_eq!(
+        session.buffers[&session.active_buffer().unwrap()]
+            .document
+            .text(),
+        "abc"
+    );
+    assert_eq!(active_cursor(&mut session), 2);
+    assert_eq!(
+        session.active_snapshot().unwrap().cursor,
+        Some(CursorPosition { row: 0, column: 2 })
+    );
+
+    let mut empty = EditorSession::new();
+    create_buffer(&mut empty, "a");
+    empty
+        .active_editor()
+        .unwrap()
+        .delete_grapheme_forward()
+        .unwrap();
+    assert_eq!(
+        empty.buffers[&empty.active_buffer().unwrap()]
+            .document
+            .text(),
+        ""
+    );
+    assert_eq!(active_cursor(&mut empty), 0);
+}
+
+#[test]
+fn deleting_middle_or_unicode_graphemes_preserves_the_expected_cursor() {
+    let mut middle = EditorSession::new();
+    create_buffer(&mut middle, "abcd");
+    middle
+        .active_editor()
+        .unwrap()
+        .move_cursor_to(DocumentPosition {
+            line: 0,
+            character: 1,
+        })
+        .unwrap();
+    middle
+        .active_editor()
+        .unwrap()
+        .delete_grapheme_forward()
+        .unwrap();
+    assert_eq!(
+        middle.buffers[&middle.active_buffer().unwrap()]
+            .document
+            .text(),
+        "acd"
+    );
+    assert_eq!(active_cursor(&mut middle), 1);
+
+    let mut unicode = EditorSession::new();
+    create_buffer(&mut unicode, "a👩\u{200d}💻");
+    unicode
+        .active_editor()
+        .unwrap()
+        .move_cursor_to(DocumentPosition {
+            line: 0,
+            character: 1,
+        })
+        .unwrap();
+    unicode
+        .active_editor()
+        .unwrap()
+        .delete_grapheme_forward()
+        .unwrap();
+    assert_eq!(
+        unicode.buffers[&unicode.active_buffer().unwrap()]
+            .document
+            .text(),
+        "a"
+    );
+    assert_eq!(active_cursor(&mut unicode), 0);
+}
+
+#[test]
 fn delete_and_change_word_use_the_next_word_start_and_one_undo_step() {
     let mut delete = EditorSession::new();
     let delete_id = create_buffer(&mut delete, "héllo world");

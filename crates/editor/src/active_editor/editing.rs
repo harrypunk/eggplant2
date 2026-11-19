@@ -193,11 +193,15 @@ impl ActiveEditor<'_> {
     pub fn delete_grapheme_forward(&mut self) -> Result<(), EditorError> {
         let text = self.document.text().slice(..);
         let cursor = self.document.selection(self.view.id).primary().cursor(text);
-        self.delete_range(
-            cursor,
-            graphemes::next_grapheme_boundary(text, cursor),
-            cursor,
-        );
+        let line = text.char_to_line(cursor);
+        let line_end = helix_core::line_ending::line_end_char_index(&text, line);
+        let next = graphemes::next_grapheme_boundary(text, cursor);
+        let target = if next == line_end {
+            graphemes::prev_grapheme_boundary(text, cursor).max(text.line_to_char(line))
+        } else {
+            cursor
+        };
+        self.delete_range(cursor, next, target);
         self.commit_history();
         Ok(())
     }
