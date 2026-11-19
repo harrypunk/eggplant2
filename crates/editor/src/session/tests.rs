@@ -742,6 +742,46 @@ fn inserts_text_and_deletes_previous_character() {
 }
 
 #[test]
+fn leaving_insert_places_the_cursor_on_the_previous_grapheme() {
+    for (text, expected) in [("abcd", 3), ("a👩\u{200d}💻", 1), ("e\u{301}", 0)] {
+        let mut session = EditorSession::new();
+        create_buffer(&mut session, text);
+        session.resize_active_view(80, 24);
+        session.enter_insert_mode();
+        let (document, view) = active_parts(&mut session);
+        let end = document.text().len_chars();
+        document.set_selection(view.id, Selection::point(end));
+        assert_eq!(active_cursor(&mut session), end);
+
+        session.enter_normal_mode();
+        assert_eq!(active_cursor(&mut session), expected);
+        session.enter_normal_mode();
+        assert_eq!(active_cursor(&mut session), expected);
+
+        if text == "abcd" {
+            assert_eq!(
+                session.active_snapshot().unwrap().cursor,
+                Some(CursorPosition { row: 0, column: 3 })
+            );
+        }
+    }
+}
+
+#[test]
+fn leaving_insert_does_not_move_before_the_current_line_start() {
+    for (text, cursor) in [("", 0), ("\n", 1), ("a\nb", 2)] {
+        let mut session = EditorSession::new();
+        create_buffer(&mut session, text);
+        session.enter_insert_mode();
+        let (document, view) = active_parts(&mut session);
+        document.set_selection(view.id, Selection::point(cursor));
+
+        session.enter_normal_mode();
+        assert_eq!(active_cursor(&mut session), cursor);
+    }
+}
+
+#[test]
 fn backspace_removes_the_whole_grapheme() {
     for text in ["e\u{301}", "👩\u{200d}💻", "🇫🇮"] {
         let mut session = EditorSession::new();

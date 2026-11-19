@@ -495,6 +495,11 @@ impl EditorSession {
         {
             document.append_changes_to_history(view);
         }
+        if self.mode == EditMode::Insert
+            && let Ok(mut editor) = self.active_editor()
+        {
+            editor.move_cursor_to_normal();
+        }
         self.mode = EditMode::Normal;
     }
 

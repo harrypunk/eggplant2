@@ -33,6 +33,17 @@ impl ActiveEditor<'_> {
         Ok(())
     }
 
+    /// Move an insert cursor onto the preceding grapheme without crossing the line start.
+    pub(crate) fn move_cursor_to_normal(&mut self) {
+        let text = self.document.text().slice(..);
+        let cursor = self.document.selection(self.view.id).primary().cursor(text);
+        let line_start = text.line_to_char(text.char_to_line(cursor));
+        let target = graphemes::prev_grapheme_boundary(text, cursor).max(line_start);
+        self.document
+            .set_selection(self.view.id, Selection::point(target));
+        self.ensure_cursor_in_view();
+    }
+
     /// Open an indented line below or above the cursor through one transaction.
     pub fn open_line(&mut self, direction: OpenLineDirection) -> Result<(), EditorError> {
         let text = self.document.text().slice(..);

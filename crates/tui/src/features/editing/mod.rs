@@ -353,6 +353,16 @@ mod tests {
             model.editor.active_snapshot().unwrap().text.lines[0].text,
             "ac"
         );
+        assert_eq!(
+            model
+                .editor
+                .active_snapshot()
+                .unwrap()
+                .cursor
+                .unwrap()
+                .column,
+            1
+        );
 
         manager.update(&mut model, Message::InvokeCommand(CommandId("undo")));
         assert_eq!(

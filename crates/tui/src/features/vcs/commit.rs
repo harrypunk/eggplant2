@@ -502,7 +502,7 @@ mod tests {
             result: Err("retry".to_string()),
         })
         .update(&mut model);
-        crate::editing::enter_insert(&mut model);
+        crate::editing::handle_command(&mut model, CommandId("insert_at_line_end"));
         type_text(&mut model, " second");
         assert!(submit(&mut model).is_some());
 
