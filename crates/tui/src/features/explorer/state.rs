@@ -11,7 +11,7 @@ use super::{
     add::AddState,
     delete::DeleteState,
     fs,
-    relocate::MoveState,
+    transfer::TransferState,
     work::{ExplorerAction, ExplorerRefreshKind, ExplorerRequest},
 };
 use crate::{data_object::Visibility, navigation::VerticalNavigation};
@@ -65,7 +65,7 @@ pub struct ExplorerState {
     pub selected: Option<usize>,
     pub(crate) add: AddState,
     pub(crate) delete: DeleteState,
-    pub(crate) relocate: MoveState,
+    pub(crate) transfer: TransferState,
     documents: DocumentFactory,
     expanded_directories: HashSet<PathBuf>,
     ignore_mode: IgnoreMode,
@@ -81,7 +81,7 @@ impl Default for ExplorerState {
             selected: None,
             add: AddState::default(),
             delete: DeleteState::default(),
-            relocate: MoveState::default(),
+            transfer: TransferState::default(),
             documents: DocumentFactory::new(),
             expanded_directories: HashSet::new(),
             ignore_mode: IgnoreMode::HideIgnored,

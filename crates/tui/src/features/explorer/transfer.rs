@@ -14,7 +14,7 @@ use crate::{
         text_input::TextInput,
     },
     data_object::{Context, Message, Model, StatusMessage},
-    filesystem::{self, FileKind, MoveDestination},
+    filesystem::{self, FileKind, TransferDestination},
     manager::{
         effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
         text_input_registry::TextInputRegistry,
@@ -25,43 +25,75 @@ use crate::{
 
 use super::{ExplorerEntry, ExplorerEntryKind, buffers};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum TransferOperation {
+    Move,
+    Copy,
+}
+
+impl TransferOperation {
+    fn name(self) -> &'static str {
+        match self {
+            Self::Move => "Move",
+            Self::Copy => "Copy",
+        }
+    }
+
+    fn action(self) -> &'static str {
+        match self {
+            Self::Move => "move",
+            Self::Copy => "copy",
+        }
+    }
+
+    fn pending(self) -> &'static str {
+        match self {
+            Self::Move => "Moving…",
+            Self::Copy => "Copying…",
+        }
+    }
+}
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-enum MovePhase {
+enum TransferPhase {
     #[default]
     Closed,
     Editing,
-    Moving,
+    Running,
 }
 
 #[derive(Debug, Default)]
-pub(crate) struct MoveState {
-    phase: MovePhase,
-    source: Option<MoveSource>,
+pub(crate) struct TransferState {
+    phase: TransferPhase,
+    operation: Option<TransferOperation>,
+    source: Option<TransferSource>,
     destination: String,
     revision: u64,
 }
 
-impl MoveState {
+impl TransferState {
     fn is_open(&self) -> bool {
-        self.phase != MovePhase::Closed
+        self.phase != TransferPhase::Closed
     }
 
     fn is_editing(&self) -> bool {
-        self.phase == MovePhase::Editing
+        self.phase == TransferPhase::Editing
     }
 
-    fn is_moving(&self) -> bool {
-        self.phase == MovePhase::Moving
+    fn is_running(&self) -> bool {
+        self.phase == TransferPhase::Running
     }
 
-    fn open(&mut self, source: MoveSource) {
+    fn open(&mut self, source: TransferSource, operation: TransferOperation) {
         self.destination = source.relative.to_string_lossy().into_owned();
         self.source = Some(source);
-        self.phase = MovePhase::Editing;
+        self.operation = Some(operation);
+        self.phase = TransferPhase::Editing;
     }
 
     fn close(&mut self) {
-        self.phase = MovePhase::Closed;
+        self.phase = TransferPhase::Closed;
+        self.operation = None;
         self.source = None;
         self.destination.clear();
         self.revision = self.revision.wrapping_add(1);
@@ -79,36 +111,36 @@ impl MoveState {
         }
     }
 
-    fn begin_move(&mut self) -> Option<u64> {
+    fn begin_transfer(&mut self) -> Option<u64> {
         if !self.is_editing() {
             return None;
         }
-        self.phase = MovePhase::Moving;
+        self.phase = TransferPhase::Running;
         self.revision = self.revision.wrapping_add(1);
         Some(self.revision)
     }
 
     fn accepts_completion(&self, revision: u64) -> bool {
-        self.is_moving() && self.revision == revision
+        self.is_running() && self.revision == revision
     }
 
     fn fail(&mut self, revision: u64) -> bool {
         if !self.accepts_completion(revision) {
             return false;
         }
-        self.phase = MovePhase::Editing;
+        self.phase = TransferPhase::Editing;
         true
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct MoveSource {
+struct TransferSource {
     path: PathBuf,
     relative: PathBuf,
     kind: FileKind,
 }
 
-impl MoveSource {
+impl TransferSource {
     fn new(root: &Path, entry: &ExplorerEntry) -> Result<Self, String> {
         let relative = entry
             .path
@@ -116,14 +148,14 @@ impl MoveSource {
             .map_err(|_| "The selected path is outside the workspace".to_string())?
             .to_path_buf();
         if relative.as_os_str().is_empty() {
-            return Err("The workspace root cannot be moved".to_string());
+            return Err("The workspace root cannot be copied or moved".to_string());
         }
         let kind = match entry.kind {
             ExplorerEntryKind::File => FileKind::File,
             ExplorerEntryKind::Directory => FileKind::Directory,
             ExplorerEntryKind::Link => FileKind::Link,
             ExplorerEntryKind::Other => {
-                return Err("The selected file type cannot be moved".to_string());
+                return Err("The selected file type cannot be copied or moved".to_string());
             }
         };
         Ok(Self {
@@ -138,7 +170,7 @@ fn notify(model: &mut Model, status: StatusMessage) -> Option<Effect> {
     Some(crate::notifications::report_status(model, status))
 }
 
-pub(super) fn open(model: &mut Model) -> Option<Effect> {
+pub(super) fn open(model: &mut Model, operation: TransferOperation) -> Option<Effect> {
     let Some(root) = model
         .workspace
         .as_ref()
@@ -146,28 +178,28 @@ pub(super) fn open(model: &mut Model) -> Option<Effect> {
     else {
         return notify(model, StatusMessage::info("No folder open"));
     };
-    if model.explorer.relocate.is_open() || !model.modal.open(Context::ExplorerMove) {
+    if model.explorer.transfer.is_open() || !model.modal.open(Context::ExplorerTransfer) {
         return None;
     }
     let Some(entry) = model.explorer.selected_entry() else {
-        model.modal.close(Context::ExplorerMove);
+        model.modal.close(Context::ExplorerTransfer);
         return notify(model, StatusMessage::info("No file or folder selected"));
     };
-    let source = match MoveSource::new(&root, entry) {
+    let source = match TransferSource::new(&root, entry) {
         Ok(source) => source,
         Err(error) => {
-            model.modal.close(Context::ExplorerMove);
+            model.modal.close(Context::ExplorerTransfer);
             return notify(model, StatusMessage::error(error));
         }
     };
 
-    model.explorer.relocate.open(source);
-    model.context_stack.push(Context::ExplorerMove);
+    model.explorer.transfer.open(source, operation);
+    model.context_stack.push(Context::ExplorerTransfer);
     None
 }
 
 pub(super) fn cancel(model: &mut Model) -> Option<Effect> {
-    if model.explorer.relocate.is_moving() {
+    if model.explorer.transfer.is_running() {
         return None;
     }
     close_prompt(model);
@@ -175,24 +207,24 @@ pub(super) fn cancel(model: &mut Model) -> Option<Effect> {
 }
 
 pub(super) fn backspace(model: &mut Model) -> Option<Effect> {
-    model.explorer.relocate.backspace();
+    model.explorer.transfer.backspace();
     None
 }
 
 pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
-    input.register(Context::ExplorerMove, insert_char)
+    input.register(Context::ExplorerTransfer, insert_char)
 }
 
 fn insert_char(model: &mut Model, character: char) -> Option<Effect> {
-    model.explorer.relocate.insert(character);
+    model.explorer.transfer.insert(character);
     None
 }
 
 pub(super) fn submit(model: &mut Model) -> Option<Effect> {
-    if !model.explorer.relocate.is_editing() {
+    if !model.explorer.transfer.is_editing() {
         return None;
     }
-    let destination = match MoveDestination::parse(&model.explorer.relocate.destination) {
+    let destination = match TransferDestination::parse(&model.explorer.transfer.destination) {
         Ok(destination) => destination,
         Err(error) => return notify(model, StatusMessage::error(error)),
     };
@@ -203,13 +235,17 @@ pub(super) fn submit(model: &mut Model) -> Option<Effect> {
     else {
         return notify(model, StatusMessage::error("No folder open"));
     };
-    let source = model.explorer.relocate.source.clone()?;
-    if let Some(effect) = buffers::reject_blocked(model, &source.path, source.kind, "moving") {
+    let source = model.explorer.transfer.source.clone()?;
+    let operation = model.explorer.transfer.operation?;
+    if operation == TransferOperation::Move
+        && let Some(effect) = buffers::reject_blocked(model, &source.path, source.kind, "moving")
+    {
         return Some(effect);
     }
-    let revision = model.explorer.relocate.begin_move()?;
-    Some(Effect::feature(MoveRequest {
+    let revision = model.explorer.transfer.begin_transfer()?;
+    Some(Effect::feature(TransferRequest {
         root,
+        operation,
         source,
         destination,
         revision,
@@ -217,57 +253,74 @@ pub(super) fn submit(model: &mut Model) -> Option<Effect> {
 }
 
 fn close_prompt(model: &mut Model) {
-    model.explorer.relocate.close();
-    model.modal.close(Context::ExplorerMove);
+    model.explorer.transfer.close();
+    model.modal.close(Context::ExplorerTransfer);
     model
         .context_stack
-        .pop_if(|context| context == &Context::ExplorerMove);
+        .pop_if(|context| context == &Context::ExplorerTransfer);
 }
 
-struct MoveRequest {
+struct TransferRequest {
     root: PathBuf,
-    source: MoveSource,
-    destination: MoveDestination,
+    operation: TransferOperation,
+    source: TransferSource,
+    destination: TransferDestination,
     revision: u64,
 }
 
-impl FeatureEffect for MoveRequest {
+impl FeatureEffect for TransferRequest {
     fn perform(self: Box<Self>) -> Message {
         let source_relative = self.source.relative.clone();
         let destination_relative = self.destination.relative().to_path_buf();
-        let result = filesystem::relocate(
-            &self.root,
-            &self.source.path,
-            self.source.kind,
-            &self.destination,
-        )
+        let result = match self.operation {
+            TransferOperation::Move => filesystem::relocate(
+                &self.root,
+                &self.source.path,
+                self.source.kind,
+                &self.destination,
+            ),
+            TransferOperation::Copy => filesystem::copy(
+                &self.root,
+                &self.source.path,
+                self.source.kind,
+                &self.destination,
+            ),
+        }
         .map_err(|error| {
             format!(
-                "failed to move `{}` to `{}`: {error}",
+                "failed to {} `{}` to `{}`: {error}",
+                self.operation.action(),
                 source_relative.display(),
                 destination_relative.display()
             )
         });
-        Message::FeatureCompletion(FeatureCompletion::new(MoveCompletion {
+        Message::FeatureCompletion(FeatureCompletion::new(TransferCompletion {
             revision: self.revision,
+            operation: self.operation,
             source: self.source,
             result,
         }))
     }
 }
 
-struct MoveCompletion {
+struct TransferCompletion {
     revision: u64,
-    source: MoveSource,
+    operation: TransferOperation,
+    source: TransferSource,
     result: Result<PathBuf, String>,
 }
 
-impl Completion for MoveCompletion {
+impl Completion for TransferCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
         match self.result {
-            Ok(path) if model.explorer.relocate.accepts_completion(self.revision) => {
+            Ok(path) if model.explorer.transfer.accepts_completion(self.revision) => {
                 close_prompt(model);
-                let close = buffers::close(model, &self.source.path, self.source.kind);
+                let close = match self.operation {
+                    TransferOperation::Move => {
+                        buffers::close(model, &self.source.path, self.source.kind)
+                    }
+                    TransferOperation::Copy => None,
+                };
                 let root = model.workspace.as_ref()?.root().to_path_buf();
                 let reveal = model
                     .explorer
@@ -277,7 +330,7 @@ impl Completion for MoveCompletion {
             }
             Ok(_) => None,
             Err(error) => {
-                if !model.explorer.relocate.fail(self.revision) {
+                if !model.explorer.transfer.fail(self.revision) {
                     return None;
                 }
                 notify(model, StatusMessage::error(error))
@@ -287,17 +340,17 @@ impl Completion for MoveCompletion {
 }
 
 pub(crate) fn overlay(model: &Model) -> Option<OverlayContribution> {
-    if !model.explorer.relocate.is_open() {
+    if !model.explorer.transfer.is_open() {
         return None;
     }
-    let height = if model.explorer.relocate.is_moving() {
+    let height = if model.explorer.transfer.is_running() {
         6
     } else {
         5
     };
     Some(
         OverlayContribution::new(
-            "explorer_move",
+            "explorer_transfer",
             OverlayKind::Modal,
             OverlayPlacement::Centered(Size::new(64, height)),
             render,
@@ -308,8 +361,8 @@ pub(crate) fn overlay(model: &Model) -> Option<OverlayContribution> {
 
 fn render(model: &Model, frame: &mut Frame, area: Rect) {
     frame.render_widget(
-        MovePrompt {
-            state: &model.explorer.relocate,
+        TransferPrompt {
+            state: &model.explorer.transfer,
             theme: &model.theme,
         },
         area,
@@ -317,7 +370,7 @@ fn render(model: &Model, frame: &mut Frame, area: Rect) {
 }
 
 fn cursor(model: &Model, area: Rect) -> Option<Position> {
-    let state = &model.explorer.relocate;
+    let state = &model.explorer.transfer;
     if !state.is_editing() {
         return None;
     }
@@ -325,27 +378,31 @@ fn cursor(model: &Model, area: Rect) -> Option<Position> {
     TextInput::new(&state.destination, model.theme.ui()).cursor_position(input)
 }
 
-struct MovePrompt<'a> {
-    state: &'a MoveState,
+struct TransferPrompt<'a> {
+    state: &'a TransferState,
     theme: &'a Theme,
 }
 
-struct MoveContent<'a> {
-    state: &'a MoveState,
+struct TransferContent<'a> {
+    state: &'a TransferState,
     styles: &'a UiTheme,
 }
 
-impl Widget for MovePrompt<'_> {
+impl Widget for TransferPrompt<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
+        let operation = self
+            .state
+            .operation
+            .map_or("Transfer", TransferOperation::name);
         let title = self
             .state
             .source
             .as_ref()
-            .map(|source| format!("Move {}", source.relative.display()))
-            .unwrap_or_else(|| "Move".to_string());
+            .map(|source| format!("{operation} {}", source.relative.display()))
+            .unwrap_or_else(|| operation.to_string());
         Popup::new(
             title,
-            MoveContent {
+            TransferContent {
                 state: self.state,
                 styles: self.theme.ui(),
             },
@@ -355,13 +412,18 @@ impl Widget for MovePrompt<'_> {
     }
 }
 
-impl Widget for MoveContent<'_> {
+impl Widget for TransferContent<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let (input, status_area) = content_areas(area);
         let surface = self.styles.popup_surface();
         TextInput::new(&self.state.destination, self.styles).render(input, buf);
-        if self.state.is_moving() {
-            let status = Line::styled("Moving…", surface.patch(self.styles.muted));
+        if self.state.is_running() {
+            let status = Line::styled(
+                self.state
+                    .operation
+                    .map_or("Working…", TransferOperation::pending),
+                surface.patch(self.styles.muted),
+            );
             Paragraph::new(status)
                 .style(surface)
                 .render(status_area, buf);
@@ -392,8 +454,18 @@ mod tests {
                 .update(model, Message::InvokeCommand(CommandId("explorer_move")))
                 .is_none()
         );
-        assert!(model.explorer.relocate.is_editing());
-        assert_eq!(model.context_stack.last(), Some(&Context::ExplorerMove));
+        assert!(model.explorer.transfer.is_editing());
+        assert_eq!(model.context_stack.last(), Some(&Context::ExplorerTransfer));
+    }
+
+    fn open_copy(manager: &MessageManager, model: &mut Model) {
+        assert!(
+            manager
+                .update(model, Message::InvokeCommand(CommandId("explorer_copy")))
+                .is_none()
+        );
+        assert!(model.explorer.transfer.is_editing());
+        assert_eq!(model.context_stack.last(), Some(&Context::ExplorerTransfer));
     }
 
     fn type_destination(manager: &MessageManager, model: &mut Model, destination: &str) {
@@ -407,10 +479,10 @@ mod tests {
     }
 
     fn replace_destination(manager: &MessageManager, model: &mut Model, destination: &str) {
-        while !model.explorer.relocate.destination.is_empty() {
+        while !model.explorer.transfer.destination.is_empty() {
             manager.update(
                 model,
-                Message::InvokeCommand(CommandId("explorer_move_backspace")),
+                Message::InvokeCommand(CommandId("explorer_transfer_backspace")),
             );
         }
         type_destination(manager, model, destination);
@@ -451,13 +523,13 @@ mod tests {
         let buffer = crate::test_utils::open_file(&mut model, &source);
         let manager = MessageManager::default();
         open_move(&manager, &mut model);
-        assert_eq!(model.explorer.relocate.destination, "source.txt");
+        assert_eq!(model.explorer.transfer.destination, "source.txt");
         replace_destination(&manager, &mut model, "nested/destination.txt");
 
         let effect = manager
             .update(
                 &mut model,
-                Message::InvokeCommand(CommandId("explorer_move_submit")),
+                Message::InvokeCommand(CommandId("explorer_transfer_submit")),
             )
             .unwrap();
         let reveal = complete_feature(&manager, &mut model, effect).unwrap();
@@ -465,7 +537,7 @@ mod tests {
         assert!(!source.exists());
         assert_eq!(fs::read_to_string(&destination).unwrap(), "content");
         assert_eq!(model.editor.buffer_path(buffer), None);
-        assert!(!model.explorer.relocate.is_open());
+        assert!(!model.explorer.transfer.is_open());
         apply_features(&manager, &mut model, reveal);
         assert_eq!(model.explorer.selected_entry().unwrap().path, destination);
     }
@@ -482,13 +554,13 @@ mod tests {
         let buffer = crate::test_utils::open_file(&mut model, &nested_file);
         let manager = MessageManager::default();
         open_move(&manager, &mut model);
-        assert_eq!(model.explorer.relocate.destination, "folder");
+        assert_eq!(model.explorer.transfer.destination, "folder");
         replace_destination(&manager, &mut model, "renamed");
 
         let effect = manager
             .update(
                 &mut model,
-                Message::InvokeCommand(CommandId("explorer_move_submit")),
+                Message::InvokeCommand(CommandId("explorer_transfer_submit")),
             )
             .unwrap();
         let reveal = complete_feature(&manager, &mut model, effect).unwrap();
@@ -522,7 +594,7 @@ mod tests {
 
         let notification = manager.update(
             &mut model,
-            Message::InvokeCommand(CommandId("explorer_move_submit")),
+            Message::InvokeCommand(CommandId("explorer_transfer_submit")),
         );
         assert!(notification.is_some());
         assert!(source.exists());
@@ -532,7 +604,7 @@ mod tests {
             model.editor.active_text_snapshot().unwrap().text,
             "changed original"
         );
-        assert!(model.explorer.relocate.is_editing());
+        assert!(model.explorer.transfer.is_editing());
     }
 
     #[test]
@@ -547,11 +619,11 @@ mod tests {
 
         manager.update(
             &mut model,
-            Message::InvokeCommand(CommandId("close_explorer_move")),
+            Message::InvokeCommand(CommandId("close_explorer_transfer")),
         );
         assert!(source.exists());
         assert!(!directory.path().join("destination.txt").exists());
-        assert!(!model.explorer.relocate.is_open());
+        assert!(!model.explorer.transfer.is_open());
         assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
     }
 
@@ -575,15 +647,15 @@ mod tests {
         let effect = manager
             .update(
                 &mut model,
-                Message::InvokeCommand(CommandId("explorer_move_submit")),
+                Message::InvokeCommand(CommandId("explorer_transfer_submit")),
             )
             .unwrap();
         let notification = complete_feature(&manager, &mut model, effect);
         assert!(notification.is_some());
         assert_eq!(fs::read_to_string(source).unwrap(), "source");
         assert_eq!(fs::read_to_string(destination).unwrap(), "destination");
-        assert!(model.explorer.relocate.is_editing());
-        assert_eq!(model.explorer.relocate.destination, "destination.txt");
+        assert!(model.explorer.transfer.is_editing());
+        assert_eq!(model.explorer.transfer.destination, "destination.txt");
         assert!(
             model
                 .notifications
@@ -592,6 +664,44 @@ mod tests {
                 .message()
                 .contains("the destination already exists")
         );
+    }
+
+    #[test]
+    fn copy_preserves_source_and_modified_buffer_and_reveals_destination() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("source.txt");
+        fs::write(&source, "original").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let root = model.workspace.as_ref().unwrap().root().to_path_buf();
+        let buffer = crate::test_utils::open_file(&mut model, &source);
+        model
+            .editor
+            .active_editor()
+            .unwrap()
+            .insert_text("changed ")
+            .unwrap();
+        let manager = MessageManager::default();
+        open_copy(&manager, &mut model);
+        replace_destination(&manager, &mut model, "nested/copied.txt");
+
+        let effect = manager
+            .update(
+                &mut model,
+                Message::InvokeCommand(CommandId("explorer_transfer_submit")),
+            )
+            .unwrap();
+        let reveal = complete_feature(&manager, &mut model, effect).unwrap();
+        let destination = root.join("nested/copied.txt");
+        assert_eq!(fs::read_to_string(&source).unwrap(), "original");
+        assert_eq!(fs::read_to_string(&destination).unwrap(), "original");
+        assert_eq!(model.editor.buffer_path(buffer), Some(source.as_path()));
+        assert_eq!(
+            model.editor.active_text_snapshot().unwrap().text,
+            "changed original"
+        );
+        assert!(!model.explorer.transfer.is_open());
+        apply_features(&manager, &mut model, reveal);
+        assert_eq!(model.explorer.selected_entry().unwrap().path, destination);
     }
 
     #[test]

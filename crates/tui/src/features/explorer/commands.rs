@@ -5,7 +5,11 @@ use crate::{
     manager::effect::Effect,
 };
 
-use super::{ExpansionState, add, delete, relocate, work::ExplorerRefreshKind};
+use super::{
+    ExpansionState, add, delete,
+    transfer::{self, TransferOperation},
+    work::ExplorerRefreshKind,
+};
 
 /// Explorer state commands. File opening and panel focus stay in separate slices.
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
@@ -25,11 +29,11 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         "explorer_delete" => return delete::open(model),
         "explorer_delete_confirm" => return delete::confirm(model),
         "close_explorer_delete" => return delete::cancel(model),
-        "explorer_move" => return relocate::open(model),
-        "explorer_move_submit" => return relocate::submit(model),
-        "close_explorer_move" => return relocate::cancel(model),
-        "explorer_move_backspace" => return relocate::backspace(model),
-        "explorer_copy" => return placeholder(model, "Copy"),
+        "explorer_move" => return transfer::open(model, TransferOperation::Move),
+        "explorer_transfer_submit" => return transfer::submit(model),
+        "close_explorer_transfer" => return transfer::cancel(model),
+        "explorer_transfer_backspace" => return transfer::backspace(model),
+        "explorer_copy" => return transfer::open(model, TransferOperation::Copy),
         _ => {
             model.status = Some(StatusMessage::error(format!(
                 "unknown explorer command `{}`",
@@ -98,13 +102,6 @@ fn close_help(model: &mut Model) -> Option<Effect> {
         .context_stack
         .pop_if(|context| context == &Context::ExplorerHelp);
     None
-}
-
-fn placeholder(model: &mut Model, action: &str) -> Option<Effect> {
-    Some(crate::notifications::report_status(
-        model,
-        StatusMessage::info(format!("{action} is not implemented")),
-    ))
 }
 
 #[cfg(test)]
@@ -279,32 +276,6 @@ mod tests {
         );
         assert!(!model.explorer.help_visible());
         assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
-    }
-
-    #[test]
-    fn copy_placeholder_reports_without_changing_files() {
-        let directory = tempfile::tempdir().unwrap();
-        std::fs::write(directory.path().join("note.txt"), "hello").unwrap();
-        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
-        let original_entries = model.explorer.entries.clone();
-        let manager = MessageManager::default();
-
-        let effect = manager.update(
-            &mut model,
-            Message::InvokeCommand(CommandId("explorer_copy")),
-        );
-        assert!(effect.is_some());
-        assert_eq!(
-            model.status.as_ref().map(|status| status.text.as_str()),
-            Some("Copy is not implemented")
-        );
-
-        assert_eq!(model.explorer.entries, original_entries);
-        assert_eq!(
-            std::fs::read_to_string(directory.path().join("note.txt")).unwrap(),
-            "hello"
-        );
-        assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
     }
 
     #[test]

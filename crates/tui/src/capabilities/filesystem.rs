@@ -80,11 +80,11 @@ fn parse_relative(input: &str) -> Result<PathBuf, String> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct MoveDestination {
+pub(crate) struct TransferDestination {
     relative: PathBuf,
 }
 
-impl MoveDestination {
+impl TransferDestination {
     pub(crate) fn parse(input: &str) -> Result<Self, String> {
         parse_relative(input).map(|relative| Self { relative })
     }
@@ -155,7 +155,7 @@ pub(crate) fn relocate(
     root: &Path,
     source: &Path,
     expected: FileKind,
-    destination: &MoveDestination,
+    destination: &TransferDestination,
 ) -> io::Result<PathBuf> {
     let root = fs::canonicalize(root)?;
     let source = existing_target(&root, source)?;
@@ -164,16 +164,45 @@ pub(crate) fn relocate(
         return Err(io::Error::other("the source changed before moving"));
     }
 
+    let destination = prepare_destination(&root, &source, expected, destination)?;
+    fs::rename(source, &destination)?;
+    fs::canonicalize(destination)
+}
+
+pub(crate) fn copy(
+    root: &Path,
+    source: &Path,
+    expected: FileKind,
+    destination: &TransferDestination,
+) -> io::Result<PathBuf> {
+    let root = fs::canonicalize(root)?;
+    let source = existing_target(&root, source)?;
+    let actual = file_kind(fs::symlink_metadata(&source)?.file_type())?;
+    if actual != expected {
+        return Err(io::Error::other("the source changed before copying"));
+    }
+
+    let destination = prepare_destination(&root, &source, expected, destination)?;
+    copy_entry(&source, &destination, expected)?;
+    fs::canonicalize(destination)
+}
+
+fn prepare_destination(
+    root: &Path,
+    source: &Path,
+    kind: FileKind,
+    destination: &TransferDestination,
+) -> io::Result<PathBuf> {
     let raw_destination = root.join(&destination.relative);
-    validate_move_paths(&source, &raw_destination, expected)?;
+    validate_transfer_paths(source, &raw_destination, kind)?;
     ensure_missing(&raw_destination)?;
     let parent = destination
         .relative
         .parent()
         .unwrap_or(Path::new(""))
         .iter()
-        .try_fold(root.clone(), |parent, name| {
-            ensure_parent_directory(parent.join(name), &root)
+        .try_fold(root.to_path_buf(), |parent, name| {
+            ensure_parent_directory(parent.join(name), root)
         })?;
     let name = destination.relative.file_name().ok_or_else(|| {
         io::Error::new(
@@ -182,10 +211,32 @@ pub(crate) fn relocate(
         )
     })?;
     let destination = parent.join(name);
-    validate_move_paths(&source, &destination, expected)?;
+    validate_transfer_paths(source, &destination, kind)?;
     ensure_missing(&destination)?;
-    fs::rename(source, &destination)?;
-    fs::canonicalize(destination)
+    Ok(destination)
+}
+
+fn copy_entry(source: &Path, destination: &Path, kind: FileKind) -> io::Result<()> {
+    match kind {
+        FileKind::File => {
+            fs::copy(source, destination)?;
+        }
+        FileKind::Directory => {
+            fs::create_dir(destination)?;
+            for entry in fs::read_dir(source)? {
+                let entry = entry?;
+                copy_entry(
+                    &entry.path(),
+                    &destination.join(entry.file_name()),
+                    file_kind(entry.file_type()?)?,
+                )?;
+            }
+        }
+        FileKind::Link => {
+            std::os::unix::fs::symlink(fs::read_link(source)?, destination)?;
+        }
+    }
+    Ok(())
 }
 
 fn existing_target(root: &Path, path: &Path) -> io::Result<PathBuf> {
@@ -210,7 +261,7 @@ fn existing_target(root: &Path, path: &Path) -> io::Result<PathBuf> {
     Ok(parent.join(name))
 }
 
-fn validate_move_paths(source: &Path, destination: &Path, kind: FileKind) -> io::Result<()> {
+fn validate_transfer_paths(source: &Path, destination: &Path, kind: FileKind) -> io::Result<()> {
     if source == destination {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -220,7 +271,7 @@ fn validate_move_paths(source: &Path, destination: &Path, kind: FileKind) -> io:
     if kind == FileKind::Directory && destination.starts_with(source) {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "a directory cannot be moved inside itself",
+            "a directory cannot be copied or moved inside itself",
         ));
     }
     Ok(())
@@ -342,7 +393,7 @@ mod tests {
         let root = fs::canonicalize(workspace.path()).unwrap();
         let source = root.join("source.txt");
         fs::write(&source, "content").unwrap();
-        let destination = MoveDestination::parse("nested/new.txt").unwrap();
+        let destination = TransferDestination::parse("nested/new.txt").unwrap();
 
         let moved = relocate(&root, &source, FileKind::File, &destination).unwrap();
         assert_eq!(moved, root.join("nested/new.txt"));
@@ -358,18 +409,18 @@ mod tests {
         fs::create_dir_all(source.join("nested")).unwrap();
         fs::write(source.join("nested/note.txt"), "keep").unwrap();
 
-        let inside = MoveDestination::parse("folder/subfolder").unwrap();
+        let inside = TransferDestination::parse("folder/subfolder").unwrap();
         assert!(relocate(&root, &source, FileKind::Directory, &inside).is_err());
         assert!(source.join("nested/note.txt").exists());
 
         let existing = root.join("existing");
         fs::create_dir(&existing).unwrap();
-        let destination = MoveDestination::parse("existing").unwrap();
+        let destination = TransferDestination::parse("existing").unwrap();
         let error = relocate(&root, &source, FileKind::Directory, &destination).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
         assert!(source.exists() && existing.exists());
 
-        let destination = MoveDestination::parse("renamed").unwrap();
+        let destination = TransferDestination::parse("renamed").unwrap();
         let moved = relocate(&root, &source, FileKind::Directory, &destination).unwrap();
         assert!(!source.exists());
         assert_eq!(
@@ -387,18 +438,82 @@ mod tests {
         fs::write(&source, "keep").unwrap();
         std::os::unix::fs::symlink(outside.path(), root.join("linked")).unwrap();
 
-        let escape = MoveDestination::parse("linked/escape.txt").unwrap();
+        let escape = TransferDestination::parse("linked/escape.txt").unwrap();
         let error = relocate(&root, &source, FileKind::File, &escape).unwrap_err();
         assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
         assert!(source.exists());
         assert!(!outside.path().join("escape.txt").exists());
 
-        let destination = MoveDestination::parse("moved-link").unwrap();
+        let destination = TransferDestination::parse("moved-link").unwrap();
         relocate(&root, &root.join("linked"), FileKind::Link, &destination).unwrap();
         assert_eq!(
             fs::read_link(root.join("moved-link")).unwrap(),
             outside.path()
         );
         assert!(fs::symlink_metadata(root.join("linked")).is_err());
+    }
+
+    #[test]
+    fn file_copy_creates_parents_and_preserves_source_and_content() {
+        let workspace = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(workspace.path()).unwrap();
+        let source = root.join("source.txt");
+        fs::write(&source, "content").unwrap();
+        let existing = root.join("existing.txt");
+        fs::write(&existing, "keep").unwrap();
+
+        let rejected = TransferDestination::parse("existing.txt").unwrap();
+        assert!(copy(&root, &source, FileKind::File, &rejected).is_err());
+        assert_eq!(fs::read_to_string(existing).unwrap(), "keep");
+
+        let destination = TransferDestination::parse("nested/copied.txt").unwrap();
+        let copied = copy(&root, &source, FileKind::File, &destination).unwrap();
+        assert_eq!(copied, root.join("nested/copied.txt"));
+        assert_eq!(fs::read_to_string(&source).unwrap(), "content");
+        assert_eq!(fs::read_to_string(copied).unwrap(), "content");
+    }
+
+    #[test]
+    fn directory_copy_is_recursive_and_rejects_self_descendants() {
+        let workspace = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(workspace.path()).unwrap();
+        let source = root.join("folder");
+        fs::create_dir_all(source.join("nested")).unwrap();
+        fs::write(source.join("nested/note.txt"), "keep").unwrap();
+
+        let inside = TransferDestination::parse("folder/subfolder").unwrap();
+        assert!(copy(&root, &source, FileKind::Directory, &inside).is_err());
+        assert!(source.join("nested/note.txt").exists());
+
+        let destination = TransferDestination::parse("copied").unwrap();
+        let copied = copy(&root, &source, FileKind::Directory, &destination).unwrap();
+        assert!(source.join("nested/note.txt").exists());
+        assert_eq!(
+            fs::read_to_string(copied.join("nested/note.txt")).unwrap(),
+            "keep"
+        );
+    }
+
+    #[test]
+    fn copy_rejects_symlink_parent_escape_and_copies_only_links() {
+        let workspace = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(workspace.path()).unwrap();
+        let source = root.join("source.txt");
+        fs::write(&source, "keep").unwrap();
+        std::os::unix::fs::symlink(outside.path(), root.join("linked")).unwrap();
+
+        let escape = TransferDestination::parse("linked/escape.txt").unwrap();
+        let error = copy(&root, &source, FileKind::File, &escape).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+        assert!(!outside.path().join("escape.txt").exists());
+
+        let destination = TransferDestination::parse("copied-link").unwrap();
+        copy(&root, &root.join("linked"), FileKind::Link, &destination).unwrap();
+        assert_eq!(
+            fs::read_link(root.join("copied-link")).unwrap(),
+            outside.path()
+        );
+        assert!(fs::symlink_metadata(root.join("linked")).is_ok());
     }
 }

@@ -18,7 +18,7 @@ const HELP_TEXT: [&str; 14] = [
     "a           add file / directory",
     "d           delete file / directory",
     "m           move file / directory",
-    "c           copy (placeholder)",
+    "c           copy file / directory",
     "",
     "? / Esc     close help",
 ];
@@ -78,7 +78,7 @@ mod tests {
             "add file / directory",
             "delete file / directory",
             "move file / directory",
-            "copy (placeholder)",
+            "copy file / directory",
             "? / Esc     close help",
         ] {
             assert!(content.contains(expected), "missing help text: {expected}");

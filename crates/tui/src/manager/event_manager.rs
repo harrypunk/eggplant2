@@ -908,11 +908,11 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         assert!(manager.translate(event, &model).is_none());
 
-        model.context_stack.push(Context::ExplorerMove);
+        model.context_stack.push(Context::ExplorerTransfer);
         for (key, command) in [
-            (KeyCode::Enter, "explorer_move_submit"),
-            (KeyCode::Esc, "close_explorer_move"),
-            (KeyCode::Backspace, "explorer_move_backspace"),
+            (KeyCode::Enter, "explorer_transfer_submit"),
+            (KeyCode::Esc, "close_explorer_transfer"),
+            (KeyCode::Backspace, "explorer_transfer_backspace"),
         ] {
             let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
             assert!(matches!(
