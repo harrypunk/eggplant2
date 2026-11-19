@@ -81,7 +81,7 @@ impl ExplorerState {
             Ok(entries) => entries,
             Err(error) => return ExplorerApply::Failed(request.action, error),
         };
-        if matches!(&request.action, ExplorerAction::Expansion { .. }) {
+        if let ExplorerAction::Expansion { .. } = &request.action {
             if self.expand_directory(&request, entries) == TreeChange::Unchanged {
                 return ExplorerApply::Unchanged;
             }

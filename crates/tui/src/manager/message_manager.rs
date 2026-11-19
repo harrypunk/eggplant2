@@ -145,7 +145,7 @@ impl MessageManager {
                 document::OpenOrigin::Other => true,
             };
         if reconcile {
-            if matches!(opened.origin, document::OpenOrigin::FilePicker { .. }) {
+            if let document::OpenOrigin::FilePicker { .. } = opened.origin {
                 file_picker::close(model);
             }
             focus::focus_editor(model);

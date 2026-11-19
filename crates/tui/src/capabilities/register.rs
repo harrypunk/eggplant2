@@ -20,7 +20,10 @@ impl RegisterState {
     }
 
     pub fn has_system_provider(&self) -> bool {
-        !matches!(self.provider, ClipboardProvider::None)
+        let ClipboardProvider::None = self.provider else {
+            return true;
+        };
+        false
     }
 
     pub(crate) fn provider(&self) -> ClipboardProvider {

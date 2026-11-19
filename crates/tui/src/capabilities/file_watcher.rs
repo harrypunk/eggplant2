@@ -38,10 +38,12 @@ pub fn start(
 }
 
 fn is_file_change(kind: &EventKind) -> bool {
-    matches!(
-        kind,
-        EventKind::Any | EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)
-    )
+    let (EventKind::Any | EventKind::Create(_) | EventKind::Modify(_) | EventKind::Remove(_)) =
+        kind
+    else {
+        return false;
+    };
+    true
 }
 
 fn change_kind(kind: &EventKind) -> ExternalChangeKind {

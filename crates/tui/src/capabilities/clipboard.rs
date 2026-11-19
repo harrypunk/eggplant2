@@ -13,7 +13,7 @@ impl<C: ClipboardWriter + ?Sized> ClipboardWriter for &C {
 
 impl ClipboardWriter for ClipboardProvider {
     fn write_text(&self, text: &str) -> Result<(), String> {
-        if matches!(self, ClipboardProvider::None) {
+        if let ClipboardProvider::None = self {
             return Err("no system clipboard provider is available".to_string());
         }
         self.set_contents(text, ClipboardType::Clipboard)

@@ -72,7 +72,7 @@ impl EventManager {
     }
 
     fn is_leader_start(context: &Context, key: KeyEvent) -> bool {
-        matches!(context, Context::AppNormal | Context::Explorer)
+        (context == &Context::AppNormal || context == &Context::Explorer)
             && key.code == KeyCode::Char(' ')
             && key.modifiers.is_empty()
     }
@@ -106,10 +106,13 @@ fn shifted_symbol_chord(key: KeyEvent) -> Option<KeyChord> {
 
 fn menu_navigation_alias(context: &Context, key: KeyEvent) -> Option<KeyChord> {
     if key.modifiers != KeyModifiers::CONTROL
-        || !matches!(
-            context,
-            Context::FilePicker | Context::ThemePicker | Context::BufferGrep | Context::ProjectGrep
-        )
+        || ![
+            Context::FilePicker,
+            Context::ThemePicker,
+            Context::BufferGrep,
+            Context::ProjectGrep,
+        ]
+        .contains(context)
     {
         return None;
     }

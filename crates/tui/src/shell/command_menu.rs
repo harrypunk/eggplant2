@@ -214,7 +214,7 @@ impl CommandMenuState {
         let Some(item) = context
             .items
             .iter()
-            .find(|item| matches!(key, KeyCode::Char(character) if character == item.key))
+            .find(|item| key == KeyCode::Char(item.key))
         else {
             return self.cancel();
         };

@@ -433,7 +433,7 @@ fn commit_change_parts(
 }
 
 fn is_blob(mode: EntryMode) -> bool {
-    matches!(mode.kind(), EntryKind::Blob | EntryKind::BlobExecutable)
+    mode.kind() == EntryKind::Blob || mode.kind() == EntryKind::BlobExecutable
 }
 
 /// Read complete commit metadata and its changed-file list.
@@ -590,7 +590,7 @@ fn commit_inner(repository: Repository, message: &str) -> anyhow::Result<ObjectI
     {
         anyhow::bail!("conflicted index");
     }
-    if matches!(repository.state(), Some(gix::state::InProgress::Merge)) {
+    if let Some(gix::state::InProgress::Merge) = repository.state() {
         anyhow::bail!("merge in progress");
     }
 
@@ -1218,10 +1218,9 @@ fn branch_tips(repository: &Repository) -> anyhow::Result<HashMap<ObjectId, Vec<
                 if let (Some(id), Some((category, name))) = (
                     reference.target().try_id(),
                     reference.name().category_and_short_name(),
-                ) && matches!(
-                    category,
-                    gix::reference::Category::LocalBranch | gix::reference::Category::RemoteBranch
-                ) {
+                ) && let gix::reference::Category::LocalBranch
+                | gix::reference::Category::RemoteBranch = category
+                {
                     tips.entry(id.to_owned())
                         .or_default()
                         .push(name.to_str_lossy().into_owned());

@@ -50,13 +50,13 @@ impl BranchState {
     }
 
     pub(crate) fn is_popup_active(&self) -> bool {
-        matches!(
-            self.phase,
-            BranchPhase::Loading
-                | BranchPhase::Selecting
-                | BranchPhase::Naming
-                | BranchPhase::Switching
-        )
+        [
+            BranchPhase::Loading,
+            BranchPhase::Selecting,
+            BranchPhase::Naming,
+            BranchPhase::Switching,
+        ]
+        .contains(&self.phase)
     }
 
     pub(crate) fn is_loading(&self) -> bool {
@@ -163,7 +163,7 @@ impl BranchState {
     }
 
     fn insert(&mut self, character: char) {
-        if !matches!(self.phase, BranchPhase::Selecting | BranchPhase::Naming) {
+        if self.phase != BranchPhase::Selecting && self.phase != BranchPhase::Naming {
             return;
         }
         self.query.push(character);
@@ -174,7 +174,7 @@ impl BranchState {
     }
 
     fn backspace(&mut self) {
-        if !matches!(self.phase, BranchPhase::Selecting | BranchPhase::Naming) {
+        if self.phase != BranchPhase::Selecting && self.phase != BranchPhase::Naming {
             return;
         }
         self.query.pop();

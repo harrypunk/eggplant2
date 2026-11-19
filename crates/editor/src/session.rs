@@ -380,7 +380,7 @@ impl EditorSession {
         let document = &self.buffers.get(&active.buffer)?.document;
         let view = &active.view;
         let mut text = text_view_snapshot(document, view);
-        if matches!(self.mode, EditMode::Visual | EditMode::VisualLine) {
+        if self.mode == EditMode::Visual || self.mode == EditMode::VisualLine {
             apply_selection_snapshot(&mut text, document, view);
         }
         apply_diff_snapshot(&mut text, document);
@@ -485,7 +485,7 @@ impl EditorSession {
     }
 
     pub fn enter_normal_mode(&mut self) {
-        if matches!(self.mode, EditMode::Visual | EditMode::VisualLine)
+        if let EditMode::Visual | EditMode::VisualLine = self.mode
             && let Ok(mut editor) = self.active_editor()
         {
             editor.collapse_selection();

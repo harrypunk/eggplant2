@@ -246,7 +246,8 @@ fn local_branch_commit(repository: &Repository, branch: &str) -> anyhow::Result<
 fn validate_switch_index(index: &gix::index::State) -> anyhow::Result<()> {
     if index.entries().iter().any(|entry| {
         entry.stage() != Stage::Unconflicted
-            || matches!(entry.mode, Mode::COMMIT | Mode::DIR)
+            || entry.mode == Mode::COMMIT
+            || entry.mode == Mode::DIR
             || entry
                 .flags
                 .contains(gix::index::entry::Flags::SKIP_WORKTREE)

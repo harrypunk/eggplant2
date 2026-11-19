@@ -218,7 +218,7 @@ impl ChangesController {
         }
         self.target = Some(target.clone());
         self.refreshing = true;
-        if !matches!(self.state, ChangesState::Ready(_)) {
+        if let ChangesState::Idle | ChangesState::Loading | ChangesState::Failed(_) = self.state {
             self.state = ChangesState::Loading;
         }
         self.revision = self.revision.wrapping_add(1);

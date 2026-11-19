@@ -146,7 +146,7 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
 /// Consume only count and gg/G input; unrelated printable input remains a no-op.
 pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
     let accepts_count =
-        !model.line_jump.is_active() && matches!(character, '1'..='9') && accepts_count(model);
+        !model.line_jump.is_active() && ('1'..='9').contains(&character) && accepts_count(model);
     match model.line_jump.update(character, accepts_count) {
         LineJumpAction::Ignored => {}
         LineJumpAction::Pending => activate(model),

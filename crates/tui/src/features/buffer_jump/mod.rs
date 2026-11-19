@@ -121,12 +121,9 @@ fn refresh_matches(model: &mut Model) {
 }
 
 fn start(model: &mut Model) {
-    if !matches!(
-        model.context_stack.last(),
-        Some(Context::AppNormal | Context::Explorer)
-    ) {
+    let Some(Context::AppNormal | Context::Explorer) = model.context_stack.last() else {
         return;
-    }
+    };
     let Some(source) = model.editor.active_revision() else {
         model.status = Some(StatusMessage::info("No active buffer"));
         return;

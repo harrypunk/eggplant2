@@ -344,7 +344,7 @@ pub(super) fn toggle_history_files(model: &mut Model) -> Option<Effect> {
 
 pub(super) fn open_history_detail(model: &mut Model) -> Option<Effect> {
     let commit = selected_history_commit(model)?;
-    if matches!(model.vcs.history.detail, CommitDetailsState::Ready(_)) {
+    if let CommitDetailsState::Ready(_) = model.vcs.history.detail {
         return None;
     }
     let cached = model.vcs.history.commit_cache.get(&commit.id).cloned();

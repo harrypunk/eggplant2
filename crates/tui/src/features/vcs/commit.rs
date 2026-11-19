@@ -38,18 +38,21 @@ enum CommitPhase {
 
 impl CommitState {
     pub(crate) fn is_editing(&self) -> bool {
-        matches!(self.phase, CommitPhase::Editing)
+        self.phase == CommitPhase::Editing
     }
 
     pub(crate) fn is_waiting_for_save(&self) -> bool {
-        matches!(self.phase, CommitPhase::Saving(_))
+        let CommitPhase::Saving(_) = self.phase else {
+            return false;
+        };
+        true
     }
 
     pub(crate) fn is_in_progress(&self) -> bool {
-        matches!(
-            self.phase,
-            CommitPhase::Saving(_) | CommitPhase::Committing(_)
-        )
+        let (CommitPhase::Saving(_) | CommitPhase::Committing(_)) = self.phase else {
+            return false;
+        };
+        true
     }
 
     pub(crate) fn resize_active_view(&mut self, width: u16, height: u16) {
@@ -200,9 +203,7 @@ fn submit(model: &mut Model) -> Option<Effect> {
 
 /// Continue the save barrier after each ordinary file save completes.
 pub(crate) fn continue_after_save(model: &mut Model) -> Option<Effect> {
-    if !matches!(model.vcs.commit.phase, CommitPhase::Saving(_))
-        || model.editor.has_saving_buffers()
-    {
+    if !model.vcs.commit.is_waiting_for_save() || model.editor.has_saving_buffers() {
         return None;
     }
     if let Some(id) = model.editor.first_dirty_file_buffer() {
@@ -218,7 +219,7 @@ pub(crate) fn continue_after_save(model: &mut Model) -> Option<Effect> {
 }
 
 pub(crate) fn save_failed(model: &mut Model, error: &str) {
-    if matches!(model.vcs.commit.phase, CommitPhase::Saving(_)) {
+    if model.vcs.commit.is_waiting_for_save() {
         model.vcs.commit.phase = CommitPhase::Editing;
         model.vcs.notice = Some(format!("Commit cancelled: {error}"));
     }
