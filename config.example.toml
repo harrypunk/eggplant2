@@ -85,6 +85,14 @@ focus_up = "ctrl-k"
 focus_right = "ctrl-l"
 refresh_explorer = "r"
 toggle_ignored_files = "shift-i"
+explorer_help = "?"
+explorer_add = "a"
+explorer_delete = "d"
+explorer_move = "m"
+explorer_copy = "c"
+
+[keymap.explorer_add]
+explorer_add_submit = "enter"
 
 [keymap.file_picker]
 open_picker_file = "enter"

@@ -5,7 +5,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use editor::DocumentFactory;
+
 use super::{
+    add::AddState,
     fs,
     work::{ExplorerAction, ExplorerRefreshKind, ExplorerRequest},
 };
@@ -58,9 +61,12 @@ pub struct ExplorerState {
     pub visibility: Visibility,
     pub entries: Vec<ExplorerEntry>,
     pub selected: Option<usize>,
+    pub(crate) add: AddState,
+    documents: DocumentFactory,
     expanded_directories: HashSet<PathBuf>,
     ignore_mode: IgnoreMode,
     refresh_generation: u64,
+    help_visible: bool,
 }
 
 impl Default for ExplorerState {
@@ -69,9 +75,12 @@ impl Default for ExplorerState {
             visibility: Visibility::Displayed,
             entries: Vec::new(),
             selected: None,
+            add: AddState::default(),
+            documents: DocumentFactory::new(),
             expanded_directories: HashSet::new(),
             ignore_mode: IgnoreMode::HideIgnored,
             refresh_generation: 0,
+            help_visible: false,
         }
     }
 }
@@ -341,6 +350,22 @@ impl ExplorerState {
         }
 
         self.selected = Some(self.selected.unwrap_or(0).saturating_sub(1));
+    }
+
+    pub(crate) fn documents(&self) -> &DocumentFactory {
+        &self.documents
+    }
+
+    pub(crate) fn help_visible(&self) -> bool {
+        self.help_visible
+    }
+
+    pub(crate) fn open_help(&mut self) {
+        self.help_visible = true;
+    }
+
+    pub(crate) fn close_help(&mut self) {
+        self.help_visible = false;
     }
 
     pub fn selected_entry(&self) -> Option<&ExplorerEntry> {

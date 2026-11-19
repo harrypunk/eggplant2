@@ -181,8 +181,14 @@ impl Default for Config {
                         ("focus_right", "ctrl-l"),
                         ("refresh_explorer", "r"),
                         ("toggle_ignored_files", "shift-i"),
+                        ("explorer_help", "?"),
+                        ("explorer_add", "a"),
+                        ("explorer_delete", "d"),
+                        ("explorer_move", "m"),
+                        ("explorer_copy", "c"),
                     ],
                 ),
+                keymap_context("explorer_add", [("explorer_add_submit", "enter")]),
                 keymap_context(
                     "file_picker",
                     [

@@ -27,6 +27,8 @@ impl TextInputRegistry {
         registry
             .register(Context::FilePicker, crate::file_picker::insert_char)
             .expect("file-picker text input must be unique");
+        crate::explorer::register_text_input(&mut registry)
+            .expect("explorer-add text input must be unique");
         crate::theme_picker::register_text_input(&mut registry)
             .expect("theme-picker text input must be unique");
         crate::buffer_jump::register_text_input(&mut registry)

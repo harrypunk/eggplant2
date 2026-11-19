@@ -843,6 +843,59 @@ mod tests {
     }
 
     #[test]
+    fn routes_explorer_help_and_file_operation_keys() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::Explorer);
+
+        for (key, command) in [
+            (KeyCode::Char('?'), "explorer_help"),
+            (KeyCode::Char('a'), "explorer_add"),
+            (KeyCode::Char('d'), "explorer_delete"),
+            (KeyCode::Char('m'), "explorer_move"),
+            (KeyCode::Char('c'), "explorer_copy"),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+
+        model.context_stack.push(Context::ExplorerHelp);
+        for (key, command) in [
+            (KeyCode::Esc, "close_explorer_help"),
+            (KeyCode::Char('?'), "explorer_help"),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+        let event = Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
+        assert!(manager.translate(event, &model).is_none());
+
+        model.context_stack.push(Context::ExplorerAdd);
+        for (key, command) in [
+            (KeyCode::Enter, "explorer_add_submit"),
+            (KeyCode::Esc, "close_explorer_add"),
+            (KeyCode::Backspace, "explorer_add_backspace"),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::TextInput('x'))
+        ));
+    }
+
+    #[test]
     fn shift_i_toggles_ignored_files_only_in_explorer_context() {
         let manager = event_manager();
         let event = || Event::Key(KeyEvent::new(KeyCode::Char('I'), KeyModifiers::SHIFT));

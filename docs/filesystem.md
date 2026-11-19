@@ -104,6 +104,12 @@ The first implementation uses established crates and explicit effects instead of
 
 Revision checks guarantee stale results are harmless, but they do not stop obsolete CPU or I/O work. If profiling on large repositories shows excessive queued work, introduce a dedicated picker worker that coalesces queued queries and supports cancellation. Do not add a complex scheduler before that need is measured. A future watcher or explicit refresh can keep the file-entry and preview caches current. A future recent-files command such as `Space f r` can reuse the same entries with recency metadata and ordering instead of introducing another scanner.
 
+## Explorer add
+
+Explorer `a` opens a revisioned path prompt. The initial path is the selected directory, or the selected file's parent, relative to the fixed workspace root. A trailing `/` creates a directory; other paths create an empty regular file with create-if-absent semantics. Existing targets are never truncated, and missing parent directories are created one component at a time within the workspace.
+
+Absolute paths and parent traversal are rejected before work starts. The blocking worker canonicalizes every existing or newly created parent component and rejects parents outside the canonical workspace, including symlink escapes. Successful files open through `document::open_file`; successful directories use `reveal_request`, which expands ancestors and selects the new directory without a separate refresh. Failures retain the entered path for correction, and stale completions cannot close or change a newer prompt.
+
 ## Future filesystem mutations
 
 Rename, move, and delete should extend the same message/effect/completion path. They should not be implemented as direct calls from explorer or picker components.

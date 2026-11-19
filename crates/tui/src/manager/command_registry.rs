@@ -310,6 +310,51 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
             crate::explorer::handle_command,
         ),
         Command::feature(
+            CommandId("explorer_help"),
+            "show explorer help",
+            crate::explorer::handle_command,
+        ),
+        Command::feature(
+            CommandId("close_explorer_help"),
+            "close explorer help",
+            crate::explorer::handle_command,
+        ),
+        Command::feature(
+            CommandId("explorer_add"),
+            "add file or directory",
+            crate::explorer::handle_command,
+        ),
+        Command::feature(
+            CommandId("explorer_add_submit"),
+            "create file or directory",
+            crate::explorer::handle_command,
+        ),
+        Command::feature(
+            CommandId("close_explorer_add"),
+            "cancel adding file or directory",
+            crate::explorer::handle_command,
+        ),
+        Command::feature(
+            CommandId("explorer_add_backspace"),
+            "edit new file or directory path",
+            crate::explorer::handle_command,
+        ),
+        Command::feature(
+            CommandId("explorer_delete"),
+            "delete (placeholder)",
+            crate::explorer::handle_command,
+        ),
+        Command::feature(
+            CommandId("explorer_move"),
+            "move (placeholder)",
+            crate::explorer::handle_command,
+        ),
+        Command::feature(
+            CommandId("explorer_copy"),
+            "copy (placeholder)",
+            crate::explorer::handle_command,
+        ),
+        Command::feature(
             CommandId("toggle_file_explorer"),
             "toggle files",
             crate::focus::handle_command,

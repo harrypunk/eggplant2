@@ -126,6 +126,10 @@ impl UiRegistry {
             .expect("tools panel must be unique");
         ui.register_status(StatusSlot::Message, render_status)
             .expect("status slot must be unique");
+        ui.register_overlay("explorer_help", crate::explorer::help_overlay)
+            .expect("explorer help overlay must be unique");
+        ui.register_overlay("explorer_add", crate::explorer::add_overlay)
+            .expect("explorer add overlay must be unique");
         ui.register_overlay("file_picker", crate::component::file_picker::overlay)
             .expect("file picker overlay must be unique");
         ui.register_overlay("theme_picker", crate::theme_picker::overlay)

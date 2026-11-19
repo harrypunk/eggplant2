@@ -61,6 +61,17 @@ fn common_bindings() -> KeymapConfig {
         ),
         keymap_context("visual", [("exit_visual_mode", "esc")]),
         keymap_context(
+            "explorer_add",
+            [
+                ("close_explorer_add", "esc"),
+                ("explorer_add_backspace", "backspace"),
+            ],
+        ),
+        keymap_context(
+            "explorer_help",
+            [("close_explorer_help", "esc"), ("explorer_help", "?")],
+        ),
+        keymap_context(
             "file_picker",
             [
                 ("close_file_picker", "esc"),
@@ -187,6 +198,8 @@ fn parse_context(value: &str) -> Option<Context> {
         "editor_input" => Some(Context::EditorInput),
         "visual" => Some(Context::EditorVisual),
         "explorer" => Some(Context::Explorer),
+        "explorer_help" => Some(Context::ExplorerHelp),
+        "explorer_add" => Some(Context::ExplorerAdd),
         "file_picker" => Some(Context::FilePicker),
         "theme_picker" => Some(Context::ThemePicker),
         "buffer_jump" => Some(Context::BufferJump),

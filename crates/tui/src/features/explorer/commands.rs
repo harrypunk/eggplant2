@@ -1,11 +1,11 @@
 use std::path::Path;
 
 use crate::{
-    data_object::{CommandId, Model, StatusMessage},
+    data_object::{CommandId, Context, Model, StatusMessage},
     manager::effect::Effect,
 };
 
-use super::{ExpansionState, work::ExplorerRefreshKind};
+use super::{ExpansionState, add, work::ExplorerRefreshKind};
 
 /// Explorer state commands. File opening and panel focus stay in separate slices.
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
@@ -16,6 +16,15 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         "explorer_unfold" => return change_expansion(model, ExpansionState::Expanded),
         "refresh_explorer" => return refresh(model),
         "toggle_ignored_files" => return toggle_ignored_files(model),
+        "explorer_help" => return toggle_help(model),
+        "close_explorer_help" => return close_help(model),
+        "explorer_add" => return add::open(model),
+        "explorer_add_submit" => return add::submit(model),
+        "close_explorer_add" => return add::cancel(model),
+        "explorer_add_backspace" => return add::backspace(model),
+        "explorer_delete" => return placeholder(model, "Delete"),
+        "explorer_move" => return placeholder(model, "Move"),
+        "explorer_copy" => return placeholder(model, "Copy"),
         _ => {
             model.status = Some(StatusMessage::error(format!(
                 "unknown explorer command `{}`",
@@ -63,6 +72,34 @@ pub(crate) fn refresh_changed(model: &mut Model, path: &Path) -> Option<Effect> 
 fn toggle_ignored_files(model: &mut Model) -> Option<Effect> {
     let root = model.workspace.as_ref()?.root().to_path_buf();
     Some(Effect::feature(model.explorer.toggle_ignore_request(&root)))
+}
+
+fn toggle_help(model: &mut Model) -> Option<Effect> {
+    if model.explorer.help_visible() {
+        return close_help(model);
+    }
+    if !model.modal.open(Context::ExplorerHelp) {
+        return None;
+    }
+    model.explorer.open_help();
+    model.context_stack.push(Context::ExplorerHelp);
+    None
+}
+
+fn close_help(model: &mut Model) -> Option<Effect> {
+    model.explorer.close_help();
+    model.modal.close(Context::ExplorerHelp);
+    model
+        .context_stack
+        .pop_if(|context| context == &Context::ExplorerHelp);
+    None
+}
+
+fn placeholder(model: &mut Model, action: &str) -> Option<Effect> {
+    Some(crate::notifications::report_status(
+        model,
+        StatusMessage::info(format!("{action} is not implemented")),
+    ))
 }
 
 #[cfg(test)]
@@ -199,6 +236,73 @@ mod tests {
             model.status.as_ref().map(|status| status.text.as_str()),
             Some("Hiding ignored files")
         );
+    }
+
+    #[test]
+    fn help_owns_a_modal_context_until_toggled_or_closed() {
+        let mut model = Model::default();
+        model.context_stack.push(Context::Explorer);
+        let manager = MessageManager::default();
+
+        assert!(
+            manager
+                .update(
+                    &mut model,
+                    Message::InvokeCommand(CommandId("explorer_help"))
+                )
+                .is_none()
+        );
+        assert!(model.explorer.help_visible());
+        assert_eq!(model.context_stack.last(), Some(&Context::ExplorerHelp));
+        assert!(model.modal.is_active(Context::ExplorerHelp));
+
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("explorer_help")),
+        );
+        assert!(!model.explorer.help_visible());
+        assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
+        assert!(!model.modal.is_active(Context::ExplorerHelp));
+
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("explorer_help")),
+        );
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("close_explorer_help")),
+        );
+        assert!(!model.explorer.help_visible());
+        assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
+    }
+
+    #[test]
+    fn file_operation_placeholders_report_without_changing_files() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(directory.path().join("note.txt"), "hello").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let original_entries = model.explorer.entries.clone();
+        let manager = MessageManager::default();
+
+        for (command, action) in [
+            ("explorer_delete", "Delete"),
+            ("explorer_move", "Move"),
+            ("explorer_copy", "Copy"),
+        ] {
+            let effect = manager.update(&mut model, Message::InvokeCommand(CommandId(command)));
+            assert!(effect.is_some());
+            assert_eq!(
+                model.status.as_ref().map(|status| status.text.as_str()),
+                Some(format!("{action} is not implemented").as_str())
+            );
+        }
+
+        assert_eq!(model.explorer.entries, original_entries);
+        assert_eq!(
+            std::fs::read_to_string(directory.path().join("note.txt")).unwrap(),
+            "hello"
+        );
+        assert_eq!(std::fs::read_dir(directory.path()).unwrap().count(), 1);
     }
 
     #[test]

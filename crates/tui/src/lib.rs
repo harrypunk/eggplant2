@@ -390,6 +390,8 @@ pub mod data_object {
         EditorChange,
         EditorYank,
         Explorer,
+        ExplorerHelp,
+        ExplorerAdd,
         FilePicker,
         ThemePicker,
         BufferJump,

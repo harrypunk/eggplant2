@@ -94,6 +94,11 @@ Paste uses the shared register and reads the system clipboard when available.
 | Fold / unfold folder | `h` / `l` |
 | Refresh tree | `r` |
 | Show/hide ignored entries | `Shift-I` |
+| Open keymap help | `?` |
+| Add file / directory | `a` |
+| Delete / move / copy placeholders | `d` / `m` / `c` |
+
+The help popup closes with `?` or Escape. Add opens a workspace-relative path prompt prefilled from the selected directory or the selected file's parent. Enter creates a regular file and opens it, or creates and reveals a directory when the path ends in `/`. Missing parent directories are created automatically. Absolute paths, parent traversal, existing targets, and symlink-parent escapes are rejected. Delete, move, and copy currently report that they are not implemented and never modify the filesystem.
 
 On an expanded directory, `h` folds that directory. On a file or collapsed directory, `h` folds the nearest visible parent and selects it. Root-level entries cannot fold the workspace root.
 
