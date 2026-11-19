@@ -8,8 +8,9 @@ event_poll_timeout = 250
 [features.page_scroll]
 step = "75%"
 
-# Keymaps map action names to key bindings.
-# Esc and Backspace are built-in common behavior and need no entries here.
+# Keymaps map custom action names to key bindings.
+# Enter, Esc, Backspace, arrows, and popup confirmation/cancellation are built-in
+# common behavior and cannot be overridden here.
 # Supported modifiers: ctrl, alt, and shift (for example, "ctrl-q").
 # Custom bindings merge with built-in defaults by context and action. Override only
 # what you want to change; unspecified bindings remain enabled.
@@ -51,13 +52,6 @@ yank_line_pending = "y"
 paste_after = "p"
 paste_before = "shift-p"
 
-[keymap.editor_input]
-insert_newline = "enter"
-move_left = "left"
-move_right = "right"
-move_up = "up"
-move_down = "down"
-
 [keymap.visual]
 move_left = "h"
 move_right = "l"
@@ -76,7 +70,6 @@ yank_selection = "y"
 [keymap.explorer]
 explorer_next = "j"
 explorer_previous = "k"
-open_selected = "enter"
 explorer_fold = "h"
 explorer_unfold = "l"
 focus_left = "ctrl-h"
@@ -91,34 +84,10 @@ explorer_delete = "d"
 explorer_move = "m"
 explorer_copy = "c"
 
-[keymap.explorer_delete]
-explorer_delete_confirm = "y"
-
-[keymap.file_picker]
-open_picker_file = "enter"
-file_picker_next = "down"
-file_picker_previous = "up"
-
-[keymap.theme_picker]
-apply_theme = "enter"
-theme_picker_next = "down"
-theme_picker_previous = "up"
-
-[keymap.buffer_grep]
-buffer_grep_next = "down"
-buffer_grep_previous = "up"
-buffer_grep_accept = "enter"
-
-[keymap.project_grep]
-project_grep_next = "down"
-project_grep_previous = "up"
-project_grep_accept = "enter"
-
 [keymap.vcs]
 close_vcs_page_q = "q"
 vcs_next_change = "j"
 vcs_previous_change = "k"
-open_vcs_change = "enter"
 vcs_stage = "s"
 vcs_unstage = "u"
 vcs_stage_all = "ctrl-s"
@@ -131,19 +100,9 @@ open_vcs_history = "l"
 vcs_merge_start = "m"
 vcs_branch_menu = "b"
 
-[keymap.vcs_merge]
-vcs_merge_submit = "enter"
-vcs_merge_next = "down"
-vcs_merge_previous = "up"
-
 [keymap.vcs_branch_menu]
 vcs_branch_create = "c"
 vcs_branch_switch = "s"
-
-[keymap.vcs_branch]
-vcs_branch_submit = "enter"
-vcs_branch_next = "down"
-vcs_branch_previous = "up"
 
 [keymap.vcs_commit]
 vcs_commit_close = "q"
@@ -175,18 +134,12 @@ redo = "ctrl-r"
 [keymap.vcs_commit_input]
 vcs_commit_discard = "ctrl-c"
 vcs_commit_submit = "ctrl-s"
-insert_newline = "enter"
-move_left = "left"
-move_right = "right"
-move_up = "up"
-move_down = "down"
 
 [keymap.vcs_history]
 close_vcs_history_q = "q"
 vcs_history_next = "j"
 vcs_history_previous = "k"
 vcs_history_toggle_diff = "tab"
-open_vcs_commit_detail = "enter"
 vcs_history_copy_short = "c"
 vcs_history_copy_full = "shift-c"
 vcs_history_load_more = "n"

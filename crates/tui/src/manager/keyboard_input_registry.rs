@@ -25,11 +25,10 @@ impl Registry {
         config: &KeymapConfig,
         commands: &CommandRegistry,
     ) -> color_eyre::Result<Self> {
-        let config = common_bindings().into_iter().chain(
-            config
-                .iter()
-                .map(|(context, bindings)| (context.clone(), bindings.clone())),
-        );
+        let config = config
+            .iter()
+            .map(|(context, bindings)| (context.clone(), bindings.clone()))
+            .chain(common_bindings());
         config
             .into_iter()
             .fold(
@@ -57,9 +56,18 @@ fn common_bindings() -> KeymapConfig {
     HashMap::from([
         keymap_context(
             "editor_input",
-            [("exit_insert_mode", "esc"), ("backspace", "backspace")],
+            [
+                ("exit_insert_mode", "esc"),
+                ("backspace", "backspace"),
+                ("insert_newline", "enter"),
+                ("move_left", "left"),
+                ("move_right", "right"),
+                ("move_up", "up"),
+                ("move_down", "down"),
+            ],
         ),
         keymap_context("visual", [("exit_visual_mode", "esc")]),
+        keymap_context("explorer", [("open_selected", "enter")]),
         keymap_context(
             "explorer_add",
             [
@@ -68,7 +76,13 @@ fn common_bindings() -> KeymapConfig {
                 ("explorer_add_backspace", "backspace"),
             ],
         ),
-        keymap_context("explorer_delete", [("close_explorer_delete", "esc")]),
+        keymap_context(
+            "explorer_delete",
+            [
+                ("explorer_delete_confirm", "y"),
+                ("close_explorer_delete", "esc"),
+            ],
+        ),
         keymap_context(
             "explorer_transfer",
             [
@@ -84,6 +98,9 @@ fn common_bindings() -> KeymapConfig {
         keymap_context(
             "file_picker",
             [
+                ("open_picker_file", "enter"),
+                ("file_picker_next", "down"),
+                ("file_picker_previous", "up"),
                 ("close_file_picker", "esc"),
                 ("file_picker_backspace", "backspace"),
             ],
@@ -91,6 +108,9 @@ fn common_bindings() -> KeymapConfig {
         keymap_context(
             "theme_picker",
             [
+                ("apply_theme", "enter"),
+                ("theme_picker_next", "down"),
+                ("theme_picker_previous", "up"),
                 ("close_theme_picker", "esc"),
                 ("theme_picker_backspace", "backspace"),
             ],
@@ -106,6 +126,9 @@ fn common_bindings() -> KeymapConfig {
         keymap_context(
             "buffer_grep",
             [
+                ("buffer_grep_next", "down"),
+                ("buffer_grep_previous", "up"),
+                ("buffer_grep_accept", "enter"),
                 ("buffer_grep_close", "esc"),
                 ("buffer_grep_backspace", "backspace"),
             ],
@@ -113,6 +136,9 @@ fn common_bindings() -> KeymapConfig {
         keymap_context(
             "project_grep",
             [
+                ("project_grep_next", "down"),
+                ("project_grep_previous", "up"),
+                ("project_grep_accept", "enter"),
                 ("project_grep_close", "esc"),
                 ("project_grep_backspace", "backspace"),
             ],
@@ -123,12 +149,29 @@ fn common_bindings() -> KeymapConfig {
         keymap_context("yank", [("yank_cancel", "esc")]),
         keymap_context(
             "vcs_commit_input",
-            [("exit_insert_mode", "esc"), ("backspace", "backspace")],
+            [
+                ("exit_insert_mode", "esc"),
+                ("backspace", "backspace"),
+                ("insert_newline", "enter"),
+                ("move_left", "left"),
+                ("move_right", "right"),
+                ("move_up", "up"),
+                ("move_down", "down"),
+            ],
         ),
-        keymap_context("vcs_history", [("close_vcs_history", "esc")]),
+        keymap_context(
+            "vcs_history",
+            [
+                ("open_vcs_commit_detail", "enter"),
+                ("close_vcs_history", "esc"),
+            ],
+        ),
         keymap_context(
             "vcs_merge",
             [
+                ("vcs_merge_submit", "enter"),
+                ("vcs_merge_next", "down"),
+                ("vcs_merge_previous", "up"),
                 ("vcs_merge_cancel", "esc"),
                 ("vcs_merge_backspace", "backspace"),
             ],
@@ -137,11 +180,17 @@ fn common_bindings() -> KeymapConfig {
         keymap_context(
             "vcs_branch",
             [
+                ("vcs_branch_submit", "enter"),
+                ("vcs_branch_next", "down"),
+                ("vcs_branch_previous", "up"),
                 ("vcs_branch_cancel", "esc"),
                 ("vcs_branch_backspace", "backspace"),
             ],
         ),
-        keymap_context("vcs", [("close_vcs_page", "esc")]),
+        keymap_context(
+            "vcs",
+            [("open_vcs_change", "enter"), ("close_vcs_page", "esc")],
+        ),
     ])
 }
 
@@ -275,6 +324,48 @@ mod tests {
                 .unwrap()
                 .resolve(KeyChord::new(KeyCode::Char('q'), KeyModifiers::NONE))
                 .is_none()
+        );
+    }
+
+    #[test]
+    fn common_keys_cannot_be_overridden_by_custom_entries() {
+        let config = HashMap::from([
+            (
+                "file_picker".to_string(),
+                HashMap::from([
+                    ("open_picker_file".to_string(), "x".to_string()),
+                    ("file_picker_next".to_string(), "n".to_string()),
+                ]),
+            ),
+            (
+                "explorer_delete".to_string(),
+                HashMap::from([("explorer_delete_confirm".to_string(), "n".to_string())]),
+            ),
+        ]);
+        let registry = Registry::from_config(&config, &CommandRegistry::default()).unwrap();
+
+        let picker = registry.get_binding(&Context::FilePicker).unwrap();
+        assert_eq!(
+            picker.resolve(KeyChord::new(KeyCode::Enter, KeyModifiers::NONE)),
+            Some(CommandId("open_picker_file"))
+        );
+        assert_eq!(
+            picker.resolve(KeyChord::new(KeyCode::Down, KeyModifiers::NONE)),
+            Some(CommandId("file_picker_next"))
+        );
+        assert_eq!(
+            picker.resolve(KeyChord::new(KeyCode::Char('x'), KeyModifiers::NONE)),
+            None
+        );
+
+        let delete = registry.get_binding(&Context::ExplorerDelete).unwrap();
+        assert_eq!(
+            delete.resolve(KeyChord::new(KeyCode::Char('y'), KeyModifiers::NONE)),
+            Some(CommandId("explorer_delete_confirm"))
+        );
+        assert_eq!(
+            delete.resolve(KeyChord::new(KeyCode::Char('n'), KeyModifiers::NONE)),
+            None
         );
     }
 

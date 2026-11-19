@@ -140,16 +140,6 @@ impl Default for Config {
                     ],
                 ),
                 keymap_context(
-                    "editor_input",
-                    [
-                        ("insert_newline", "enter"),
-                        ("move_left", "left"),
-                        ("move_right", "right"),
-                        ("move_up", "up"),
-                        ("move_down", "down"),
-                    ],
-                ),
-                keymap_context(
                     "visual",
                     [
                         ("move_left", "h"),
@@ -172,7 +162,6 @@ impl Default for Config {
                     [
                         ("explorer_next", "j"),
                         ("explorer_previous", "k"),
-                        ("open_selected", "enter"),
                         ("explorer_fold", "h"),
                         ("explorer_unfold", "l"),
                         ("focus_left", "ctrl-h"),
@@ -188,40 +177,7 @@ impl Default for Config {
                         ("explorer_copy", "c"),
                     ],
                 ),
-                keymap_context("explorer_delete", [("explorer_delete_confirm", "y")]),
-                keymap_context(
-                    "file_picker",
-                    [
-                        ("open_picker_file", "enter"),
-                        ("file_picker_next", "down"),
-                        ("file_picker_previous", "up"),
-                    ],
-                ),
-                keymap_context(
-                    "theme_picker",
-                    [
-                        ("apply_theme", "enter"),
-                        ("theme_picker_next", "down"),
-                        ("theme_picker_previous", "up"),
-                    ],
-                ),
                 keymap_context("buffer_jump", []),
-                keymap_context(
-                    "buffer_grep",
-                    [
-                        ("buffer_grep_next", "down"),
-                        ("buffer_grep_previous", "up"),
-                        ("buffer_grep_accept", "enter"),
-                    ],
-                ),
-                keymap_context(
-                    "project_grep",
-                    [
-                        ("project_grep_next", "down"),
-                        ("project_grep_previous", "up"),
-                        ("project_grep_accept", "enter"),
-                    ],
-                ),
                 keymap_context(
                     "vcs_commit",
                     [
@@ -257,11 +213,6 @@ impl Default for Config {
                     [
                         ("vcs_commit_discard", "ctrl-c"),
                         ("vcs_commit_submit", "ctrl-s"),
-                        ("insert_newline", "enter"),
-                        ("move_left", "left"),
-                        ("move_right", "right"),
-                        ("move_up", "up"),
-                        ("move_down", "down"),
                     ],
                 ),
                 keymap_context(
@@ -271,18 +222,9 @@ impl Default for Config {
                         ("vcs_history_next", "j"),
                         ("vcs_history_previous", "k"),
                         ("vcs_history_toggle_diff", "tab"),
-                        ("open_vcs_commit_detail", "enter"),
                         ("vcs_history_copy_short", "c"),
                         ("vcs_history_copy_full", "shift-c"),
                         ("vcs_history_load_more", "n"),
-                    ],
-                ),
-                keymap_context(
-                    "vcs_merge",
-                    [
-                        ("vcs_merge_submit", "enter"),
-                        ("vcs_merge_next", "down"),
-                        ("vcs_merge_previous", "up"),
                     ],
                 ),
                 keymap_context(
@@ -290,20 +232,11 @@ impl Default for Config {
                     [("vcs_branch_create", "c"), ("vcs_branch_switch", "s")],
                 ),
                 keymap_context(
-                    "vcs_branch",
-                    [
-                        ("vcs_branch_submit", "enter"),
-                        ("vcs_branch_next", "down"),
-                        ("vcs_branch_previous", "up"),
-                    ],
-                ),
-                keymap_context(
                     "vcs",
                     [
                         ("close_vcs_page_q", "q"),
                         ("vcs_next_change", "j"),
                         ("vcs_previous_change", "k"),
-                        ("open_vcs_change", "enter"),
                         ("vcs_stage", "s"),
                         ("vcs_unstage", "u"),
                         ("vcs_stage_all", "ctrl-s"),
@@ -412,7 +345,6 @@ mod tests {
         assert_eq!(config.keymap["normal"]["page_scroll_down"], "ctrl-f");
         assert_eq!(config.keymap["normal"]["enter_insert_mode"], "i");
         assert_eq!(config.keymap["explorer"]["refresh_explorer"], "r");
-        assert_eq!(config.keymap["theme_picker"]["apply_theme"], "enter");
     }
 
     #[test]
@@ -490,12 +422,15 @@ mod tests {
     }
 
     #[test]
-    fn defaults_omit_escape_and_backspace_bindings() {
-        assert!(Config::default().keymap.values().all(|bindings| {
+    fn defaults_omit_common_and_confirmation_bindings() {
+        let config = Config::default();
+        let common = ["esc", "backspace", "enter", "left", "right", "up", "down"];
+        assert!(config.keymap.values().all(|bindings| {
             bindings
                 .values()
-                .all(|binding| binding != "esc" && binding != "backspace")
+                .all(|binding| !common.contains(&binding.as_str()))
         }));
+        assert!(!config.keymap.contains_key("explorer_delete"));
     }
 
     #[test]

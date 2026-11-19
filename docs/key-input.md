@@ -137,7 +137,7 @@ On an expanded directory, `h` folds that directory. On a file or collapsed direc
 
 File/theme pickers and both live-grep lists wrap from first to last and last to first. Their rendered list window follows the selection so the selected row remains visible, including after wraparound and in small terminals.
 
-`Ctrl-N`/`Ctrl-P` are built-in aliases for the configured Down/Up navigation actions. An explicit `Ctrl-N`/`Ctrl-P` binding in the same context takes priority.
+`Ctrl-N`/`Ctrl-P` are built-in aliases for Down/Up navigation. An explicit `Ctrl-N`/`Ctrl-P` binding for a custom action in the same context takes priority.
 
 ### VCS status page
 
@@ -203,11 +203,11 @@ File/theme pickers and both live-grep lists wrap from first to last and last to 
 
 ## Common input behavior
 
-Escape cancels the active popup or prefix, or returns to Normal mode where appropriate. Backspace edits the current query. These common behaviors are built into input routing and require no configuration entries.
+Enter accepts, opens, or submits; arrows navigate lists or move the insertion cursor; Escape cancels or closes; Backspace edits single-line input; `y` confirms destructive Explorer deletion. These common behaviors are fixed in input routing and cannot be overridden through configuration.
 
 ## Configuration
 
-Custom `[keymap]` entries merge with defaults by context and action, so only overrides need to be specified. Built-in Space leader sequences are not configured in TOML. Explicit unbinding is not implemented.
+Custom `[keymap]` entries merge with defaults for application-specific actions, so only overrides need to be specified. Common keys and confirmation/cancellation are not configurable. Built-in Space leader sequences are not configured in TOML. Explicit unbinding is not implemented.
 
 See [`config.example.toml`](../config.example.toml) for every configurable action name and its default binding.
 

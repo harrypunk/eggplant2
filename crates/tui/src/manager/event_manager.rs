@@ -191,9 +191,9 @@ mod tests {
         let mut config = Config::default();
         config
             .keymap
-            .get_mut("file_picker")
-            .unwrap()
-            .insert("close_file_picker".to_string(), "ctrl-n".to_string());
+            .entry("file_picker".to_string())
+            .or_default()
+            .insert("toggle_file_explorer".to_string(), "ctrl-n".to_string());
         let keymap = Registry::from_config(&config.keymap, &CommandRegistry::default()).unwrap();
         let manager = EventManager::new(&config, keymap, TextInputRegistry::builtin());
         let mut model = Model::default();
@@ -202,7 +202,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::InvokeCommand(CommandId("close_file_picker")))
+            Some(Message::InvokeCommand(CommandId("toggle_file_explorer")))
         ));
     }
 
