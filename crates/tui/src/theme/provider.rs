@@ -3,7 +3,7 @@ use std::{error::Error, fmt::Display};
 use helix_view::Theme as HelixTheme;
 use ratatui::style::Style;
 
-use super::{Theme, ThemeName, UiTheme, syntax_styles};
+use super::{Theme, ThemeName, UiTheme, helix};
 
 #[derive(Debug, Clone, Default)]
 pub struct UiThemePatch {
@@ -50,6 +50,8 @@ impl UiThemePatch {
     }
 
     fn resolve(self, fallback: Option<&UiTheme>) -> Result<UiTheme, ThemeResolutionError> {
+        // Prefer the provider's value for every field. If neither the provider nor
+        // the fallback supplies it, the resulting theme would be incomplete.
         macro_rules! field {
             ($name:ident) => {
                 self.$name
@@ -122,8 +124,8 @@ impl ThemeAdapter for HelixThemeAdapter {
         Ok(ThemeDraft {
             name: self.name.as_str().to_string(),
             builtin: Some(self.name),
-            ui: UiThemePatch::complete(&UiTheme::from_helix(document)),
-            syntax: Some(syntax_styles(document)),
+            ui: UiThemePatch::complete(&helix::ui_theme(document)),
+            syntax: Some(helix::syntax_styles(document)),
         })
     }
 }
@@ -148,6 +150,8 @@ impl Error for ThemeResolutionError {}
 pub struct ThemeResolver;
 
 impl ThemeResolver {
+    /// Resolve UI and syntax independently so a provider can replace one while
+    /// retaining the other's fallback. Missing fallbacks are explicit errors.
     pub fn resolve(
         draft: ThemeDraft,
         fallback: Option<&Theme>,

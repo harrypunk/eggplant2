@@ -261,17 +261,18 @@ This asynchronous path is unnecessary for compiled-in themes and should not be i
 
 ## Built-in theme organization
 
-`theme.rs` can remain one file while the theme contract and default palette are small. When additional themes make that unclear, split by ownership rather than by component:
+Built-in and external themes share one `theme/` module, split by ownership rather than by component:
 
 ```text
 theme/
-├── mod.rs          Theme, UiTheme, resolved syntax table, name resolution
-└── builtin/
-    ├── default.rs
-    └── another.rs
+├── mod.rs          # Resolved Theme/UiTheme, semantic styles, and public operations
+├── builtin.rs      # Embedded resource selection and built-in resolution
+├── helix.rs        # Helix-to-Ratatui style and syntax conversion
+├── provider.rs     # Provider-neutral drafts, patches, and fallback resolution
+└── ...             # Discovery, loading, persistence, and source-specific adapters
 ```
 
-Each built-in module supplies the same semantic contract. Name resolution selects a complete theme; it does not branch inside components.
+Each built-in resource supplies the same semantic contract. Name resolution selects a complete theme; it does not branch inside components. Per-theme Rust modules are unnecessary for curated Helix-compatible TOML resources.
 
 For the first implementation, prefer a small set of curated Helix-compatible TOML resources resolved at startup. Imported themes do not need per-theme Rust modules. User-selected external files, automatic terminal-capability detection, hot reload, and additional source-format importers are separate features. If terminal capability adaptation is added, resolve it at initialization/loading time rather than querying the terminal during rendering.
 
