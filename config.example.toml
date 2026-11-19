@@ -94,6 +94,9 @@ explorer_copy = "c"
 [keymap.explorer_add]
 explorer_add_submit = "enter"
 
+[keymap.explorer_delete]
+explorer_delete_confirm = "y"
+
 [keymap.file_picker]
 open_picker_file = "enter"
 file_picker_next = "down"

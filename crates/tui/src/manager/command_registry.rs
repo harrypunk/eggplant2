@@ -341,7 +341,17 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
         ),
         Command::feature(
             CommandId("explorer_delete"),
-            "delete (placeholder)",
+            "delete file or directory",
+            crate::explorer::handle_command,
+        ),
+        Command::feature(
+            CommandId("explorer_delete_confirm"),
+            "confirm deletion",
+            crate::explorer::handle_command,
+        ),
+        Command::feature(
+            CommandId("close_explorer_delete"),
+            "cancel deletion",
             crate::explorer::handle_command,
         ),
         Command::feature(

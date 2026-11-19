@@ -5,7 +5,7 @@ use crate::{
     manager::effect::Effect,
 };
 
-use super::{ExpansionState, add, work::ExplorerRefreshKind};
+use super::{ExpansionState, add, delete, work::ExplorerRefreshKind};
 
 /// Explorer state commands. File opening and panel focus stay in separate slices.
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
@@ -22,7 +22,9 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         "explorer_add_submit" => return add::submit(model),
         "close_explorer_add" => return add::cancel(model),
         "explorer_add_backspace" => return add::backspace(model),
-        "explorer_delete" => return placeholder(model, "Delete"),
+        "explorer_delete" => return delete::open(model),
+        "explorer_delete_confirm" => return delete::confirm(model),
+        "close_explorer_delete" => return delete::cancel(model),
         "explorer_move" => return placeholder(model, "Move"),
         "explorer_copy" => return placeholder(model, "Copy"),
         _ => {
@@ -284,11 +286,7 @@ mod tests {
         let original_entries = model.explorer.entries.clone();
         let manager = MessageManager::default();
 
-        for (command, action) in [
-            ("explorer_delete", "Delete"),
-            ("explorer_move", "Move"),
-            ("explorer_copy", "Copy"),
-        ] {
+        for (command, action) in [("explorer_move", "Move"), ("explorer_copy", "Copy")] {
             let effect = manager.update(&mut model, Message::InvokeCommand(CommandId(command)));
             assert!(effect.is_some());
             assert_eq!(

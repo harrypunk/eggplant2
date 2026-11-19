@@ -68,6 +68,10 @@ fn common_bindings() -> KeymapConfig {
             ],
         ),
         keymap_context(
+            "explorer_delete",
+            [("close_explorer_delete", "esc")],
+        ),
+        keymap_context(
             "explorer_help",
             [("close_explorer_help", "esc"), ("explorer_help", "?")],
         ),
@@ -200,6 +204,7 @@ fn parse_context(value: &str) -> Option<Context> {
         "explorer" => Some(Context::Explorer),
         "explorer_help" => Some(Context::ExplorerHelp),
         "explorer_add" => Some(Context::ExplorerAdd),
+        "explorer_delete" => Some(Context::ExplorerDelete),
         "file_picker" => Some(Context::FilePicker),
         "theme_picker" => Some(Context::ThemePicker),
         "buffer_jump" => Some(Context::BufferJump),

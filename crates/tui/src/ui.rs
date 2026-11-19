@@ -130,6 +130,8 @@ impl UiRegistry {
             .expect("explorer help overlay must be unique");
         ui.register_overlay("explorer_add", crate::explorer::add_overlay)
             .expect("explorer add overlay must be unique");
+        ui.register_overlay("explorer_delete", crate::explorer::delete_overlay)
+            .expect("explorer delete overlay must be unique");
         ui.register_overlay("file_picker", crate::component::file_picker::overlay)
             .expect("file picker overlay must be unique");
         ui.register_overlay("theme_picker", crate::theme_picker::overlay)

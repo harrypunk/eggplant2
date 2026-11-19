@@ -392,6 +392,7 @@ pub mod data_object {
         Explorer,
         ExplorerHelp,
         ExplorerAdd,
+        ExplorerDelete,
         FilePicker,
         ThemePicker,
         BufferJump,

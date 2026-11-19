@@ -189,6 +189,7 @@ impl Default for Config {
                     ],
                 ),
                 keymap_context("explorer_add", [("explorer_add_submit", "enter")]),
+                keymap_context("explorer_delete", [("explorer_delete_confirm", "y")]),
                 keymap_context(
                     "file_picker",
                     [

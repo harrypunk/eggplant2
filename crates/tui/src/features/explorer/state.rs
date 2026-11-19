@@ -9,6 +9,7 @@ use editor::DocumentFactory;
 
 use super::{
     add::AddState,
+    delete::DeleteState,
     fs,
     work::{ExplorerAction, ExplorerRefreshKind, ExplorerRequest},
 };
@@ -62,6 +63,7 @@ pub struct ExplorerState {
     pub entries: Vec<ExplorerEntry>,
     pub selected: Option<usize>,
     pub(crate) add: AddState,
+    pub(crate) delete: DeleteState,
     documents: DocumentFactory,
     expanded_directories: HashSet<PathBuf>,
     ignore_mode: IgnoreMode,
@@ -76,6 +78,7 @@ impl Default for ExplorerState {
             entries: Vec::new(),
             selected: None,
             add: AddState::default(),
+            delete: DeleteState::default(),
             documents: DocumentFactory::new(),
             expanded_directories: HashSet::new(),
             ignore_mode: IgnoreMode::HideIgnored,
