@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::crossterm::event::{self, Event};
 
 use crate::config::Config;
-use crate::data_object::{Context, Message, Model};
+use crate::data_object::{CommandId, Context, Message, Model};
 use crate::manager::{
     context::KeyChord, keyboard_input_registry::Registry, text_input_registry::TextInputRegistry,
 };
@@ -43,45 +43,32 @@ impl EventManager {
     /// Pure routing: dispatch on the event kind.
     fn translate(&self, event: Event, model: &Model) -> Option<Message> {
         match event {
-            Event::Key(key) if key.kind == KeyEventKind::Press => {
-                let ctx = model.context_stack.last()?;
-                if model.command_menu.is_active() || Self::is_leader_start(ctx, key) {
-                    return Some(Message::CommandMenuKey(key.code));
-                }
-                self.keymap
-                    .get_binding(ctx)
-                    .and_then(|bindings| {
-                        let chord = KeyChord::new(key.code, key.modifiers);
-                        bindings
-                            .resolve(chord)
-                            .or_else(|| {
-                                menu_navigation_alias(ctx, key)
-                                    .and_then(|alias| bindings.resolve(alias))
-                            })
-                            .or_else(|| {
-                                // Terminals disagree about SHIFT metadata for symbols such as `$`.
-                                match key.code {
-                                    KeyCode::Char(character)
-                                        if !character.is_alphabetic()
-                                            && key.modifiers.contains(KeyModifiers::SHIFT) =>
-                                    {
-                                        bindings.resolve(KeyChord::new(
-                                            key.code,
-                                            key.modifiers & !KeyModifiers::SHIFT,
-                                        ))
-                                    }
-                                    _ => None,
-                                }
-                            })
-                    })
-                    .map(Message::InvokeCommand)
-                    .or_else(|| self.unbound_key_message(ctx, key))
-            }
+            Event::Key(key) if key.kind == KeyEventKind::Press => self.translate_key(key, model),
             Event::FocusLost => Some(Message::FocusLost),
             Event::Resize(width, height) => Some(Message::Resize(width, height)),
             // Event::Mouse(mouse) => MouseManager.translate(mouse, model),
             _ => None,
         }
+    }
+
+    fn translate_key(&self, key: KeyEvent, model: &Model) -> Option<Message> {
+        let context = model.context_stack.last()?;
+        if model.command_menu.is_active() || Self::is_leader_start(context, key) {
+            return Some(Message::CommandMenuKey(key.code));
+        }
+        self.resolve_command(context, key)
+            .map(Message::InvokeCommand)
+            .or_else(|| self.unbound_key_message(context, key))
+    }
+
+    /// Resolve a command by direct binding, menu alias, then shifted-symbol fallback.
+    fn resolve_command(&self, context: &Context, key: KeyEvent) -> Option<CommandId> {
+        let bindings = self.keymap.get_binding(context)?;
+        let direct = bindings.resolve(KeyChord::new(key.code, key.modifiers));
+        let navigation =
+            menu_navigation_alias(context, key).and_then(|alias| bindings.resolve(alias));
+        let shifted = shifted_symbol_chord(key).and_then(|chord| bindings.resolve(chord));
+        direct.or(navigation).or(shifted)
     }
 
     fn is_leader_start(context: &Context, key: KeyEvent) -> bool {
@@ -101,6 +88,20 @@ impl EventManager {
             _ => None,
         }
     }
+}
+
+fn shifted_symbol_chord(key: KeyEvent) -> Option<KeyChord> {
+    // Terminals disagree about SHIFT metadata for symbols such as `$`.
+    let KeyCode::Char(character) = key.code else {
+        return None;
+    };
+    if character.is_alphabetic() || !key.modifiers.contains(KeyModifiers::SHIFT) {
+        return None;
+    }
+    Some(KeyChord::new(
+        key.code,
+        key.modifiers & !KeyModifiers::SHIFT,
+    ))
 }
 
 fn menu_navigation_alias(context: &Context, key: KeyEvent) -> Option<KeyChord> {
