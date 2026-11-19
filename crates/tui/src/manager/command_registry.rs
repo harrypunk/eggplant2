@@ -356,7 +356,22 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
         ),
         Command::feature(
             CommandId("explorer_move"),
-            "move (placeholder)",
+            "move file or directory",
+            crate::explorer::handle_command,
+        ),
+        Command::feature(
+            CommandId("explorer_move_submit"),
+            "confirm move destination",
+            crate::explorer::handle_command,
+        ),
+        Command::feature(
+            CommandId("close_explorer_move"),
+            "cancel move",
+            crate::explorer::handle_command,
+        ),
+        Command::feature(
+            CommandId("explorer_move_backspace"),
+            "edit move destination",
             crate::explorer::handle_command,
         ),
         Command::feature(

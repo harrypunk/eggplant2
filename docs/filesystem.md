@@ -1,6 +1,6 @@
 # Filesystem work and the file picker
 
-Eggplant owns filesystem policy. Helix provides document/editing primitives and document construction through `DocumentFactory`; it does not own picker ranking, explorer traversal, previews, or future rename/move/copy commands.
+Eggplant owns filesystem policy. Helix provides document/editing primitives and document construction through `DocumentFactory`; it does not own picker ranking, explorer traversal, previews, or future copy commands.
 
 ## Responsibility boundaries
 
@@ -12,7 +12,7 @@ Eggplant owns filesystem policy. Helix provides document/editing primitives and 
 | Effect runtime | Execute blocking work with `tokio::task::spawn_blocking` and send completion messages back to the single update loop. |
 | `FilePicker` component | Render query/results and text preview inside the reusable `Popup`; perform no filesystem I/O. |
 | `DocumentFactory` / `EditorSession` | Open the selected document and manage buffers, paths, dirty state, cursor, and saving. |
-| Filesystem adapter | Share Git-ignore policy and own workspace-safe create/delete primitives and canonical containment checks. |
+| Filesystem adapter | Share Git-ignore policy and own workspace-safe create/move/delete primitives and canonical containment checks. |
 
 No component reads a directory or file during rendering. No worker mutates `Model` directly.
 
@@ -118,9 +118,15 @@ Affected modified or saving buffers reject confirmation without deleting anythin
 
 Raw create/delete operations and workspace path enforcement live in `capabilities/filesystem`, while Explorer owns prompts, operation state, and application coordination.
 
+## Explorer move
+
+Explorer `m` opens a destination prompt prefilled with the selected workspace-relative source path. Enter starts a revisioned move and Escape cancels while editing. The filesystem capability rejects absolute paths, traversal, existing destinations, directory self-moves, source type changes, and canonical workspace escapes. Missing destination parents are created safely. Files, directories, and links are moved with `rename`; links are moved themselves.
+
+Modified or saving source buffers block the move. After success, affected clean source buffers close atomically, including nested buffers for directories, and Explorer reveals the destination. Errors notify and retain the edited destination.
+
 ## Future filesystem mutations
 
-Rename, move, and copy should extend the same message/effect/completion path. They should not be implemented as direct calls from explorer or picker components.
+Copy should extend the same message/effect/completion path. They should not be implemented as direct calls from explorer or picker components.
 
 ```text
 Command/menu selection

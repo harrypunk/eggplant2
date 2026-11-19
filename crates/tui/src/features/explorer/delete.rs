@@ -1,6 +1,5 @@
 use std::path::{Path, PathBuf};
 
-use editor::BufferId;
 use ratatui::{Frame, layout::Size, text::Line, widgets::Paragraph};
 
 use crate::{
@@ -11,7 +10,7 @@ use crate::{
     ui::{OverlayContribution, OverlayKind, OverlayPlacement},
 };
 
-use super::{ExplorerEntry, ExplorerEntryKind};
+use super::{ExplorerEntry, ExplorerEntryKind, buffers};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 enum DeletePhase {
@@ -163,15 +162,8 @@ pub(super) fn confirm(model: &mut Model) -> Option<Effect> {
         return notify(model, StatusMessage::error("No folder open"));
     };
     let target = model.explorer.delete.target()?.clone();
-    let buffers = affected_buffers(model, &target.path, target.kind);
-    if buffers
-        .iter()
-        .any(|&id| model.editor.is_saving(id) || model.editor.is_modified(id) == Some(true))
-    {
-        return notify(
-            model,
-            StatusMessage::error("Save modified buffers and wait for saves before deleting"),
-        );
+    if let Some(effect) = buffers::reject_blocked(model, &target.path, target.kind, "deleting") {
+        return Some(effect);
     }
     let revision = model.explorer.delete.begin_delete()?;
     Some(Effect::feature(DeleteRequest {
@@ -187,23 +179,6 @@ fn close_prompt(model: &mut Model) {
     model
         .context_stack
         .pop_if(|context| context == &Context::ExplorerDelete);
-}
-
-fn affected_buffers(model: &Model, path: &Path, kind: DeleteKind) -> Vec<BufferId> {
-    model
-        .editor
-        .file_buffer_ids()
-        .into_iter()
-        .filter(|&id| {
-            model
-                .editor
-                .buffer_path(id)
-                .is_some_and(|candidate| match kind {
-                    DeleteKind::Directory => candidate.starts_with(path),
-                    DeleteKind::File | DeleteKind::Link => candidate == path,
-                })
-        })
-        .collect()
 }
 
 struct DeleteRequest {
@@ -236,21 +211,9 @@ impl Completion for DeleteCompletion {
         match self.result {
             Ok(path) if model.explorer.delete.accepts_completion(self.revision) => {
                 close_prompt(model);
-                let buffers = affected_buffers(model, &path, self.kind);
-                let close_error = model.editor.close_buffers(&buffers).err();
+                let close = buffers::close(model, &path, self.kind);
                 let refresh = super::refresh_changed(model, &path);
-                match close_error {
-                    Some(error) => Effect::combine(
-                        refresh,
-                        notify(
-                            model,
-                            StatusMessage::error(format!(
-                                "Deleted the path, but failed to close its buffers: {error}"
-                            )),
-                        ),
-                    ),
-                    None => refresh,
-                }
+                Effect::combine(refresh, close)
             }
             Ok(_) => None,
             Err(error) => {

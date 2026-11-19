@@ -39,29 +39,8 @@ pub(crate) struct CreateTarget {
 
 impl CreateTarget {
     pub(crate) fn parse(input: &str) -> Result<Self, String> {
-        if input.is_empty() {
-            return Err("Enter a workspace-relative path".to_string());
-        }
-        let path = Path::new(input);
-        if path.is_absolute() {
-            return Err("Use a path relative to the workspace".to_string());
-        }
-
-        let mut relative = PathBuf::new();
-        for component in path.components() {
-            match component {
-                Component::Normal(part) => relative.push(part),
-                Component::CurDir => {}
-                Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
-                    return Err("The path must stay within the workspace".to_string());
-                }
-            }
-        }
-        if relative.as_os_str().is_empty() {
-            return Err("Enter a workspace-relative path".to_string());
-        }
         Ok(Self {
-            relative,
+            relative: parse_relative(input)?,
             directory: input.ends_with('/'),
         })
     }
@@ -72,6 +51,46 @@ impl CreateTarget {
 
     pub(crate) fn is_directory(&self) -> bool {
         self.directory
+    }
+}
+
+fn parse_relative(input: &str) -> Result<PathBuf, String> {
+    if input.is_empty() {
+        return Err("Enter a workspace-relative path".to_string());
+    }
+    let path = Path::new(input);
+    if path.is_absolute() {
+        return Err("Use a path relative to the workspace".to_string());
+    }
+
+    let mut relative = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::Normal(part) => relative.push(part),
+            Component::CurDir => {}
+            Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
+                return Err("The path must stay within the workspace".to_string());
+            }
+        }
+    }
+    if relative.as_os_str().is_empty() {
+        return Err("Enter a workspace-relative path".to_string());
+    }
+    Ok(relative)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct MoveDestination {
+    relative: PathBuf,
+}
+
+impl MoveDestination {
+    pub(crate) fn parse(input: &str) -> Result<Self, String> {
+        parse_relative(input).map(|relative| Self { relative })
+    }
+
+    pub(crate) fn relative(&self) -> &Path {
+        &self.relative
     }
 }
 
@@ -132,8 +151,44 @@ fn ensure_parent_directory(path: PathBuf, root: &Path) -> io::Result<PathBuf> {
     Ok(path)
 }
 
-pub(crate) fn delete(root: &Path, path: &Path, expected: FileKind) -> io::Result<PathBuf> {
+pub(crate) fn relocate(
+    root: &Path,
+    source: &Path,
+    expected: FileKind,
+    destination: &MoveDestination,
+) -> io::Result<PathBuf> {
     let root = fs::canonicalize(root)?;
+    let source = existing_target(&root, source)?;
+    let actual = file_kind(fs::symlink_metadata(&source)?.file_type())?;
+    if actual != expected {
+        return Err(io::Error::other("the source changed before moving"));
+    }
+
+    let raw_destination = root.join(&destination.relative);
+    validate_move_paths(&source, &raw_destination, expected)?;
+    ensure_missing(&raw_destination)?;
+    let parent = destination
+        .relative
+        .parent()
+        .unwrap_or(Path::new(""))
+        .iter()
+        .try_fold(root.clone(), |parent, name| {
+            ensure_parent_directory(parent.join(name), &root)
+        })?;
+    let name = destination.relative.file_name().ok_or_else(|| {
+        io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "a destination name is required",
+        )
+    })?;
+    let destination = parent.join(name);
+    validate_move_paths(&source, &destination, expected)?;
+    ensure_missing(&destination)?;
+    fs::rename(source, &destination)?;
+    fs::canonicalize(destination)
+}
+
+fn existing_target(root: &Path, path: &Path) -> io::Result<PathBuf> {
     let name = path.file_name().ok_or_else(|| {
         io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -146,13 +201,45 @@ pub(crate) fn delete(root: &Path, path: &Path, expected: FileKind) -> io::Result
             "a parent directory is required",
         )
     })?)?;
-    if !parent.starts_with(&root) {
+    if !parent.starts_with(root) {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
             "the target is outside the workspace",
         ));
     }
-    let path = parent.join(name);
+    Ok(parent.join(name))
+}
+
+fn validate_move_paths(source: &Path, destination: &Path, kind: FileKind) -> io::Result<()> {
+    if source == destination {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "the source and destination are the same",
+        ));
+    }
+    if kind == FileKind::Directory && destination.starts_with(source) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "a directory cannot be moved inside itself",
+        ));
+    }
+    Ok(())
+}
+
+fn ensure_missing(path: &Path) -> io::Result<()> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "the destination already exists",
+        )),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(error),
+    }
+}
+
+pub(crate) fn delete(root: &Path, path: &Path, expected: FileKind) -> io::Result<PathBuf> {
+    let root = fs::canonicalize(root)?;
+    let path = existing_target(&root, path)?;
     let actual = file_kind(fs::symlink_metadata(&path)?.file_type())?;
     if actual != expected {
         return Err(io::Error::other("the target changed before deletion"));
@@ -247,5 +334,71 @@ mod tests {
         delete(&root, &root.join("linked"), FileKind::Link).unwrap();
         assert!(fs::symlink_metadata(root.join("linked")).is_err());
         assert_eq!(fs::read_to_string(outside_file).unwrap(), "keep");
+    }
+
+    #[test]
+    fn move_creates_missing_parents_and_preserves_file_content() {
+        let workspace = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(workspace.path()).unwrap();
+        let source = root.join("source.txt");
+        fs::write(&source, "content").unwrap();
+        let destination = MoveDestination::parse("nested/new.txt").unwrap();
+
+        let moved = relocate(&root, &source, FileKind::File, &destination).unwrap();
+        assert_eq!(moved, root.join("nested/new.txt"));
+        assert!(!source.exists());
+        assert_eq!(fs::read_to_string(moved).unwrap(), "content");
+    }
+
+    #[test]
+    fn directory_move_rejects_self_descendants_and_existing_destinations() {
+        let workspace = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(workspace.path()).unwrap();
+        let source = root.join("folder");
+        fs::create_dir_all(source.join("nested")).unwrap();
+        fs::write(source.join("nested/note.txt"), "keep").unwrap();
+
+        let inside = MoveDestination::parse("folder/subfolder").unwrap();
+        assert!(relocate(&root, &source, FileKind::Directory, &inside).is_err());
+        assert!(source.join("nested/note.txt").exists());
+
+        let existing = root.join("existing");
+        fs::create_dir(&existing).unwrap();
+        let destination = MoveDestination::parse("existing").unwrap();
+        let error = relocate(&root, &source, FileKind::Directory, &destination).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
+        assert!(source.exists() && existing.exists());
+
+        let destination = MoveDestination::parse("renamed").unwrap();
+        let moved = relocate(&root, &source, FileKind::Directory, &destination).unwrap();
+        assert!(!source.exists());
+        assert_eq!(
+            fs::read_to_string(moved.join("nested/note.txt")).unwrap(),
+            "keep"
+        );
+    }
+
+    #[test]
+    fn move_rejects_symlink_parent_escape_and_moves_only_links() {
+        let workspace = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let root = fs::canonicalize(workspace.path()).unwrap();
+        let source = root.join("source.txt");
+        fs::write(&source, "keep").unwrap();
+        std::os::unix::fs::symlink(outside.path(), root.join("linked")).unwrap();
+
+        let escape = MoveDestination::parse("linked/escape.txt").unwrap();
+        let error = relocate(&root, &source, FileKind::File, &escape).unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::PermissionDenied);
+        assert!(source.exists());
+        assert!(!outside.path().join("escape.txt").exists());
+
+        let destination = MoveDestination::parse("moved-link").unwrap();
+        relocate(&root, &root.join("linked"), FileKind::Link, &destination).unwrap();
+        assert_eq!(
+            fs::read_link(root.join("moved-link")).unwrap(),
+            outside.path()
+        );
+        assert!(fs::symlink_metadata(root.join("linked")).is_err());
     }
 }

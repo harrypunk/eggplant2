@@ -907,6 +907,24 @@ mod tests {
         }
         let event = Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         assert!(manager.translate(event, &model).is_none());
+
+        model.context_stack.push(Context::ExplorerMove);
+        for (key, command) in [
+            (KeyCode::Enter, "explorer_move_submit"),
+            (KeyCode::Esc, "close_explorer_move"),
+            (KeyCode::Backspace, "explorer_move_backspace"),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::TextInput('x'))
+        ));
     }
 
     #[test]

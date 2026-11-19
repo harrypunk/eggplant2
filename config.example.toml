@@ -91,9 +91,6 @@ explorer_delete = "d"
 explorer_move = "m"
 explorer_copy = "c"
 
-[keymap.explorer_add]
-explorer_add_submit = "enter"
-
 [keymap.explorer_delete]
 explorer_delete_confirm = "y"
 

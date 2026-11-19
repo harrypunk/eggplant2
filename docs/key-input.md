@@ -97,9 +97,10 @@ Paste uses the shared register and reads the system clipboard when available.
 | Open keymap help | `?` |
 | Add file / directory | `a` |
 | Delete file / directory | `d` |
-| Move / copy placeholders | `m` / `c` |
+| Move file / directory | `m` |
+| Copy placeholder | `c` |
 
-The help popup closes with `?` or Escape. Add opens a workspace-relative path prompt prefilled from the selected directory or the selected file's parent. Enter creates a regular file and opens it, or creates and reveals a directory when the path ends in `/`. Missing parent directories are created automatically. Absolute paths, parent traversal, existing targets, and symlink-parent escapes are rejected. Delete asks for `y` confirmation and supports Escape cancellation. Files and links are removed directly; directories are deleted recursively. Affected modified or saving buffers block deletion, while affected clean buffers close after success. Move and copy remain placeholders.
+The help popup closes with `?` or Escape. Add opens a workspace-relative path prompt prefilled from the selected directory or the selected file's parent. Enter creates a regular file and opens it, or creates and reveals a directory when the path ends in `/`. Missing parent directories are created automatically. Absolute paths, parent traversal, existing targets, and symlink-parent escapes are rejected. Delete asks for `y` confirmation and supports Escape cancellation. Files and links are removed directly; directories are deleted recursively. Affected clean buffers close after success. Move opens a destination field prefilled with the selected path; Enter moves without overwriting, and Escape cancels. Missing destination parents are created, directories cannot move inside themselves, and source buffers follow the same modified/saving rejection and clean close-after-success policy. Copy remains a placeholder.
 
 On an expanded directory, `h` folds that directory. On a file or collapsed directory, `h` folds the nearest visible parent and selects it. Root-level entries cannot fold the workspace root.
 

@@ -17,7 +17,7 @@ const HELP_TEXT: [&str; 14] = [
     "",
     "a           add file / directory",
     "d           delete file / directory",
-    "m           move (placeholder)",
+    "m           move file / directory",
     "c           copy (placeholder)",
     "",
     "? / Esc     close help",
@@ -77,7 +77,7 @@ mod tests {
             "show / hide ignored entries",
             "add file / directory",
             "delete file / directory",
-            "move (placeholder)",
+            "move file / directory",
             "copy (placeholder)",
             "? / Esc     close help",
         ] {

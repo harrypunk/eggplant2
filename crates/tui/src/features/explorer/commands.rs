@@ -5,7 +5,7 @@ use crate::{
     manager::effect::Effect,
 };
 
-use super::{ExpansionState, add, delete, work::ExplorerRefreshKind};
+use super::{ExpansionState, add, delete, relocate, work::ExplorerRefreshKind};
 
 /// Explorer state commands. File opening and panel focus stay in separate slices.
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
@@ -25,7 +25,10 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         "explorer_delete" => return delete::open(model),
         "explorer_delete_confirm" => return delete::confirm(model),
         "close_explorer_delete" => return delete::cancel(model),
-        "explorer_move" => return placeholder(model, "Move"),
+        "explorer_move" => return relocate::open(model),
+        "explorer_move_submit" => return relocate::submit(model),
+        "close_explorer_move" => return relocate::cancel(model),
+        "explorer_move_backspace" => return relocate::backspace(model),
         "explorer_copy" => return placeholder(model, "Copy"),
         _ => {
             model.status = Some(StatusMessage::error(format!(
@@ -279,21 +282,22 @@ mod tests {
     }
 
     #[test]
-    fn file_operation_placeholders_report_without_changing_files() {
+    fn copy_placeholder_reports_without_changing_files() {
         let directory = tempfile::tempdir().unwrap();
         std::fs::write(directory.path().join("note.txt"), "hello").unwrap();
         let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
         let original_entries = model.explorer.entries.clone();
         let manager = MessageManager::default();
 
-        for (command, action) in [("explorer_move", "Move"), ("explorer_copy", "Copy")] {
-            let effect = manager.update(&mut model, Message::InvokeCommand(CommandId(command)));
-            assert!(effect.is_some());
-            assert_eq!(
-                model.status.as_ref().map(|status| status.text.as_str()),
-                Some(format!("{action} is not implemented").as_str())
-            );
-        }
+        let effect = manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("explorer_copy")),
+        );
+        assert!(effect.is_some());
+        assert_eq!(
+            model.status.as_ref().map(|status| status.text.as_str()),
+            Some("Copy is not implemented")
+        );
 
         assert_eq!(model.explorer.entries, original_entries);
         assert_eq!(
