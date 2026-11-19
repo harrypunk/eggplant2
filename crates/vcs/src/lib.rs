@@ -1208,35 +1208,35 @@ fn read_history(
 }
 
 fn branch_tips(repository: &Repository) -> anyhow::Result<HashMap<ObjectId, Vec<String>>> {
-    repository
-        .references()?
-        .all()?
-        .try_fold(
-            HashMap::<ObjectId, Vec<String>>::new(),
-            |mut tips, reference| {
-                let reference = reference.map_err(|error| anyhow::anyhow!(error.to_string()))?;
-                if let (Some(id), Some((category, name))) = (
-                    reference.target().try_id(),
-                    reference.name().category_and_short_name(),
-                ) && let gix::reference::Category::LocalBranch
-                | gix::reference::Category::RemoteBranch = category
-                {
-                    tips.entry(id.to_owned())
-                        .or_default()
-                        .push(name.to_str_lossy().into_owned());
-                }
-                Ok::<_, anyhow::Error>(tips)
-            },
-        )
-        .map(|tips| {
-            tips.into_iter()
-                .map(|(id, mut branches)| {
-                    branches.sort();
-                    branches.dedup();
-                    (id, branches)
-                })
-                .collect()
-        })
+    let mut tips = repository.references()?.all()?.try_fold(
+        HashMap::<ObjectId, Vec<String>>::new(),
+        |mut tips, reference| {
+            let reference = reference.map_err(|error| anyhow::anyhow!(error.to_string()))?;
+            if let Some((id, branch)) = branch_tip(&reference) {
+                tips.entry(id).or_default().push(branch);
+            }
+            Ok::<_, anyhow::Error>(tips)
+        },
+    )?;
+    for branches in tips.values_mut() {
+        branches.sort();
+        branches.dedup();
+    }
+    Ok(tips)
+}
+
+fn branch_tip(reference: &gix::Reference<'_>) -> Option<(ObjectId, String)> {
+    let target = reference.target();
+    let (Some(id), Some((category, name))) =
+        (target.try_id(), reference.name().category_and_short_name())
+    else {
+        return None;
+    };
+    let (gix::reference::Category::LocalBranch | gix::reference::Category::RemoteBranch) = category
+    else {
+        return None;
+    };
+    Some((id.to_owned(), name.to_str_lossy().into_owned()))
 }
 
 #[cfg(test)]
