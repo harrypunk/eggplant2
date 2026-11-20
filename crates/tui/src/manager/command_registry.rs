@@ -98,6 +98,8 @@ impl CommandRegistry {
         crate::vcs::register_commands(&mut registry).expect("VCS commands must be unique");
         crate::code_navigation::register_commands(&mut registry)
             .expect("code-navigation commands must be unique");
+        crate::diagnostics::register_commands(&mut registry)
+            .expect("diagnostics commands must be unique");
         registry
     }
 }

@@ -317,6 +317,7 @@ mod tests {
             ('d', "code_definition"),
             ('r', "code_references"),
             ('i', "code_implementation"),
+            ('l', "code_diagnostics"),
         ] {
             menu.handle_key(KeyCode::Char(' '));
             menu.handle_key(KeyCode::Char('c'));

@@ -29,6 +29,7 @@ impl<'a> ToolsPanel<'a> {
             Some(ToolKind::Search) => "Search",
             Some(ToolKind::Agent) => "Agent",
             Some(ToolKind::Info) => "Info",
+            Some(ToolKind::Diagnostics) => "Diagnostics",
         }
     }
 

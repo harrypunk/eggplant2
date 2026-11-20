@@ -10,8 +10,8 @@ use ratatui::{
 
 use crate::{
     component::{
-        file_explorer::FileExplorer, key_hints::KeyHints, status_bar::StatusBar,
-        tools_panel::ToolsPanel,
+        diagnostics_panel::DiagnosticsPanel, file_explorer::FileExplorer, key_hints::KeyHints,
+        status_bar::StatusBar, tools_panel::ToolsPanel,
     },
     data_object::{FocusState, FocusTarget, Model, PendingInput},
 };
@@ -250,6 +250,18 @@ fn render_explorer_panel(model: &Model, frame: &mut Frame, area: Rect) {
 }
 
 fn render_tools_panel(model: &Model, frame: &mut Frame, area: Rect) {
+    if model.tools.active_tool == Some(crate::tools::ToolKind::Diagnostics) {
+        frame.render_widget(
+            DiagnosticsPanel::new(
+                &model.diagnostics,
+                model.workspace.as_ref().map(|workspace| workspace.root()),
+                focus_for(model.current_focus, FocusTarget::ToolsPanel),
+                model.theme.ui(),
+            ),
+            area,
+        );
+        return;
+    }
     frame.render_widget(
         ToolsPanel::new(
             model.tools.active_tool,

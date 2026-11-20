@@ -20,6 +20,7 @@ Available in Normal and Explorer contexts unless noted otherwise.
 | Go to definition | `Space c d` |
 | Find references | `Space c r` |
 | Go to implementation | `Space c i` |
+| Show diagnostics | `Space c l` |
 | Search the current file | `Space s c` |
 | Search the project | `Space s p` |
 | Open full-screen Git status | `Space g g` |

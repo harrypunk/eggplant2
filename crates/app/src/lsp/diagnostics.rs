@@ -2,14 +2,7 @@ use serde_json::Value;
 use url::Url;
 
 use super::navigation::from_lsp_position;
-use crate::language::{Diagnostic, DiagnosticSeverity, LanguageError};
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DiagnosticBatch {
-    pub path: std::path::PathBuf,
-    pub version: Option<i32>,
-    pub diagnostics: Vec<Diagnostic>,
-}
+use crate::language::{Diagnostic, DiagnosticBatch, DiagnosticSeverity, LanguageError};
 
 /// Decode `textDocument/publishDiagnostics` parameters into one complete path batch.
 pub fn decode_diagnostics(

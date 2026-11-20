@@ -125,6 +125,7 @@ impl ThemeAdapter for GhosttyThemeAdapter {
                 border: palette(BRIGHT_BLACK),
                 focused_border: palette(BRIGHT_BLUE),
                 error: palette(RED),
+                warning: palette(BRIGHT_YELLOW),
                 file_path: palette(BRIGHT_BLACK),
                 vcs_branch: palette(BRIGHT_MAGENTA).map(|style| style.add_modifier(Modifier::BOLD)),
                 diff_add: palette(GREEN),

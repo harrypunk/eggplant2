@@ -104,6 +104,7 @@ pub struct UiTheme {
     pub(crate) border: Style,
     pub(crate) focused_border: Style,
     pub(crate) error: Style,
+    pub(crate) warning: Style,
     pub(crate) file_path: Style,
     pub(crate) vcs_branch: Style,
     pub(crate) diff_add: Style,

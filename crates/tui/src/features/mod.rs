@@ -5,6 +5,7 @@ pub mod buffer_jump;
 pub mod buffer_navigation;
 pub mod change;
 pub mod code_navigation;
+pub mod diagnostics;
 pub mod editing;
 pub mod explorer;
 pub mod external_sync;

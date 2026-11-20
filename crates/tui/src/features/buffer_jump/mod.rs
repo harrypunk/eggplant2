@@ -27,6 +27,7 @@ pub static CODE_CONTEXT: CommandMenuContext = CommandMenuContext::new(
         CommandMenuItem::action('d', "definition", CommandId("code_definition")),
         CommandMenuItem::action('r', "references", CommandId("code_references")),
         CommandMenuItem::action('i', "implementation", CommandId("code_implementation")),
+        CommandMenuItem::action('l', "diagnostics", CommandId("code_diagnostics")),
     ],
 );
 

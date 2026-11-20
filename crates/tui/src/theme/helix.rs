@@ -35,6 +35,9 @@ pub(crate) fn ui_theme(source: &HelixTheme) -> UiTheme {
         error: source_style(source, "error")
             .or_else(|| source_style(source, "diagnostic.error"))
             .unwrap_or_else(|| Style::new().fg(Color::Red)),
+        warning: source_style(source, "warning")
+            .or_else(|| source_style(source, "diagnostic.warning"))
+            .unwrap_or_else(|| Style::new().fg(Color::Yellow)),
         file_path: source_style(source, "ui.text.directory")
             .or_else(|| source_style(source, "ui.text"))
             .unwrap_or_else(|| Style::new().fg(Color::Cyan)),

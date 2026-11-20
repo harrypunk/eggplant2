@@ -17,9 +17,9 @@ pub use capabilities::{clipboard, copy_hash, document, file_watcher, register, s
 pub use shell::{buffer, command_menu, focus, lifecycle};
 
 pub use features::{
-    buffer_grep, buffer_jump, buffer_navigation, change, code_navigation, editing, explorer,
-    external_sync, file_picker, line_jump, navigation, notifications, page_scroll, project_grep,
-    theme_picker, vcs, view_align, yank,
+    buffer_grep, buffer_jump, buffer_navigation, change, code_navigation, diagnostics, editing,
+    explorer, external_sync, file_picker, line_jump, navigation, notifications, page_scroll,
+    project_grep, theme_picker, vcs, view_align, yank,
 };
 
 #[cfg(test)]
@@ -46,6 +46,7 @@ pub mod data_object {
         change::ChangeState,
         code_navigation::CodeNavigationState,
         command_menu::CommandMenuState,
+        diagnostics::DiagnosticsState,
         explorer::ExplorerState,
         file_picker::FilePickerState,
         line_jump::LineJumpState,
@@ -148,6 +149,7 @@ pub mod data_object {
         pub deferred_action: Option<DeferredAction>,
         pub command_menu: CommandMenuState,
         pub code_navigation: CodeNavigationState,
+        pub diagnostics: DiagnosticsState,
         pub modal: ModalController,
         pub file_picker: FilePickerState,
         pub theme_picker: ThemePickerState,
@@ -187,6 +189,7 @@ pub mod data_object {
                 deferred_action: None,
                 command_menu: CommandMenuState::default(),
                 code_navigation: CodeNavigationState::default(),
+                diagnostics: DiagnosticsState::default(),
                 modal: ModalController::default(),
                 file_picker: FilePickerState::default(),
                 theme_picker: ThemePickerState::default(),

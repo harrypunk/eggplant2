@@ -9,6 +9,7 @@ pub enum ToolKind {
     Search,
     Agent,
     Info,
+    Diagnostics,
 }
 
 /// State shared by all tools in the side panel.

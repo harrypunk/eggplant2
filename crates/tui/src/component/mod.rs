@@ -1,5 +1,6 @@
 pub mod buffer_tabs;
 pub mod commit_message;
+pub mod diagnostics_panel;
 pub mod editor;
 pub mod file_explorer;
 pub mod file_picker;
