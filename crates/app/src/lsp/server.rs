@@ -1,10 +1,12 @@
-use std::path::Path;
+use std::{collections::HashMap, path::Path};
 
 use serde_json::Value;
 use url::Url;
 
 use super::{ServerMessage, error_response_message, response_message};
-use crate::language::{LanguageError, LanguageMessage, LanguageMessageKind};
+use crate::language::{
+    LanguageError, LanguageMessage, LanguageMessageKind, LanguageProgress, LanguageProgressStage,
+};
 
 pub fn show_message_params(message: &ServerMessage) -> Option<&Value> {
     let ServerMessage::Notification { method, params } = message else {
@@ -36,6 +38,94 @@ pub fn decode_show_message(params: &Value) -> Result<LanguageMessage, LanguageEr
         kind,
         message: message.to_string(),
     })
+}
+
+pub fn progress_params(message: &ServerMessage) -> Option<&Value> {
+    let ServerMessage::Notification { method, params } = message else {
+        return None;
+    };
+    (method == "$/progress").then_some(params)
+}
+
+/// Decode work progress and retain begin titles for subsequent report/end events.
+pub fn decode_progress(
+    params: &Value,
+    titles: &mut HashMap<String, String>,
+) -> Result<Option<LanguageProgress>, LanguageError> {
+    let token = match params.get("token") {
+        Some(Value::String(token)) => token.clone(),
+        Some(Value::Number(token)) if token.as_i64().is_some() => token.to_string(),
+        _ => {
+            return Err(LanguageError(
+                "$/progress requires a string or integer token".to_string(),
+            ));
+        }
+    };
+    let value = params
+        .get("value")
+        .ok_or_else(|| LanguageError("$/progress requires a progress value".to_string()))?;
+    let stage = match value.get("kind").and_then(Value::as_str) {
+        Some("begin") => LanguageProgressStage::Begin,
+        Some("report") => LanguageProgressStage::Report,
+        Some("end") => LanguageProgressStage::End,
+        _ => {
+            return Err(LanguageError(
+                "$/progress requires begin, report, or end".to_string(),
+            ));
+        }
+    };
+    let message = match value.get("message") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(message)) => Some(message.clone()),
+        _ => {
+            return Err(LanguageError(
+                "$/progress message must be a string".to_string(),
+            ));
+        }
+    };
+    let percentage = match value.get("percentage") {
+        None | Some(Value::Null) => None,
+        Some(Value::Number(percentage)) => {
+            let Some(percentage) = percentage.as_u64().filter(|percentage| *percentage <= 100)
+            else {
+                return Err(LanguageError(
+                    "$/progress percentage must be between 0 and 100".to_string(),
+                ));
+            };
+            Some(percentage as u32)
+        }
+        _ => {
+            return Err(LanguageError(
+                "$/progress percentage must be between 0 and 100".to_string(),
+            ));
+        }
+    };
+    let title = if stage == LanguageProgressStage::Begin {
+        let title = value
+            .get("title")
+            .and_then(Value::as_str)
+            .filter(|title| !title.is_empty())
+            .ok_or_else(|| {
+                LanguageError("$/progress begin requires a non-empty title".to_string())
+            })?
+            .to_string();
+        titles.insert(token, title.clone());
+        title
+    } else {
+        let Some(title) = titles.get(&token).cloned() else {
+            return Ok(None);
+        };
+        if stage == LanguageProgressStage::End {
+            titles.remove(&token);
+        }
+        title
+    };
+    Ok(Some(LanguageProgress {
+        stage,
+        title,
+        message,
+        percentage,
+    }))
 }
 
 /// Answer the small set of server requests needed by the lightweight integration.
@@ -104,6 +194,64 @@ mod tests {
 
         assert!(decode_show_message(&json!({"type": 9, "message": "bad"})).is_err());
         assert!(decode_show_message(&json!({"type": 3, "message": ""})).is_err());
+    }
+
+    #[test]
+    fn tracks_progress_titles_through_begin_report_and_end() {
+        let mut titles = HashMap::new();
+        let begin = decode_progress(
+            &json!({
+                "token": "indexing",
+                "value": {"kind": "begin", "title": "Indexing", "percentage": 0}
+            }),
+            &mut titles,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(begin.stage, LanguageProgressStage::Begin);
+        assert_eq!(begin.title, "Indexing");
+        assert_eq!(begin.percentage, Some(0));
+
+        let report = decode_progress(
+            &json!({
+                "token": "indexing",
+                "value": {"kind": "report", "message": "workspace", "percentage": 50}
+            }),
+            &mut titles,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(report.stage, LanguageProgressStage::Report);
+        assert_eq!(report.title, "Indexing");
+        assert_eq!(report.message.as_deref(), Some("workspace"));
+
+        let end = decode_progress(
+            &json!({"token": "indexing", "value": {"kind": "end"}}),
+            &mut titles,
+        )
+        .unwrap()
+        .unwrap();
+        assert_eq!(end.stage, LanguageProgressStage::End);
+        assert_eq!(end.title, "Indexing");
+        assert!(titles.is_empty());
+        assert!(
+            decode_progress(
+                &json!({"token": "indexing", "value": {"kind": "report"}}),
+                &mut titles,
+            )
+            .unwrap()
+            .is_none()
+        );
+        assert!(
+            decode_progress(
+                &json!({
+                    "token": "other",
+                    "value": {"kind": "begin", "title": "Other", "percentage": 101}
+                }),
+                &mut titles,
+            )
+            .is_err()
+        );
     }
 
     #[test]

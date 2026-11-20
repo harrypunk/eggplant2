@@ -15,7 +15,10 @@ use super::{
     notification_message,
     process::{LspChild, LspProcess, diagnostics_params},
     request_message,
-    server::{decode_show_message, respond_to_server_request, show_message_params},
+    server::{
+        decode_progress, decode_show_message, progress_params, respond_to_server_request,
+        show_message_params,
+    },
     transport::LspTransport,
 };
 use crate::language::{
@@ -47,11 +50,13 @@ impl LspRuntime {
         let documents = Arc::new(Mutex::new(parts.documents));
         let (sender, receiver) = mpsc::channel();
         let (outgoing, outgoing_receiver) = mpsc::channel();
+        let mut progress = HashMap::new();
         for message in parts.pending {
             route_message(
                 message,
                 &documents,
                 &on_event,
+                &mut progress,
                 &sender,
                 &parts.workspace_root,
                 &outgoing,
@@ -77,6 +82,7 @@ impl LspRuntime {
                             message,
                             &reader_documents,
                             &on_event,
+                            &mut progress,
                             &sender,
                             &workspace_root,
                             &reader_outgoing,
@@ -267,6 +273,7 @@ fn route_message(
     message: ServerMessage,
     documents: &Documents,
     on_event: &EventHandler,
+    progress: &mut HashMap<String, String>,
     incoming: &mpsc::Sender<ServerMessage>,
     workspace_root: &Path,
     outgoing: &mpsc::Sender<Value>,
@@ -283,6 +290,12 @@ fn route_message(
                 on_event(result);
             } else if let Some(params) = show_message_params(&message) {
                 on_event(decode_show_message(params).map(LanguageEvent::Message));
+            } else if let Some(params) = progress_params(&message) {
+                match decode_progress(params, progress) {
+                    Ok(Some(progress)) => on_event(Ok(LanguageEvent::Progress(progress))),
+                    Ok(None) => {}
+                    Err(error) => on_event(Err(error)),
+                }
             } else {
                 let _ = incoming.send(message);
             }
@@ -327,12 +340,27 @@ read_frame
 [[ $frame == *'"id":99'* && $frame == *'"result":null'* ]] || exit 3
 show_message='{"jsonrpc":"2.0","method":"window/showMessage","params":{"type":2,"message":"workspace loaded"}}'
 printf 'Content-Length: %s\r\n\r\n%s' "${#show_message}" "$show_message"
+progress='{"jsonrpc":"2.0","method":"$/progress","params":{"token":"indexing","value":{"kind":"begin","title":"Indexing"}}}'
+printf 'Content-Length: %s\r\n\r\n%s' "${#progress}" "$progress"
+progress='{"jsonrpc":"2.0","method":"$/progress","params":{"token":"indexing","value":{"kind":"report","message":"workspace","percentage":50}}}'
+printf 'Content-Length: %s\r\n\r\n%s' "${#progress}" "$progress"
+progress='{"jsonrpc":"2.0","method":"$/progress","params":{"token":"indexing","value":{"kind":"end","message":"done"}}}'
+printf 'Content-Length: %s\r\n\r\n%s' "${#progress}" "$progress"
 notification="{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/publishDiagnostics\",\"params\":{\"uri\":\"file://$PWD/note.txt\",\"diagnostics\":[]}}"
 printf 'Content-Length: %s\r\n\r\n%s' "${#notification}" "$notification"
 read_frame
 body='{"jsonrpc":"2.0","id":2,"result":[]}'
 printf 'Content-Length: %s\r\n\r\n%s' "${#body}" "$body"
 "#;
+
+    fn receive_event(
+        receiver: &mpsc::Receiver<Result<LanguageEvent, LanguageError>>,
+    ) -> LanguageEvent {
+        receiver
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .unwrap()
+    }
 
     #[test]
     fn runtime_routes_diagnostics_and_navigation_independently() {
@@ -368,20 +396,35 @@ printf 'Content-Length: %s\r\n\r\n%s' "${#body}" "$body"
             })
             .unwrap();
         assert!(locations.is_empty());
-        let message = receiver
-            .recv_timeout(Duration::from_secs(2))
-            .unwrap()
-            .unwrap();
+        let message = receive_event(&receiver);
         let LanguageEvent::Message(message) = message else {
             panic!("expected server message");
         };
         assert_eq!(message.kind, LanguageMessageKind::Warning);
         assert_eq!(message.message, "workspace loaded");
 
-        let diagnostics = receiver
-            .recv_timeout(Duration::from_secs(2))
-            .unwrap()
-            .unwrap();
+        let begin = receive_event(&receiver);
+        let LanguageEvent::Progress(begin) = begin else {
+            panic!("expected progress begin");
+        };
+        assert_eq!(begin.title, "Indexing");
+
+        let report = receive_event(&receiver);
+        let LanguageEvent::Progress(report) = report else {
+            panic!("expected progress report");
+        };
+        assert_eq!(report.title, "Indexing");
+        assert_eq!(report.message.as_deref(), Some("workspace"));
+        assert_eq!(report.percentage, Some(50));
+
+        let end = receive_event(&receiver);
+        let LanguageEvent::Progress(end) = end else {
+            panic!("expected progress end");
+        };
+        assert_eq!(end.title, "Indexing");
+        assert_eq!(end.message.as_deref(), Some("done"));
+
+        let diagnostics = receive_event(&receiver);
         let LanguageEvent::Diagnostics(diagnostics) = diagnostics else {
             panic!("expected diagnostics");
         };

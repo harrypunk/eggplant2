@@ -117,7 +117,10 @@ impl LspProcess {
             serde_json::json!({
                 "processId": std::process::id(),
                 "rootUri": root_uri.to_string(),
-                "capabilities": {"textDocumentSync": 1},
+                "capabilities": {
+                    "textDocumentSync": 1,
+                    "window": {"workDoneProgress": true},
+                },
             }),
         ))?;
 
@@ -287,9 +290,10 @@ read_frame() {
       length=${length//[[:space:]]/}
     fi
   done
-  dd if=/dev/stdin bs=1 count="$length" of=/dev/null status=none
+  frame=$(dd if=/dev/stdin bs=1 count="$length" status=none)
 }
 read_frame
+[[ $frame == *'"workDoneProgress":true'* ]] || exit 4
 body='{"jsonrpc":"2.0","id":1,"result":{"capabilities":{}}}'
 printf 'Content-Length: %s\r\n\r\n%s' "${#body}" "$body"
 read_frame

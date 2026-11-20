@@ -2,7 +2,8 @@ use std::path::PathBuf;
 
 use app::language::{
     DocumentEvent, LanguageError, LanguageEvent, LanguageMessage, LanguageMessageKind,
-    LanguageServerSpec, LanguageServers, LanguageService, NavigationKind, NavigationRequest,
+    LanguageProgress, LanguageProgressStage, LanguageServerSpec, LanguageServers, LanguageService,
+    NavigationKind, NavigationRequest,
 };
 
 use super::NavigationOutcome;
@@ -278,6 +279,13 @@ impl FeatureEffect for LanguageWork {
                                         )),
                                     )
                                 }
+                                Ok(LanguageEvent::Progress(progress)) => {
+                                    crate::data_object::Message::FeatureCompletion(
+                                        FeatureCompletion::new(NotificationCompletion(
+                                            progress_notification(progress),
+                                        )),
+                                    )
+                                }
                                 Err(error) => crate::data_object::Message::FeatureCompletion(
                                     FeatureCompletion::new(DiagnosticFailureCompletion(format!(
                                         "Language server failed: {}",
@@ -433,6 +441,26 @@ fn server_notification(message: LanguageMessage) -> Notification {
     notification.with_title("LSP")
 }
 
+fn progress_notification(progress: LanguageProgress) -> Notification {
+    let message = match progress.stage {
+        LanguageProgressStage::Begin | LanguageProgressStage::Report => {
+            match (progress.message, progress.percentage) {
+                (Some(message), Some(percentage)) => {
+                    format!("{}: {message} ({percentage}%)", progress.title)
+                }
+                (Some(message), None) => format!("{}: {message}", progress.title),
+                (None, Some(percentage)) => format!("{} ({percentage}%)", progress.title),
+                (None, None) => progress.title,
+            }
+        }
+        LanguageProgressStage::End => match progress.message {
+            Some(message) => format!("{}: {message}", progress.title),
+            None => format!("{} finished", progress.title),
+        },
+    };
+    Notification::info(message).with_title("LSP")
+}
+
 fn notify(model: &mut Model, status: StatusMessage) -> Option<Effect> {
     Some(crate::notifications::report_status(model, status))
 }
@@ -539,6 +567,26 @@ mod tests {
         );
         assert_eq!(notification.title(), Some("LSP"));
         assert_eq!(notification.message(), "workspace loaded");
+    }
+
+    #[test]
+    fn progress_notifications_include_details_and_completion() {
+        let report = progress_notification(LanguageProgress {
+            stage: LanguageProgressStage::Report,
+            title: "Indexing".to_string(),
+            message: Some("workspace".to_string()),
+            percentage: Some(50),
+        });
+        assert_eq!(report.title(), Some("LSP"));
+        assert_eq!(report.message(), "Indexing: workspace (50%)");
+
+        let end = progress_notification(LanguageProgress {
+            stage: LanguageProgressStage::End,
+            title: "Indexing".to_string(),
+            message: None,
+            percentage: None,
+        });
+        assert_eq!(end.message(), "Indexing finished");
     }
 
     #[test]

@@ -192,11 +192,27 @@ pub struct LanguageMessage {
     pub message: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LanguageProgressStage {
+    Begin,
+    Report,
+    End,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LanguageProgress {
+    pub stage: LanguageProgressStage,
+    pub title: String,
+    pub message: Option<String>,
+    pub percentage: Option<u32>,
+}
+
 /// Provider-neutral events delivered independently of navigation responses.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LanguageEvent {
     Diagnostics(DiagnosticBatch),
     Message(LanguageMessage),
+    Progress(LanguageProgress),
 }
 
 #[cfg(test)]
