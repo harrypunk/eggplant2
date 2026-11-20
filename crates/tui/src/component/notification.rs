@@ -35,6 +35,7 @@ impl<'a> NotificationPopup<'a> {
         let surface = styles.popup_surface();
         let accent = match self.notification.kind() {
             NotificationKind::Info => styles.action_hint,
+            NotificationKind::Warning => styles.warning,
             NotificationKind::Error => styles.error,
         };
         let content = Paragraph::new(self.notification.message().to_string())
@@ -46,6 +47,7 @@ impl<'a> NotificationPopup<'a> {
             .title()
             .unwrap_or(match self.notification.kind() {
                 NotificationKind::Info => "Info",
+                NotificationKind::Warning => "Warning",
                 NotificationKind::Error => "Error",
             });
         let block = Block::bordered()

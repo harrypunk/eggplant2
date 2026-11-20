@@ -1,12 +1,13 @@
 use std::path::PathBuf;
 
 use app::language::{
-    DocumentEvent, LanguageError, LanguageServerSpec, LanguageServers, LanguageService,
-    NavigationKind, NavigationRequest,
+    DocumentEvent, LanguageError, LanguageEvent, LanguageMessage, LanguageMessageKind,
+    LanguageServerSpec, LanguageServers, LanguageService, NavigationKind, NavigationRequest,
 };
 
 use super::NavigationOutcome;
 use crate::{
+    capabilities::notification::Notification,
     data_object::{CommandId, Context, Model, StatusMessage},
     diagnostics::{DiagnosticFailureCompletion, DiagnosticsCompletion},
     document,
@@ -245,13 +246,13 @@ impl FeatureEffect for LanguageWork {
                 Ok(process) => {
                     if let Some(sender) = &diagnostics_sender {
                         let _ = sender.send(crate::data_object::Message::FeatureCompletion(
-                            FeatureCompletion::new(NotificationCompletion {
-                                status: StatusMessage::info(format!(
+                            FeatureCompletion::new(NotificationCompletion(
+                                Notification::info(format!(
                                     "Language server `{}` started",
                                     spec.command()
-                                )),
-                                title: Some("LSP"),
-                            }),
+                                ))
+                                .with_title("LSP"),
+                            )),
                         ));
                     }
                     let sender = diagnostics_sender;
@@ -262,12 +263,21 @@ impl FeatureEffect for LanguageWork {
                                 return;
                             };
                             let message = match result {
-                                Ok(batch) => crate::data_object::Message::FeatureCompletion(
-                                    FeatureCompletion::new(DiagnosticsCompletion {
-                                        batch,
-                                        server_generation: generation,
-                                    }),
-                                ),
+                                Ok(LanguageEvent::Diagnostics(batch)) => {
+                                    crate::data_object::Message::FeatureCompletion(
+                                        FeatureCompletion::new(DiagnosticsCompletion {
+                                            batch,
+                                            server_generation: generation,
+                                        }),
+                                    )
+                                }
+                                Ok(LanguageEvent::Message(message)) => {
+                                    crate::data_object::Message::FeatureCompletion(
+                                        FeatureCompletion::new(NotificationCompletion(
+                                            server_notification(message),
+                                        )),
+                                    )
+                                }
                                 Err(error) => crate::data_object::Message::FeatureCompletion(
                                     FeatureCompletion::new(DiagnosticFailureCompletion(format!(
                                         "Language server failed: {}",
@@ -412,6 +422,17 @@ fn close(model: &mut Model) {
         .pop_if(|context| context == &Context::CodeNavigation);
 }
 
+fn server_notification(message: LanguageMessage) -> Notification {
+    let notification = match message.kind {
+        LanguageMessageKind::Error => Notification::error(message.message),
+        LanguageMessageKind::Warning => Notification::warning(message.message),
+        LanguageMessageKind::Information | LanguageMessageKind::Log => {
+            Notification::info(message.message)
+        }
+    };
+    notification.with_title("LSP")
+}
+
 fn notify(model: &mut Model, status: StatusMessage) -> Option<Effect> {
     Some(crate::notifications::report_status(model, status))
 }
@@ -503,6 +524,21 @@ mod tests {
         manager.update(&mut model, Message::FileOpened(request.perform()));
         let active = model.editor.active_buffer().unwrap();
         assert_eq!(model.editor.buffer_path(active), Some(target.as_path()));
+    }
+
+    #[test]
+    fn server_messages_preserve_warning_severity() {
+        let notification = server_notification(LanguageMessage {
+            kind: LanguageMessageKind::Warning,
+            message: "workspace loaded".to_string(),
+        });
+
+        assert_eq!(
+            notification.kind(),
+            crate::capabilities::notification::NotificationKind::Warning
+        );
+        assert_eq!(notification.title(), Some("LSP"));
+        assert_eq!(notification.message(), "workspace loaded");
     }
 
     #[test]

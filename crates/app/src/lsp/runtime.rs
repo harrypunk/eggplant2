@@ -15,15 +15,15 @@ use super::{
     notification_message,
     process::{LspChild, LspProcess, diagnostics_params},
     request_message,
-    server::respond_to_server_request,
+    server::{decode_show_message, respond_to_server_request, show_message_params},
     transport::LspTransport,
 };
 use crate::language::{
-    DiagnosticBatch, DocumentEvent, LanguageError, LanguageService, NavigationRequest,
+    DocumentEvent, LanguageError, LanguageEvent, LanguageService, NavigationRequest,
 };
 
 type Documents = Arc<Mutex<HashMap<PathBuf, String>>>;
-type DiagnosticsHandler = dyn Fn(Result<DiagnosticBatch, LanguageError>) + Send + 'static;
+type EventHandler = dyn Fn(Result<LanguageEvent, LanguageError>) + Send + 'static;
 
 /// Split process ownership for concurrent diagnostics reads and navigation writes.
 pub struct LspRuntime {
@@ -40,7 +40,7 @@ pub struct LspRuntime {
 impl LspRuntime {
     pub fn start(
         process: LspProcess,
-        on_diagnostics: impl Fn(Result<DiagnosticBatch, LanguageError>) + Send + 'static,
+        on_event: impl Fn(Result<LanguageEvent, LanguageError>) + Send + 'static,
     ) -> Self {
         let parts = process.into_parts();
         let (reader, writer, buffer) = parts.transport.into_parts();
@@ -51,7 +51,7 @@ impl LspRuntime {
             route_message(
                 message,
                 &documents,
-                &on_diagnostics,
+                &on_event,
                 &sender,
                 &parts.workspace_root,
                 &outgoing,
@@ -76,18 +76,18 @@ impl LspRuntime {
                         Ok(message) => route_message(
                             message,
                             &reader_documents,
-                            &on_diagnostics,
+                            &on_event,
                             &sender,
                             &workspace_root,
                             &reader_outgoing,
                         ),
                         Err(error) => {
-                            on_diagnostics(Err(error));
+                            on_event(Err(error));
                             break;
                         }
                     },
                     Err(error) => {
-                        on_diagnostics(Err(error));
+                        on_event(Err(error));
                         break;
                     }
                 }
@@ -266,7 +266,7 @@ fn document_text(documents: &Documents, path: &Path) -> Result<String, LanguageE
 fn route_message(
     message: ServerMessage,
     documents: &Documents,
-    on_diagnostics: &DiagnosticsHandler,
+    on_event: &EventHandler,
     incoming: &mpsc::Sender<ServerMessage>,
     workspace_root: &Path,
     outgoing: &mpsc::Sender<Value>,
@@ -278,8 +278,11 @@ fn route_message(
         }
         message => {
             if let Some(params) = diagnostics_params(&message) {
-                let result = decode_batch(params, |path| document_text(documents, path));
-                on_diagnostics(result);
+                let result = decode_batch(params, |path| document_text(documents, path))
+                    .map(LanguageEvent::Diagnostics);
+                on_event(result);
+            } else if let Some(params) = show_message_params(&message) {
+                on_event(decode_show_message(params).map(LanguageEvent::Message));
             } else {
                 let _ = incoming.send(message);
             }
@@ -294,7 +297,9 @@ mod tests {
     use editor::DocumentPosition;
 
     use super::*;
-    use crate::language::{LanguageServerSpec, NavigationKind, NavigationRequestId};
+    use crate::language::{
+        LanguageMessageKind, LanguageServerSpec, NavigationKind, NavigationRequestId,
+    };
 
     const SERVER: &str = r#"
 read_frame() {
@@ -320,6 +325,8 @@ request='{"jsonrpc":"2.0","id":99,"method":"client/registerCapability","params":
 printf 'Content-Length: %s\r\n\r\n%s' "${#request}" "$request"
 read_frame
 [[ $frame == *'"id":99'* && $frame == *'"result":null'* ]] || exit 3
+show_message='{"jsonrpc":"2.0","method":"window/showMessage","params":{"type":2,"message":"workspace loaded"}}'
+printf 'Content-Length: %s\r\n\r\n%s' "${#show_message}" "$show_message"
 notification="{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/publishDiagnostics\",\"params\":{\"uri\":\"file://$PWD/note.txt\",\"diagnostics\":[]}}"
 printf 'Content-Length: %s\r\n\r\n%s' "${#notification}" "$notification"
 read_frame
@@ -361,10 +368,23 @@ printf 'Content-Length: %s\r\n\r\n%s' "${#body}" "$body"
             })
             .unwrap();
         assert!(locations.is_empty());
+        let message = receiver
+            .recv_timeout(Duration::from_secs(2))
+            .unwrap()
+            .unwrap();
+        let LanguageEvent::Message(message) = message else {
+            panic!("expected server message");
+        };
+        assert_eq!(message.kind, LanguageMessageKind::Warning);
+        assert_eq!(message.message, "workspace loaded");
+
         let diagnostics = receiver
             .recv_timeout(Duration::from_secs(2))
             .unwrap()
             .unwrap();
+        let LanguageEvent::Diagnostics(diagnostics) = diagnostics else {
+            panic!("expected diagnostics");
+        };
         assert_eq!(diagnostics.path, path);
         assert!(diagnostics.diagnostics.is_empty());
     }

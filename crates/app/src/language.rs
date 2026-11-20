@@ -178,6 +178,27 @@ pub struct DiagnosticBatch {
     pub diagnostics: Vec<Diagnostic>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LanguageMessageKind {
+    Error,
+    Warning,
+    Information,
+    Log,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LanguageMessage {
+    pub kind: LanguageMessageKind,
+    pub message: String,
+}
+
+/// Provider-neutral events delivered independently of navigation responses.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LanguageEvent {
+    Diagnostics(DiagnosticBatch),
+    Message(LanguageMessage),
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

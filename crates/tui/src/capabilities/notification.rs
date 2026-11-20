@@ -5,6 +5,7 @@ pub const DEFAULT_NOTIFICATION_DURATION: Duration = Duration::from_secs(4);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NotificationKind {
     Info,
+    Warning,
     Error,
 }
 
@@ -19,6 +20,10 @@ pub struct Notification {
 impl Notification {
     pub fn info(message: impl Into<String>) -> Self {
         Self::new(NotificationKind::Info, message)
+    }
+
+    pub fn warning(message: impl Into<String>) -> Self {
+        Self::new(NotificationKind::Warning, message)
     }
 
     pub fn error(message: impl Into<String>) -> Self {

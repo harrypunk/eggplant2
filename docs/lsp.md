@@ -24,7 +24,7 @@ Non-goals include completion, hover, rename, code actions, formatting, semantic 
 | `features/diagnostics` | Diagnostic storage, stale-version checks, typed completions, and side-panel visibility. |
 | `component/diagnostics_panel` | Severity/path/position/message rendering without protocol or process knowledge. |
 
-The runtime splits process reading from writing. A reader thread routes diagnostics to a callback and other messages to navigation. Document-map locks cover only short lookups, never blocking transport I/O. The child is terminated/reaped and the reader joined during teardown.
+The runtime splits process reading from writing. A reader thread routes diagnostics and server messages to an event callback and other messages to navigation. Document-map locks cover only short lookups, never blocking transport I/O. The child is terminated/reaped and the reader/writer threads are joined during teardown.
 
 Server-initiated requests receive minimal responses rather than being dropped: capability registration, progress creation, refresh requests, configuration items, and the fixed workspace folder are acknowledged. Workspace edit requests are explicitly rejected, and unknown methods receive JSON-RPC `MethodNotFound`.
 
@@ -46,7 +46,7 @@ Navigation results behave as follows:
 
 The diagnostics panel is non-modal and does not move editor focus. It displays severity, workspace-relative path, line/column, and message. It is shown on demand rather than opening automatically whenever diagnostics arrive.
 
-Transient server information, missing results, startup failures, and protocol failures use the existing notification path. Starting/restarting, successful initialization, and startup/runtime failures produce non-modal `LSP` notifications. These are lifecycle milestones, not server-rendered indexing progress.
+Transient server information, missing results, startup failures, and protocol failures use the existing notification path. Starting/restarting, successful initialization, and startup/runtime failures produce non-modal `LSP` notifications. Server `window/showMessage` notifications also appear there with error, warning, or information severity. Lifecycle messages are milestones, not server-rendered indexing progress.
 
 ## Synchronization and stale safety
 

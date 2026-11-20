@@ -7,14 +7,11 @@ use crate::{
     manager::effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
 };
 
-pub struct NotificationCompletion {
-    pub status: StatusMessage,
-    pub title: Option<&'static str>,
-}
+pub struct NotificationCompletion(pub Notification);
 
 impl Completion for NotificationCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        Some(publish_status(model, self.status, self.title))
+        Some(publish(model, self.0))
     }
 }
 
@@ -116,10 +113,9 @@ mod tests {
     #[test]
     fn notification_completion_publishes_lsp_status() {
         let mut model = Model::default();
-        let effect = Box::new(NotificationCompletion {
-            status: StatusMessage::info("Language server `rust-analyzer` started"),
-            title: Some("LSP"),
-        })
+        let effect = Box::new(NotificationCompletion(
+            Notification::info("Language server `rust-analyzer` started").with_title("LSP"),
+        ))
         .update(&mut model);
 
         assert!(effect.is_some());
