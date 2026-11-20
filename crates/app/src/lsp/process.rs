@@ -1,18 +1,29 @@
-use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
+use std::{
+    collections::{HashMap, VecDeque},
+    path::{Path, PathBuf},
+    process::{Child, ChildStdin, ChildStdout, Command, Stdio},
+};
 
 use serde_json::Value;
 use url::Url;
 
 use super::{
-    ServerMessage, decode_server_message, notification_message, request_message,
+    ServerMessage, decode_server_message,
+    navigation::{decode_locations, navigation_method, navigation_params},
+    notification_message, request_message,
     transport::LspTransport,
 };
-use crate::language::{LanguageError, LanguageServerSpec};
+use crate::language::{
+    DocumentEvent, LanguageError, LanguageServerSpec, LanguageService, NavigationRequest,
+};
 
 /// A live language-server child process and its stdio transport.
 pub struct LspProcess {
     child: Child,
     transport: LspTransport<ChildStdout, ChildStdin>,
+    documents: HashMap<PathBuf, String>,
+    pending: VecDeque<ServerMessage>,
+    next_request_id: u64,
 }
 
 impl LspProcess {
@@ -37,7 +48,13 @@ impl LspProcess {
             .take()
             .ok_or_else(|| LanguageError("language server stdout is unavailable".to_string()))?;
         let transport = LspTransport::new(stdout, stdin);
-        let mut process = Self { child, transport };
+        let mut process = Self {
+            child,
+            transport,
+            documents: HashMap::new(),
+            pending: VecDeque::new(),
+            next_request_id: 2,
+        };
         process.initialize(workspace_root)?;
         Ok(process)
     }
@@ -51,19 +68,119 @@ impl LspProcess {
             serde_json::json!({
                 "processId": std::process::id(),
                 "rootUri": root_uri.to_string(),
-                "capabilities": {},
+                "capabilities": {"textDocumentSync": 1},
             }),
         ))?;
 
         loop {
-            let message = decode_server_message(self.transport.receive()?)?;
+            let message = self.receive()?;
             if let ServerMessage::Response { id: 1, result } = message {
                 result.map_err(|error| LanguageError(error.message))?;
                 break;
+            } else {
+                self.pending.push_back(message);
             }
         }
         self.transport
             .send(&notification_message("initialized", Value::Null))
+    }
+
+    /// Receive the next queued or transport-level server message.
+    pub fn receive(&mut self) -> Result<ServerMessage, LanguageError> {
+        match self.pending.pop_front() {
+            Some(message) => Ok(message),
+            None => decode_server_message(self.transport.receive()?),
+        }
+    }
+
+    fn document_text(&self, path: &Path) -> Result<String, LanguageError> {
+        if let Some(text) = self.documents.get(path) {
+            return Ok(text.clone());
+        }
+        std::fs::read_to_string(path).map_err(|error| LanguageError(error.to_string()))
+    }
+}
+
+impl LanguageService for LspProcess {
+    fn synchronize(&mut self, event: DocumentEvent) -> Result<(), LanguageError> {
+        match event {
+            DocumentEvent::Open {
+                path,
+                language,
+                version,
+                text,
+            } => {
+                let uri = Url::from_file_path(&path)
+                    .map_err(|_| LanguageError("document path must be absolute".to_string()))?;
+                self.transport.send(&notification_message(
+                    "textDocument/didOpen",
+                    serde_json::json!({
+                        "textDocument": {
+                            "uri": uri.to_string(),
+                            "languageId": language,
+                            "version": version,
+                            "text": text,
+                        }
+                    }),
+                ))?;
+                self.documents.insert(path, text);
+            }
+            DocumentEvent::Change {
+                path,
+                version,
+                text,
+            } => {
+                let uri = Url::from_file_path(&path)
+                    .map_err(|_| LanguageError("document path must be absolute".to_string()))?;
+                self.transport.send(&notification_message(
+                    "textDocument/didChange",
+                    serde_json::json!({
+                        "textDocument": {"uri": uri.to_string(), "version": version},
+                        "contentChanges": [{"text": text}],
+                    }),
+                ))?;
+                self.documents.insert(path, text);
+            }
+            DocumentEvent::Close { path } => {
+                let uri = Url::from_file_path(&path)
+                    .map_err(|_| LanguageError("document path must be absolute".to_string()))?;
+                self.transport.send(&notification_message(
+                    "textDocument/didClose",
+                    serde_json::json!({"textDocument": {"uri": uri.to_string()}}),
+                ))?;
+                self.documents.remove(&path);
+            }
+        }
+        Ok(())
+    }
+
+    fn navigate(
+        &mut self,
+        request: NavigationRequest,
+    ) -> Result<Vec<crate::language::SourceLocation>, LanguageError> {
+        let text = self.document_text(&request.path)?;
+        let params = navigation_params(&request, &text)?;
+        let id = self.next_request_id;
+        self.next_request_id = self.next_request_id.wrapping_add(1);
+        self.transport.send(&request_message(
+            id,
+            navigation_method(request.kind),
+            params,
+        ))?;
+
+        loop {
+            let message = decode_server_message(self.transport.receive()?)?;
+            match message {
+                ServerMessage::Response {
+                    id: response_id,
+                    result,
+                } if response_id == id => {
+                    let value = result.map_err(|error| LanguageError(error.message))?;
+                    return decode_locations(&value, |path| self.document_text(path));
+                }
+                other => self.pending.push_back(other),
+            }
+        }
     }
 }
 
@@ -114,5 +231,75 @@ read_frame
         let spec = LanguageServerSpec::new("test", "bash", &["-c", "exit 0"]);
 
         assert!(LspProcess::spawn(&spec, workspace.path()).is_err());
+    }
+
+    #[test]
+    fn synchronizes_and_navigates_without_losing_notifications() {
+        const SERVER: &str = r#"
+read_frame() {
+  local length=0 line
+  while IFS= read -r line; do
+    line=${line%$'\r'}
+    if [[ -z $line ]]; then
+      break
+    fi
+    if [[ $line == Content-Length:* ]]; then
+      length=${line#Content-Length: }
+      length=${length//[[:space:]]/}
+    fi
+  done
+  frame=$(dd if=/dev/stdin bs=1 count="$length" status=none)
+}
+read_frame
+body='{"jsonrpc":"2.0","id":1,"result":{"capabilities":{}}}'
+printf 'Content-Length: %s\r\n\r\n%s' "${#body}" "$body"
+read_frame
+read_frame
+[[ $frame == *'"text":"fn main() {}"'* ]] || exit 2
+read_frame
+notification='{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{}}'
+printf 'Content-Length: %s\r\n\r\n%s' "${#notification}" "$notification"
+body="{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":[{\"uri\":\"file://$PWD/note.txt\",\"range\":{\"start\":{\"line\":0,\"character\":0},\"end\":{\"line\":0,\"character\":1}}}]}"
+printf 'Content-Length: %s\r\n\r\n%s' "${#body}" "$body"
+read_frame
+"#;
+        let workspace = tempfile::tempdir().unwrap();
+        let spec = LanguageServerSpec::new("test", "bash", &["-c", SERVER]);
+        let mut process = LspProcess::spawn(&spec, workspace.path()).unwrap();
+        let path = workspace.path().join("note.txt");
+        process
+            .synchronize(DocumentEvent::Open {
+                path: path.clone(),
+                language: "rust".to_string(),
+                version: 1,
+                text: "fn main() {}".to_string(),
+            })
+            .unwrap();
+
+        let locations = process
+            .navigate(NavigationRequest {
+                id: crate::language::NavigationRequestId(1),
+                kind: crate::language::NavigationKind::Definition,
+                buffer: editor::EditorSession::new()
+                    .insert_document(editor::DocumentFactory::new().create("")),
+                path: path.clone(),
+                revision: 1,
+                position: editor::DocumentPosition {
+                    line: 0,
+                    character: 0,
+                },
+            })
+            .unwrap();
+        assert_eq!(locations.len(), 1);
+        assert_eq!(locations[0].path, path);
+        assert_eq!(locations[0].end.character, 1);
+
+        let notification = process.receive().unwrap();
+        assert!(matches!(
+            notification,
+            ServerMessage::Notification { ref method, .. } if method == "textDocument/publishDiagnostics"
+        ));
+
+        process.synchronize(DocumentEvent::Close { path }).unwrap();
     }
 }
