@@ -179,7 +179,7 @@ fn paste_direct(model: &mut Model, position: PastePosition) -> Option<Effect> {
 }
 
 fn paste_enabled(model: &mut Model) -> bool {
-    target::with_active(model, |target| target.is_editing_enabled()).unwrap_or(false)
+    target::with_active(model, |target| target.can_mutate()).unwrap_or(false)
 }
 
 fn current_paste_target(model: &mut Model) -> Option<PasteTarget> {
@@ -213,8 +213,7 @@ fn target_is_current(model: &mut Model, target: PasteTarget) -> bool {
         return false;
     }
     target::with_active(model, |target| {
-        target.is_editing_enabled()
-            && target.session().active_revision() == Some((buffer_id, revision))
+        target.can_mutate() && target.session().active_revision() == Some((buffer_id, revision))
     })
     .unwrap_or(false)
 }
@@ -277,7 +276,7 @@ impl Completion for PasteCompletion {
 }
 
 fn paste_with(target: &mut dyn EditingTarget, position: PastePosition) -> Option<Effect> {
-    if !target.is_editing_enabled() {
+    if !target.can_mutate() {
         return None;
     }
     let text = target.register_text();
@@ -319,10 +318,33 @@ mod tests {
     use crate::{
         data_object::{AppPage, Message, Workspace},
         manager::message_manager::MessageManager,
-        test_utils::create_buffer,
+        test_utils::{create_buffer, open_file},
         vcs::ChangesState,
     };
     use ::vcs::{ChangeKind, FileChange};
+
+    #[test]
+    fn external_buffers_allow_yanking_but_reject_paste() {
+        let workspace = tempfile::tempdir().unwrap();
+        let external = tempfile::tempdir().unwrap();
+        let path = external.path().join("dependency.rs");
+        std::fs::write(&path, "outside").unwrap();
+        let mut model =
+            crate::startup::initial_model(Some(workspace.path().to_path_buf())).unwrap();
+        model.context_stack.push(Context::AppNormal);
+        model.register.set_provider(ClipboardProvider::None);
+        open_file(&mut model, &path);
+        let revision = model.editor.active_revision();
+
+        handle_command(&mut model, CommandId("yank_line_pending"));
+        assert!(handle_input(&mut model, 'y').is_some());
+        assert!(!model.register.unnamed().is_empty());
+        handle_command(&mut model, CommandId("paste_after"));
+        handle_command(&mut model, CommandId("paste_before"));
+
+        assert_eq!(model.editor.active_revision(), revision);
+        assert_eq!(model.editor.active_text_snapshot().unwrap().text, "outside");
+    }
 
     fn commit_model(text: &str) -> Model {
         let root = std::path::PathBuf::from("/workspace");

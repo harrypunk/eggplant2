@@ -24,6 +24,14 @@ pub(crate) trait EditingTarget {
         true
     }
 
+    fn is_read_only(&self) -> bool {
+        false
+    }
+
+    fn can_mutate(&self) -> bool {
+        self.is_editing_enabled() && !self.is_read_only()
+    }
+
     /// Text available for paste through the shared register policy.
     fn register_text(&self) -> String {
         String::new()
@@ -87,6 +95,10 @@ impl EditingTarget for MainEditingTarget<'_> {
 
     fn input_context(&self) -> Context {
         Context::EditorInput
+    }
+
+    fn is_read_only(&self) -> bool {
+        crate::capabilities::readonly::active_buffer_is_read_only(self.model)
     }
 
     fn push_context(&mut self, context: Context) {

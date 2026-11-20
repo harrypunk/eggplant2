@@ -148,10 +148,12 @@ pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
 
 fn start(model: &mut Model, pending: PendingChange) {
     // Normal d/c are prefixes; Visual d/c use direct selection commands instead.
-    let Some(normal_context) = target::with_active(model, |target| target.normal_context()) else {
+    let Some((normal_context, can_mutate)) = target::with_active(model, |target| {
+        (target.normal_context(), target.can_mutate())
+    }) else {
         return;
     };
-    if model.context_stack.last() != Some(&normal_context) {
+    if !can_mutate || model.context_stack.last() != Some(&normal_context) {
         return;
     }
     let pending = model.change.begin(pending);
@@ -175,7 +177,7 @@ fn delete_grapheme(model: &mut Model) -> Option<Effect> {
 }
 
 fn delete_grapheme_with(target: &mut dyn EditingTarget) -> Option<Effect> {
-    if !target.is_editing_enabled() {
+    if !target.can_mutate() {
         return None;
     }
     let text = match target.session().active_editor() {
@@ -197,7 +199,7 @@ fn delete_selection_with(
     target: &mut dyn EditingTarget,
     operation: SelectionOperation,
 ) -> Option<Effect> {
-    if !target.is_editing_enabled() {
+    if !target.can_mutate() {
         return None;
     }
     let text = match target.session().active_editor() {
@@ -235,7 +237,7 @@ fn delete_line(model: &mut Model) -> Option<Effect> {
 }
 
 fn delete_line_with(target: &mut dyn EditingTarget) -> Option<Effect> {
-    if !target.is_editing_enabled() {
+    if !target.can_mutate() {
         return None;
     }
     let text = match target.session().active_editor() {
@@ -255,7 +257,7 @@ fn change_line(model: &mut Model) -> Option<Effect> {
 }
 
 fn change_line_with(target: &mut dyn EditingTarget) -> Option<Effect> {
-    if !target.is_editing_enabled() {
+    if !target.can_mutate() {
         return None;
     }
     let text = match target.session().active_editor() {
@@ -276,7 +278,7 @@ fn delete_word(model: &mut Model) -> Option<Effect> {
 }
 
 fn delete_word_with(target: &mut dyn EditingTarget) -> Option<Effect> {
-    if !target.is_editing_enabled() {
+    if !target.can_mutate() {
         return None;
     }
     let text = match target.session().active_editor() {
@@ -296,7 +298,7 @@ fn change_word(model: &mut Model) -> Option<Effect> {
 }
 
 fn change_word_with(target: &mut dyn EditingTarget) -> Option<Effect> {
-    if !target.is_editing_enabled() {
+    if !target.can_mutate() {
         return None;
     }
     let text = match target.session().active_editor() {
@@ -317,10 +319,35 @@ mod tests {
     use crate::{
         data_object::{AppPage, Message, Workspace},
         manager::message_manager::MessageManager,
-        test_utils::create_buffer,
+        test_utils::{create_buffer, open_file},
         vcs::ChangesState,
     };
     use ::vcs::{ChangeKind, FileChange};
+
+    #[test]
+    fn external_buffers_reject_delete_and_change_without_starting_a_prefix() {
+        let workspace = tempfile::tempdir().unwrap();
+        let external = tempfile::tempdir().unwrap();
+        let path = external.path().join("dependency.rs");
+        std::fs::write(&path, "outside").unwrap();
+        let mut model =
+            crate::startup::initial_model(Some(workspace.path().to_path_buf())).unwrap();
+        model.context_stack.push(Context::AppNormal);
+        open_file(&mut model, &path);
+        let revision = model.editor.active_revision();
+
+        for command in [
+            "delete_grapheme",
+            "delete_line_pending",
+            "change_line_pending",
+        ] {
+            handle_command(&mut model, CommandId(command));
+        }
+
+        assert_eq!(model.editor.active_revision(), revision);
+        assert_eq!(model.editor.active_text_snapshot().unwrap().text, "outside");
+        assert!(!model.context_stack.contains(&Context::EditorChange));
+    }
 
     fn commit_model(text: &str) -> Model {
         let root = std::path::PathBuf::from("/workspace");

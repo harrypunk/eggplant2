@@ -31,6 +31,9 @@ fn handle_command_with(
     if !target.is_editing_enabled() {
         return Ok(None);
     }
+    if mutates_text(id) && !target.can_mutate() {
+        return Ok(None);
+    }
     let effect = match id.as_str() {
         "enter_visual_mode" => enter_visual(target),
         "enter_visual_line_mode" => enter_visual_line(target),
@@ -100,12 +103,28 @@ fn handle_command_with(
     Ok(effect)
 }
 
+fn mutates_text(id: CommandId) -> bool {
+    matches!(
+        id.as_str(),
+        "enter_insert_mode"
+            | "insert_after_cursor"
+            | "insert_at_line_end"
+            | "insert_at_first_nonblank"
+            | "open_line_below"
+            | "open_line_above"
+            | "backspace"
+            | "insert_newline"
+            | "undo"
+            | "redo"
+    )
+}
+
 pub(crate) fn insert_char(model: &mut Model, character: char) -> Option<Effect> {
     target::with_active(model, |target| insert_char_with(target, character)).flatten()
 }
 
 fn insert_char_with(target: &mut dyn EditingTarget, character: char) -> Option<Effect> {
-    if !target.is_editing_enabled() {
+    if !target.can_mutate() {
         return None;
     }
     insert(target, &character.to_string())
@@ -134,7 +153,7 @@ pub(crate) fn enter_insert(model: &mut Model) -> Option<Effect> {
 }
 
 pub(crate) fn enter_insert_with(target: &mut dyn EditingTarget) -> Option<Effect> {
-    if target.session().active_buffer().is_some() {
+    if target.can_mutate() && target.session().active_buffer().is_some() {
         let context = target.input_context();
         target.push_context(context);
         target.session().enter_insert_mode();
@@ -262,6 +281,55 @@ mod tests {
             assert_eq!(model.editor.active_revision(), revision);
             assert_eq!(model.editor.mode(), EditMode::Normal);
         }
+    }
+
+    #[test]
+    fn external_buffers_reject_mutation_but_allow_navigation_and_visual_selection() {
+        let workspace = tempfile::tempdir().unwrap();
+        let external = tempfile::tempdir().unwrap();
+        let inside = workspace.path().join("main.rs");
+        let outside = external.path().join("dependency.rs");
+        std::fs::write(&inside, "inside").unwrap();
+        std::fs::write(&outside, "outside").unwrap();
+        let mut model =
+            crate::startup::initial_model(Some(workspace.path().to_path_buf())).unwrap();
+        open_file(&mut model, &outside);
+        let revision = model.editor.active_revision();
+
+        assert!(crate::capabilities::readonly::active_buffer_is_read_only(
+            &model
+        ));
+        for command in [
+            "enter_insert_mode",
+            "insert_after_cursor",
+            "insert_at_line_end",
+            "insert_at_first_nonblank",
+            "open_line_below",
+            "open_line_above",
+            "backspace",
+            "insert_newline",
+            "undo",
+            "redo",
+        ] {
+            handle_command(&mut model, CommandId(command));
+        }
+        insert_char(&mut model, 'X');
+        assert_eq!(model.editor.active_revision(), revision);
+        assert_eq!(model.editor.active_text_snapshot().unwrap().text, "outside");
+        assert_eq!(model.editor.mode(), EditMode::Normal);
+
+        handle_command(&mut model, CommandId("move_right"));
+        handle_command(&mut model, CommandId("enter_visual_mode"));
+        assert_eq!(model.editor.mode(), EditMode::Visual);
+        handle_command(&mut model, CommandId("exit_visual_mode"));
+
+        open_file(&mut model, &inside);
+        assert!(!crate::capabilities::readonly::active_buffer_is_read_only(
+            &model
+        ));
+        handle_command(&mut model, CommandId("enter_insert_mode"));
+        insert_char(&mut model, 'X');
+        assert_eq!(model.editor.active_text_snapshot().unwrap().text, "Xinside");
     }
 
     #[test]

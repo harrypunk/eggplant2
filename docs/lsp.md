@@ -45,6 +45,8 @@ Navigation results behave as follows:
 - One location: open it through the existing document capability.
 - Multiple locations: one shared popup with Up/Down, Enter, and Escape.
 
+Locations outside the fixed workspace open as read-only buffers and show `[read-only]` in the status bar. Cursor movement, visual selection, yanking, and further navigation remain available; insert, delete/change, undo/redo, and paste are rejected. Returning to a workspace buffer restores normal editing. Opening a standalone file without a workspace keeps the existing editable behavior.
+
 The diagnostics panel is non-modal and does not move editor focus. It displays severity, workspace-relative path, line/column, and message. It is shown on demand rather than opening automatically whenever diagnostics arrive.
 
 Transient server information, missing results, startup failures, and protocol failures use the existing notification path. Starting/restarting, successful initialization, and startup/runtime failures produce non-modal `LSP` notifications. Server `window/showMessage` notifications also appear there with error, warning, or information severity. `$/progress` begin/report/end events show the task title, optional details, and percentage; report/end events reuse the title registered by begin. Lifecycle and progress feedback are transient, with no persistent progress panel.

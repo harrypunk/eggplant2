@@ -307,13 +307,18 @@ fn active_file_path(model: &Model) -> String {
     else {
         return String::new();
     };
-    model
+    let path = model
         .workspace
         .as_ref()
         .and_then(|workspace| path.strip_prefix(workspace.root()).ok())
         .unwrap_or(path)
         .to_string_lossy()
-        .into_owned()
+        .into_owned();
+    if crate::capabilities::readonly::active_buffer_is_read_only(model) {
+        format!("{path} [read-only]")
+    } else {
+        path
+    }
 }
 
 fn command_menu_overlay(model: &Model) -> Option<OverlayContribution> {
@@ -403,6 +408,24 @@ mod tests {
         assert_eq!(active_file_path(&untitled), "");
         create_buffer(&mut untitled, "text");
         assert_eq!(active_file_path(&untitled), "");
+    }
+
+    #[test]
+    fn external_status_path_is_marked_read_only() {
+        let workspace = tempfile::tempdir().unwrap();
+        let external = tempfile::tempdir().unwrap();
+        let path = external.path().join("dependency.rs");
+        std::fs::write(&path, "fn dependency() {}\n").unwrap();
+        let mut model = Model {
+            workspace: Some(Workspace::new(workspace.path().to_path_buf())),
+            ..Model::default()
+        };
+        open_file(&mut model, &path);
+
+        assert_eq!(
+            active_file_path(&model),
+            format!("{} [read-only]", path.display())
+        );
     }
 
     #[test]

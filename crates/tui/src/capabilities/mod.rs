@@ -7,6 +7,7 @@ pub mod file_watcher;
 pub use app::language;
 pub mod notification;
 pub mod page_scroll;
+pub mod readonly;
 pub mod register;
 pub mod search;
 
