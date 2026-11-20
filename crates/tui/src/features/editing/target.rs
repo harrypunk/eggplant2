@@ -110,7 +110,10 @@ impl EditingTarget for MainEditingTarget<'_> {
     }
 
     fn after_edit(&mut self) -> Option<Effect> {
-        buffer::auto_save_active(self.model)
+        Effect::combine(
+            buffer::auto_save_active(self.model),
+            crate::code_navigation::synchronize(self.model),
+        )
     }
 }
 

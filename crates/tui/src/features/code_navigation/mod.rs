@@ -4,11 +4,11 @@ mod component;
 mod work;
 
 pub use component::overlay;
-pub use work::{handle_command, register_commands};
+pub use work::{handle_command, register_commands, synchronize};
 
 use app::language::{
-    LanguageError, LanguageService, NavigationKind, NavigationRequest, NavigationRequestId,
-    SourceLocation,
+    DocumentEvent, LanguageError, LanguageService, NavigationKind, NavigationRequest,
+    NavigationRequestId, SourceLocation,
 };
 use editor::{BufferId, DocumentPosition};
 
@@ -28,6 +28,8 @@ pub struct CodeNavigationState {
     locations: Vec<SourceLocation>,
     selected: Option<usize>,
     service: Option<Box<dyn LanguageService>>,
+    operation_active: bool,
+    trailing_sync: Option<DocumentEvent>,
 }
 
 impl std::fmt::Debug for CodeNavigationState {
@@ -38,6 +40,8 @@ impl std::fmt::Debug for CodeNavigationState {
             .field("locations", &self.locations)
             .field("selected", &self.selected)
             .field("has_service", &self.service.is_some())
+            .field("operation_active", &self.operation_active)
+            .field("has_trailing_sync", &self.trailing_sync.is_some())
             .finish()
     }
 }
@@ -61,6 +65,7 @@ impl CodeNavigationState {
             position,
         };
         self.pending = Some(request.clone());
+        self.operation_active = true;
         self.locations.clear();
         self.selected = None;
         request
@@ -80,6 +85,7 @@ impl CodeNavigationState {
             return NavigationOutcome::Ignored;
         }
         self.pending = None;
+        self.operation_active = false;
         if pending.buffer != buffer || pending.revision != revision {
             return NavigationOutcome::Ignored;
         }
@@ -107,8 +113,28 @@ impl CodeNavigationState {
         &self.locations
     }
 
-    pub fn is_pending(&self) -> bool {
-        self.pending.is_some()
+    pub fn is_busy(&self) -> bool {
+        self.operation_active
+    }
+
+    pub fn begin_sync(&mut self) {
+        self.operation_active = true;
+    }
+
+    pub fn finish_operation(&mut self) {
+        self.operation_active = false;
+    }
+
+    pub fn queue_sync(&mut self, event: DocumentEvent) {
+        self.trailing_sync = Some(event);
+    }
+
+    pub fn has_trailing_sync(&self) -> bool {
+        self.trailing_sync.is_some()
+    }
+
+    pub fn take_trailing_sync(&mut self) -> Option<DocumentEvent> {
+        self.trailing_sync.take()
     }
 
     pub fn take_service(&mut self) -> Option<Box<dyn LanguageService>> {

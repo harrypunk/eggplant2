@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use app::language::{
     DocumentEvent, LanguageError, LanguageServerSpec, LanguageServers, LanguageService,
     NavigationKind, NavigationRequest,
@@ -82,59 +84,126 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
 }
 
 fn start(model: &mut Model, kind: NavigationKind) -> Option<Effect> {
-    if model.code_navigation.is_pending() {
+    if model.code_navigation.is_busy() {
         return None;
     }
+    let document = active_document(model)?;
+    let position = model.editor.active_position()?;
+    let request = model.code_navigation.begin(
+        kind,
+        document.buffer,
+        document.path.clone(),
+        document.revision,
+        position,
+    );
+    language_work(model, document.event(), LanguageAction::Navigate(request))
+}
+
+/// Synchronize the active document, or retain only the newest event while busy.
+pub fn synchronize(model: &mut Model) -> Option<Effect> {
+    let event = model
+        .code_navigation
+        .take_trailing_sync()
+        .or_else(|| active_document(model).map(|document| document.event()))?;
+    if model.code_navigation.is_busy() {
+        model.code_navigation.queue_sync(event);
+        return None;
+    }
+    model.code_navigation.begin_sync();
+    language_work(model, event, LanguageAction::Synchronize)
+}
+
+struct ActiveDocument {
+    buffer: editor::BufferId,
+    path: PathBuf,
+    revision: i32,
+    text: String,
+    spec: LanguageServerSpec,
+}
+
+impl ActiveDocument {
+    fn event(&self) -> DocumentEvent {
+        DocumentEvent::Open {
+            path: self.path.clone(),
+            language: self.spec.language().to_string(),
+            version: self.revision,
+            text: self.text.clone(),
+        }
+    }
+}
+
+fn active_document(model: &Model) -> Option<ActiveDocument> {
     let buffer = model.editor.active_buffer()?;
     let path = model.editor.buffer_path(buffer)?.to_path_buf();
     let (_, revision) = model.editor.active_revision()?;
-    let position = model.editor.active_position()?;
     let snapshot = model.editor.active_text_snapshot()?;
-    let root = model.workspace.as_ref()?.root().to_path_buf();
     let spec = LanguageServers::builtin().find_for_path(&path)?.clone();
-    let request = model
-        .code_navigation
-        .begin(kind, buffer, path.clone(), revision, position);
+
+    Some(ActiveDocument {
+        buffer,
+        path,
+        revision,
+        text: snapshot.text,
+        spec,
+    })
+}
+
+fn language_work(
+    model: &mut Model,
+    document: DocumentEvent,
+    action: LanguageAction,
+) -> Option<Effect> {
+    let root = model.workspace.as_ref()?.root().to_path_buf();
+    let spec = LanguageServers::builtin()
+        .find_for_path(document_path(&document))
+        .cloned()?;
     let service = model.code_navigation.take_service();
-    let generation = model.diagnostics.server_generation();
     if service.is_none() {
         model.diagnostics.restart_server();
     }
-    let document = DocumentEvent::Open {
-        path,
-        language: spec.language().to_string(),
-        version: revision,
-        text: snapshot.text,
-    };
-    Some(Effect::feature(NavigationWork {
+    let generation = model.diagnostics.server_generation();
+    Some(Effect::feature(LanguageWork {
         service,
         spec,
         root,
         document,
-        request,
+        action,
         generation,
         diagnostics_sender: None,
     }))
 }
 
-struct NavigationWork {
+fn document_path(document: &DocumentEvent) -> &std::path::Path {
+    match document {
+        DocumentEvent::Open { path, .. }
+        | DocumentEvent::Change { path, .. }
+        | DocumentEvent::Close { path } => path,
+    }
+}
+
+enum LanguageAction {
+    Navigate(NavigationRequest),
+    Synchronize,
+}
+
+struct LanguageWork {
     service: Option<Box<dyn LanguageService>>,
     spec: LanguageServerSpec,
     root: std::path::PathBuf,
     document: DocumentEvent,
-    request: NavigationRequest,
+    action: LanguageAction,
     generation: u64,
     diagnostics_sender: Option<tokio::sync::mpsc::UnboundedSender<crate::data_object::Message>>,
 }
 
-impl FeatureEffect for NavigationWork {
+impl FeatureEffect for LanguageWork {
     fn perform(self: Box<Self>) -> crate::data_object::Message {
         let Self {
             service,
             spec,
             root,
             document,
-            request,
+            action,
             generation,
             diagnostics_sender,
         } = *self;
@@ -164,13 +233,14 @@ impl FeatureEffect for NavigationWork {
                         },
                     )) as Box<dyn LanguageService>
                 }
-                Err(error) => return completion(request, None, Err(error)),
+                Err(error) => return completion(action, None, Err(error)),
             },
         };
-        let result = service
-            .synchronize(document)
-            .and_then(|()| service.navigate(request.clone()));
-        completion(request, Some(service), result)
+        let result = service.synchronize(document).and_then(|()| match &action {
+            LanguageAction::Navigate(request) => service.navigate(request.clone()),
+            LanguageAction::Synchronize => Ok(Vec::new()),
+        });
+        completion(action, Some(service), result)
     }
 
     fn execute(
@@ -186,44 +256,68 @@ impl FeatureEffect for NavigationWork {
 }
 
 fn completion(
-    request: NavigationRequest,
+    action: LanguageAction,
     service: Option<Box<dyn LanguageService>>,
     result: Result<Vec<app::language::SourceLocation>, LanguageError>,
 ) -> crate::data_object::Message {
-    crate::data_object::Message::FeatureCompletion(FeatureCompletion::new(NavigationCompletion {
-        request,
+    crate::data_object::Message::FeatureCompletion(FeatureCompletion::new(LanguageCompletion {
+        action,
         service,
         result,
     }))
 }
 
-struct NavigationCompletion {
-    request: NavigationRequest,
+struct LanguageCompletion {
+    action: LanguageAction,
     service: Option<Box<dyn LanguageService>>,
     result: Result<Vec<app::language::SourceLocation>, LanguageError>,
 }
 
-impl Completion for NavigationCompletion {
+impl Completion for LanguageCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
         if let Some(service) = self.service {
             model.code_navigation.restore_service(service);
         }
-        let (buffer, revision) = model.editor.active_revision()?;
-        match model
-            .code_navigation
-            .complete(self.request.id, buffer, revision, self.result)
-        {
-            NavigationOutcome::Ignored => None,
-            NavigationOutcome::Failed(error) => notify(model, StatusMessage::error(error.0)),
-            NavigationOutcome::NoResults => notify(
-                model,
-                StatusMessage::info(format!("No {} found", navigation_label(self.request.kind))),
-            ),
-            NavigationOutcome::Locations => {
-                if model.code_navigation.locations().len() == 1 {
-                    let location = model.code_navigation.locations()[0].clone();
-                    return open_location(model, location);
+        let effect = match self.action {
+            LanguageAction::Navigate(request) => navigate_completion(model, request, self.result),
+            LanguageAction::Synchronize => {
+                model.code_navigation.finish_operation();
+                match self.result {
+                    Ok(_) => None,
+                    Err(error) => notify(model, StatusMessage::error(error.0)),
                 }
+            }
+        };
+        let trailing = model
+            .code_navigation
+            .has_trailing_sync()
+            .then(|| synchronize(model))
+            .flatten();
+        Effect::combine(effect, trailing)
+    }
+}
+
+fn navigate_completion(
+    model: &mut Model,
+    request: NavigationRequest,
+    result: Result<Vec<app::language::SourceLocation>, LanguageError>,
+) -> Option<Effect> {
+    let (buffer, revision) = model.editor.active_revision()?;
+    match model
+        .code_navigation
+        .complete(request.id, buffer, revision, result)
+    {
+        NavigationOutcome::Ignored => None,
+        NavigationOutcome::Failed(error) => notify(model, StatusMessage::error(error.0)),
+        NavigationOutcome::NoResults => notify(
+            model,
+            StatusMessage::info(format!("No {} found", navigation_label(request.kind))),
+        ),
+        NavigationOutcome::Locations => {
+            if model.code_navigation.locations().len() == 1 {
+                let location = model.code_navigation.locations()[0].clone();
+                open_location(model, location)
+            } else {
                 if model.modal.open(Context::CodeNavigation)
                     && model.context_stack.last() != Some(&Context::CodeNavigation)
                 {
@@ -345,6 +439,32 @@ mod tests {
         manager.update(&mut model, Message::FileOpened(request.perform()));
         let active = model.editor.active_buffer().unwrap();
         assert_eq!(model.editor.buffer_path(active), Some(target.as_path()));
+    }
+
+    #[test]
+    fn busy_synchronization_coalesces_to_one_trailing_event() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(directory.path().join("main.rs"), "fn main() {}").unwrap();
+        let (mut model, manager) = model_with_locations(directory.path(), Vec::new());
+
+        let first = synchronize(&mut model).unwrap();
+        assert!(model.code_navigation.is_busy());
+        model
+            .editor
+            .active_editor()
+            .unwrap()
+            .insert_text(" ")
+            .unwrap();
+        assert!(synchronize(&mut model).is_none());
+        assert!(model.code_navigation.has_trailing_sync());
+
+        let trailing = run_feature(&manager, &mut model, first);
+        assert!(trailing.is_some());
+        assert!(!model.code_navigation.has_trailing_sync());
+        assert!(model.code_navigation.is_busy());
+        let trailing = trailing.unwrap();
+        assert!(run_feature(&manager, &mut model, trailing).is_none());
+        assert!(!model.code_navigation.is_busy());
     }
 
     #[test]
