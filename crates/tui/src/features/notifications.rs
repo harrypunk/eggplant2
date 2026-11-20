@@ -7,6 +7,17 @@ use crate::{
     manager::effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
 };
 
+pub struct NotificationCompletion {
+    pub status: StatusMessage,
+    pub title: Option<&'static str>,
+}
+
+impl Completion for NotificationCompletion {
+    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
+        Some(publish_status(model, self.status, self.title))
+    }
+}
+
 /// Publish any source's notification and schedule its non-blocking expiry.
 pub fn publish(model: &mut Model, notification: Notification) -> Effect {
     let expiry = model.notifications.notify(notification);
@@ -27,8 +38,16 @@ pub fn publish_status(model: &mut Model, status: StatusMessage, title: Option<&s
 
 /// Preserve the persistent status bar while adding transient feedback.
 pub fn report_status(model: &mut Model, status: StatusMessage) -> Effect {
+    report_status_titled(model, status, None)
+}
+
+pub fn report_status_titled(
+    model: &mut Model,
+    status: StatusMessage,
+    title: Option<&str>,
+) -> Effect {
     model.status = Some(status.clone());
-    publish_status(model, status, None)
+    publish_status(model, status, title)
 }
 
 /// Preserve status while marking a one-shot rejection explicitly.
@@ -92,6 +111,24 @@ mod tests {
         };
         completion.update(&mut model);
         assert_eq!(model.notifications.current().unwrap().message(), "second");
+    }
+
+    #[test]
+    fn notification_completion_publishes_lsp_status() {
+        let mut model = Model::default();
+        let effect = Box::new(NotificationCompletion {
+            status: StatusMessage::info("Language server `rust-analyzer` started"),
+            title: Some("LSP"),
+        })
+        .update(&mut model);
+
+        assert!(effect.is_some());
+        let notification = model.notifications.current().unwrap();
+        assert_eq!(notification.title(), Some("LSP"));
+        assert_eq!(
+            notification.message(),
+            "Language server `rust-analyzer` started"
+        );
     }
 
     #[test]

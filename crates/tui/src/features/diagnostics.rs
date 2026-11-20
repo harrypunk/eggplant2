@@ -109,9 +109,10 @@ pub struct DiagnosticFailureCompletion(pub String);
 
 impl Completion for DiagnosticFailureCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        Some(crate::notifications::report_status(
+        Some(crate::notifications::report_status_titled(
             model,
             StatusMessage::error(self.0),
+            Some("LSP"),
         ))
     }
 }

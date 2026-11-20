@@ -46,7 +46,7 @@ Navigation results behave as follows:
 
 The diagnostics panel is non-modal and does not move editor focus. It displays severity, workspace-relative path, line/column, and message. It is shown on demand rather than opening automatically whenever diagnostics arrive.
 
-Transient server information, missing results, startup failures, and protocol failures use the existing notification path.
+Transient server information, missing results, startup failures, and protocol failures use the existing notification path. Starting/restarting, successful initialization, and startup/runtime failures produce non-modal `LSP` notifications. These are lifecycle milestones, not server-rendered indexing progress.
 
 ## Synchronization and stale safety
 

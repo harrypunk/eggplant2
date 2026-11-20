@@ -14,6 +14,7 @@ use crate::{
         command_registry::{Command, CommandRegistry},
         effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
     },
+    notifications::NotificationCompletion,
 };
 
 pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<()> {
@@ -178,11 +179,21 @@ fn language_work(
         .find_for_path(document_path(&document))
         .cloned()?;
     let service = model.code_navigation.take_service();
-    if service.is_none() {
+    let starting = service.is_none();
+    let restarting = starting && model.diagnostics.server_generation() > 0;
+    if starting {
         model.diagnostics.restart_server();
     }
     let generation = model.diagnostics.server_generation();
-    Some(Effect::feature(LanguageWork {
+    let notification = starting.then(|| {
+        let action = if restarting { "Restarting" } else { "Starting" };
+        crate::notifications::publish_status(
+            model,
+            StatusMessage::info(format!("{action} language server `{}`", spec.command())),
+            Some("LSP"),
+        )
+    });
+    let work = Some(Effect::feature(LanguageWork {
         service,
         spec,
         root,
@@ -190,7 +201,8 @@ fn language_work(
         action,
         generation,
         diagnostics_sender: None,
-    }))
+    }));
+    Effect::combine(notification, work)
 }
 
 fn document_path(document: &DocumentEvent) -> &std::path::Path {
@@ -231,6 +243,17 @@ impl FeatureEffect for LanguageWork {
             Some(service) => service,
             None => match app::lsp::process::LspProcess::spawn(&spec, &root) {
                 Ok(process) => {
+                    if let Some(sender) = &diagnostics_sender {
+                        let _ = sender.send(crate::data_object::Message::FeatureCompletion(
+                            FeatureCompletion::new(NotificationCompletion {
+                                status: StatusMessage::info(format!(
+                                    "Language server `{}` started",
+                                    spec.command()
+                                )),
+                                title: Some("LSP"),
+                            }),
+                        ));
+                    }
                     let sender = diagnostics_sender;
                     Box::new(app::lsp::runtime::LspRuntime::start(
                         process,
@@ -246,14 +269,27 @@ impl FeatureEffect for LanguageWork {
                                     }),
                                 ),
                                 Err(error) => crate::data_object::Message::FeatureCompletion(
-                                    FeatureCompletion::new(DiagnosticFailureCompletion(error.0)),
+                                    FeatureCompletion::new(DiagnosticFailureCompletion(format!(
+                                        "Language server failed: {}",
+                                        error.0
+                                    ))),
                                 ),
                             };
                             let _ = sender.send(message);
                         },
                     )) as Box<dyn LanguageService>
                 }
-                Err(error) => return completion(action, None, Err(error)),
+                Err(error) => {
+                    return completion(
+                        action,
+                        None,
+                        Err(LanguageError(format!(
+                            "Failed to start language server `{}`: {}",
+                            spec.command(),
+                            error.0
+                        ))),
+                    );
+                }
             },
         };
         let result = service.synchronize(document).and_then(|()| match &action {
@@ -304,7 +340,7 @@ impl Completion for LanguageCompletion {
                 model.code_navigation.finish_operation();
                 match self.result {
                     Ok(_) => None,
-                    Err(error) => notify(model, StatusMessage::error(error.0)),
+                    Err(error) => notify_lsp(model, StatusMessage::error(error.0)),
                 }
             }
         };
@@ -328,7 +364,7 @@ fn navigate_completion(
         .complete(request.id, buffer, revision, result)
     {
         NavigationOutcome::Ignored => None,
-        NavigationOutcome::Failed(error) => notify(model, StatusMessage::error(error.0)),
+        NavigationOutcome::Failed(error) => notify_lsp(model, StatusMessage::error(error.0)),
         NavigationOutcome::NoResults => notify(
             model,
             StatusMessage::info(format!("No {} found", navigation_label(request.kind))),
@@ -378,6 +414,14 @@ fn close(model: &mut Model) {
 
 fn notify(model: &mut Model, status: StatusMessage) -> Option<Effect> {
     Some(crate::notifications::report_status(model, status))
+}
+
+fn notify_lsp(model: &mut Model, status: StatusMessage) -> Option<Effect> {
+    Some(crate::notifications::report_status_titled(
+        model,
+        status,
+        Some("LSP"),
+    ))
 }
 
 #[cfg(test)]
@@ -459,6 +503,43 @@ mod tests {
         manager.update(&mut model, Message::FileOpened(request.perform()));
         let active = model.editor.active_buffer().unwrap();
         assert_eq!(model.editor.buffer_path(active), Some(target.as_path()));
+    }
+
+    #[test]
+    fn lifecycle_notifications_cover_start_failure_and_restart() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(directory.path().join("main.rs"), "fn main() {}").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        open_file(&mut model, &directory.path().join("main.rs"));
+
+        assert!(matches!(synchronize(&mut model), Some(Effect::Batch(_))));
+        let notification = model.notifications.current().unwrap();
+        assert_eq!(notification.title(), Some("LSP"));
+        assert_eq!(
+            notification.message(),
+            "Starting language server `rust-analyzer`"
+        );
+
+        Box::new(LanguageCompletion {
+            action: LanguageAction::Synchronize,
+            service: None,
+            result: Err(LanguageError(
+                "Failed to start language server `rust-analyzer`: unavailable".to_string(),
+            )),
+        })
+        .update(&mut model);
+        let notification = model.notifications.current().unwrap();
+        assert_eq!(notification.title(), Some("LSP"));
+        assert_eq!(
+            notification.message(),
+            "Failed to start language server `rust-analyzer`: unavailable"
+        );
+
+        assert!(matches!(synchronize(&mut model), Some(Effect::Batch(_))));
+        assert_eq!(
+            model.notifications.current().unwrap().message(),
+            "Restarting language server `rust-analyzer`"
+        );
     }
 
     #[test]
