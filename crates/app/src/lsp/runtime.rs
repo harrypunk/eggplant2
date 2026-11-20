@@ -88,12 +88,12 @@ impl LspRuntime {
                             &reader_outgoing,
                         ),
                         Err(error) => {
-                            on_event(Err(error));
+                            on_event(Ok(LanguageEvent::Failure(error)));
                             break;
                         }
                     },
                     Err(error) => {
-                        on_event(Err(error));
+                        on_event(Ok(LanguageEvent::Failure(error)));
                         break;
                     }
                 }
@@ -430,5 +430,8 @@ printf 'Content-Length: %s\r\n\r\n%s' "${#body}" "$body"
         };
         assert_eq!(diagnostics.path, path);
         assert!(diagnostics.diagnostics.is_empty());
+
+        let failure = receiver.recv_timeout(Duration::from_secs(2)).unwrap();
+        assert!(matches!(failure, Ok(LanguageEvent::Failure(_))));
     }
 }

@@ -213,6 +213,8 @@ pub enum LanguageEvent {
     Diagnostics(DiagnosticBatch),
     Message(LanguageMessage),
     Progress(LanguageProgress),
+    /// Terminal runtime failure; no further events will be emitted.
+    Failure(LanguageError),
 }
 
 #[cfg(test)]

@@ -105,13 +105,24 @@ impl Completion for DiagnosticsCompletion {
     }
 }
 
-pub struct DiagnosticFailureCompletion(pub String);
+pub struct DiagnosticFailureCompletion {
+    pub message: String,
+    pub server_generation: u64,
+    pub fatal: bool,
+}
 
 impl Completion for DiagnosticFailureCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
+        if self.server_generation != model.diagnostics.server_generation() {
+            return None;
+        }
+        if self.fatal {
+            model.code_navigation.invalidate_service();
+            model.diagnostics.restart_server();
+        }
         Some(crate::notifications::report_status_titled(
             model,
-            StatusMessage::error(self.0),
+            StatusMessage::error(self.message),
             Some("LSP"),
         ))
     }

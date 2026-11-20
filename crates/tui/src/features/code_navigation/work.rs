@@ -286,11 +286,21 @@ impl FeatureEffect for LanguageWork {
                                         )),
                                     )
                                 }
+                                Ok(LanguageEvent::Failure(error)) => {
+                                    crate::data_object::Message::FeatureCompletion(
+                                        FeatureCompletion::new(DiagnosticFailureCompletion {
+                                            message: format!("Language server failed: {}", error.0),
+                                            server_generation: generation,
+                                            fatal: true,
+                                        }),
+                                    )
+                                }
                                 Err(error) => crate::data_object::Message::FeatureCompletion(
-                                    FeatureCompletion::new(DiagnosticFailureCompletion(format!(
-                                        "Language server failed: {}",
-                                        error.0
-                                    ))),
+                                    FeatureCompletion::new(DiagnosticFailureCompletion {
+                                        message: format!("Language server error: {}", error.0),
+                                        server_generation: generation,
+                                        fatal: false,
+                                    }),
                                 ),
                             };
                             let _ = sender.send(message);
@@ -624,6 +634,56 @@ mod tests {
             model.notifications.current().unwrap().message(),
             "Restarting language server `rust-analyzer`"
         );
+    }
+
+    #[test]
+    fn fatal_failure_discards_an_inflight_service_and_restarts_on_next_sync() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(directory.path().join("main.rs"), "fn main() {}").unwrap();
+        let (mut model, manager) = model_with_locations(directory.path(), Vec::new());
+        model.diagnostics.restart_server();
+        let generation = model.diagnostics.server_generation();
+        let work = synchronize(&mut model).unwrap();
+
+        Box::new(DiagnosticFailureCompletion {
+            message: "Language server failed: stopped".to_string(),
+            server_generation: generation,
+            fatal: true,
+        })
+        .update(&mut model);
+        assert!(run_feature(&manager, &mut model, work).is_none());
+        assert!(!model.code_navigation.has_service());
+
+        assert!(matches!(synchronize(&mut model), Some(Effect::Batch(_))));
+        assert_eq!(
+            model.notifications.current().unwrap().message(),
+            "Restarting language server `rust-analyzer`"
+        );
+    }
+
+    #[test]
+    fn stale_or_nonfatal_failures_preserve_the_current_service() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(directory.path().join("main.rs"), "fn main() {}").unwrap();
+        let (mut model, _) = model_with_locations(directory.path(), Vec::new());
+
+        let stale = Box::new(DiagnosticFailureCompletion {
+            message: "old server failed".to_string(),
+            server_generation: 1,
+            fatal: true,
+        })
+        .update(&mut model);
+        assert!(stale.is_none());
+        assert!(model.code_navigation.has_service());
+
+        let nonfatal = Box::new(DiagnosticFailureCompletion {
+            message: "bad notification".to_string(),
+            server_generation: 0,
+            fatal: false,
+        })
+        .update(&mut model);
+        assert!(nonfatal.is_some());
+        assert!(model.code_navigation.has_service());
     }
 
     #[test]

@@ -58,6 +58,7 @@ Transient server information, missing results, startup failures, and protocol fa
 - Navigation completions require the latest request ID plus matching buffer identity and revision.
 - Diagnostic batches carry path, optional version, and server generation. Older document versions and old-server batches are ignored.
 - Empty diagnostic batches clear the path without reading document text.
+- Terminal reader/transport failures invalidate the service and clear old diagnostics; the next edit or navigation starts a replacement. Failures from older server generations are ignored, while malformed individual notifications report an error without invalidating a live service.
 - LSP positions are converted between UTF-16 code units and editor character offsets, including non-ASCII text.
 
 There is no application-level request cancellation yet. Stale results are discarded rather than cancelled on the server.

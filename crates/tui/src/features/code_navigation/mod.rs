@@ -28,6 +28,7 @@ pub struct CodeNavigationState {
     locations: Vec<SourceLocation>,
     selected: Option<usize>,
     service: Option<Box<dyn LanguageService>>,
+    service_failed: bool,
     operation_active: bool,
     trailing_sync: VecDeque<DocumentEvent>,
 }
@@ -40,6 +41,7 @@ impl std::fmt::Debug for CodeNavigationState {
             .field("locations", &self.locations)
             .field("selected", &self.selected)
             .field("has_service", &self.service.is_some())
+            .field("service_failed", &self.service_failed)
             .field("operation_active", &self.operation_active)
             .field("has_trailing_sync", &!self.trailing_sync.is_empty())
             .finish()
@@ -150,11 +152,21 @@ impl CodeNavigationState {
     }
 
     pub fn take_service(&mut self) -> Option<Box<dyn LanguageService>> {
+        self.service_failed = false;
         self.service.take()
     }
 
     pub fn restore_service(&mut self, service: Box<dyn LanguageService>) {
-        self.service = Some(service);
+        if self.service_failed {
+            self.service_failed = false;
+        } else {
+            self.service = Some(service);
+        }
+    }
+
+    pub fn invalidate_service(&mut self) {
+        self.service = None;
+        self.service_failed = true;
     }
 
     pub fn has_service(&self) -> bool {
