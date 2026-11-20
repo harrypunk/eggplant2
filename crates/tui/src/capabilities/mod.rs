@@ -4,6 +4,7 @@ pub mod clipboard;
 pub mod copy_hash;
 pub mod document;
 pub mod file_watcher;
+pub use app::language;
 pub mod notification;
 pub mod page_scroll;
 pub mod register;

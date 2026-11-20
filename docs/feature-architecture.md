@@ -45,6 +45,7 @@ One registration per feature is allowed and desirable. “Open for extension” 
 | Command registration, keymap/leader resolution, and conflict detection | Shell command platform |
 | Effect scheduling and completion delivery | Shell runtime |
 | Documents, buffers, revisions, editing, viewport, and save invariants | Editor core and editor feature adapter |
+| UI-neutral application capabilities shared with future frontends | `app` crate |
 | Workspace root and shared filesystem acceptance rules | Shell/editor capabilities |
 | Git discovery/HEAD operations and Gitoxide/Helix VCS types | Optional `vcs` crate |
 | Feature-specific state, messages, updates, effects, components, and tests | Each feature |

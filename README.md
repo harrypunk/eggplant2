@@ -28,6 +28,7 @@ The application reads `~/.eggplant/config.toml` when present. See `config.exampl
 
 ```text
 crates/
+├── app/       # UI-neutral application capabilities and provider interfaces
 ├── editor/    # Documents, buffers, editing, viewport, and persistence
 ├── tui/       # Terminal runtime, application state, features, and rendering
 └── vcs/       # Optional Git capability with private Helix/Gitoxide types
