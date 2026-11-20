@@ -1,3 +1,4 @@
+pub mod diagnostics;
 pub mod navigation;
 
 use serde_json::Value;

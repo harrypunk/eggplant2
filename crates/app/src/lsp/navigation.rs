@@ -87,7 +87,10 @@ fn to_lsp_position(text: &str, position: DocumentPosition) -> Value {
     serde_json::json!({"line": position.line, "character": character})
 }
 
-fn from_lsp_position(text: &str, position: &Value) -> Result<DocumentPosition, LanguageError> {
+pub(crate) fn from_lsp_position(
+    text: &str,
+    position: &Value,
+) -> Result<DocumentPosition, LanguageError> {
     let line = number(position, "line")?;
     let target = number(position, "character")?;
     let mut utf16 = 0;
