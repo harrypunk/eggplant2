@@ -58,6 +58,67 @@ impl Display for LanguageError {
 
 impl Error for LanguageError {}
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LanguageServerSpec {
+    language: &'static str,
+    command: &'static str,
+    args: &'static [&'static str],
+}
+
+impl LanguageServerSpec {
+    pub const fn new(
+        language: &'static str,
+        command: &'static str,
+        args: &'static [&'static str],
+    ) -> Self {
+        Self {
+            language,
+            command,
+            args,
+        }
+    }
+
+    pub fn command(&self) -> &'static str {
+        self.command
+    }
+
+    pub fn args(&self) -> &'static [&'static str] {
+        self.args
+    }
+}
+
+#[derive(Debug)]
+pub struct LanguageServers {
+    specs: Vec<LanguageServerSpec>,
+}
+
+impl LanguageServers {
+    pub fn builtin() -> Self {
+        Self {
+            specs: vec![LanguageServerSpec::new("rust", "rust-analyzer", &[])],
+        }
+    }
+
+    pub fn register(&mut self, spec: LanguageServerSpec) -> Result<(), LanguageError> {
+        if self
+            .specs
+            .iter()
+            .any(|current| current.language == spec.language)
+        {
+            return Err(LanguageError(format!(
+                "duplicate language server for `{}`",
+                spec.language
+            )));
+        }
+        self.specs.push(spec);
+        Ok(())
+    }
+
+    pub fn find(&self, language: &str) -> Option<&LanguageServerSpec> {
+        self.specs.iter().find(|spec| spec.language == language)
+    }
+}
+
 /// Provider-neutral document synchronization and source navigation capability.
 /// Implementations may use LSP, but callers never depend on protocol types.
 pub trait LanguageService: Send {
@@ -154,5 +215,19 @@ mod tests {
 
         assert_eq!(service.events, [event]);
         assert_eq!(locations, [location]);
+    }
+
+    #[test]
+    fn server_registry_selects_known_languages_and_rejects_duplicates() {
+        let mut servers = LanguageServers::builtin();
+        let rust = servers.find("rust").unwrap();
+        assert_eq!(rust.command(), "rust-analyzer");
+        assert!(rust.args().is_empty());
+        assert!(servers.find("unknown").is_none());
+
+        let duplicate = LanguageServerSpec::new("rust", "another-server", &[]);
+        let error = servers.register(duplicate).unwrap_err();
+        assert!(error.0.contains("duplicate language server"));
+        assert_eq!(servers.find("rust").unwrap().command(), "rust-analyzer");
     }
 }
