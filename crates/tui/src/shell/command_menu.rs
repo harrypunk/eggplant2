@@ -313,6 +313,18 @@ mod tests {
             menu.handle_key(KeyCode::Char('j')),
             CommandMenuOutcome::Action(CommandId("buffer_jump_start"))
         );
+        for (key, command) in [
+            ('d', "code_definition"),
+            ('r', "code_references"),
+            ('i', "code_implementation"),
+        ] {
+            menu.handle_key(KeyCode::Char(' '));
+            menu.handle_key(KeyCode::Char('c'));
+            assert_eq!(
+                menu.handle_key(KeyCode::Char(key)),
+                CommandMenuOutcome::Action(CommandId(command))
+            );
+        }
 
         menu.handle_key(KeyCode::Char(' '));
         menu.handle_key(KeyCode::Char('s'));

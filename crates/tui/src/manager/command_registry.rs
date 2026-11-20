@@ -96,6 +96,8 @@ impl CommandRegistry {
         crate::change::register_commands(&mut registry).expect("change commands must be unique");
         crate::yank::register_commands(&mut registry).expect("yank commands must be unique");
         crate::vcs::register_commands(&mut registry).expect("VCS commands must be unique");
+        crate::code_navigation::register_commands(&mut registry)
+            .expect("code-navigation commands must be unique");
         registry
     }
 }

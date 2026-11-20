@@ -112,17 +112,27 @@ impl LanguageService for LspProcess {
             } => {
                 let uri = Url::from_file_path(&path)
                     .map_err(|_| LanguageError("document path must be absolute".to_string()))?;
-                self.transport.send(&notification_message(
-                    "textDocument/didOpen",
-                    serde_json::json!({
-                        "textDocument": {
-                            "uri": uri.to_string(),
-                            "languageId": language,
-                            "version": version,
-                            "text": text,
-                        }
-                    }),
-                ))?;
+                if self.documents.contains_key(&path) {
+                    self.transport.send(&notification_message(
+                        "textDocument/didChange",
+                        serde_json::json!({
+                            "textDocument": {"uri": uri.to_string(), "version": version},
+                            "contentChanges": [{"text": text}],
+                        }),
+                    ))?;
+                } else {
+                    self.transport.send(&notification_message(
+                        "textDocument/didOpen",
+                        serde_json::json!({
+                            "textDocument": {
+                                "uri": uri.to_string(),
+                                "languageId": language,
+                                "version": version,
+                                "text": text,
+                            }
+                        }),
+                    ))?;
+                }
                 self.documents.insert(path, text);
             }
             DocumentEvent::Change {

@@ -18,11 +18,16 @@ use crate::{
 
 pub static CODE_CONTEXT: CommandMenuContext = CommandMenuContext::new(
     "code",
-    &[CommandMenuItem::action(
-        'j',
-        "jump in visible buffer",
-        CommandId("buffer_jump_start"),
-    )],
+    &[
+        CommandMenuItem::action(
+            'j',
+            "jump in visible buffer",
+            CommandId("buffer_jump_start"),
+        ),
+        CommandMenuItem::action('d', "definition", CommandId("code_definition")),
+        CommandMenuItem::action('r', "references", CommandId("code_references")),
+        CommandMenuItem::action('i', "implementation", CommandId("code_implementation")),
+    ],
 );
 
 pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<()> {

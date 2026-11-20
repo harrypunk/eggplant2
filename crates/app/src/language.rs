@@ -63,6 +63,7 @@ pub struct LanguageServerSpec {
     language: &'static str,
     command: &'static str,
     args: &'static [&'static str],
+    extensions: &'static [&'static str],
 }
 
 impl LanguageServerSpec {
@@ -75,7 +76,23 @@ impl LanguageServerSpec {
             language,
             command,
             args,
+            extensions: &[],
         }
+    }
+
+    pub const fn with_extensions(mut self, extensions: &'static [&'static str]) -> Self {
+        self.extensions = extensions;
+        self
+    }
+
+    pub fn matches_path(&self, path: &std::path::Path) -> bool {
+        path.extension()
+            .and_then(|extension| extension.to_str())
+            .is_some_and(|extension| self.extensions.contains(&extension))
+    }
+
+    pub fn language(&self) -> &'static str {
+        self.language
     }
 
     pub fn command(&self) -> &'static str {
@@ -95,7 +112,9 @@ pub struct LanguageServers {
 impl LanguageServers {
     pub fn builtin() -> Self {
         Self {
-            specs: vec![LanguageServerSpec::new("rust", "rust-analyzer", &[])],
+            specs: vec![
+                LanguageServerSpec::new("rust", "rust-analyzer", &[]).with_extensions(&["rs"]),
+            ],
         }
     }
 
@@ -116,6 +135,10 @@ impl LanguageServers {
 
     pub fn find(&self, language: &str) -> Option<&LanguageServerSpec> {
         self.specs.iter().find(|spec| spec.language == language)
+    }
+
+    pub fn find_for_path(&self, path: &std::path::Path) -> Option<&LanguageServerSpec> {
+        self.specs.iter().find(|spec| spec.matches_path(path))
     }
 }
 
@@ -224,6 +247,16 @@ mod tests {
         assert_eq!(rust.command(), "rust-analyzer");
         assert!(rust.args().is_empty());
         assert!(servers.find("unknown").is_none());
+        assert!(
+            servers
+                .find_for_path(std::path::Path::new("main.rs"))
+                .is_some()
+        );
+        assert!(
+            servers
+                .find_for_path(std::path::Path::new("main.txt"))
+                .is_none()
+        );
 
         let duplicate = LanguageServerSpec::new("rust", "another-server", &[]);
         let error = servers.register(duplicate).unwrap_err();

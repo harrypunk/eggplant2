@@ -67,6 +67,15 @@ fn common_bindings() -> KeymapConfig {
             ],
         ),
         keymap_context("visual", [("exit_visual_mode", "esc")]),
+        keymap_context(
+            "code_navigation",
+            [
+                ("code_navigation_open", "enter"),
+                ("code_navigation_next", "down"),
+                ("code_navigation_previous", "up"),
+                ("close_code_navigation", "esc"),
+            ],
+        ),
         keymap_context("explorer", [("open_selected", "enter")]),
         keymap_context(
             "explorer_add",
@@ -261,6 +270,7 @@ fn parse_context(value: &str) -> Option<Context> {
         "explorer_add" => Some(Context::ExplorerAdd),
         "explorer_delete" => Some(Context::ExplorerDelete),
         "explorer_transfer" => Some(Context::ExplorerTransfer),
+        "code_navigation" => Some(Context::CodeNavigation),
         "file_picker" => Some(Context::FilePicker),
         "theme_picker" => Some(Context::ThemePicker),
         "buffer_jump" => Some(Context::BufferJump),

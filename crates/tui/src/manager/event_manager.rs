@@ -829,6 +829,26 @@ mod tests {
     }
 
     #[test]
+    fn routes_code_navigation_location_keys() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::CodeNavigation);
+
+        for (key, command) in [
+            (KeyCode::Enter, "code_navigation_open"),
+            (KeyCode::Down, "code_navigation_next"),
+            (KeyCode::Up, "code_navigation_previous"),
+            (KeyCode::Esc, "close_code_navigation"),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+    }
+
+    #[test]
     fn routes_explorer_keys_in_explorer_context() {
         let manager = event_manager();
         let mut model = Model::default();

@@ -1,7 +1,14 @@
 use std::path::PathBuf;
 
+mod component;
+mod work;
+
+pub use component::overlay;
+pub use work::{handle_command, register_commands};
+
 use app::language::{
-    LanguageError, NavigationKind, NavigationRequest, NavigationRequestId, SourceLocation,
+    LanguageError, LanguageService, NavigationKind, NavigationRequest, NavigationRequestId,
+    SourceLocation,
 };
 use editor::{BufferId, DocumentPosition};
 
@@ -14,11 +21,25 @@ pub enum NavigationOutcome {
 }
 
 /// Latest-navigation intent and the locations produced by its accepted completion.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct CodeNavigationState {
     next_id: u64,
     pending: Option<NavigationRequest>,
     locations: Vec<SourceLocation>,
+    selected: Option<usize>,
+    service: Option<Box<dyn LanguageService>>,
+}
+
+impl std::fmt::Debug for CodeNavigationState {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("CodeNavigationState")
+            .field("pending", &self.pending)
+            .field("locations", &self.locations)
+            .field("selected", &self.selected)
+            .field("has_service", &self.service.is_some())
+            .finish()
+    }
 }
 
 impl CodeNavigationState {
@@ -41,6 +62,7 @@ impl CodeNavigationState {
         };
         self.pending = Some(request.clone());
         self.locations.clear();
+        self.selected = None;
         request
     }
 
@@ -51,25 +73,31 @@ impl CodeNavigationState {
         revision: i32,
         result: Result<Vec<SourceLocation>, LanguageError>,
     ) -> NavigationOutcome {
-        let Some(pending) = &self.pending else {
+        let Some(pending) = self.pending.clone() else {
             return NavigationOutcome::Ignored;
         };
-        if pending.id != request_id || pending.buffer != buffer || pending.revision != revision {
+        if pending.id != request_id {
             return NavigationOutcome::Ignored;
         }
         self.pending = None;
+        if pending.buffer != buffer || pending.revision != revision {
+            return NavigationOutcome::Ignored;
+        }
 
         match result {
             Err(error) => {
                 self.locations.clear();
+                self.selected = None;
                 NavigationOutcome::Failed(error)
             }
             Ok(locations) if locations.is_empty() => {
                 self.locations.clear();
+                self.selected = None;
                 NavigationOutcome::NoResults
             }
             Ok(locations) => {
                 self.locations = locations;
+                self.selected = Some(0);
                 NavigationOutcome::Locations
             }
         }
@@ -77,6 +105,45 @@ impl CodeNavigationState {
 
     pub fn locations(&self) -> &[SourceLocation] {
         &self.locations
+    }
+
+    pub fn is_pending(&self) -> bool {
+        self.pending.is_some()
+    }
+
+    pub fn take_service(&mut self) -> Option<Box<dyn LanguageService>> {
+        self.service.take()
+    }
+
+    pub fn restore_service(&mut self, service: Box<dyn LanguageService>) {
+        self.service = Some(service);
+    }
+
+    pub fn selected_location(&self) -> Option<&SourceLocation> {
+        self.locations.get(self.selected?)
+    }
+
+    pub fn selected_index(&self) -> Option<usize> {
+        self.selected
+    }
+
+    pub fn select_next(&mut self) {
+        if !self.locations.is_empty() {
+            self.selected = Some((self.selected.unwrap_or(0) + 1) % self.locations.len());
+        }
+    }
+
+    pub fn select_previous(&mut self) {
+        if !self.locations.is_empty() {
+            self.selected = Some(
+                (self.selected.unwrap_or(0) + self.locations.len() - 1) % self.locations.len(),
+            );
+        }
+    }
+
+    pub fn clear_locations(&mut self) {
+        self.locations.clear();
+        self.selected = None;
     }
 }
 
@@ -175,7 +242,17 @@ mod tests {
             state.complete(request.id, buffer, 3, Ok(Vec::new())),
             NavigationOutcome::Ignored
         );
-        assert_eq!(state.pending, Some(request.clone()));
+        assert_eq!(state.pending, None);
+        let request = state.begin(
+            NavigationKind::Definition,
+            buffer,
+            PathBuf::from("/workspace/main.rs"),
+            4,
+            DocumentPosition {
+                line: 0,
+                character: 0,
+            },
+        );
         let error = LanguageError("request failed".to_string());
         assert_eq!(
             state.complete(request.id, buffer, 4, Err(error.clone())),

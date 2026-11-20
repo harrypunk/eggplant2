@@ -699,6 +699,28 @@ fn counted_vertical_movement_uses_the_same_boundaries_and_viewport() {
 }
 
 #[test]
+fn active_position_is_an_absolute_document_location() {
+    let mut session = EditorSession::new();
+    create_buffer(&mut session, "first\nsecond");
+    session
+        .active_editor()
+        .unwrap()
+        .move_cursor_to(DocumentPosition {
+            line: 1,
+            character: 4,
+        })
+        .unwrap();
+
+    assert_eq!(
+        session.active_position(),
+        Some(DocumentPosition {
+            line: 1,
+            character: 4,
+        })
+    );
+}
+
+#[test]
 fn movement_scrolls_cursor_into_view() {
     let text = (0..=8)
         .map(|line| line.to_string())

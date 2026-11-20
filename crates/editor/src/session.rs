@@ -374,6 +374,21 @@ impl EditorSession {
         }
     }
 
+    /// Return the active cursor as an absolute document line and character offset.
+    pub fn active_position(&self) -> Option<DocumentPosition> {
+        let active = self.active_view.as_ref()?;
+        let document = &self.buffers.get(&active.buffer)?.document;
+        let cursor = document
+            .selection(active.view.id)
+            .primary()
+            .cursor(document.text().slice(..));
+        let line = document.text().char_to_line(cursor);
+        Some(DocumentPosition {
+            line,
+            character: cursor - document.text().line_to_char(line),
+        })
+    }
+
     /// Capture the active view for rendering without exposing Helix internals.
     pub fn active_snapshot(&self) -> Option<EditorSnapshot> {
         let active = self.active_view.as_ref()?;
