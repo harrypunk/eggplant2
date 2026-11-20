@@ -21,6 +21,18 @@ impl<R: Read, W: Write> LspTransport<R, W> {
         }
     }
 
+    pub fn into_parts(self) -> (R, W, Vec<u8>) {
+        (self.reader, self.writer, self.buffer)
+    }
+
+    pub fn from_parts(reader: R, writer: W, buffer: Vec<u8>) -> Self {
+        Self {
+            reader,
+            writer,
+            buffer,
+        }
+    }
+
     pub fn send(&mut self, message: &Value) -> Result<(), LanguageError> {
         self.writer
             .write_all(&encode_message(message))

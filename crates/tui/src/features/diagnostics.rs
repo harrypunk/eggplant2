@@ -55,6 +55,10 @@ impl DiagnosticsState {
         self.batches.clear();
     }
 
+    pub fn server_generation(&self) -> u64 {
+        self.server_generation
+    }
+
     pub fn all(&self) -> impl Iterator<Item = &Diagnostic> {
         self.batches
             .values()
@@ -91,6 +95,17 @@ impl Completion for DiagnosticsCompletion {
             .diagnostics
             .replace(self.batch, self.server_generation, current_version);
         None
+    }
+}
+
+pub struct DiagnosticFailureCompletion(pub String);
+
+impl Completion for DiagnosticFailureCompletion {
+    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
+        Some(crate::notifications::report_status(
+            model,
+            StatusMessage::error(self.0),
+        ))
     }
 }
 

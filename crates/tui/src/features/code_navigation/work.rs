@@ -6,6 +6,7 @@ use app::language::{
 use super::NavigationOutcome;
 use crate::{
     data_object::{CommandId, Context, Model, StatusMessage},
+    diagnostics::{DiagnosticFailureCompletion, DiagnosticsCompletion},
     document,
     manager::{
         command_registry::{Command, CommandRegistry},
@@ -95,6 +96,10 @@ fn start(model: &mut Model, kind: NavigationKind) -> Option<Effect> {
         .code_navigation
         .begin(kind, buffer, path.clone(), revision, position);
     let service = model.code_navigation.take_service();
+    let generation = model.diagnostics.server_generation();
+    if service.is_none() {
+        model.diagnostics.restart_server();
+    }
     let document = DocumentEvent::Open {
         path,
         language: spec.language().to_string(),
@@ -107,6 +112,8 @@ fn start(model: &mut Model, kind: NavigationKind) -> Option<Effect> {
         root,
         document,
         request,
+        generation,
+        diagnostics_sender: None,
     }))
 }
 
@@ -116,6 +123,8 @@ struct NavigationWork {
     root: std::path::PathBuf,
     document: DocumentEvent,
     request: NavigationRequest,
+    generation: u64,
+    diagnostics_sender: Option<tokio::sync::mpsc::UnboundedSender<crate::data_object::Message>>,
 }
 
 impl FeatureEffect for NavigationWork {
@@ -126,11 +135,35 @@ impl FeatureEffect for NavigationWork {
             root,
             document,
             request,
+            generation,
+            diagnostics_sender,
         } = *self;
         let mut service = match service {
             Some(service) => service,
             None => match app::lsp::process::LspProcess::spawn(&spec, &root) {
-                Ok(service) => Box::new(service) as Box<dyn LanguageService>,
+                Ok(process) => {
+                    let sender = diagnostics_sender;
+                    Box::new(app::lsp::runtime::LspRuntime::start(
+                        process,
+                        move |result| {
+                            let Some(sender) = &sender else {
+                                return;
+                            };
+                            let message = match result {
+                                Ok(batch) => crate::data_object::Message::FeatureCompletion(
+                                    FeatureCompletion::new(DiagnosticsCompletion {
+                                        batch,
+                                        server_generation: generation,
+                                    }),
+                                ),
+                                Err(error) => crate::data_object::Message::FeatureCompletion(
+                                    FeatureCompletion::new(DiagnosticFailureCompletion(error.0)),
+                                ),
+                            };
+                            let _ = sender.send(message);
+                        },
+                    )) as Box<dyn LanguageService>
+                }
                 Err(error) => return completion(request, None, Err(error)),
             },
         };
@@ -138,6 +171,17 @@ impl FeatureEffect for NavigationWork {
             .synchronize(document)
             .and_then(|()| service.navigate(request.clone()));
         completion(request, Some(service), result)
+    }
+
+    fn execute(
+        mut self: Box<Self>,
+        sender: tokio::sync::mpsc::UnboundedSender<crate::data_object::Message>,
+    ) {
+        self.diagnostics_sender = Some(sender.clone());
+        tokio::task::spawn_blocking(move || {
+            let message = self.perform();
+            let _ = sender.send(message);
+        });
     }
 }
 

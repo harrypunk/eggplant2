@@ -21,11 +21,36 @@ use crate::language::{
 
 /// A live language-server child process and its stdio transport.
 pub struct LspProcess {
-    child: Child,
+    child: LspChild,
     transport: LspTransport<ChildStdout, ChildStdin>,
     documents: HashMap<PathBuf, String>,
     pending: VecDeque<ServerMessage>,
     next_request_id: u64,
+}
+
+/// Owned process parts used to move server reading onto a separate worker.
+pub struct LspProcessParts {
+    pub child: LspChild,
+    pub transport: LspTransport<ChildStdout, ChildStdin>,
+    pub documents: HashMap<PathBuf, String>,
+    pub pending: VecDeque<ServerMessage>,
+    pub next_request_id: u64,
+}
+
+/// Child ownership that always terminates and reaps the process on drop.
+pub struct LspChild(Child);
+
+impl LspChild {
+    pub(crate) fn terminate(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+impl Drop for LspChild {
+    fn drop(&mut self) {
+        self.terminate();
+    }
 }
 
 impl LspProcess {
@@ -51,7 +76,7 @@ impl LspProcess {
             .ok_or_else(|| LanguageError("language server stdout is unavailable".to_string()))?;
         let transport = LspTransport::new(stdout, stdin);
         let mut process = Self {
-            child,
+            child: LspChild(child),
             transport,
             documents: HashMap::new(),
             pending: VecDeque::new(),
@@ -59,6 +84,23 @@ impl LspProcess {
         };
         process.initialize(workspace_root)?;
         Ok(process)
+    }
+
+    pub fn into_parts(self) -> LspProcessParts {
+        let Self {
+            child,
+            transport,
+            documents,
+            pending,
+            next_request_id,
+        } = self;
+        LspProcessParts {
+            child,
+            transport,
+            documents,
+            pending,
+            next_request_id,
+        }
     }
 
     fn initialize(&mut self, workspace_root: &std::path::Path) -> Result<(), LanguageError> {
@@ -216,18 +258,11 @@ impl LanguageService for LspProcess {
     }
 }
 
-fn diagnostics_params(message: &ServerMessage) -> Option<&Value> {
+pub(crate) fn diagnostics_params(message: &ServerMessage) -> Option<&Value> {
     let ServerMessage::Notification { method, params } = message else {
         return None;
     };
     (method == "textDocument/publishDiagnostics").then_some(params)
-}
-
-impl Drop for LspProcess {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-    }
 }
 
 #[cfg(test)]
