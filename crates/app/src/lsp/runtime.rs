@@ -15,6 +15,7 @@ use super::{
     notification_message,
     process::{LspChild, LspProcess, diagnostics_params},
     request_message,
+    server::respond_to_server_request,
     transport::LspTransport,
 };
 use crate::language::{
@@ -27,12 +28,13 @@ type DiagnosticsHandler = dyn Fn(Result<DiagnosticBatch, LanguageError>) + Send 
 /// Split process ownership for concurrent diagnostics reads and navigation writes.
 pub struct LspRuntime {
     child: LspChild,
-    writer: LspTransport<std::io::Empty, std::process::ChildStdin>,
+    outgoing: Option<mpsc::Sender<Value>>,
     documents: Documents,
     pending: VecDeque<ServerMessage>,
     incoming: mpsc::Receiver<ServerMessage>,
     next_request_id: u64,
     reader: Option<JoinHandle<()>>,
+    writer: Option<JoinHandle<()>>,
 }
 
 impl LspRuntime {
@@ -44,18 +46,41 @@ impl LspRuntime {
         let (reader, writer, buffer) = parts.transport.into_parts();
         let documents = Arc::new(Mutex::new(parts.documents));
         let (sender, receiver) = mpsc::channel();
+        let (outgoing, outgoing_receiver) = mpsc::channel();
         for message in parts.pending {
-            route_message(message, &documents, &on_diagnostics, &sender);
+            route_message(
+                message,
+                &documents,
+                &on_diagnostics,
+                &sender,
+                &parts.workspace_root,
+                &outgoing,
+            );
         }
+        let mut writer_transport = LspTransport::new(std::io::empty(), writer);
+        let writer = std::thread::spawn(move || {
+            while let Ok(message) = outgoing_receiver.recv() {
+                if writer_transport.send(&message).is_err() {
+                    break;
+                }
+            }
+        });
         let reader_documents = documents.clone();
+        let reader_outgoing = outgoing.clone();
+        let workspace_root = parts.workspace_root.clone();
         let mut transport = LspTransport::from_parts(reader, std::io::sink(), buffer);
         let reader = std::thread::spawn(move || {
             loop {
                 match transport.receive() {
                     Ok(message) => match decode_server_message(message) {
-                        Ok(message) => {
-                            route_message(message, &reader_documents, &on_diagnostics, &sender)
-                        }
+                        Ok(message) => route_message(
+                            message,
+                            &reader_documents,
+                            &on_diagnostics,
+                            &sender,
+                            &workspace_root,
+                            &reader_outgoing,
+                        ),
                         Err(error) => {
                             on_diagnostics(Err(error));
                             break;
@@ -70,12 +95,13 @@ impl LspRuntime {
         });
         Self {
             child: parts.child,
-            writer: LspTransport::new(std::io::empty(), writer),
+            outgoing: Some(outgoing),
             documents,
             pending: VecDeque::new(),
             incoming: receiver,
             next_request_id: parts.next_request_id,
             reader: Some(reader),
+            writer: Some(writer),
         }
     }
 
@@ -90,7 +116,11 @@ impl LspRuntime {
     }
 
     fn write(&mut self, message: Value) -> Result<(), LanguageError> {
-        self.writer.send(&message)
+        self.outgoing
+            .as_ref()
+            .ok_or_else(|| LanguageError("language server writer stopped".to_string()))?
+            .send(message)
+            .map_err(|_| LanguageError("language server writer stopped".to_string()))
     }
 
     fn contains_document(&self, path: &Path) -> bool {
@@ -205,9 +235,13 @@ impl LanguageService for LspRuntime {
 
 impl Drop for LspRuntime {
     fn drop(&mut self) {
+        self.outgoing.take();
         self.child.terminate();
         if let Some(reader) = self.reader.take() {
             let _ = reader.join();
+        }
+        if let Some(writer) = self.writer.take() {
+            let _ = writer.join();
         }
     }
 }
@@ -234,12 +268,22 @@ fn route_message(
     documents: &Documents,
     on_diagnostics: &DiagnosticsHandler,
     incoming: &mpsc::Sender<ServerMessage>,
+    workspace_root: &Path,
+    outgoing: &mpsc::Sender<Value>,
 ) {
-    if let Some(params) = diagnostics_params(&message) {
-        let result = decode_batch(params, |path| document_text(documents, path));
-        on_diagnostics(result);
-    } else {
-        let _ = incoming.send(message);
+    match message {
+        ServerMessage::Request { id, method, params } => {
+            let response = respond_to_server_request(id, &method, &params, workspace_root);
+            let _ = outgoing.send(response);
+        }
+        message => {
+            if let Some(params) = diagnostics_params(&message) {
+                let result = decode_batch(params, |path| document_text(documents, path));
+                on_diagnostics(result);
+            } else {
+                let _ = incoming.send(message);
+            }
+        }
     }
 }
 
@@ -265,13 +309,17 @@ read_frame() {
       length=${length//[[:space:]]/}
     fi
   done
-  dd if=/dev/stdin bs=1 count="$length" of=/dev/null status=none
+  frame=$(dd if=/dev/stdin bs=1 count="$length" status=none)
 }
 read_frame
 body='{"jsonrpc":"2.0","id":1,"result":{"capabilities":{}}}'
 printf 'Content-Length: %s\r\n\r\n%s' "${#body}" "$body"
 read_frame
 read_frame
+request='{"jsonrpc":"2.0","id":99,"method":"client/registerCapability","params":{"registrations":[]}}'
+printf 'Content-Length: %s\r\n\r\n%s' "${#request}" "$request"
+read_frame
+[[ $frame == *'"id":99'* && $frame == *'"result":null'* ]] || exit 3
 notification="{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/publishDiagnostics\",\"params\":{\"uri\":\"file://$PWD/note.txt\",\"diagnostics\":[]}}"
 printf 'Content-Length: %s\r\n\r\n%s' "${#notification}" "$notification"
 read_frame

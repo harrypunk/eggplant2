@@ -23,6 +23,7 @@ use crate::language::{
 pub struct LspProcess {
     child: LspChild,
     transport: LspTransport<ChildStdout, ChildStdin>,
+    workspace_root: PathBuf,
     documents: HashMap<PathBuf, String>,
     pending: VecDeque<ServerMessage>,
     next_request_id: u64,
@@ -32,6 +33,7 @@ pub struct LspProcess {
 pub struct LspProcessParts {
     pub child: LspChild,
     pub transport: LspTransport<ChildStdout, ChildStdin>,
+    pub workspace_root: PathBuf,
     pub documents: HashMap<PathBuf, String>,
     pub pending: VecDeque<ServerMessage>,
     pub next_request_id: u64,
@@ -78,6 +80,7 @@ impl LspProcess {
         let mut process = Self {
             child: LspChild(child),
             transport,
+            workspace_root: workspace_root.to_path_buf(),
             documents: HashMap::new(),
             pending: VecDeque::new(),
             next_request_id: 2,
@@ -90,6 +93,7 @@ impl LspProcess {
         let Self {
             child,
             transport,
+            workspace_root,
             documents,
             pending,
             next_request_id,
@@ -97,6 +101,7 @@ impl LspProcess {
         LspProcessParts {
             child,
             transport,
+            workspace_root,
             documents,
             pending,
             next_request_id,

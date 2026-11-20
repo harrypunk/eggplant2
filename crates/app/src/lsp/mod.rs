@@ -2,6 +2,7 @@ pub mod diagnostics;
 pub mod navigation;
 pub mod process;
 pub mod runtime;
+pub mod server;
 pub mod transport;
 
 use serde_json::Value;
@@ -76,6 +77,11 @@ pub enum ServerMessage {
         method: String,
         params: Value,
     },
+    Request {
+        id: u64,
+        method: String,
+        params: Value,
+    },
 }
 
 pub fn request_message(id: u64, method: &str, params: Value) -> Value {
@@ -95,6 +101,18 @@ pub fn notification_message(method: &str, params: Value) -> Value {
     })
 }
 
+pub fn response_message(id: u64, result: Value) -> Value {
+    serde_json::json!({"jsonrpc": "2.0", "id": id, "result": result})
+}
+
+pub fn error_response_message(id: u64, code: i64, message: &str) -> Value {
+    serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": id,
+        "error": {"code": code, "message": message},
+    })
+}
+
 pub fn decode_server_message(message: Value) -> Result<ServerMessage, LanguageError> {
     let object = message
         .as_object()
@@ -103,10 +121,15 @@ pub fn decode_server_message(message: Value) -> Result<ServerMessage, LanguageEr
         return Err(LanguageError("expected JSON-RPC 2.0".to_string()));
     }
     if let Some(method) = object.get("method").and_then(Value::as_str) {
-        if object.contains_key("id") {
-            return Err(LanguageError(
-                "server-initiated requests are not supported".to_string(),
-            ));
+        if let Some(id) = object.get("id") {
+            let id = id
+                .as_u64()
+                .ok_or_else(|| LanguageError("server request requires a numeric ID".to_string()))?;
+            return Ok(ServerMessage::Request {
+                id,
+                method: method.to_string(),
+                params: object.get("params").cloned().unwrap_or(Value::Null),
+            });
         }
         return Ok(ServerMessage::Notification {
             method: method.to_string(),
@@ -242,12 +265,30 @@ mod tests {
     }
 
     #[test]
-    fn rejects_malformed_or_unsupported_server_messages() {
+    fn decodes_server_requests() {
+        let request = decode_server_message(json!({
+            "jsonrpc": "2.0",
+            "id": 99,
+            "method": "client/registerCapability",
+            "params": {"registrations": []}
+        }))
+        .unwrap();
+        assert_eq!(
+            request,
+            ServerMessage::Request {
+                id: 99,
+                method: "client/registerCapability".to_string(),
+                params: json!({"registrations": []}),
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_malformed_server_messages() {
         for message in [
             json!({"jsonrpc": "1.0", "id": 1, "result": null}),
             json!({"jsonrpc": "2.0", "result": null}),
             json!({"jsonrpc": "2.0", "id": 1}),
-            json!({"jsonrpc": "2.0", "id": 1, "method": "custom/request"}),
         ] {
             assert!(decode_server_message(message).is_err());
         }

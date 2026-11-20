@@ -43,6 +43,7 @@ The VCS integration is an **addon**, not a requirement of the core editor. Editi
 - [Key input](docs/key-input.md) — complete keybindings, input contexts, and sequence behavior.
 - [Editor design](docs/editor-design.md) — core document, buffer, viewport, and persistence invariants.
 - [Feature architecture](docs/feature-architecture.md) — extension ownership and dependency rules.
+- [Language services](docs/lsp.md) — lightweight LSP navigation, diagnostics, and runtime ownership.
 - [VCS addon](docs/vcs.md) — optional Git status, staging, and diff workflows.
 - [Filesystem](docs/filesystem.md) — opening, previews, background work, and mutation rules.
 - [Themes](docs/theme.md) — built-in themes and resolved styles.

@@ -1,0 +1,74 @@
+# Lightweight language services
+
+Eggplant's LSP support is intentionally limited to source navigation and diagnostics. It is not a full IDE integration.
+
+## Scope
+
+- Go to definition, references, and implementation.
+- Full-text document open/change/close synchronization.
+- Error, warning, information, and hint diagnostics.
+- One workspace root and the registered server for the current file type.
+
+Currently the built-in registry maps Rust files (`.rs`) to `rust-analyzer`. Servers are not downloaded automatically. Unsupported files and unavailable servers leave ordinary editing intact and report feedback through notifications.
+
+Non-goals include completion, hover, rename, code actions, formatting, semantic tokens, workspace symbols, multiple workspace folders, and incremental document synchronization.
+
+## Ownership
+
+| Module | Responsibility |
+| --- | --- |
+| `app::language` | UI-neutral requests, locations, diagnostics, document events, server metadata, and the `LanguageService` port. |
+| `app::lsp` | Stdio framing, JSON-RPC envelopes, navigation/diagnostics mapping, process lifecycle, and the split runtime. |
+| `editor` | Buffer identity, text, revisions, logical cursor positions, and document opening. It has no LSP dependency. |
+| `features/code_navigation` | Latest-request state, service ownership, command handling, effect completion, and the shared location popup. |
+| `features/diagnostics` | Diagnostic storage, stale-version checks, typed completions, and side-panel visibility. |
+| `component/diagnostics_panel` | Severity/path/position/message rendering without protocol or process knowledge. |
+
+The runtime splits process reading from writing. A reader thread routes diagnostics to a callback and other messages to navigation. Document-map locks cover only short lookups, never blocking transport I/O. The child is terminated/reaped and the reader joined during teardown.
+
+Server-initiated requests receive minimal responses rather than being dropped: capability registration, progress creation, refresh requests, configuration items, and the fixed workspace folder are acknowledged. Workspace edit requests are explicitly rejected, and unknown methods receive JSON-RPC `MethodNotFound`.
+
+## Commands and UX
+
+| Action | Binding |
+| --- | --- |
+| Definition | `Space c d` |
+| References | `Space c r` |
+| Implementation | `Space c i` |
+| Diagnostics panel | `Space c l` |
+| Existing visible-buffer jump | `Space c j` |
+
+Navigation results behave as follows:
+
+- No locations: a transient notification.
+- One location: open it through the existing document capability.
+- Multiple locations: one shared popup with Up/Down, Enter, and Escape.
+
+The diagnostics panel is non-modal and does not move editor focus. It displays severity, workspace-relative path, line/column, and message. It is shown on demand rather than opening automatically whenever diagnostics arrive.
+
+Transient server information, missing results, startup failures, and protocol failures use the existing notification path.
+
+## Synchronization and stale safety
+
+- Synchronization uses owned full-text events with document versions.
+- Opening a supported document starts or reuses the service; ordinary edits synchronize current text.
+- One operation owns the service at a time. While busy, only the newest text update is retained per path, and close events are never coalesced away.
+- Successful buffer closes send `didClose` and clear the path's diagnostics.
+- Navigation completions require the latest request ID plus matching buffer identity and revision.
+- Diagnostic batches carry path, optional version, and server generation. Older document versions and old-server batches are ignored.
+- Empty diagnostic batches clear the path without reading document text.
+- LSP positions are converted between UTF-16 code units and editor character offsets, including non-ASCII text.
+
+There is no application-level request cancellation yet. Stale results are discarded rather than cancelled on the server.
+
+## Validation
+
+Automated coverage uses fake services and fake stdio servers. No test requires `rust-analyzer` to be installed.
+
+For a real-terminal check, create a small Cargo project with a function definition and a call, then open it with `rust-analyzer` on `PATH`:
+
+1. Use `Space c d` on the call and confirm the definition opens.
+2. Use `Space c r` on a symbol with multiple references and confirm the shared location popup opens the selected result.
+3. Introduce a compile error and warning, then use `Space c l` to inspect them in the side panel.
+4. Edit and close documents and confirm diagnostics update or clear without stale entries.
+5. Remove the server from `PATH` and confirm an ordinary notification rather than a panic or loss of editing behavior.
