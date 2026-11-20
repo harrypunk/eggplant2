@@ -1,3 +1,5 @@
+pub mod navigation;
+
 use serde_json::Value;
 
 use crate::language::LanguageError;
