@@ -9,12 +9,14 @@ use url::Url;
 
 use super::{
     ServerMessage, decode_server_message,
+    diagnostics::decode_diagnostics as decode_batch,
     navigation::{decode_locations, navigation_method, navigation_params},
     notification_message, request_message,
     transport::LspTransport,
 };
 use crate::language::{
-    DocumentEvent, LanguageError, LanguageServerSpec, LanguageService, NavigationRequest,
+    DiagnosticBatch, DocumentEvent, LanguageError, LanguageServerSpec, LanguageService,
+    NavigationRequest,
 };
 
 /// A live language-server child process and its stdio transport.
@@ -91,6 +93,26 @@ impl LspProcess {
             Some(message) => Ok(message),
             None => decode_server_message(self.transport.receive()?),
         }
+    }
+
+    /// Wait for the next diagnostics notification without discarding other messages.
+    pub fn receive_diagnostics(&mut self) -> Result<Option<DiagnosticBatch>, LanguageError> {
+        let pending = self
+            .pending
+            .iter()
+            .position(|message| diagnostics_params(message).is_some());
+        let message = match pending {
+            Some(index) => self
+                .pending
+                .remove(index)
+                .expect("pending message must exist"),
+            None => decode_server_message(self.transport.receive()?)?,
+        };
+        if let Some(params) = diagnostics_params(&message) {
+            return decode_batch(params, |path| self.document_text(path)).map(Some);
+        }
+        self.pending.push_back(message);
+        Ok(None)
     }
 
     fn document_text(&self, path: &Path) -> Result<String, LanguageError> {
@@ -194,6 +216,13 @@ impl LanguageService for LspProcess {
     }
 }
 
+fn diagnostics_params(message: &ServerMessage) -> Option<&Value> {
+    let ServerMessage::Notification { method, params } = message else {
+        return None;
+    };
+    (method == "textDocument/publishDiagnostics").then_some(params)
+}
+
 impl Drop for LspProcess {
     fn drop(&mut self) {
         let _ = self.child.kill();
@@ -267,7 +296,7 @@ read_frame
 read_frame
 [[ $frame == *'"text":"fn main() {}"'* ]] || exit 2
 read_frame
-notification='{"jsonrpc":"2.0","method":"textDocument/publishDiagnostics","params":{}}'
+notification="{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/publishDiagnostics\",\"params\":{\"uri\":\"file://$PWD/note.txt\",\"diagnostics\":[]}}"
 printf 'Content-Length: %s\r\n\r\n%s' "${#notification}" "$notification"
 body="{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":[{\"uri\":\"file://$PWD/note.txt\",\"range\":{\"start\":{\"line\":0,\"character\":0},\"end\":{\"line\":0,\"character\":1}}}]}"
 printf 'Content-Length: %s\r\n\r\n%s' "${#body}" "$body"
@@ -304,11 +333,9 @@ read_frame
         assert_eq!(locations[0].path, path);
         assert_eq!(locations[0].end.character, 1);
 
-        let notification = process.receive().unwrap();
-        assert!(matches!(
-            notification,
-            ServerMessage::Notification { ref method, .. } if method == "textDocument/publishDiagnostics"
-        ));
+        let batch = process.receive_diagnostics().unwrap().unwrap();
+        assert_eq!(batch.path, path);
+        assert!(batch.diagnostics.is_empty());
 
         process.synchronize(DocumentEvent::Close { path }).unwrap();
     }
