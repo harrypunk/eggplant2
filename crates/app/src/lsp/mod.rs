@@ -1,5 +1,6 @@
 pub mod diagnostics;
 pub mod navigation;
+pub mod process;
 pub mod transport;
 
 use serde_json::Value;
