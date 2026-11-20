@@ -1,10 +1,10 @@
-use std::path::PathBuf;
+use std::{collections::VecDeque, path::PathBuf};
 
 mod component;
 mod work;
 
 pub use component::overlay;
-pub use work::{handle_command, register_commands, synchronize};
+pub use work::{close_document, handle_command, register_commands, synchronize};
 
 use app::language::{
     DocumentEvent, LanguageError, LanguageService, NavigationKind, NavigationRequest,
@@ -29,7 +29,7 @@ pub struct CodeNavigationState {
     selected: Option<usize>,
     service: Option<Box<dyn LanguageService>>,
     operation_active: bool,
-    trailing_sync: Option<DocumentEvent>,
+    trailing_sync: VecDeque<DocumentEvent>,
 }
 
 impl std::fmt::Debug for CodeNavigationState {
@@ -41,7 +41,7 @@ impl std::fmt::Debug for CodeNavigationState {
             .field("selected", &self.selected)
             .field("has_service", &self.service.is_some())
             .field("operation_active", &self.operation_active)
-            .field("has_trailing_sync", &self.trailing_sync.is_some())
+            .field("has_trailing_sync", &!self.trailing_sync.is_empty())
             .finish()
     }
 }
@@ -126,15 +126,27 @@ impl CodeNavigationState {
     }
 
     pub fn queue_sync(&mut self, event: DocumentEvent) {
-        self.trailing_sync = Some(event);
+        let replace = match (&event, self.trailing_sync.back()) {
+            (DocumentEvent::Close { .. }, _) | (_, Some(DocumentEvent::Close { .. })) => false,
+            (_, None) => false,
+            (event, Some(previous)) => event_path(event) == event_path(previous),
+        };
+        if replace {
+            *self
+                .trailing_sync
+                .back_mut()
+                .expect("queued event must exist") = event;
+        } else {
+            self.trailing_sync.push_back(event);
+        }
     }
 
     pub fn has_trailing_sync(&self) -> bool {
-        self.trailing_sync.is_some()
+        !self.trailing_sync.is_empty()
     }
 
     pub fn take_trailing_sync(&mut self) -> Option<DocumentEvent> {
-        self.trailing_sync.take()
+        self.trailing_sync.pop_front()
     }
 
     pub fn take_service(&mut self) -> Option<Box<dyn LanguageService>> {
@@ -143,6 +155,10 @@ impl CodeNavigationState {
 
     pub fn restore_service(&mut self, service: Box<dyn LanguageService>) {
         self.service = Some(service);
+    }
+
+    pub fn has_service(&self) -> bool {
+        self.service.is_some() || self.is_busy()
     }
 
     pub fn selected_location(&self) -> Option<&SourceLocation> {
@@ -170,6 +186,14 @@ impl CodeNavigationState {
     pub fn clear_locations(&mut self) {
         self.locations.clear();
         self.selected = None;
+    }
+}
+
+fn event_path(event: &DocumentEvent) -> &std::path::Path {
+    match event {
+        DocumentEvent::Open { path, .. }
+        | DocumentEvent::Change { path, .. }
+        | DocumentEvent::Close { path } => path,
     }
 }
 
@@ -245,6 +269,46 @@ mod tests {
             NavigationOutcome::NoResults
         );
         assert!(state.locations().is_empty());
+    }
+
+    #[test]
+    fn close_events_are_not_coalesced_away() {
+        let mut state = CodeNavigationState::default();
+        let path = |name| PathBuf::from(name);
+        state.queue_sync(DocumentEvent::Open {
+            path: path("a.rs"),
+            language: "rust".to_string(),
+            version: 1,
+            text: "first".to_string(),
+        });
+        state.queue_sync(DocumentEvent::Change {
+            path: path("a.rs"),
+            version: 2,
+            text: "latest".to_string(),
+        });
+        state.queue_sync(DocumentEvent::Close { path: path("a.rs") });
+        state.queue_sync(DocumentEvent::Close { path: path("b.rs") });
+
+        let first = state.take_trailing_sync().unwrap();
+        assert_eq!(event_path(&first), path("a.rs"));
+        assert_eq!(
+            first,
+            DocumentEvent::Change {
+                path: path("a.rs"),
+                version: 2,
+                text: "latest".to_string(),
+            }
+        );
+        assert!(state.has_trailing_sync());
+        assert_eq!(
+            state.take_trailing_sync(),
+            Some(DocumentEvent::Close { path: path("a.rs") })
+        );
+        assert_eq!(
+            state.take_trailing_sync(),
+            Some(DocumentEvent::Close { path: path("b.rs") })
+        );
+        assert!(!state.has_trailing_sync());
     }
 
     #[test]

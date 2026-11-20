@@ -1,4 +1,7 @@
-use std::{collections::BTreeMap, path::PathBuf};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+};
 
 use app::language::{Diagnostic, DiagnosticBatch};
 
@@ -57,6 +60,10 @@ impl DiagnosticsState {
 
     pub fn server_generation(&self) -> u64 {
         self.server_generation
+    }
+
+    pub fn clear_path(&mut self, path: &Path) {
+        self.batches.remove(path);
     }
 
     pub fn all(&self) -> impl Iterator<Item = &Diagnostic> {
@@ -180,6 +187,8 @@ mod tests {
         );
         assert_eq!(state.all().count(), 1);
         assert_eq!(state.all().next().unwrap().message, "second");
+        state.clear_path(std::path::Path::new("/workspace/b.rs"));
+        assert_eq!(state.all().count(), 0);
     }
 
     #[test]

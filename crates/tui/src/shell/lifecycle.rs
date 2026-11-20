@@ -70,13 +70,20 @@ fn finish_close(model: &mut Model, id: editor::BufferId) -> Option<Effect> {
         Some(true) => buffer::start_save(model, id),
         Some(false) => {
             model.deferred_action = None;
+            let path = model
+                .editor
+                .buffer_path(id)
+                .map(std::path::Path::to_path_buf);
             match model.editor.close_buffer(id) {
-                Ok(()) => model.status = None,
+                Ok(()) => {
+                    model.status = None;
+                    path.and_then(|path| crate::code_navigation::close_document(model, path))
+                }
                 Err(error) => {
                     model.status = Some(StatusMessage::error(error.to_string()));
+                    None
                 }
             }
-            None
         }
         None => {
             model.deferred_action = None;
@@ -162,11 +169,31 @@ fn finish_close_group(
     }
 
     model.deferred_action = None;
+    let paths = targets
+        .iter()
+        .filter_map(|&id| {
+            model
+                .editor
+                .buffer_path(id)
+                .map(std::path::Path::to_path_buf)
+        })
+        .collect::<Vec<_>>();
     match model.editor.close_buffers(&targets) {
-        Ok(()) => model.status = None,
-        Err(error) => model.status = Some(StatusMessage::error(error.to_string())),
+        Ok(()) => {
+            model.status = None;
+            close_documents(model, paths)
+        }
+        Err(error) => {
+            model.status = Some(StatusMessage::error(error.to_string()));
+            None
+        }
     }
-    None
+}
+
+fn close_documents(model: &mut Model, paths: Vec<std::path::PathBuf>) -> Option<Effect> {
+    paths.into_iter().fold(None, |effect, path| {
+        Effect::combine(effect, crate::code_navigation::close_document(model, path))
+    })
 }
 
 fn follow_up_save(model: &mut Model, id: editor::BufferId) -> Option<Effect> {

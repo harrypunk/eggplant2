@@ -113,6 +113,26 @@ pub fn synchronize(model: &mut Model) -> Option<Effect> {
     language_work(model, event, LanguageAction::Synchronize)
 }
 
+/// Close one document without starting a server when none is running.
+pub fn close_document(model: &mut Model, path: PathBuf) -> Option<Effect> {
+    model.diagnostics.clear_path(&path);
+    if !model.code_navigation.has_service() {
+        return None;
+    }
+    if model.code_navigation.is_busy() {
+        model
+            .code_navigation
+            .queue_sync(DocumentEvent::Close { path });
+        return None;
+    }
+    model.code_navigation.begin_sync();
+    language_work(
+        model,
+        DocumentEvent::Close { path },
+        LanguageAction::Synchronize,
+    )
+}
+
 struct ActiveDocument {
     buffer: editor::BufferId,
     path: PathBuf,
@@ -439,6 +459,19 @@ mod tests {
         manager.update(&mut model, Message::FileOpened(request.perform()));
         let active = model.editor.active_buffer().unwrap();
         assert_eq!(model.editor.buffer_path(active), Some(target.as_path()));
+    }
+
+    #[test]
+    fn close_document_uses_existing_service_without_navigation() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(directory.path().join("main.rs"), "fn main() {}").unwrap();
+        let (mut model, manager) = model_with_locations(directory.path(), Vec::new());
+        let path = directory.path().join("main.rs");
+
+        let effect = close_document(&mut model, path).unwrap();
+        assert!(model.code_navigation.is_busy());
+        assert!(run_feature(&manager, &mut model, effect).is_none());
+        assert!(!model.code_navigation.is_busy());
     }
 
     #[test]
