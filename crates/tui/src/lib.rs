@@ -17,9 +17,9 @@ pub use capabilities::{clipboard, copy_hash, document, file_watcher, register, s
 pub use shell::{buffer, command_menu, focus, lifecycle};
 
 pub use features::{
-    buffer_grep, buffer_jump, buffer_navigation, change, editing, explorer, external_sync,
-    file_picker, line_jump, navigation, notifications, page_scroll, project_grep, theme_picker,
-    vcs, view_align, yank,
+    buffer_grep, buffer_jump, buffer_navigation, change, code_navigation, editing, explorer,
+    external_sync, file_picker, line_jump, navigation, notifications, page_scroll, project_grep,
+    theme_picker, vcs, view_align, yank,
 };
 
 #[cfg(test)]
