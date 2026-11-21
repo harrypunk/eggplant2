@@ -140,6 +140,17 @@ On an expanded directory, `h` folds that directory. On a file or collapsed direc
 
 The prompt starts as `workspace/relative/path:line` and is editable/deletable. It is available only for file-backed buffers inside the workspace; no-buffer, standalone-file, and external read-only contexts are rejected. Dismissal preserves the run and conversation. Reopening restores the current session. The fake provider streams a simulated response for this first slice; no credentials are needed.
 
+### Agent write approval
+
+| Action | Default binding |
+| --- | --- |
+| Approve one immutable exact-text write | `y` |
+| Reject the write and resume the model | `n` |
+| Hide the unchanged approval without resolving it | `Esc` |
+| Cancel the run without applying or resuming the write | `Ctrl-F7` |
+
+Approval mode has no printable prompt input and no cursor. Reopening with `Ctrl-I` restores the pending approval. Revision/exact-text conflicts return an error to the model without changing user text.
+
 ### Current-buffer grep
 
 | Action | Default binding |

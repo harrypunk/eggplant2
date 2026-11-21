@@ -188,6 +188,25 @@ fn tool_declarations() -> Value {
                     "required": ["query"]
                 }
             }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "write",
+                "description": "Request one approved exact-text replacement in an open buffer. Read the buffer first for its ID and revision. This must be the only tool call in its round.",
+                "parameters": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "buffer_id": {"type": "integer", "minimum": 1},
+                        "path": {"type": "string", "description": "Workspace-relative canonical buffer path"},
+                        "expected_revision": {"type": "integer"},
+                        "old_text": {"type": "string", "minLength": 1},
+                        "new_text": {"type": "string"}
+                    },
+                    "required": ["buffer_id", "path", "expected_revision", "old_text", "new_text"]
+                }
+            }
         }
     ])
 }
@@ -441,6 +460,7 @@ mod tests {
         assert!(request.contains("authorization: bearer test-key"));
         assert!(request.contains("gpt-test"));
         assert!(request.contains("hello"));
+        assert!(request.contains("write"));
         unsafe { std::env::remove_var(key_env) };
     }
 

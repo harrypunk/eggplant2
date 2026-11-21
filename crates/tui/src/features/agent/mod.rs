@@ -1,12 +1,13 @@
 mod component;
 mod tools;
 mod work;
+mod write;
 
 pub use component::{AgentDialog, AgentPanel};
 pub use work::{handle_command, register_commands, register_text_input, register_ui};
 
 use editor::BufferId;
-use eggplant_agent::{AgentProvider, AgentSession, CancellationToken, RunId};
+use eggplant_agent::{AgentContinuation, AgentProvider, AgentSession, CancellationToken, RunId};
 use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -15,6 +16,12 @@ pub struct EditorContext {
     pub path: std::path::PathBuf,
     pub revision: i32,
     pub line: usize,
+}
+
+#[derive(Debug, Clone)]
+struct SuspendedRun {
+    run_id: RunId,
+    continuation: AgentContinuation,
 }
 
 #[derive(Debug, Default)]
@@ -26,6 +33,7 @@ pub struct AgentState {
     context: Option<EditorContext>,
     provider: Option<Arc<dyn AgentProvider>>,
     active_cancellation: Option<CancellationToken>,
+    suspended: Option<SuspendedRun>,
 }
 
 impl AgentState {
@@ -101,6 +109,26 @@ impl AgentState {
         if let Some(cancellation) = &self.active_cancellation {
             cancellation.cancel();
         }
+    }
+
+    fn suspend(&mut self, run_id: RunId, continuation: AgentContinuation) {
+        self.suspended = Some(SuspendedRun {
+            run_id,
+            continuation,
+        });
+    }
+
+    fn take_suspension(&mut self, run_id: RunId) -> Option<AgentContinuation> {
+        self.suspended
+            .as_ref()
+            .is_some_and(|suspended| suspended.run_id == run_id)
+            .then_some(())
+            .and_then(|_| self.suspended.take())
+            .map(|suspended| suspended.continuation)
+    }
+
+    fn clear_suspension(&mut self) {
+        self.suspended = None;
     }
 }
 

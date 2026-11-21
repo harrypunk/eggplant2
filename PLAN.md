@@ -1,7 +1,7 @@
 # Eggplant first-edition plan
 
 Last updated: 2026-11-21
-Current baseline: M10, M11.1/M11.2, M12.1, M12.2, and M12.3 are complete; M12.4 approved revision-safe writes are next
+Current baseline: M10, M11.1/M11.2, and M12.1–M12.4 are complete; M12.5 scalable session persistence is next
 
 ## Purpose
 
@@ -516,7 +516,7 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 ### Milestone 12: Inline AI agent
 
-**Status: M12.1 fake streaming UI, M12.2 OpenAI-compatible provider, and M12.3 bounded read/grep tools complete; M12.4 approved writes are next.**
+**Status: M12.1 fake streaming UI, M12.2 OpenAI-compatible provider, M12.3 bounded read/grep tools, and M12.4 approved revision-safe writes complete; M12.5 persistence is next.**
 
 **Goal:** make agent chat and bounded coding tools a first-class inline workflow without creating a second editor, bypassing persistence, or adopting a general agent/plugin framework. Read [AI agent architecture](docs/agent.md) and [Agent tools](docs/agent-tools.md) before implementation.
 
@@ -555,11 +555,11 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 #### M12.4 — Approved revision-safe writes
 
-- [ ] Start with exact-text/range replacement in an existing open buffer identified by `BufferId`, canonical path, and expected revision.
-- [ ] Compute a bounded diff and require one immutable per-call approval before mutation; any changed input requires new approval.
-- [ ] Revalidate identity/revision/exact text on the main update path and apply one undoable editor transaction through existing after-edit/save/sync behavior; coordinate non-active-buffer persistence explicitly by ID/path.
-- [ ] Report rejection, conflict, cancellation, and save failure honestly; never claim an automatic rollback or silently widen approval.
-- [ ] Defer whole-file creation/delete/rename, multi-file patches, shell commands, LSP workspace edits, and Git mutations to separately reviewed tools.
+- [x] Start with exact-text/range replacement in an existing open buffer identified by `BufferId`, canonical path, and expected revision.
+- [x] Compute a bounded diff and require one immutable per-call approval before mutation; any changed input requires new approval.
+- [x] Revalidate identity/revision/exact text on the main update path and apply one undoable editor transaction through existing after-edit/save/sync behavior; coordinate non-active-buffer persistence explicitly by ID/path.
+- [x] Report rejection, conflict, cancellation, and save failure honestly; never claim an automatic rollback or silently widen approval.
+- [x] Defer whole-file creation/delete/rename, multi-file patches, shell commands, LSP workspace edits, and Git mutations to separately reviewed tools.
 
 #### M12.5 — Scalable session persistence
 

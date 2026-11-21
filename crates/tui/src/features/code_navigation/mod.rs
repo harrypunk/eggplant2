@@ -7,7 +7,9 @@ mod component;
 mod work;
 
 pub use component::overlay;
-pub use work::{close_document, handle_command, register_commands, synchronize};
+pub use work::{
+    close_document, handle_command, register_commands, synchronize, synchronize_buffer,
+};
 
 use app::language::{
     DocumentEvent, LanguageError, LanguageServerSpec, LanguageService, NavigationKind,

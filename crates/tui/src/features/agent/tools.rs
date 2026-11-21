@@ -17,10 +17,20 @@ const MAX_OUTPUT: usize = 50 * 1024;
 const TRUNCATION_MARKER: &str = "\n[truncated]";
 
 #[derive(Debug, Clone)]
+pub struct BufferContext {
+    pub path: PathBuf,
+    pub snapshot: BufferTextSnapshot,
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct ToolContext {
     pub root: PathBuf,
-    pub active_path: Option<PathBuf>,
-    pub active_snapshot: Option<BufferTextSnapshot>,
+    pub buffers: Vec<BufferContext>,
+}
+
+struct SourceText<'a> {
+    text: Cow<'a, str>,
+    buffer: Option<&'a BufferTextSnapshot>,
 }
 
 pub fn execute(call: &ToolCall, context: &ToolContext) -> ToolResult {
@@ -59,13 +69,26 @@ fn read_result(call: &ToolCall, context: &ToolContext) -> Result<ToolResult, Too
             )
         })?;
     let path = resolve(&context.root, &arguments.path).map_err(|message| error(call, message))?;
-    let text = source_text(&path, context).map_err(|message| error(call, message))?;
-    let output = text
-        .lines()
-        .enumerate()
-        .skip(offset - 1)
-        .take(limit)
-        .map(|(index, line)| format!("{}:{}\n", index + 1, line))
+    let source = source_text(&path, context).map_err(|message| error(call, message))?;
+    let metadata = source.buffer.map(|snapshot| {
+        format!(
+            "buffer:{} revision:{} path:{}\n",
+            snapshot.buffer_id,
+            snapshot.revision,
+            display_path(&context.root, &path)
+        )
+    });
+    let output = metadata
+        .into_iter()
+        .chain(
+            source
+                .text
+                .lines()
+                .enumerate()
+                .skip(offset - 1)
+                .take(limit)
+                .map(|(index, line)| format!("{}:{}\n", index + 1, line)),
+        )
         .try_fold(String::new(), |content, row| {
             match content.len() + row.len() <= MAX_OUTPUT {
                 true => Continue(content + row.as_str()),
@@ -76,7 +99,7 @@ fn read_result(call: &ToolCall, context: &ToolContext) -> Result<ToolResult, Too
         Continue(content) => (content, false),
         Break(content) => (content, true),
     };
-    let range_truncated = (offset - 1).saturating_add(limit) < text.lines().count();
+    let range_truncated = (offset - 1).saturating_add(limit) < source.text.lines().count();
     Ok(success(call, content, output_truncated || range_truncated))
 }
 
@@ -168,7 +191,7 @@ fn grep_path(
     search_file(
         searcher,
         &display_path(&context.root, &path),
-        &text,
+        &text.text,
         context_lines,
         GrepOutput::default(),
     )
@@ -196,7 +219,7 @@ fn grep_workspace(
                         Ok(text) => search_file(
                             searcher,
                             &display_path(&context.root, path),
-                            &text,
+                            &text.text,
                             context_lines,
                             output,
                         ),
@@ -253,7 +276,7 @@ fn search_file(
     })
 }
 
-fn parse_arguments<T: for<'de> Deserialize<'de>>(
+pub(super) fn parse_arguments<T: for<'de> Deserialize<'de>>(
     call: &ToolCall,
     name: &str,
 ) -> Result<T, ToolResult> {
@@ -265,7 +288,7 @@ fn parse_arguments<T: for<'de> Deserialize<'de>>(
     })
 }
 
-fn resolve(root: &Path, input: &str) -> Result<PathBuf, String> {
+pub(super) fn resolve(root: &Path, input: &str) -> Result<PathBuf, String> {
     (!input.is_empty() && !Path::new(input).is_absolute())
         .then_some(())
         .ok_or_else(|| "path must be workspace-relative".to_string())?;
@@ -276,24 +299,30 @@ fn resolve(root: &Path, input: &str) -> Result<PathBuf, String> {
         .ok_or_else(|| "path escapes the workspace".to_string())
 }
 
-fn source_text<'a>(path: &Path, context: &'a ToolContext) -> Result<Cow<'a, str>, String> {
+fn source_text<'a>(path: &Path, context: &'a ToolContext) -> Result<SourceText<'a>, String> {
     context
-        .active_snapshot
-        .as_ref()
-        .filter(|_| context.active_path.as_deref() == Some(path))
-        .map(|snapshot| {
-            (snapshot.text.len() as u64 <= MAX_FILE_BYTES)
-                .then_some(Cow::Borrowed(snapshot.text.as_str()))
+        .buffers
+        .iter()
+        .find(|buffer| buffer.path == path)
+        .map(|buffer| {
+            (buffer.snapshot.text.len() as u64 <= MAX_FILE_BYTES)
+                .then_some(SourceText {
+                    text: Cow::Borrowed(buffer.snapshot.text.as_str()),
+                    buffer: Some(&buffer.snapshot),
+                })
                 .ok_or_else(|| format!("text file exceeds the {MAX_FILE_BYTES}-byte limit"))
         })
         .unwrap_or_else(|| {
             read_text_file_bounded(path, MAX_FILE_BYTES)
-                .map(Cow::Owned)
+                .map(|text| SourceText {
+                    text: Cow::Owned(text),
+                    buffer: None,
+                })
                 .map_err(|error| error.to_string())
         })
 }
 
-fn display_path(root: &Path, path: &Path) -> String {
+pub(super) fn display_path(root: &Path, path: &Path) -> String {
     path.strip_prefix(root)
         .unwrap_or(path)
         .to_string_lossy()
@@ -339,7 +368,7 @@ fn truncate_utf8(text: &str, max_bytes: usize) -> String {
     text[..boundary].to_string()
 }
 
-fn error(call: &ToolCall, message: String) -> ToolResult {
+pub(super) fn error(call: &ToolCall, message: String) -> ToolResult {
     ToolResult {
         call_id: call.id.clone(),
         status: ToolResultStatus::Error,
@@ -365,8 +394,7 @@ mod tests {
     fn context(directory: &tempfile::TempDir) -> ToolContext {
         ToolContext {
             root: directory.path().to_path_buf(),
-            active_path: None,
-            active_snapshot: None,
+            buffers: Vec::new(),
         }
     }
 
@@ -420,15 +448,22 @@ mod tests {
         let buffer = crate::test_utils::create_buffer(&mut model, "hello");
         let context = ToolContext {
             root: directory.path().to_path_buf(),
-            active_path: Some(path.clone()),
-            active_snapshot: Some(BufferTextSnapshot {
-                buffer_id: buffer,
-                revision: 2,
-                text: "changed HELLO".to_string(),
-            }),
+            buffers: vec![BufferContext {
+                path,
+                snapshot: BufferTextSnapshot {
+                    buffer_id: buffer,
+                    revision: 2,
+                    text: "changed HELLO".to_string(),
+                },
+            }],
         };
         let result = execute(&call("read", r#"{"path":"main.rs"}"#), &context);
         assert!(result.content.contains("changed HELLO"));
+        assert!(
+            result
+                .content
+                .contains(&format!("buffer:{buffer} revision:2"))
+        );
 
         let result = execute(
             &call("grep", r#"{"query":"changed","path":"main.rs"}"#),

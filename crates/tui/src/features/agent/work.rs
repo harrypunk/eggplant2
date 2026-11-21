@@ -1,11 +1,14 @@
 use std::{future::Future, pin::Pin, sync::Arc};
 
 use eggplant_agent::{
-    AgentEvent, AgentProvider, AgentRequest, CancellationToken, ProviderMessage, RunId, ToolResult,
-    ToolResultStatus,
+    AgentContinuation, AgentEvent, AgentProvider, AgentRequest, CancellationToken, ProviderMessage,
+    RunId, ToolApproval, ToolResult, ToolResultStatus,
 };
 
-use super::{AgentContextProvider, EditorContext, tools::ToolContext};
+use super::{
+    AgentContextProvider, EditorContext,
+    tools::{BufferContext, ToolContext},
+};
 use crate::{
     data_object::{CommandId, Context, Model, StatusMessage, Visibility},
     manager::{
@@ -37,6 +40,16 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
             handle_command,
         ),
         Command::feature(
+            CommandId("agent_approve"),
+            "approve agent write",
+            handle_command,
+        ),
+        Command::feature(
+            CommandId("agent_reject"),
+            "reject agent write",
+            handle_command,
+        ),
+        Command::feature(
             CommandId("agent_toggle_panel"),
             "toggle agent tool panel",
             handle_command,
@@ -61,6 +74,8 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         "agent_submit" => submit(model),
         "agent_backspace" => backspace(model),
         "agent_interrupt" => interrupt(model),
+        "agent_approve" => approve_write(model),
+        "agent_reject" => reject_write(model),
         "agent_toggle_panel" => toggle_panel(model),
         _ => None,
     }
@@ -79,18 +94,16 @@ fn open(model: &mut Model) -> Option<Effect> {
         .as_ref()
         .and_then(|workspace| context.path.strip_prefix(workspace.root()).ok())
         .unwrap_or(&context.path);
-    model.agent.open_dialog(
-        context.clone(),
-        format!("{}:{}", relative.display(), context.line),
-    );
-    if !model.modal.open(Context::AgentChatDialog) {
+    let input_context = match model.agent.session().pending_approval() {
+        Some(_) => Context::AgentApproval,
+        None => Context::AgentChatDialog,
+    };
+    if !model.modal.open(input_context) {
         return None;
     }
-    model.agent.open_dialog(
-        context.clone(),
-        format!("{}:{}", relative.display(), context.line),
-    );
-    model.context_stack.push(Context::AgentChatDialog);
+    let label = format!("{}:{}", relative.display(), context.line);
+    model.agent.open_dialog(context, label);
+    model.context_stack.push(input_context);
     None
 }
 
@@ -99,11 +112,32 @@ fn close(model: &mut Model) -> Option<Effect> {
         return None;
     }
     model.agent.close_dialog();
-    model.modal.close(Context::AgentChatDialog);
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::AgentChatDialog);
+    [Context::AgentChatDialog, Context::AgentApproval]
+        .into_iter()
+        .for_each(|context| {
+            model.modal.close(context);
+            model.context_stack.pop_if(|active| active == &context);
+        });
     None
+}
+
+fn transition_to_approval(model: &mut Model) {
+    transition_modal(model, Context::AgentChatDialog, Context::AgentApproval);
+}
+
+fn transition_to_chat(model: &mut Model) {
+    transition_modal(model, Context::AgentApproval, Context::AgentChatDialog);
+}
+
+fn transition_modal(model: &mut Model, from: Context, to: Context) {
+    if !model.agent.dialog_open() || !model.modal.is_active(from) {
+        return;
+    }
+    model.modal.close(from);
+    model.context_stack.pop_if(|context| context == &from);
+    if model.modal.open(to) {
+        model.context_stack.push(to);
+    }
 }
 
 fn submit(model: &mut Model) -> Option<Effect> {
@@ -123,24 +157,63 @@ fn submit(model: &mut Model) -> Option<Effect> {
     let run_id = model.agent.begin_prompt()?;
     if let Some(provider) = model.agent.provider() {
         let cancellation = model.agent.begin_cancellation();
-        let context = ToolContext {
-            root: model.workspace.as_ref()?.root().to_path_buf(),
-            active_path: model
-                .editor
-                .active_buffer()
-                .and_then(|buffer| model.editor.buffer_path(buffer))
-                .map(std::path::Path::to_path_buf),
-            active_snapshot: model.editor.active_text_snapshot(),
-        };
         return Some(Effect::feature(ProviderAgentRun {
             run_id,
             prompt,
             cancellation,
             provider,
-            context,
+            context: tool_context(model)?,
+            progress: RunProgress::default(),
         }));
     }
     Some(Effect::feature(FakeAgentRun { run_id, prompt }))
+}
+
+fn approve_write(model: &mut Model) -> Option<Effect> {
+    resolve_write(model, true)
+}
+
+fn reject_write(model: &mut Model) -> Option<Effect> {
+    resolve_write(model, false)
+}
+
+fn resolve_write(model: &mut Model, approved: bool) -> Option<Effect> {
+    let run_id = model.agent.session().run().map(|run| run.id)?;
+    let approval = model.agent.session().pending_approval()?.clone();
+    let provider = model.agent.provider()?;
+    let root = tool_context(model)?.root;
+    let continuation = model.agent.take_suspension(run_id)?;
+    let outcome = match approved {
+        true => super::write::apply(&mut model.editor, &root, &approval.call),
+        false => super::write::rejected(&approval.call),
+    };
+    let super::write::WriteOutcome { result, edited } = outcome;
+    let context = tool_context(model)?;
+    model
+        .agent
+        .session_mut()
+        .resolve_approval(run_id, &approval.call.id);
+    model
+        .agent
+        .session_mut()
+        .complete_tool_call(run_id, result.clone());
+    let after_edit = edited.and_then(|buffer_id| {
+        Effect::combine(
+            crate::buffer::save_if_dirty(model, buffer_id),
+            crate::code_navigation::synchronize_buffer(model, buffer_id),
+        )
+    });
+    let cancellation = model.agent.begin_cancellation();
+    let resume = Effect::feature(ProviderAgentRun {
+        run_id,
+        prompt: String::new(),
+        cancellation,
+        provider,
+        context,
+        progress: RunProgress::from(continuation).with_results(vec![result]),
+    });
+    transition_to_chat(model);
+    Effect::combine(after_edit, Some(resume))
 }
 
 fn insert(model: &mut Model, character: char) -> Option<Effect> {
@@ -154,8 +227,29 @@ fn backspace(model: &mut Model) -> Option<Effect> {
 }
 
 fn interrupt(model: &mut Model) -> Option<Effect> {
+    let pending = model.agent.session().pending_approval().cloned();
+    let run_id = model.agent.session().run().map(|run| run.id);
     model.agent.cancel_active();
     model.agent.session_mut().cancel();
+    run_id
+        .zip(pending)
+        .map(|(run_id, approval)| {
+            (
+                run_id,
+                ToolResult {
+                    call_id: approval.call.id,
+                    status: ToolResultStatus::Cancelled,
+                    content: "Write approval cancelled; no changes were applied.".to_string(),
+                    truncated: false,
+                },
+            )
+        })
+        .into_iter()
+        .for_each(|(run_id, result)| {
+            model.agent.session_mut().complete_tool_call(run_id, result);
+        });
+    model.agent.clear_suspension();
+    transition_to_chat(model);
     None
 }
 
@@ -204,6 +298,22 @@ impl AgentContextProvider for Model {
     }
 }
 
+fn tool_context(model: &Model) -> Option<ToolContext> {
+    let root = model.workspace.as_ref()?.root().to_path_buf();
+    let buffers = model
+        .editor
+        .file_buffer_ids()
+        .into_iter()
+        .filter_map(|buffer_id| {
+            let path = model.editor.buffer_path(buffer_id)?.to_path_buf();
+            let snapshot = model.editor.buffer_text_snapshot(buffer_id)?;
+            path.starts_with(&root)
+                .then_some(BufferContext { path, snapshot })
+        })
+        .collect();
+    Some(ToolContext { root, buffers })
+}
+
 fn notify(model: &mut Model, message: String) -> Option<Effect> {
     Some(crate::notifications::publish_status(
         model,
@@ -240,9 +350,10 @@ struct ProviderAgentRun {
     cancellation: CancellationToken,
     provider: Arc<dyn AgentProvider>,
     context: ToolContext,
+    progress: RunProgress,
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct RunProgress {
     step: usize,
     history: Vec<ProviderMessage>,
@@ -265,6 +376,11 @@ enum RoundTerminal {
 enum RoundAction {
     Stop(Option<AgentEvent>),
     Tools(RunProgress, Vec<eggplant_agent::ToolCall>),
+}
+
+enum ToolExecution {
+    Results(Vec<ToolResult>),
+    Approval(ToolApproval),
 }
 
 impl ProviderRound {
@@ -300,7 +416,7 @@ impl ProviderRound {
                     },
                     None,
                 ),
-                AgentEvent::ToolResults(_) => (self, None),
+                AgentEvent::ToolResults(_) | AgentEvent::ApprovalRequired { .. } => (self, None),
             },
         }
     }
@@ -370,6 +486,11 @@ impl RunProgress {
                     && call.arguments.len() <= super::tools::MAX_ARGUMENT_BYTES
             });
         require(valid, "provider emitted an invalid tool call")?;
+        let writes = calls.iter().filter(|call| call.name == "write").count();
+        require(
+            writes == 0 || (writes == 1 && calls.len() == 1),
+            "write must be the only tool call in its round",
+        )?;
         let history = match history.is_empty() {
             true => vec![ProviderMessage::user(prompt.to_string())],
             false => history,
@@ -413,13 +534,35 @@ impl RunProgress {
     }
 }
 
+impl From<RunProgress> for AgentContinuation {
+    fn from(progress: RunProgress) -> Self {
+        Self {
+            step: progress.step,
+            history: progress.history,
+            tool_calls: progress.tool_calls,
+            tool_output: progress.tool_output,
+        }
+    }
+}
+
+impl From<AgentContinuation> for RunProgress {
+    fn from(continuation: AgentContinuation) -> Self {
+        Self {
+            step: continuation.step,
+            history: continuation.history,
+            tool_calls: continuation.tool_calls,
+            tool_output: continuation.tool_output,
+        }
+    }
+}
+
 fn require(condition: bool, message: &str) -> Result<(), String> {
     condition.then_some(()).ok_or_else(|| message.to_string())
 }
 
 impl ProviderAgentRun {
     async fn drive(self, mut emit: impl FnMut(AgentEvent) + Send + 'static) {
-        self.drive_round(RunProgress::default(), &mut emit).await;
+        self.drive_round(self.progress.clone(), &mut emit).await;
     }
 
     fn drive_round<'a>(
@@ -439,12 +582,21 @@ impl ProviderAgentRun {
                 RoundAction::Stop(event) => event.into_iter().for_each(&mut *emit),
                 RoundAction::Tools(progress, calls) => {
                     emit(AgentEvent::ToolCalls(calls.clone()));
-                    let results = self.execute_calls(&calls, progress.tool_output);
-                    emit(AgentEvent::ToolResults(results.clone()));
-                    match self.cancellation.is_cancelled() {
-                        true => {}
-                        false => {
-                            self.drive_round(progress.with_results(results), emit).await;
+                    match self.execute_calls(&calls, progress.tool_output) {
+                        ToolExecution::Results(results) => {
+                            emit(AgentEvent::ToolResults(results.clone()));
+                            match self.cancellation.is_cancelled() {
+                                true => {}
+                                false => {
+                                    self.drive_round(progress.with_results(results), emit).await;
+                                }
+                            }
+                        }
+                        ToolExecution::Approval(approval) => {
+                            emit(AgentEvent::ApprovalRequired {
+                                approval,
+                                continuation: progress.into(),
+                            });
                         }
                     }
                 }
@@ -476,25 +628,40 @@ impl ProviderAgentRun {
         &self,
         calls: &[eggplant_agent::ToolCall],
         output_used: usize,
-    ) -> Vec<ToolResult> {
-        calls
-            .iter()
-            .map(|call| match self.cancellation.is_cancelled() {
-                true => ToolResult {
-                    call_id: call.id.clone(),
-                    status: ToolResultStatus::Cancelled,
-                    content: "cancelled".to_string(),
-                    truncated: false,
-                },
-                false => super::tools::execute(call, &self.context),
-            })
-            .scan(output_used, |used, result| {
-                let result =
-                    super::tools::bound_result(result, MAX_TOOL_OUTPUT.saturating_sub(*used));
-                *used = used.saturating_add(result.content.len());
-                Some(result)
-            })
-            .collect()
+    ) -> ToolExecution {
+        match calls {
+            [call] if call.name == "write" && !self.cancellation.is_cancelled() => {
+                match super::write::prepare(call, &self.context) {
+                    Ok(approval) => ToolExecution::Approval(approval),
+                    Err(result) => ToolExecution::Results(vec![super::tools::bound_result(
+                        result,
+                        MAX_TOOL_OUTPUT.saturating_sub(output_used),
+                    )]),
+                }
+            }
+            _ => ToolExecution::Results(
+                calls
+                    .iter()
+                    .map(|call| match self.cancellation.is_cancelled() {
+                        true => ToolResult {
+                            call_id: call.id.clone(),
+                            status: ToolResultStatus::Cancelled,
+                            content: "cancelled".to_string(),
+                            truncated: false,
+                        },
+                        false => super::tools::execute(call, &self.context),
+                    })
+                    .scan(output_used, |used, result| {
+                        let result = super::tools::bound_result(
+                            result,
+                            MAX_TOOL_OUTPUT.saturating_sub(*used),
+                        );
+                        *used = used.saturating_add(result.content.len());
+                        Some(result)
+                    })
+                    .collect(),
+            ),
+        }
     }
 }
 
@@ -579,35 +746,42 @@ impl FeatureEffect for FakeAgentRun {
 
 impl Completion for AgentCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        for event in self.events {
-            match event {
-                AgentEvent::TextDelta(delta) => {
-                    model.agent.session_mut().append_delta(self.run_id, &delta);
-                }
-                AgentEvent::Complete => {
-                    model.agent.session_mut().complete(self.run_id);
-                }
-                AgentEvent::ToolCalls(calls) => {
-                    for call in calls {
-                        model
-                            .agent
-                            .session_mut()
-                            .record_tool_call(self.run_id, &call);
-                    }
-                }
-                AgentEvent::ToolResults(results) => {
-                    for result in results {
-                        model
-                            .agent
-                            .session_mut()
-                            .complete_tool_call(self.run_id, result);
-                    }
-                }
-                AgentEvent::Failed(error) => {
-                    model.agent.session_mut().fail(self.run_id, error);
+        self.events.into_iter().for_each(|event| match event {
+            AgentEvent::TextDelta(delta) => {
+                model.agent.session_mut().append_delta(self.run_id, &delta);
+            }
+            AgentEvent::Complete => {
+                model.agent.session_mut().complete(self.run_id);
+            }
+            AgentEvent::ToolCalls(calls) => calls.into_iter().for_each(|call| {
+                model
+                    .agent
+                    .session_mut()
+                    .record_tool_call(self.run_id, &call);
+            }),
+            AgentEvent::ToolResults(results) => results.into_iter().for_each(|result| {
+                model
+                    .agent
+                    .session_mut()
+                    .complete_tool_call(self.run_id, result);
+            }),
+            AgentEvent::ApprovalRequired {
+                approval,
+                continuation,
+            } => {
+                if model
+                    .agent
+                    .session_mut()
+                    .request_approval(self.run_id, approval)
+                {
+                    model.agent.suspend(self.run_id, continuation);
+                    transition_to_approval(model);
                 }
             }
-        }
+            AgentEvent::Failed(error) => {
+                model.agent.session_mut().fail(self.run_id, error);
+            }
+        });
         None
     }
 }
@@ -890,6 +1064,334 @@ mod tests {
                 .iter()
                 .any(|message| message.role == eggplant_agent::ProviderMessageRole::Tool)
         );
+    }
+
+    #[derive(Debug)]
+    struct WriteProvider {
+        call: eggplant_agent::ToolCall,
+        read_after: bool,
+        requests: Arc<std::sync::atomic::AtomicUsize>,
+        seen: Arc<std::sync::Mutex<Vec<ProviderMessage>>>,
+    }
+
+    impl WriteProvider {
+        fn new(
+            call: eggplant_agent::ToolCall,
+            read_after: bool,
+        ) -> (
+            Self,
+            Arc<std::sync::Mutex<Vec<ProviderMessage>>>,
+            Arc<std::sync::atomic::AtomicUsize>,
+        ) {
+            let requests = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+            (
+                Self {
+                    call,
+                    read_after,
+                    requests: requests.clone(),
+                    seen: seen.clone(),
+                },
+                seen,
+                requests,
+            )
+        }
+    }
+
+    impl AgentProvider for WriteProvider {
+        fn stream<'a>(
+            &'a self,
+            request: AgentRequest,
+            mut on_event: Box<dyn FnMut(AgentEvent) + Send + 'a>,
+        ) -> std::pin::Pin<
+            Box<dyn Future<Output = Result<(), eggplant_agent::AgentError>> + Send + 'a>,
+        > {
+            Box::pin(async move {
+                let round = self
+                    .requests
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                if round == 0 {
+                    on_event(AgentEvent::ToolCalls(vec![self.call.clone()]));
+                } else {
+                    self.seen.lock().unwrap().extend(request.history.clone());
+                    if round == 1 && self.read_after {
+                        let path = serde_json::from_str::<serde_json::Value>(&self.call.arguments)
+                            .ok()
+                            .and_then(|value| value["path"].as_str().map(str::to_string))
+                            .unwrap_or_default();
+                        on_event(AgentEvent::ToolCalls(vec![eggplant_agent::ToolCall {
+                            id: "read-after-write".to_string(),
+                            name: "read".to_string(),
+                            arguments: serde_json::json!({"path": path}).to_string(),
+                        }]));
+                    } else {
+                        on_event(AgentEvent::TextDelta("write resolved".to_string()));
+                    }
+                }
+                on_event(AgentEvent::Complete);
+                Ok(())
+            })
+        }
+    }
+
+    fn write_call(model: &Model, buffer_id: editor::BufferId) -> eggplant_agent::ToolCall {
+        let snapshot = model.editor.buffer_text_snapshot(buffer_id).unwrap();
+        let root = model.workspace.as_ref().unwrap().root();
+        let path = model.editor.buffer_path(buffer_id).unwrap();
+        let relative = path.strip_prefix(root).unwrap();
+        eggplant_agent::ToolCall {
+            id: "write-1".to_string(),
+            name: "write".to_string(),
+            arguments: serde_json::json!({
+                "buffer_id": buffer_id.as_raw(),
+                "path": relative,
+                "expected_revision": snapshot.revision,
+                "old_text": "before",
+                "new_text": "after",
+            })
+            .to_string(),
+        }
+    }
+
+    fn begin_write(model: &mut Model) {
+        let manager = MessageManager::default();
+        open(model);
+        let effect = submit(model).unwrap();
+        perform(&manager, model, effect);
+        assert_eq!(
+            model.agent.session().run().unwrap().status,
+            RunStatus::WaitingForApproval
+        );
+    }
+
+    fn perform_resolution(model: &mut Model, effect: Effect) -> Vec<editor::BufferId> {
+        match effect {
+            Effect::Save(request) => vec![request.buffer_id()],
+            Effect::Feature(request) => {
+                MessageManager::default().update(model, request.perform());
+                Vec::new()
+            }
+            Effect::Batch(effects) => effects
+                .into_iter()
+                .flat_map(|effect| perform_resolution(model, effect))
+                .collect(),
+            Effect::OpenDocument(_) => Vec::new(),
+        }
+    }
+
+    #[test]
+    fn approval_is_required_once_before_an_undoable_write_and_resume() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("main.rs");
+        std::fs::write(&path, "before").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let buffer = open_file(&mut model, &path);
+        let (provider, seen, requests) = WriteProvider::new(write_call(&model, buffer), false);
+        model.agent.set_provider(Arc::new(provider));
+        begin_write(&mut model);
+
+        assert!(
+            model
+                .modal
+                .is_active(crate::data_object::Context::AgentApproval)
+        );
+        assert_eq!(
+            model.editor.buffer_text_snapshot(buffer).unwrap().text,
+            "before"
+        );
+        assert_eq!(requests.load(std::sync::atomic::Ordering::Relaxed), 1);
+
+        let effect = approve_write(&mut model).unwrap();
+        let saves = perform_resolution(&mut model, effect);
+
+        assert_eq!(saves, vec![buffer]);
+        assert_eq!(
+            model.editor.buffer_text_snapshot(buffer).unwrap().text,
+            "after"
+        );
+        assert_eq!(
+            model.agent.session().run().unwrap().status,
+            RunStatus::Complete
+        );
+        assert_eq!(requests.load(std::sync::atomic::Ordering::Relaxed), 2);
+        assert!(model.agent.session().pending_approval().is_none());
+        assert!(
+            model
+                .modal
+                .is_active(crate::data_object::Context::AgentChatDialog)
+        );
+        assert!(approve_write(&mut model).is_none());
+        assert!(seen.lock().unwrap().iter().any(|message| {
+            message.role == eggplant_agent::ProviderMessageRole::Tool
+                && message.content.contains("not claimed to be saved")
+        }));
+    }
+
+    #[test]
+    fn rejection_and_cancellation_do_not_mutate_or_implicitly_resume() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("main.rs");
+        std::fs::write(&path, "before").unwrap();
+        let mut rejected = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let buffer = open_file(&mut rejected, &path);
+        let (provider, seen, requests) = WriteProvider::new(write_call(&rejected, buffer), false);
+        rejected.agent.set_provider(Arc::new(provider));
+        begin_write(&mut rejected);
+        let effect = reject_write(&mut rejected).unwrap();
+        assert!(perform_resolution(&mut rejected, effect).is_empty());
+
+        assert_eq!(
+            rejected.editor.buffer_text_snapshot(buffer).unwrap().text,
+            "before"
+        );
+        assert_eq!(
+            rejected.agent.session().run().unwrap().status,
+            RunStatus::Complete
+        );
+        assert_eq!(requests.load(std::sync::atomic::Ordering::Relaxed), 2);
+        assert!(seen.lock().unwrap().iter().any(|message| {
+            message.role == eggplant_agent::ProviderMessageRole::Tool
+                && message.content.contains("rejected")
+        }));
+
+        let mut cancelled = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let buffer = open_file(&mut cancelled, &path);
+        let (provider, _seen, requests) = WriteProvider::new(write_call(&cancelled, buffer), false);
+        cancelled.agent.set_provider(Arc::new(provider));
+        begin_write(&mut cancelled);
+        assert!(interrupt(&mut cancelled).is_none());
+
+        assert_eq!(
+            cancelled.editor.buffer_text_snapshot(buffer).unwrap().text,
+            "before"
+        );
+        assert_eq!(
+            cancelled.agent.session().run().unwrap().status,
+            RunStatus::Cancelled
+        );
+        assert_eq!(requests.load(std::sync::atomic::Ordering::Relaxed), 1);
+        assert!(approve_write(&mut cancelled).is_none());
+        assert_eq!(
+            cancelled.agent.session().tool_events()[0]
+                .result
+                .as_ref()
+                .unwrap()
+                .status,
+            ToolResultStatus::Cancelled
+        );
+    }
+
+    #[test]
+    fn hiding_and_reopening_preserves_the_identical_approval() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("main.rs");
+        std::fs::write(&path, "before").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let buffer = open_file(&mut model, &path);
+        let (provider, _seen, requests) = WriteProvider::new(write_call(&model, buffer), false);
+        model.agent.set_provider(Arc::new(provider));
+        begin_write(&mut model);
+        let approval = model.agent.session().pending_approval().unwrap().clone();
+
+        close(&mut model);
+        assert!(!model.agent.dialog_open());
+        assert_eq!(model.agent.session().pending_approval(), Some(&approval));
+        assert_eq!(
+            model.editor.buffer_text_snapshot(buffer).unwrap().text,
+            "before"
+        );
+
+        open(&mut model);
+        assert!(model.agent.dialog_open());
+        assert!(
+            model
+                .modal
+                .is_active(crate::data_object::Context::AgentApproval)
+        );
+        assert_eq!(model.agent.session().pending_approval(), Some(&approval));
+        assert_eq!(requests.load(std::sync::atomic::Ordering::Relaxed), 1);
+        assert_eq!(
+            model.editor.buffer_text_snapshot(buffer).unwrap().text,
+            "before"
+        );
+    }
+
+    #[test]
+    fn stale_revision_returns_a_conflict_without_overwriting_user_text() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("main.rs");
+        std::fs::write(&path, "before").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let buffer = open_file(&mut model, &path);
+        let (provider, seen, _requests) = WriteProvider::new(write_call(&model, buffer), false);
+        model.agent.set_provider(Arc::new(provider));
+        begin_write(&mut model);
+        model.editor.enter_insert_mode();
+        model
+            .editor
+            .active_editor()
+            .unwrap()
+            .insert_text("user ")
+            .unwrap();
+        model.editor.enter_normal_mode();
+
+        let effect = approve_write(&mut model).unwrap();
+        assert!(perform_resolution(&mut model, effect).is_empty());
+
+        assert_eq!(
+            model.editor.buffer_text_snapshot(buffer).unwrap().text,
+            "user before"
+        );
+        assert_eq!(
+            model.agent.session().run().unwrap().status,
+            RunStatus::Complete
+        );
+        assert_eq!(
+            model.agent.session().tool_events()[0]
+                .result
+                .as_ref()
+                .unwrap()
+                .status,
+            ToolResultStatus::Error
+        );
+        assert!(seen.lock().unwrap().iter().any(|message| {
+            message.role == eggplant_agent::ProviderMessageRole::Tool
+                && message.content.contains("revision changed")
+        }));
+    }
+
+    #[test]
+    fn inactive_write_saves_by_id_and_follow_up_reads_fresh_text() {
+        let directory = tempfile::tempdir().unwrap();
+        let first_path = directory.path().join("first.txt");
+        let second_path = directory.path().join("second.txt");
+        std::fs::write(&first_path, "before").unwrap();
+        std::fs::write(&second_path, "second").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let first = open_file(&mut model, &first_path);
+        let second = open_file(&mut model, &second_path);
+        let (provider, seen, requests) = WriteProvider::new(write_call(&model, first), true);
+        model.agent.set_provider(Arc::new(provider));
+        begin_write(&mut model);
+
+        let effect = approve_write(&mut model).unwrap();
+        let saves = perform_resolution(&mut model, effect);
+
+        assert_eq!(saves, vec![first]);
+        assert_eq!(model.editor.active_buffer(), Some(second));
+        assert_eq!(
+            model.editor.buffer_text_snapshot(first).unwrap().text,
+            "after"
+        );
+        assert_eq!(
+            model.agent.session().run().unwrap().status,
+            RunStatus::Complete
+        );
+        assert_eq!(requests.load(std::sync::atomic::Ordering::Relaxed), 3);
+        assert!(seen.lock().unwrap().iter().any(|message| {
+            message.role == eggplant_agent::ProviderMessageRole::Tool
+                && message.content.contains("1:after")
+        }));
     }
 
     #[derive(Debug)]

@@ -1,6 +1,6 @@
 # Agent tools
 
-Status: bounded `read` and `grep` are implemented through provider tool calls. Approved revision-safe `write` remains design-only.
+Status: bounded `read` and `grep` plus approved revision-safe exact-text `write` are implemented through provider tool calls. Broader mutations remain deferred.
 
 The model sees small, stable tools. Eggplant owns validation and execution. Tools reuse existing capabilities where those capabilities already enforce the required invariant, and introduce a narrow adapter where an agent-safe precondition is missing.
 
@@ -9,9 +9,9 @@ The model sees small, stable tools. Eggplant owns validation and execution. Tool
 | Capability | Existing source | Agent decision |
 | --- | --- | --- |
 | Text acceptance | `editor/src/document.rs` | Reuse `read_text_file` for regular-file/UTF-8/NUL checks, but add workspace authorization, symlink policy, and byte/line limits; it is not a complete agent `read`. |
-| Owned snapshots | `editor/src/snapshot.rs`, `features/buffer_grep/work.rs` | Reuse owned `BufferId` + revision + text for current-buffer reads/search; add explicit-ID snapshot access for non-active buffers. |
+| Owned snapshots | `editor/src/snapshot.rs`, `features/buffer_grep/work.rs` | Reuse owned `BufferId` + revision + text; `buffer_text_snapshot(id)` covers active and non-active buffers without activation. |
 | Workspace traversal/search | `capabilities/search.rs`, `features/project_grep/work.rs`, `capabilities/filesystem.rs` | Reuse smart-case regex, ignore policy, and traversal, extracting a public bounded core where current functions are private. Do not invoke external grep. |
-| Editor mutation | `editor/src/session.rs`, `active_editor/editing.rs`, `features/editing/target.rs` | Add a new explicit-buffer/revision/exact-text transaction adapter. Existing commands are active-buffer UI editing, not an agent API. |
+| Editor mutation | `editor/src/session.rs`, `active_editor/editing.rs`, `features/editing/target.rs` | Use `replace_exact_text` for explicit-buffer/path/revision/exact-text transactions. Existing commands remain active-buffer UI editing, not an agent API. |
 | Save/reload | `editor/src/save.rs`, `session.rs`, `shell/buffer.rs`, `features/external_sync.rs` | Compose the same after-edit/save/completion and conflict protections; coordinate explicit-ID saves for non-active buffers. |
 | Approval diff UI | `features/vcs/diff.rs`, `buffer_diff.rs` | Reuse presentation/identity patterns, not `vcs::diff` itself. Proposed-before/after buffer diffs need a small bounded text-diff adapter. |
 
@@ -93,7 +93,7 @@ Do not invoke an external `grep`/shell command or create a second regex/ignore i
 
 ## `write`
 
-The first mutation tool should be narrow: replace exact text in an existing open buffer with an expected revision. Whole-file creation, delete, rename, and arbitrary patch formats are separate tools/slices.
+The first mutation tool is narrow: replace exactly one non-overlapping old-text match in an existing open buffer with an expected revision. Old text must be non-empty and different from the replacement. Whole-file creation, delete, rename, and arbitrary patch formats are separate tools/slices. Reads of open buffers return `BufferId`, revision, and path metadata for constructing this request.
 
 ### Inputs
 
@@ -113,7 +113,9 @@ The first mutation tool should be narrow: replace exact text in an existing open
 6. Run the normal after-edit/auto-save/language-sync path. If the target is not the active buffer, coordinate persistence and synchronization explicitly by `BufferId`/path rather than relying on active-document behavior.
 7. Report success only after the transaction is accepted; report save failure separately and never claim the edit was rolled back automatically.
 
-If the revision or exact text changed, reject with a conflict. The model may request a fresh read and try again; it cannot force the write.
+If the revision or exact text changed, reject with a conflict. The model may request a fresh read and try again; it cannot force the write. A save already in flight for the target is also a retryable conflict, and switching the active buffer alone is not a conflict.
+
+The worker suspends with an owned provider-neutral continuation rather than blocking on a UI channel. Each write must be the only call in its round. `y` accepts exactly once, `n` resumes with an explicit rejection, `Esc` hides the identical pending request, and `Ctrl-F7` records cancellation without resuming. Acceptance applies one transaction on the main update path, schedules auto-save and language synchronization by explicit `BufferId`, and resumes with fresh snapshots so subsequent reads cannot reuse pre-write text. Success means the edit was accepted, not that persistence succeeded; normal save failures remain visible and never imply rollback.
 
 ### What not to do
 
@@ -167,7 +169,7 @@ Set concrete defaults during implementation and test their boundaries. The contr
 
 Limits should produce useful truncation metadata. Do not simply cut a UTF-8 string at an arbitrary byte or hide the fact that content was omitted.
 
-### M12.3 implementation defaults
+### Implemented defaults
 
 | Bound | Current limit |
 | --- | --- |
@@ -180,6 +182,7 @@ Limits should produce useful truncation metadata. Do not simply cut a UTF-8 stri
 | Cumulative provider tool output | 100 KiB per run; another tool round after exhaustion fails explicitly |
 | Retained tool events | 50 entries; results correlate with both call ID and current `RunId` |
 | Panel preview | Two lines and 240 characters, plus an explicit truncation indicator |
+| Approval diff | 120 lines and 12 KiB, with an explicit `[diff truncated]` marker |
 
 Workspace grep uses the shared ignore policy and sorted path traversal. It processes one bounded file at a time rather than retaining all workspace text. A provider-round `Complete` event is not emitted to the session until the run has no further tool work; failed or cancelled rounds never execute queued calls.
 

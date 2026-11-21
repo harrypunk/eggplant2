@@ -393,6 +393,7 @@ pub mod data_object {
         AppNormal,
         AgentChat,
         AgentChatDialog,
+        AgentApproval,
         VCS,
         VcsHistory,
         VcsCommit,

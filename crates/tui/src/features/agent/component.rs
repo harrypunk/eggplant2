@@ -19,10 +19,14 @@ pub struct AgentDialog;
 impl AgentDialog {
     pub fn overlay(model: &Model) -> Option<OverlayContribution> {
         model.agent.dialog_open().then(|| {
+            let size = match model.agent.session().pending_approval() {
+                Some(_) => ratatui::layout::Size::new(90, 24),
+                None => ratatui::layout::Size::new(70, 12),
+            };
             OverlayContribution::new(
                 "agent",
                 OverlayKind::Modal,
-                OverlayPlacement::Centered(ratatui::layout::Size::new(70, 12)),
+                OverlayPlacement::Centered(size),
                 Self::render,
             )
             .with_cursor(Self::cursor)
@@ -41,7 +45,16 @@ impl AgentDialog {
     }
 
     pub fn cursor(model: &Model, area: Rect) -> Option<Position> {
-        TextInput::new(model.agent.prompt(), model.theme.ui()).cursor_position(input_area(area))
+        model
+            .agent
+            .session()
+            .pending_approval()
+            .is_none()
+            .then(|| {
+                TextInput::new(model.agent.prompt(), model.theme.ui())
+                    .cursor_position(input_area(area))
+            })
+            .flatten()
     }
 }
 
@@ -56,8 +69,8 @@ impl<'a> AgentDialogContent<'a> {
     }
 }
 
-impl Widget for AgentDialogContent<'_> {
-    fn render(self, area: Rect, buffer: &mut ratatui::buffer::Buffer) {
+impl AgentDialogContent<'_> {
+    fn render_prompt(self, area: Rect, buffer: &mut ratatui::buffer::Buffer) {
         let [status, input, assistant] = Layout::vertical([
             Constraint::Length(1),
             Constraint::Length(3),
@@ -88,6 +101,58 @@ impl Widget for AgentDialogContent<'_> {
             .style(self.styles.base)
             .render(assistant, buffer);
     }
+
+    fn render_approval(
+        self,
+        approval: &eggplant_agent::ToolApproval,
+        area: Rect,
+        buffer: &mut ratatui::buffer::Buffer,
+    ) {
+        let [status, summary, diff, hints] = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Length(2),
+            Constraint::Fill(1),
+            Constraint::Length(1),
+        ])
+        .areas(area);
+        Paragraph::new("Waiting for write approval")
+            .style(self.styles.action_hint)
+            .render(status, buffer);
+        Paragraph::new(approval.summary.clone())
+            .wrap(Wrap { trim: false })
+            .style(self.styles.base)
+            .render(summary, buffer);
+        Paragraph::new(diff_lines(&approval.diff, self.styles))
+            .wrap(Wrap { trim: false })
+            .style(self.styles.base)
+            .render(diff, buffer);
+        Paragraph::new("y approve once · n reject · Esc hide · Ctrl-F7 cancel")
+            .style(self.styles.muted)
+            .render(hints, buffer);
+    }
+}
+
+impl Widget for AgentDialogContent<'_> {
+    fn render(self, area: Rect, buffer: &mut ratatui::buffer::Buffer) {
+        match self.state.session().pending_approval() {
+            Some(approval) => self.render_approval(approval, area, buffer),
+            None => self.render_prompt(area, buffer),
+        }
+    }
+}
+
+fn diff_lines(diff: &str, styles: &UiTheme) -> Vec<Line<'static>> {
+    diff.lines()
+        .map(|line| {
+            let style = match line {
+                line if line.starts_with('+') => styles.diff_add,
+                line if line.starts_with('-') => styles.diff_remove,
+                line if line.starts_with("@@") => styles.diff_hunk,
+                _ => styles.muted,
+            };
+            Line::styled(line.to_string(), style)
+        })
+        .collect()
 }
 
 fn input_area(area: Rect) -> Rect {
@@ -187,6 +252,17 @@ impl AgentPanel {
             };
             Line::styled(summary, styles.muted)
         }));
+        lines.extend(session.pending_approval().into_iter().flat_map(|approval| {
+            std::iter::once(Line::styled(
+                format!("Approval: {}", approval.summary),
+                styles.action_hint,
+            ))
+            .chain(diff_lines(&approval.diff, styles))
+            .chain(std::iter::once(Line::styled(
+                "Resolve in the Agent popup: y approve · n reject",
+                styles.muted,
+            )))
+        }));
         Paragraph::new(lines)
             .wrap(Wrap { trim: false })
             .style(styles.base)
@@ -258,5 +334,79 @@ mod tests {
             .collect::<String>();
         assert!(panel_content.contains("You: question"));
         assert!(panel_content.contains("Agent: answer"));
+    }
+
+    #[test]
+    fn dialog_and_panel_render_the_same_bounded_write_approval() {
+        let mut model = Model::default();
+        let buffer = create_buffer(&mut model, "before");
+        model.agent.open_dialog(
+            crate::agent::EditorContext {
+                buffer,
+                path: std::path::PathBuf::from("/workspace/main.rs"),
+                revision: 1,
+                line: 1,
+            },
+            "main.rs:1".to_string(),
+        );
+        let run = model
+            .agent
+            .session_mut()
+            .begin("change".to_string())
+            .unwrap();
+        let call = eggplant_agent::ToolCall {
+            id: "write-1".to_string(),
+            name: "write".to_string(),
+            arguments: "{}".to_string(),
+        };
+        model.agent.session_mut().record_tool_call(run, &call);
+        model.agent.session_mut().request_approval(
+            run,
+            eggplant_agent::ToolApproval {
+                call,
+                summary: "Replace text in main.rs".to_string(),
+                diff: "--- main.rs\n+++ main.rs\n@@ exact replacement @@\n-before\n+after\n"
+                    .to_string(),
+            },
+        );
+
+        let mut dialog = Terminal::new(TestBackend::new(90, 24)).unwrap();
+        dialog
+            .draw(|frame| AgentDialog::render(&model, frame, frame.area()))
+            .unwrap();
+        let dialog_content = dialog
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(dialog_content.contains("Waiting for write approval"));
+        assert!(dialog_content.contains("before"));
+        assert!(dialog_content.contains("after"));
+        assert!(AgentDialog::cursor(&model, ratatui::layout::Rect::new(0, 0, 90, 24)).is_none());
+
+        let mut panel = Terminal::new(TestBackend::new(80, 20)).unwrap();
+        panel
+            .draw(|frame| {
+                AgentPanel::render(
+                    model.agent.session(),
+                    model.current_focus,
+                    model.theme.ui(),
+                    frame,
+                    frame.area(),
+                );
+            })
+            .unwrap();
+        let panel_content = panel
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(panel_content.contains("Approval: Replace text in main.rs"));
+        assert!(panel_content.contains("before"));
+        assert!(panel_content.contains("after"));
     }
 }

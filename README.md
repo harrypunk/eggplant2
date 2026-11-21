@@ -14,7 +14,7 @@ The current application is intentionally lightweight: it is not a full IDE, a Vi
 - A separate **VCS addon** for branch display, switching/creation, changed files, staging, commits, and inline diffs.
 - Narrow boundaries for AI commands instead of direct widget or Helix access.
 
-The **inline AI agent supports fake and OpenAI-compatible providers**, editable `path:line` prompts, shared popup/panel conversations, ordered streaming/interrupt behavior, environment-based credentials, and native bounded `read`/`grep` tool calls. Approved revision-safe writes are the next milestone.
+The **inline AI agent supports fake and OpenAI-compatible providers**, editable `path:line` prompts, shared popup/panel conversations, ordered streaming/interrupt behavior, environment-based credentials, bounded `read`/`grep` tools, and per-call-approved revision-safe exact-text writes. Scalable session persistence is the next milestone.
 
 ## Run
 

@@ -142,6 +142,15 @@ fn common_bindings() -> KeymapConfig {
             ],
         ),
         keymap_context(
+            "agent_approval",
+            [
+                ("agent_close", "esc"),
+                ("agent_approve", "y"),
+                ("agent_reject", "n"),
+                ("agent_interrupt", "ctrl-f7"),
+            ],
+        ),
+        keymap_context(
             "buffer_grep",
             [
                 ("buffer_grep_next", "down"),
@@ -276,6 +285,7 @@ fn parse_context(value: &str) -> Option<Context> {
         "normal" => Some(Context::AppNormal),
         "agent_chat" => Some(Context::AgentChat),
         "agent_chat_dialog" => Some(Context::AgentChatDialog),
+        "agent_approval" => Some(Context::AgentApproval),
         "vcs" => Some(Context::VCS),
         "vcs_history" => Some(Context::VcsHistory),
         "vcs_commit" => Some(Context::VcsCommit),

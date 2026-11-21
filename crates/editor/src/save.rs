@@ -27,6 +27,10 @@ pub struct SaveRequest {
 }
 
 impl SaveRequest {
+    pub fn buffer_id(&self) -> BufferId {
+        self.buffer_id
+    }
+
     /// Execute the file write and return its completion for the update loop.
     pub async fn perform(self) -> SaveCompletion {
         SaveCompletion {

@@ -5,6 +5,7 @@ use app::language::{
     LanguageProgress, LanguageProgressStage, LanguageServerSpec, LanguageService, NavigationKind,
     NavigationRequest,
 };
+use editor::BufferId;
 
 use super::{NavigationOutcome, PendingSync};
 use crate::{
@@ -110,10 +111,16 @@ fn start(model: &mut Model, kind: NavigationKind) -> Option<Effect> {
 
 /// Synchronize every configured provider, retaining newest text per provider/path.
 pub fn synchronize(model: &mut Model) -> Option<Effect> {
+    let buffer = model.editor.active_buffer()?;
+    synchronize_buffer(model, buffer)
+}
+
+/// Synchronize one explicitly edited buffer without activating it.
+pub fn synchronize_buffer(model: &mut Model, buffer: BufferId) -> Option<Effect> {
     if !model.code_navigation.is_busy() && model.code_navigation.has_trailing_sync() {
         return next_sync(model);
     }
-    let tasks = active_sync_tasks(model)?;
+    let tasks = buffer_sync_tasks(model, buffer)?;
     queue_tasks(model, tasks);
     if model.code_navigation.is_busy() {
         return None;
@@ -143,8 +150,8 @@ pub fn close_document(model: &mut Model, path: PathBuf) -> Option<Effect> {
     next_sync(model)
 }
 
-fn active_sync_tasks(model: &Model) -> Option<Vec<PendingSync>> {
-    Some(active_document(model)?.sync_tasks())
+fn buffer_sync_tasks(model: &Model, buffer: BufferId) -> Option<Vec<PendingSync>> {
+    Some(buffer_document(model, buffer)?.sync_tasks())
 }
 
 fn queue_tasks(model: &mut Model, tasks: Vec<PendingSync>) {
@@ -203,10 +210,13 @@ impl ActiveDocument {
 }
 
 fn active_document(model: &Model) -> Option<ActiveDocument> {
-    let buffer = model.editor.active_buffer()?;
+    buffer_document(model, model.editor.active_buffer()?)
+}
+
+fn buffer_document(model: &Model, buffer: BufferId) -> Option<ActiveDocument> {
     let path = model.editor.buffer_path(buffer)?.to_path_buf();
-    let (_, revision) = model.editor.active_revision()?;
-    let snapshot = model.editor.active_text_snapshot()?;
+    let revision = model.editor.buffer_version(buffer)?;
+    let snapshot = model.editor.buffer_text_snapshot(buffer)?;
     let specs = model.language_servers.servers_for_path(&path);
     if specs.is_empty() {
         return None;
@@ -650,6 +660,49 @@ language-servers = ["ts"]
                 text: "const value: number = 1;\n".to_string(),
             }
         );
+    }
+
+    #[test]
+    fn explicit_buffer_sync_uses_the_inactive_edited_snapshot() {
+        let directory = tempfile::tempdir().unwrap();
+        let target_path = directory.path().join("main.rs");
+        let other_path = directory.path().join("other.rs");
+        std::fs::write(&target_path, "before").unwrap();
+        std::fs::write(&other_path, "other").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let target = open_file(&mut model, &target_path);
+        let other = open_file(&mut model, &other_path);
+        let events = Arc::new(Mutex::new(Vec::new()));
+        model.code_navigation.restore_service_for(
+            &rust_spec(),
+            Box::new(FakeService {
+                locations: Vec::new(),
+                events: Some(events.clone()),
+            }),
+        );
+        let revision = model.editor.buffer_version(target).unwrap();
+        model
+            .editor
+            .replace_exact_text(editor::ExactTextReplacement {
+                buffer_id: target,
+                path: &target_path,
+                expected_revision: revision,
+                old_text: "before",
+                new_text: "after",
+            })
+            .unwrap();
+        let manager = MessageManager::default();
+
+        let effect = synchronize_buffer(&mut model, target).unwrap();
+        run_feature(&manager, &mut model, effect);
+
+        assert_eq!(model.editor.active_buffer(), Some(other));
+        assert_eq!(events.lock().unwrap().len(), 1);
+        assert!(matches!(
+            &events.lock().unwrap()[0],
+            DocumentEvent::Open { path, text, .. }
+                if path == &target_path && text == "after"
+        ));
     }
 
     fn assert_multi_provider_open_close(
