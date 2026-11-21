@@ -10,7 +10,7 @@ Eggplant's LSP support is intentionally limited to source navigation and diagnos
 - Server messages and work-progress begin/report/end notifications.
 - One workspace root and the registered server for the current file type.
 
-The compatibility startup registry currently maps Rust files (`.rs`) to `rust-analyzer`. Server specifications are owned configuration-ready values and lookup goes through the injected `LanguageServerRegistry` interface; user file loading is documented as a next slice in [External language-server configuration](language-configuration.md). Servers are not downloaded automatically. Unsupported files and unavailable servers leave ordinary editing intact and report feedback through notifications.
+At startup Eggplant loads `~/.eggplant/languages.toml`; if it is absent, the compatibility registry maps Rust files (`.rs`) to `rust-analyzer`. A present file replaces that default and uses owned specifications through the injected `LanguageServerRegistry` interface. See [External language-server configuration](language-configuration.md) for the supported format. Servers are not downloaded automatically. Unsupported files and unavailable servers leave ordinary editing intact and report feedback through notifications.
 
 Non-goals include completion, hover, rename, code actions, formatting, semantic tokens, workspace symbols, multiple workspace folders, incremental document synchronization, and bundling a catalog of external language tools.
 

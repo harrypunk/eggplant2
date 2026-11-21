@@ -27,17 +27,17 @@ The application composition root injects `Arc<dyn LanguageServerRegistry>` into 
 
 ## Current implementation status
 
-The abstraction, injection path, and strict TOML parser are implemented. `app::language_config::parse_language_servers` produces owned registry data without exposing TOML types to workflows. Compatibility production behavior still constructs `LanguageServers::rust_defaults()` at startup, which registers only:
+The abstraction, injection path, strict TOML parser, and user-file loading are implemented. `app::language_config::parse_language_servers` produces owned registry data without exposing TOML types to workflows. Production startup loads `~/.eggplant/languages.toml` before terminal initialization. If the file is absent, compatibility behavior registers only:
 
 ```text
 .rs → rust-analyzer
 ```
 
-Startup file discovery/loading is **not wired yet**. There is currently one active language service, one server per registered language, and one workspace root. The parser therefore rejects multiple providers per language. Service reuse requires an exact `LanguageServerSpec` match; changing language, command, arguments, or extensions drops the old service before starting another. This sequential replacement prevents cross-language process reuse. Retaining simultaneous providers and merging their diagnostics require additional routing slices.
+A present language file replaces the compatibility registry; an empty file disables language services explicitly. There is currently one active language service, one server per registered language, and one workspace root. The parser therefore rejects multiple providers per language. Service reuse requires an exact `LanguageServerSpec` match; changing language, command, arguments, or extensions drops the old service before starting another. This sequential replacement prevents cross-language process reuse. Retaining simultaneous providers and merging their diagnostics require additional routing slices.
 
-## Supported parser format
+## User configuration
 
-The app-layer parser accepts this Helix-style subset:
+Save the supported Helix-style subset as `~/.eggplant/languages.toml`:
 
 ```toml
 [language-server.typescript-language-server]
@@ -59,13 +59,13 @@ file-types = ["py", "pyi"]
 language-servers = ["ruff"]
 ```
 
-The parser accepts this format in application/library calls, but production startup does not yet read a language configuration file.
+Install the configured executables separately and ensure they are available on `PATH`. Configuration is loaded before terminal initialization; read and validation errors report the language-file path. Unsupported files and unavailable executables do not prevent ordinary editing.
 
 Configuration parsing produces owned registry values rather than leaking TOML types into application features. Unknown server references, duplicate languages, empty commands, missing/empty file types, unsupported fields, and multiple servers for one language fail with actionable errors. Missing executables remain runtime notifications and must not prevent ordinary editing.
 
 ## Later slices
 
-- Load user language configuration at startup, then optionally merge trusted project overrides.
+- Optionally merge trusted project overrides into the user language configuration.
 - Retain multiple idle/running services keyed by workspace root and server identity instead of sequentially replacing the active service.
 - Allow multiple servers per document: first capable provider for navigation, merged diagnostics from all providers.
 - Add server initialization/configuration values only when the basic loader and lifecycle are proven.

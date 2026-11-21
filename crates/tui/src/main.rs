@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use tui::{
-    capabilities::{language::LanguageServers, page_scroll::PageScroll},
-    config::Config,
+    capabilities::page_scroll::PageScroll,
+    config::{Config, load_language_servers},
     manager::{
         command_registry::CommandRegistry, keyboard_input_registry::Registry,
         text_input_registry::TextInputRegistry,
@@ -17,7 +17,7 @@ use tui::{
 async fn main() -> color_eyre::Result<()> {
     let initial_path = startup_path_from(std::env::args_os().skip(1))?;
     let config = Config::load()?;
-    let languages = Arc::new(LanguageServers::rust_defaults());
+    let languages = Arc::new(load_language_servers()?);
     let mut model = initial_model_with_languages(initial_path, languages)?;
     model.theme = config.theme.fallback_theme()?;
     model.page_scroll = PageScroll::from_step(&config.features.page_scroll.step)?;

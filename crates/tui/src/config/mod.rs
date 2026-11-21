@@ -1,9 +1,14 @@
 use std::{collections::HashMap, fs, io::ErrorKind, path::PathBuf};
 
+use color_eyre::eyre::WrapErr as _;
 use serde::{Deserialize, Serialize};
+
+use app::language::LanguageServers;
+use app::language_config::parse_language_servers;
 
 const DEFAULT_FOLDER: &str = ".eggplant";
 const CONFIG_FILE: &str = "config.toml";
+const LANGUAGES_FILE: &str = "languages.toml";
 
 /// Raw keymap entries: context -> action -> key binding.
 ///
@@ -277,6 +282,27 @@ impl Config {
     }
 }
 
+/// Load `~/.eggplant/languages.toml`, preserving Rust defaults when it is absent.
+pub fn load_language_servers() -> color_eyre::Result<LanguageServers> {
+    let Some(path) =
+        std::env::home_dir().map(|home| home.join(DEFAULT_FOLDER).join(LANGUAGES_FILE))
+    else {
+        return Ok(LanguageServers::rust_defaults());
+    };
+    load_language_servers_from(&path)
+}
+
+pub(crate) fn load_language_servers_from(
+    path: &std::path::Path,
+) -> color_eyre::Result<LanguageServers> {
+    match fs::read_to_string(path) {
+        Ok(content) => parse_language_servers(&content)
+            .wrap_err_with(|| format!("failed to parse `{}`", path.display())),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(LanguageServers::rust_defaults()),
+        Err(error) => Err(error).wrap_err_with(|| format!("failed to read `{}`", path.display())),
+    }
+}
+
 pub(crate) fn save_theme_to(path: &std::path::Path, theme: &ThemeConfig) -> Result<(), String> {
     let mut document = match fs::read_to_string(path) {
         Ok(content) => {
@@ -303,6 +329,8 @@ pub(crate) fn save_theme_to(path: &std::path::Path, theme: &ThemeConfig) -> Resu
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use super::*;
 
     #[test]
@@ -364,6 +392,53 @@ mod tests {
         let config =
             Config::parse("theme = { provider = \"vscode\", path = \"/tmp/theme\" }").unwrap();
         assert!(config.theme.fallback_theme().is_err());
+    }
+
+    #[test]
+    fn language_file_replaces_defaults_and_missing_file_preserves_them() {
+        let directory = tempfile::tempdir().unwrap();
+        let missing = directory.path().join("missing.toml");
+        let defaults = load_language_servers_from(&missing).unwrap();
+        assert!(defaults.find_for_path(Path::new("main.rs")).is_some());
+
+        let path = directory.path().join("languages.toml");
+        fs::write(
+            &path,
+            r#"
+[language-server.ts]
+command = "typescript-language-server"
+args = ["--stdio"]
+[[language]]
+name = "typescript"
+file-types = ["ts", "tsx"]
+language-servers = ["ts"]
+"#,
+        )
+        .unwrap();
+        let configured = load_language_servers_from(&path).unwrap();
+        assert!(configured.find_for_path(Path::new("main.ts")).is_some());
+        assert!(configured.find_for_path(Path::new("main.rs")).is_none());
+    }
+
+    #[test]
+    fn invalid_language_file_reports_its_path() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("languages.toml");
+        fs::write(
+            &path,
+            r#"
+[[language]]
+name = "typescript"
+file-types = ["ts"]
+language-servers = ["missing"]
+"#,
+        )
+        .unwrap();
+
+        let error = load_language_servers_from(&path).unwrap_err();
+        let message = format!("{error:#}");
+        assert!(message.contains(path.to_str().unwrap()));
+        assert!(message.contains("unknown language server"));
     }
 
     #[test]
