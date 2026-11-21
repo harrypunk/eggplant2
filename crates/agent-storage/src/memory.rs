@@ -154,64 +154,77 @@ impl SessionStore for InMemoryStore {
                 .state
                 .read()
                 .map_err(|_| StorageError::Backend("in-memory store lock failed".to_string()))?;
-            let mut hits = match query.kind {
-                SearchKind::Message => state
-                    .messages
-                    .values()
-                    .filter(|message| {
-                        message.session_id == query.session_id
-                            && query.role.is_none_or(|role| message.role == role)
-                            && query
-                                .text
-                                .as_ref()
-                                .is_none_or(|text| contains_text(&message.text, text))
-                    })
-                    .map(message_hit)
-                    .collect::<Vec<_>>(),
-                SearchKind::Tool => state
-                    .tool_calls
-                    .values()
-                    .filter(|call| {
-                        call.session_id == query.session_id
-                            && query
-                                .tool_name
-                                .as_ref()
-                                .is_none_or(|name| call.name == *name)
-                            && query
-                                .call_id
-                                .as_ref()
-                                .is_none_or(|call_id| call.call_id == *call_id)
-                            && query.text.as_ref().is_none_or(|text| {
-                                contains_text(&call.name, text)
-                                    || contains_text(&call.arguments, text)
-                                    || call
-                                        .result
-                                        .as_ref()
-                                        .is_some_and(|result| contains_text(&result.content, text))
-                            })
-                    })
-                    .map(tool_hit)
-                    .collect::<Vec<_>>(),
-            };
-            hits.sort_by_key(|hit| (hit.run_id, hit.sequence));
-            hits.retain(|hit| {
-                query
-                    .after
-                    .is_none_or(|after| (hit.run_id, hit.sequence) > (after.run_id, after.sequence))
-            });
-            let limit = page_limit(query.limit);
-            let next = (hits.len() > limit)
-                .then(|| hits.get(limit - 1))
-                .flatten()
-                .map(|hit| SearchCursor {
-                    run_id: hit.run_id,
-                    sequence: hit.sequence,
-                });
-            Ok(SearchPage {
-                hits: hits.into_iter().take(limit).collect(),
-                next,
-            })
+            let hits = matching_hits(&state, &query);
+            Ok(search_page(hits, query.after, query.limit))
         })
+    }
+}
+
+fn matching_hits(state: &MemoryState, query: &SearchQuery) -> Vec<SearchHit> {
+    match query.kind {
+        SearchKind::Message => state
+            .messages
+            .values()
+            .filter(|message| message_matches(message, query))
+            .map(message_hit)
+            .collect(),
+        SearchKind::Tool => state
+            .tool_calls
+            .values()
+            .filter(|call| tool_matches(call, query))
+            .map(tool_hit)
+            .collect(),
+    }
+}
+
+fn message_matches(message: &MessageRecord, query: &SearchQuery) -> bool {
+    message.session_id == query.session_id
+        && query.role.is_none_or(|role| message.role == role)
+        && text_matches(&message.text, query.text.as_deref())
+}
+
+fn tool_matches(call: &ToolCallRecord, query: &SearchQuery) -> bool {
+    call.session_id == query.session_id
+        && exact_matches(&call.name, query.tool_name.as_deref())
+        && exact_matches(&call.call_id, query.call_id.as_deref())
+        && tool_text_matches(call, query.text.as_deref())
+}
+
+fn exact_matches(value: &str, expected: Option<&str>) -> bool {
+    expected.is_none_or(|expected| value == expected)
+}
+
+fn text_matches(value: &str, query: Option<&str>) -> bool {
+    query.is_none_or(|query| contains_text(value, query))
+}
+
+fn tool_text_matches(call: &ToolCallRecord, query: Option<&str>) -> bool {
+    query.is_none_or(|query| {
+        [call.name.as_str(), call.arguments.as_str()]
+            .into_iter()
+            .chain(call.result.as_ref().map(|result| result.content.as_str()))
+            .any(|value| contains_text(value, query))
+    })
+}
+
+fn is_after_cursor(hit: &SearchHit, after: Option<SearchCursor>) -> bool {
+    after.is_none_or(|after| (hit.run_id, hit.sequence) > (after.run_id, after.sequence))
+}
+
+fn search_page(mut hits: Vec<SearchHit>, after: Option<SearchCursor>, limit: usize) -> SearchPage {
+    hits.sort_by_key(|hit| (hit.run_id, hit.sequence));
+    hits.retain(|hit| is_after_cursor(hit, after));
+    let limit = page_limit(limit);
+    let next = hits
+        .get(limit)
+        .and_then(|_| hits.get(limit - 1))
+        .map(|hit| SearchCursor {
+            run_id: hit.run_id,
+            sequence: hit.sequence,
+        });
+    SearchPage {
+        hits: hits.into_iter().take(limit).collect(),
+        next,
     }
 }
 

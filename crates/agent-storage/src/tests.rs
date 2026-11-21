@@ -5,8 +5,11 @@ use eggplant_agent::{
 use crate::*;
 
 fn finalized(id: &str, updated_at: i64) -> FinalizedRun {
+    finalized_run(id, RunId(1), updated_at)
+}
+
+fn finalized_run(id: &str, run_id: RunId, updated_at: i64) -> FinalizedRun {
     let session_id = SessionId::from(id);
-    let run_id = RunId(1);
     FinalizedRun {
         session: SessionRecord {
             id: session_id.clone(),
@@ -183,6 +186,55 @@ async fn recent_sessions_orders_timestamp_ties_and_filters_workspace() {
         .await
         .unwrap();
     assert!(other_workspace.sessions.is_empty());
+}
+
+#[tokio::test]
+async fn search_pages_continue_after_run_and_sequence() {
+    let store = InMemoryStore::new();
+    store
+        .finalize_run(finalized("session-1", 10), CancellationToken::default())
+        .await
+        .unwrap();
+    store
+        .finalize_run(
+            finalized_run("session-1", RunId(2), 20),
+            CancellationToken::default(),
+        )
+        .await
+        .unwrap();
+
+    let first = store
+        .search(SearchQuery {
+            limit: 1,
+            ..SearchQuery::messages(SessionId::from("session-1"))
+        })
+        .await
+        .unwrap();
+    assert_eq!(first.hits.len(), 1);
+    assert_eq!(
+        (first.hits[0].run_id, first.hits[0].sequence),
+        (RunId(1), 0)
+    );
+    assert!(first.next.is_some());
+
+    let remainder = store
+        .search(SearchQuery {
+            after: first.next,
+            limit: 3,
+            ..SearchQuery::messages(SessionId::from("session-1"))
+        })
+        .await
+        .unwrap();
+    assert_eq!(remainder.next, None);
+    assert_eq!(remainder.hits.len(), 3);
+    assert_eq!(
+        remainder
+            .hits
+            .iter()
+            .map(|hit| (hit.run_id, hit.sequence))
+            .collect::<Vec<_>>(),
+        vec![(RunId(1), 1), (RunId(2), 0), (RunId(2), 1)]
+    );
 }
 
 #[tokio::test]
