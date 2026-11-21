@@ -1,10 +1,10 @@
 use ratatui::{
     buffer::Buffer,
-    layout::{Position, Rect},
-    widgets::{Block, Paragraph, Widget},
+    layout::{Position, Rect, Size},
+    widgets::{Block, Widget},
 };
-use unicode_width::UnicodeWidthStr;
 
+use super::text_layout::{TextFlow, TextLayout};
 use crate::theme::UiTheme;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -150,15 +150,39 @@ impl TextInput {
     }
 
     pub fn view<'a>(&'a self, styles: &'a UiTheme) -> TextInputView<'a> {
+        self.view_with_flow(styles, TextFlow::SingleLine)
+    }
+
+    pub fn view_with_flow<'a>(&'a self, styles: &'a UiTheme, flow: TextFlow) -> TextInputView<'a> {
         TextInputView {
             value: &self.value,
             cursor: self.cursor,
+            flow,
             styles,
         }
     }
 
+    pub fn measure(&self, width: u16, flow: TextFlow) -> Size {
+        let layout = TextLayout::new(
+            &self.value,
+            self.cursor.byte_index(&self.value),
+            width.saturating_sub(2),
+            flow,
+        );
+        Size::new(width, layout.preferred_height().saturating_add(2))
+    }
+
     pub fn cursor_position(&self, area: Rect, styles: &UiTheme) -> Option<Position> {
         self.view(styles).cursor_position(area)
+    }
+
+    pub fn cursor_position_with_flow(
+        &self,
+        area: Rect,
+        styles: &UiTheme,
+        flow: TextFlow,
+    ) -> Option<Position> {
+        self.view_with_flow(styles, flow).cursor_position(area)
     }
 }
 
@@ -175,6 +199,7 @@ impl std::ops::Deref for TextInput {
 pub struct TextInputView<'a> {
     value: &'a str,
     cursor: TextCursor,
+    flow: TextFlow,
     styles: &'a UiTheme,
 }
 
@@ -183,35 +208,23 @@ impl<'a> TextInputView<'a> {
         Self {
             value,
             cursor: TextCursor::end(value),
+            flow: TextFlow::SingleLine,
             styles,
         }
     }
 
     pub fn cursor_position(self, area: Rect) -> Option<Position> {
-        let inner = Block::bordered().inner(area);
-        if inner.width == 0 || inner.height == 0 {
-            return None;
-        }
-        let width = self.cursor_width();
-        let offset = self.scroll_offset(inner);
-        let column = width.saturating_sub(offset);
-        let column = u16::try_from(column).unwrap_or(u16::MAX);
-        if column >= inner.width {
-            return None;
-        }
-        Some(Position::new(inner.x + column, inner.y))
+        self.layout(area)
+            .cursor_position(Block::bordered().inner(area))
     }
 
-    fn cursor_width(self) -> usize {
-        let index = self.cursor.byte_index(self.value);
-        UnicodeWidthStr::width(&self.value[..index])
-    }
-
-    fn scroll_offset(self, inner: Rect) -> usize {
-        let visible = inner.width.saturating_sub(1).into();
-        self.cursor_width()
-            .saturating_sub(visible)
-            .min(u16::MAX.into())
+    fn layout(self, area: Rect) -> TextLayout {
+        TextLayout::new(
+            self.value,
+            self.cursor.byte_index(self.value),
+            Block::bordered().inner(area).width,
+            self.flow,
+        )
     }
 }
 
@@ -219,13 +232,11 @@ impl Widget for TextInputView<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let surface = self.styles.popup_surface();
         let border = surface.patch(self.styles.border);
-        let inner = Block::bordered().inner(area);
-        let offset = u16::try_from(self.scroll_offset(inner)).unwrap_or(u16::MAX);
-        Paragraph::new(self.value)
+        Block::bordered()
             .style(surface)
-            .block(Block::bordered().style(surface).border_style(border))
-            .scroll((0, offset))
+            .border_style(border)
             .render(area, buf);
+        self.layout(area).render(Block::bordered().inner(area), buf);
     }
 }
 
@@ -283,6 +294,16 @@ mod tests {
             input.cursor_position(area, theme.ui()),
             Some(Position::new(4, 1))
         );
+    }
+
+    #[test]
+    fn wrapped_measurement_grows_with_visual_lines() {
+        let input = TextInput::new("abc");
+        assert_eq!(input.measure(20, TextFlow::SingleLine), Size::new(20, 3));
+        assert_eq!(input.measure(20, TextFlow::Wrapped), Size::new(20, 3));
+
+        let input = TextInput::new("12345678901234567890");
+        assert_eq!(input.measure(10, TextFlow::Wrapped), Size::new(10, 5));
     }
 
     #[test]

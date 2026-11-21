@@ -1,12 +1,13 @@
 use editor::{LineChange, LineSnapshot, TextViewSnapshot};
 use ratatui::{
     buffer::Buffer,
-    layout::{Constraint, Flex, Layout, Rect},
+    layout::{Constraint, Flex, Layout, Position, Rect},
     text::{Line, Span},
     widgets::{Paragraph, Widget},
 };
 use unicode_width::UnicodeWidthStr;
 
+use super::text_layout::{DisplayLine, TextFlow, TextLayout, TextPoint, byte_at_display_width};
 use crate::theme::Theme;
 
 /// Shared read-only document viewport for editor buffers and text previews.
@@ -14,11 +15,27 @@ use crate::theme::Theme;
 pub struct TextView<'a> {
     snapshot: &'a TextViewSnapshot,
     theme: &'a Theme,
+    flow: TextFlow,
+    cursor: Option<editor::CursorPosition>,
 }
 
 impl<'a> TextView<'a> {
     pub fn new(snapshot: &'a TextViewSnapshot, theme: &'a Theme) -> Self {
-        Self { snapshot, theme }
+        Self::with_flow(snapshot, theme, TextFlow::SingleLine)
+    }
+
+    pub fn with_flow(snapshot: &'a TextViewSnapshot, theme: &'a Theme, flow: TextFlow) -> Self {
+        Self {
+            snapshot,
+            theme,
+            flow,
+            cursor: None,
+        }
+    }
+
+    pub fn with_cursor(mut self, cursor: Option<editor::CursorPosition>) -> Self {
+        self.cursor = cursor;
+        self
     }
 
     /// Text region shared by rendering, viewport sizing, and cursor placement.
@@ -32,40 +49,21 @@ impl<'a> TextView<'a> {
         text
     }
 
+    pub fn cursor_position(&self, area: Rect) -> Option<Position> {
+        match self.flow {
+            TextFlow::SingleLine => self.cursor.and_then(|cursor| {
+                let column = u16::try_from(cursor.column).ok()?;
+                let row = u16::try_from(cursor.row).ok()?;
+                (column < area.width && row < area.height)
+                    .then_some(Position::new(area.x + column, area.y + row))
+            }),
+            TextFlow::Wrapped => self.wrapped_rows(area.width).cursor_position(area),
+        }
+    }
+
     fn gutter_width(snapshot: &TextViewSnapshot) -> u16 {
         let digits = snapshot.line_count.max(1).to_string().len();
         u16::try_from(digits + 1).unwrap_or(u16::MAX)
-    }
-
-    fn apply_selection(&self, text_area: Rect, buf: &mut Buffer) {
-        self.snapshot
-            .lines
-            .iter()
-            .enumerate()
-            .filter_map(|(row, line)| {
-                let range = line.selection.as_ref()?;
-                let start = UnicodeWidthStr::width(&line.text[..range.start]);
-                let end = UnicodeWidthStr::width(&line.text[..range.end]);
-                let offset = self.snapshot.horizontal_offset;
-                let viewport_start = offset;
-                let viewport_end = offset + usize::from(text_area.width);
-                let start = start.max(viewport_start);
-                let end = end.min(viewport_end);
-                if end <= start {
-                    return None;
-                }
-                let row = u16::try_from(row).ok()?;
-                if row >= text_area.height {
-                    return None;
-                }
-                Some(Rect::new(
-                    text_area.x + u16::try_from(start - offset).ok()?,
-                    text_area.y + row,
-                    u16::try_from(end - start).ok()?,
-                    1,
-                ))
-            })
-            .for_each(|area| buf.set_style(area, self.theme.ui().selection));
     }
 
     fn line(&self, snapshot: &LineSnapshot) -> Line<'static> {
@@ -102,10 +100,168 @@ impl<'a> TextView<'a> {
             .collect::<Vec<_>>();
         Line::from(spans)
     }
+
+    fn line_number(&self, index: usize, change: Option<LineChange>) -> Line<'static> {
+        let number_width = usize::from(Self::gutter_width(self.snapshot)).saturating_sub(1);
+        let base = self.theme.ui().base.patch(self.theme.ui().muted);
+        let marker = match change {
+            Some(LineChange::Added) => ("│", self.theme.ui().diff_add),
+            Some(LineChange::Deleted) => ("│", self.theme.ui().diff_remove),
+            Some(LineChange::Modified) => ("│", self.theme.ui().diff_hunk),
+            None => (" ", base),
+        };
+        Line::from(vec![
+            Span::styled(
+                format!("{:>number_width$}", self.snapshot.first_line + index + 1),
+                base,
+            ),
+            Span::styled(marker.0, base.patch(marker.1)),
+        ])
+    }
+
+    fn continuation_gutter(&self) -> Line<'static> {
+        let width = usize::from(Self::gutter_width(self.snapshot));
+        Line::raw(" ".repeat(width))
+    }
 }
 
-impl Widget for TextView<'_> {
-    fn render(self, area: Rect, buf: &mut Buffer) {
+#[derive(Debug)]
+struct WrappedRow {
+    gutter: Option<Line<'static>>,
+    content: Line<'static>,
+    logical_line: usize,
+    start: usize,
+    end: usize,
+}
+
+#[derive(Debug)]
+struct WrappedLineInput<'a> {
+    logical_line: usize,
+    snapshot_line: &'a LineSnapshot,
+    layout: TextLayout,
+    styled: Line<'static>,
+}
+
+#[derive(Debug)]
+struct WrappedView {
+    rows: Vec<WrappedRow>,
+    cursor: Option<TextPoint>,
+}
+
+impl WrappedView {
+    fn empty() -> Self {
+        Self {
+            rows: Vec::new(),
+            cursor: None,
+        }
+    }
+
+    fn push_line(self, view: &TextView, input: WrappedLineInput) -> Self {
+        let Self { rows, cursor } = self;
+        let (rows, cursor) = input.layout.lines().iter().enumerate().fold(
+            (rows, cursor),
+            |(mut rows, cursor), (segment, display)| {
+                let cursor = cursor_at_segment(cursor, &input.layout, segment, rows.len());
+                rows.push(row_for_display(view, &input, segment, display));
+                (rows, cursor)
+            },
+        );
+        Self { rows, cursor }
+    }
+
+    fn vertical_offset(&self, height: u16) -> usize {
+        self.cursor
+            .map(|cursor| cursor.row)
+            .unwrap_or(0)
+            .saturating_sub((height as usize).saturating_sub(1))
+    }
+
+    fn cursor_position(&self, area: Rect) -> Option<Position> {
+        if area.width == 0 || area.height == 0 {
+            return None;
+        }
+        let cursor = self.cursor?;
+        let offset = self.vertical_offset(area.height);
+        if cursor.row < offset || cursor.row >= offset + area.height as usize {
+            return None;
+        }
+        Some(Position::new(
+            area.x + (cursor.column.min(area.width.saturating_sub(1) as usize) as u16),
+            area.y + (cursor.row - offset) as u16,
+        ))
+    }
+}
+
+impl TextView<'_> {
+    fn wrapped_rows(&self, width: u16) -> WrappedView {
+        self.snapshot.lines.iter().enumerate().fold(
+            WrappedView::empty(),
+            |view, (logical_line, snapshot_line)| {
+                view.push_line(self, self.line_input(logical_line, snapshot_line, width))
+            },
+        )
+    }
+
+    fn line_input<'a>(
+        &'a self,
+        logical_line: usize,
+        snapshot_line: &'a LineSnapshot,
+        width: u16,
+    ) -> WrappedLineInput<'a> {
+        let cursor_byte = self.cursor_byte(snapshot_line, logical_line);
+        WrappedLineInput {
+            logical_line,
+            snapshot_line,
+            layout: TextLayout::new(&snapshot_line.text, cursor_byte, width, TextFlow::Wrapped),
+            styled: self.line(snapshot_line),
+        }
+    }
+
+    fn cursor_byte(&self, snapshot_line: &LineSnapshot, logical_line: usize) -> usize {
+        self.cursor
+            .filter(|cursor| cursor.row == logical_line)
+            .map(|cursor| {
+                byte_at_display_width(
+                    &snapshot_line.text,
+                    self.snapshot.horizontal_offset + cursor.column,
+                )
+            })
+            .unwrap_or(snapshot_line.text.len())
+    }
+}
+
+fn row_for_display(
+    view: &TextView,
+    input: &WrappedLineInput,
+    segment: usize,
+    display: &DisplayLine,
+) -> WrappedRow {
+    WrappedRow {
+        gutter: (segment == 0)
+            .then(|| view.line_number(input.logical_line, input.snapshot_line.change)),
+        content: slice_line(&input.styled, display),
+        logical_line: input.logical_line,
+        start: display.start,
+        end: display.end,
+    }
+}
+
+fn cursor_at_segment(
+    current: Option<TextPoint>,
+    layout: &TextLayout,
+    segment: usize,
+    row: usize,
+) -> Option<TextPoint> {
+    current.or_else(|| {
+        (layout.cursor().row == segment).then_some(TextPoint {
+            row,
+            column: layout.cursor().column,
+        })
+    })
+}
+
+impl TextView<'_> {
+    fn render_single_line(self, area: Rect, buf: &mut Buffer) {
         let [gutter_area, text_area] = Layout::horizontal([
             Constraint::Length(Self::gutter_width(self.snapshot)),
             Constraint::Fill(1),
@@ -113,28 +269,12 @@ impl Widget for TextView<'_> {
         .flex(Flex::Start)
         .areas(area);
         let horizontal_offset = u16::try_from(self.snapshot.horizontal_offset).unwrap_or(u16::MAX);
-        let number_width = usize::from(Self::gutter_width(self.snapshot)).saturating_sub(1);
         let line_numbers = self
             .snapshot
             .lines
             .iter()
             .enumerate()
-            .map(|(index, line)| {
-                let base = self.theme.ui().base.patch(self.theme.ui().muted);
-                let marker = match line.change {
-                    Some(LineChange::Added) => ("│", self.theme.ui().diff_add),
-                    Some(LineChange::Deleted) => ("│", self.theme.ui().diff_remove),
-                    Some(LineChange::Modified) => ("│", self.theme.ui().diff_hunk),
-                    None => (" ", base),
-                };
-                Line::from(vec![
-                    Span::styled(
-                        format!("{:>number_width$}", self.snapshot.first_line + index + 1),
-                        base,
-                    ),
-                    Span::styled(marker.0, base.patch(marker.1)),
-                ])
-            })
+            .map(|(index, line)| self.line_number(index, line.change))
             .collect::<Vec<_>>();
         let lines = self
             .snapshot
@@ -150,8 +290,139 @@ impl Widget for TextView<'_> {
             .style(self.theme.ui().base)
             .scroll((0, horizontal_offset))
             .render(text_area, buf);
-        self.apply_selection(text_area, buf);
+        self.apply_selection_single_line(text_area, buf);
     }
+
+    fn render_wrapped(self, area: Rect, buf: &mut Buffer) {
+        let [gutter_area, text_area] = Layout::horizontal([
+            Constraint::Length(Self::gutter_width(self.snapshot)),
+            Constraint::Fill(1),
+        ])
+        .flex(Flex::Start)
+        .areas(area);
+        let view = self.wrapped_rows(text_area.width);
+        let offset = view.vertical_offset(text_area.height);
+        let visible = view
+            .rows
+            .iter()
+            .skip(offset)
+            .take(text_area.height as usize);
+        let line_numbers = visible
+            .clone()
+            .map(|row| {
+                row.gutter
+                    .clone()
+                    .unwrap_or_else(|| self.continuation_gutter())
+            })
+            .collect::<Vec<_>>();
+        let lines = visible.map(|row| row.content.clone()).collect::<Vec<_>>();
+        Paragraph::new(line_numbers)
+            .style(self.theme.ui().base.patch(self.theme.ui().muted))
+            .render(gutter_area, buf);
+        Paragraph::new(lines)
+            .style(self.theme.ui().base)
+            .render(text_area, buf);
+        view.rows
+            .iter()
+            .skip(offset)
+            .take(text_area.height as usize)
+            .enumerate()
+            .for_each(|(row_index, row)| {
+                self.apply_selection_wrapped(text_area, buf, row_index, row);
+            });
+    }
+
+    fn apply_selection_single_line(&self, text_area: Rect, buf: &mut Buffer) {
+        self.snapshot
+            .lines
+            .iter()
+            .enumerate()
+            .filter_map(|(row, line)| {
+                let range = line.selection.as_ref()?;
+                let start = UnicodeWidthStr::width(&line.text[..range.start]);
+                let end = UnicodeWidthStr::width(&line.text[..range.end]);
+                let offset = self.snapshot.horizontal_offset;
+                let viewport_start = offset;
+                let viewport_end = offset + usize::from(text_area.width);
+                let start = start.max(viewport_start);
+                let end = end.min(viewport_end);
+                if end <= start {
+                    return None;
+                }
+                let row = u16::try_from(row).ok()?;
+                if row >= text_area.height {
+                    return None;
+                }
+                Some(Rect::new(
+                    text_area.x + u16::try_from(start - offset).ok()?,
+                    text_area.y + row,
+                    u16::try_from(end - start).ok()?,
+                    1,
+                ))
+            })
+            .for_each(|area| buf.set_style(area, self.theme.ui().selection));
+    }
+
+    fn apply_selection_wrapped(
+        &self,
+        text_area: Rect,
+        buf: &mut Buffer,
+        row_index: usize,
+        row: &WrappedRow,
+    ) {
+        let snapshot = &self.snapshot.lines[row.logical_line];
+        let Some(selection) = &snapshot.selection else {
+            return;
+        };
+        let start = selection.start.max(row.start);
+        let end = selection.end.min(row.end);
+        if start >= end {
+            return;
+        }
+        let start_width = UnicodeWidthStr::width(&snapshot.text[row.start..start]);
+        let end_width = UnicodeWidthStr::width(&snapshot.text[row.start..end]);
+        if end_width <= start_width {
+            return;
+        }
+        let area = Rect::new(
+            text_area.x + u16::try_from(start_width).unwrap_or(u16::MAX),
+            text_area.y + u16::try_from(row_index).unwrap_or(u16::MAX),
+            u16::try_from(end_width - start_width).unwrap_or(u16::MAX),
+            1,
+        );
+        buf.set_style(area, self.theme.ui().selection);
+    }
+}
+
+impl Widget for TextView<'_> {
+    fn render(self, area: Rect, buf: &mut Buffer) {
+        match self.flow {
+            TextFlow::SingleLine => self.render_single_line(area, buf),
+            TextFlow::Wrapped => self.render_wrapped(area, buf),
+        }
+    }
+}
+
+fn slice_line(line: &Line<'static>, display: &DisplayLine) -> Line<'static> {
+    let mut offset = 0;
+    let spans = line
+        .spans
+        .iter()
+        .filter_map(|span| {
+            let span_start = offset;
+            let span_end = span_start + span.content.len();
+            offset = span_end;
+            let start = span_start.max(display.start);
+            let end = span_end.min(display.end);
+            (start < end).then(|| {
+                Span::styled(
+                    span.content[start - span_start..end - span_start].to_string(),
+                    span.style,
+                )
+            })
+        })
+        .collect::<Vec<_>>();
+    Line::from(spans)
 }
 
 #[cfg(test)]
@@ -261,5 +532,32 @@ mod tests {
                 .iter()
                 .any(|cell| cell.symbol() == "b" && !cell.modifier.contains(Modifier::REVERSED))
         );
+    }
+
+    #[test]
+    fn wrapped_view_preserves_spans_gutters_and_cursor_visibility() {
+        let mut snapshot = TextViewSnapshot::plain(vec!["abcdef".to_string(), "next".to_string()]);
+        snapshot.first_line = 0;
+        snapshot.line_count = 2;
+        let cursor = Some(editor::CursorPosition { row: 0, column: 4 });
+        let theme = Theme::default();
+        let view = TextView::with_flow(&snapshot, &theme, TextFlow::Wrapped).with_cursor(cursor);
+        let backend = TestBackend::new(8, 2);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal
+            .draw(|frame| view.render(frame.area(), frame.buffer_mut()))
+            .unwrap();
+
+        let content = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(content.contains("1 ab"));
+        assert!(content.contains("cd"));
+        assert!(view.cursor_position(Rect::new(0, 0, 5, 2)).is_some());
     }
 }

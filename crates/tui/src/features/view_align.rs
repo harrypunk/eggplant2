@@ -39,6 +39,11 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
             "cancel pending viewport alignment",
             handle_command,
         ),
+        Command::feature(
+            CommandId("view_toggle_wrap"),
+            "toggle editor text wrapping",
+            handle_command,
+        ),
     ]
     .into_iter()
     .try_for_each(|command| commands.register(command))
@@ -52,6 +57,17 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     match id.as_str() {
         "view_align_start" => start(model),
         "view_align_cancel" => reset(model),
+        "view_toggle_wrap" => {
+            model.editor_view.toggle_wrap();
+            model.status = Some(StatusMessage::info(
+                if model.editor_view.flow() == crate::component::text_layout::TextFlow::Wrapped {
+                    "Editor wrap enabled"
+                } else {
+                    "Editor wrap disabled"
+                }
+                .to_string(),
+            ));
+        }
         _ => {
             model.status = Some(StatusMessage::error(format!(
                 "unknown view-alignment command `{}`",
@@ -194,5 +210,28 @@ mod tests {
         start_alignment(&mut model, &manager);
         manager.update(&mut model, Message::TextInput('z'));
         assert_eq!(model.pending_input, None);
+    }
+
+    #[test]
+    fn wrap_toggle_changes_only_the_view_option() {
+        let mut model = Model::default();
+        create_buffer(&mut model, "unchanged");
+        let revision = model.editor.active_revision();
+
+        handle_command(&mut model, CommandId("view_toggle_wrap"));
+        assert_eq!(
+            model.editor_view.flow(),
+            crate::component::text_layout::TextFlow::Wrapped
+        );
+        handle_command(&mut model, CommandId("view_toggle_wrap"));
+        assert_eq!(
+            model.editor_view.flow(),
+            crate::component::text_layout::TextFlow::SingleLine
+        );
+        assert_eq!(model.editor.active_revision(), revision);
+        assert_eq!(
+            model.editor.active_text_snapshot().unwrap().text,
+            "unchanged"
+        );
     }
 }

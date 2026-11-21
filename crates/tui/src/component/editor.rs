@@ -5,14 +5,33 @@ use ratatui::{
     widgets::{Paragraph, Widget},
 };
 
-use super::{buffer_tabs::BufferTabs, text_view::TextView};
+use super::{buffer_tabs::BufferTabs, text_layout::TextFlow, text_view::TextView};
 use crate::{data_object::FocusState, theme::Theme};
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct EditorViewOptions {
+    flow: TextFlow,
+}
+
+impl EditorViewOptions {
+    pub fn flow(self) -> TextFlow {
+        self.flow
+    }
+
+    pub fn toggle_wrap(&mut self) {
+        self.flow = match self.flow {
+            TextFlow::SingleLine => TextFlow::Wrapped,
+            TextFlow::Wrapped => TextFlow::SingleLine,
+        };
+    }
+}
 
 #[derive(Debug)]
 pub struct Editor<'a> {
     snapshot: Option<&'a EditorSnapshot>,
     focus: FocusState,
     theme: &'a Theme,
+    flow: TextFlow,
 }
 
 impl<'a> Editor<'a> {
@@ -21,7 +40,13 @@ impl<'a> Editor<'a> {
             snapshot,
             focus,
             theme,
+            flow: TextFlow::SingleLine,
         }
+    }
+
+    pub fn with_flow(mut self, flow: TextFlow) -> Self {
+        self.flow = flow;
+        self
     }
 
     pub fn content_area(area: Rect) -> Rect {
@@ -44,15 +69,9 @@ impl<'a> Editor<'a> {
         if content.width == 0 || content.height == 0 {
             return None;
         }
-        let column = u16::try_from(cursor.column).unwrap_or(u16::MAX);
-        let row = u16::try_from(cursor.row).unwrap_or(u16::MAX);
-        if column >= content.width || row >= content.height {
-            return None;
-        }
-        Some(Position::new(
-            content.x.saturating_add(column),
-            content.y.saturating_add(row),
-        ))
+        TextView::with_flow(&snapshot.text, self.theme, self.flow)
+            .with_cursor(Some(cursor))
+            .cursor_position(content)
     }
 }
 
@@ -66,7 +85,7 @@ impl Widget for Editor<'_> {
         match self.snapshot {
             Some(snapshot) => {
                 BufferTabs::new(snapshot, self.theme.ui()).render(tabs_area, buf);
-                EditorBuffer::new(snapshot, self.theme).render(content_area, buf);
+                EditorBuffer::with_flow(snapshot, self.theme, self.flow).render(content_area, buf);
             }
             None => Paragraph::new("No file open")
                 .style(self.theme.ui().base)
@@ -80,11 +99,20 @@ impl Widget for Editor<'_> {
 pub struct EditorBuffer<'a> {
     snapshot: &'a EditorSnapshot,
     theme: &'a Theme,
+    flow: TextFlow,
 }
 
 impl<'a> EditorBuffer<'a> {
     pub fn new(snapshot: &'a EditorSnapshot, theme: &'a Theme) -> Self {
-        Self { snapshot, theme }
+        Self::with_flow(snapshot, theme, TextFlow::SingleLine)
+    }
+
+    pub fn with_flow(snapshot: &'a EditorSnapshot, theme: &'a Theme, flow: TextFlow) -> Self {
+        Self {
+            snapshot,
+            theme,
+            flow,
+        }
     }
 
     /// Text region shared by rendering, viewport sizing, and cursor placement.
@@ -95,7 +123,9 @@ impl<'a> EditorBuffer<'a> {
 
 impl Widget for EditorBuffer<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        TextView::new(&self.snapshot.text, self.theme).render(area, buf);
+        TextView::with_flow(&self.snapshot.text, self.theme, self.flow)
+            .with_cursor(self.snapshot.cursor)
+            .render(area, buf);
     }
 }
 

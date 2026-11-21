@@ -8,7 +8,9 @@ use ratatui::{
 
 use super::AgentState;
 use crate::{
-    component::{popup::Popup, popup::content_area},
+    component::{
+        auto_height::AutoHeight, popup::Popup, popup::content_area, text_layout::TextFlow,
+    },
     data_object::{FocusTarget, Model},
     theme::UiTheme,
     ui::{OverlayContribution, OverlayKind, OverlayPlacement},
@@ -21,7 +23,7 @@ impl AgentDialog {
         model.agent.dialog_open().then(|| {
             let size = match model.agent.session().pending_approval() {
                 Some(_) => ratatui::layout::Size::new(90, 24),
-                None => ratatui::layout::Size::new(70, 12),
+                None => prompt_dialog_size(model),
             };
             OverlayContribution::new(
                 "agent",
@@ -51,13 +53,35 @@ impl AgentDialog {
             .pending_approval()
             .is_none()
             .then(|| {
-                model
-                    .agent
-                    .prompt_state()
-                    .cursor_position(input_area(area), model.theme.ui())
+                model.agent.prompt_state().cursor_position_with_flow(
+                    input_area(model, area),
+                    model.theme.ui(),
+                    TextFlow::Wrapped,
+                )
             })
             .flatten()
     }
+}
+
+const PROMPT_AUTO_HEIGHT: AutoHeight = AutoHeight::new(12, 24, 2, 9, 4);
+
+fn prompt_dialog_size(model: &Model) -> ratatui::layout::Size {
+    PROMPT_AUTO_HEIGHT.dialog_size(model.agent.prompt_state(), 68, TextFlow::Wrapped)
+}
+
+fn prompt_input_height(state: &AgentState, area: Rect) -> u16 {
+    PROMPT_AUTO_HEIGHT.input_height(state.prompt_state(), area, TextFlow::Wrapped)
+}
+
+fn prompt_area(state: &AgentState, area: Rect) -> Rect {
+    let input_height = prompt_input_height(state, area);
+    let [_, input, _] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Length(input_height),
+        Constraint::Fill(1),
+    ])
+    .areas(area);
+    input
 }
 
 struct AgentDialogContent<'a> {
@@ -75,7 +99,7 @@ impl AgentDialogContent<'_> {
     fn render_prompt(self, area: Rect, buffer: &mut ratatui::buffer::Buffer) {
         let [status, input, assistant] = Layout::vertical([
             Constraint::Length(1),
-            Constraint::Length(3),
+            Constraint::Length(prompt_input_height(self.state, area)),
             Constraint::Fill(1),
         ])
         .areas(area);
@@ -95,7 +119,7 @@ impl AgentDialogContent<'_> {
             .render(status, buffer);
         self.state
             .prompt_state()
-            .view(self.styles)
+            .view_with_flow(self.styles, TextFlow::Wrapped)
             .render(input, buffer);
         let text = self
             .state
@@ -165,14 +189,8 @@ fn diff_lines(diff: &str, styles: &UiTheme) -> Vec<Line<'static>> {
         .collect()
 }
 
-fn input_area(area: Rect) -> Rect {
-    let [_, input, _] = Layout::vertical([
-        Constraint::Length(1),
-        Constraint::Length(3),
-        Constraint::Fill(1),
-    ])
-    .areas(content_area(area));
-    input
+fn input_area(model: &Model, area: Rect) -> Rect {
+    prompt_area(&model.agent, content_area(area))
 }
 
 pub struct AgentPanel;
@@ -422,5 +440,33 @@ mod tests {
         assert!(panel_content.contains("Approval: Replace text in main.rs"));
         assert!(panel_content.contains("before"));
         assert!(panel_content.contains("after"));
+    }
+
+    #[test]
+    fn wrapped_prompt_grows_dialog_and_keeps_cursor_visible() {
+        let mut model = Model::default();
+        let buffer = create_buffer(&mut model, "before");
+        model.agent.open_dialog(
+            crate::agent::EditorContext {
+                buffer,
+                path: std::path::PathBuf::from("/workspace/main.rs"),
+                revision: 1,
+                line: 1,
+            },
+            "ab".repeat(100),
+        );
+        let size = prompt_dialog_size(&model);
+        assert_eq!(size, ratatui::layout::Size::new(70, 15));
+        let area = ratatui::layout::Rect::new(0, 0, size.width, size.height);
+        let cursor = AgentDialog::cursor(&model, area).unwrap();
+        assert!(cursor.x < area.width && cursor.y < area.height);
+        assert!(
+            prompt_input_height(&model.agent, content_area(area)) <= content_area(area).height - 4
+        );
+
+        let mut dialog = Terminal::new(TestBackend::new(size.width, size.height)).unwrap();
+        dialog
+            .draw(|frame| AgentDialog::render(&model, frame, frame.area()))
+            .unwrap();
     }
 }

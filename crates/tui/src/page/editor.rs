@@ -35,11 +35,17 @@ impl Editor {
         let overlays = self.ui.overlays(model);
         let editor_overlays = self.ui.editor_overlays(model);
         let snapshot = model.editor.active_snapshot();
+        let flow = if editor_overlays.is_empty() {
+            model.editor_view.flow()
+        } else {
+            crate::component::text_layout::TextFlow::SingleLine
+        };
         let editor = EditorComponent::new(
             snapshot.as_ref(),
             focus_for(model.current_focus, FocusTarget::Editor),
             &model.theme,
-        );
+        )
+        .with_flow(flow);
         let cursor = editor.cursor_position(areas.editor);
 
         areas.explorer.into_iter().for_each(|area| {

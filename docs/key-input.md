@@ -17,6 +17,7 @@ Available in Normal and Explorer contexts unless noted otherwise.
 | Find/open a file | `Space Space` or `Space f f` |
 | Select a UI theme | `Space u t` |
 | Open inline AI agent | `Ctrl-I` |
+| Toggle editor text wrapping | `Space u w` |
 | Toggle agent tool panel | `Space a t` |
 | Go to definition | `Space c d` |
 | Find references | `Space c r` |
@@ -247,7 +248,7 @@ The picker lists local `main`/`master`, existing remote-tracking branches, and t
 
 Enter accepts, opens, or submits; arrows navigate lists or move the insertion cursor; Escape cancels or closes; Backspace edits single-line input; `y` confirms destructive Explorer deletion. These common behaviors are fixed in input routing and cannot be overridden through configuration.
 
-Every single-line popup `TextInput` supports `Left`/`Right` movement at Unicode-scalar boundaries, including insertion and Backspace at the current cursor. `Up`/`Down` remains list navigation. Normal/Insert editor buffers and the VCS commit editor retain their existing Helix cursor behavior.
+Every single-line popup `TextInput` supports `Left`/`Right` movement at Unicode-scalar boundaries, including insertion and Backspace at the current cursor. `Up`/`Down` remains list navigation. Normal/Insert editor buffers and the VCS commit editor retain their existing Helix cursor behavior. `Space u w` independently toggles visual wrapping for the main editor viewport; popup inputs keep their own single-line or wrapped layout policy.
 
 ## Configuration
 

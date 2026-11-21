@@ -1,3 +1,4 @@
+pub mod auto_height;
 pub mod buffer_tabs;
 pub mod commit_message;
 pub mod diagnostics_panel;
@@ -13,5 +14,6 @@ pub mod relative_time;
 pub mod search_highlight;
 pub mod status_bar;
 pub mod text_input;
+pub mod text_layout;
 pub mod text_view;
 pub mod tools_panel;

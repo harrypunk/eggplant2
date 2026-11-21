@@ -49,6 +49,7 @@ pub mod data_object {
         change::ChangeState,
         code_navigation::CodeNavigationState,
         command_menu::CommandMenuState,
+        component::editor::EditorViewOptions,
         diagnostics::DiagnosticsState,
         explorer::ExplorerState,
         file_picker::FilePickerState,
@@ -129,6 +130,7 @@ pub mod data_object {
 
         // Editor-owned document and editing state.
         pub editor: EditorSession,
+        pub editor_view: EditorViewOptions,
         pub language_servers: Arc<dyn LanguageServerRegistry>,
 
         // Fixed workspace and its derived, visible filesystem tree.
@@ -180,6 +182,7 @@ pub mod data_object {
                 running_state: RunningState::Running,
                 active_page: AppPage::Editor,
                 editor: EditorSession::default(),
+                editor_view: EditorViewOptions::default(),
                 language_servers: Arc::new(LanguageServers::default()),
                 workspace: None,
                 explorer: ExplorerState::default(),

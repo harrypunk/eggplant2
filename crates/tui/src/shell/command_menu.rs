@@ -112,11 +112,18 @@ const FILES_CONTEXT: CommandMenuContext = CommandMenuContext {
 
 const UI_CONTEXT: CommandMenuContext = CommandMenuContext {
     title: "ui",
-    items: &[CommandMenuItem {
-        key: 't',
-        description: "theme",
-        target: CommandMenuTarget::Action(ThemePickerCommand::Open.id()),
-    }],
+    items: &[
+        CommandMenuItem {
+            key: 't',
+            description: "theme",
+            target: CommandMenuTarget::Action(ThemePickerCommand::Open.id()),
+        },
+        CommandMenuItem {
+            key: 'w',
+            description: "toggle editor wrap",
+            target: CommandMenuTarget::Action(CommandId("view_toggle_wrap")),
+        },
+    ],
 };
 
 const GIT_CONTEXT: CommandMenuContext = CommandMenuContext {
@@ -420,6 +427,13 @@ mod tests {
         assert_eq!(
             menu.handle_key(KeyCode::Char('t')),
             CommandMenuOutcome::Action(ThemePickerCommand::Open.id())
+        );
+
+        menu.handle_key(KeyCode::Char(' '));
+        menu.handle_key(KeyCode::Char('u'));
+        assert_eq!(
+            menu.handle_key(KeyCode::Char('w')),
+            CommandMenuOutcome::Action(CommandId("view_toggle_wrap"))
         );
     }
 
