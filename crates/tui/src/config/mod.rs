@@ -144,6 +144,7 @@ impl Default for Config {
                         ("page_scroll_up", "ctrl-u"),
                         ("view_align_start", "z"),
                         ("buffer_jump_start", "s"),
+                        ("agent_open", "ctrl-i"),
                         ("next_buffer_pending", "]"),
                         ("previous_buffer_pending", "["),
                     ]),

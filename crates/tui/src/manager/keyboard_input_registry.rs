@@ -133,6 +133,15 @@ fn common_bindings() -> KeymapConfig {
         ),
         keymap_context("buffer_navigation", [("buffer_navigation_cancel", "esc")]),
         keymap_context(
+            "agent_chat_dialog",
+            [
+                ("agent_close", "esc"),
+                ("agent_submit", "enter"),
+                ("agent_backspace", "backspace"),
+                ("agent_interrupt", "ctrl-f7"),
+            ],
+        ),
+        keymap_context(
             "buffer_grep",
             [
                 ("buffer_grep_next", "down"),

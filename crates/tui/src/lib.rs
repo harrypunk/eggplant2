@@ -17,9 +17,9 @@ pub use capabilities::{clipboard, copy_hash, document, file_watcher, register, s
 pub use shell::{buffer, command_menu, focus, lifecycle};
 
 pub use features::{
-    buffer_grep, buffer_jump, buffer_navigation, change, code_navigation, diagnostics, editing,
-    explorer, external_sync, file_picker, line_jump, navigation, notifications, page_scroll,
-    project_grep, theme_picker, vcs, view_align, yank,
+    agent, buffer_grep, buffer_jump, buffer_navigation, change, code_navigation, diagnostics,
+    editing, explorer, external_sync, file_picker, line_jump, navigation, notifications,
+    page_scroll, project_grep, theme_picker, vcs, view_align, yank,
 };
 
 #[cfg(test)]
@@ -39,6 +39,7 @@ pub mod data_object {
     use crate::manager::effect::FeatureCompletion;
 
     use crate::{
+        agent::AgentState,
         buffer_grep::BufferGrepState,
         buffer_jump::BufferJumpState,
         buffer_navigation::BufferNavigationState,
@@ -150,6 +151,7 @@ pub mod data_object {
         pub pending_input: Option<PendingInput>,
         pub document_open: DocumentOpening,
         pub document_lifecycle: DocumentLifecycle,
+        pub agent: AgentState,
         pub deferred_action: Option<DeferredAction>,
         pub command_menu: CommandMenuState,
         pub code_navigation: CodeNavigationState,
@@ -192,6 +194,7 @@ pub mod data_object {
                 pending_input: None,
                 document_open: DocumentOpening::default(),
                 document_lifecycle: DocumentLifecycle::default(),
+                agent: AgentState::default(),
                 deferred_action: None,
                 command_menu: CommandMenuState::default(),
                 code_navigation: CodeNavigationState::default(),

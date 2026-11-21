@@ -7,6 +7,7 @@ version = "0.1.0"
 edition = "2024"
 
 [workspace.dependencies]
+eggplant-agent = { path = "crates/agent" }
 app = { path = "crates/app" }
 editor = { path = "crates/editor" }
 vcs = { path = "crates/vcs" }

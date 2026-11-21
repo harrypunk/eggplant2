@@ -1,0 +1,8 @@
+[package]
+name = "eggplant-agent"
+version.workspace = true
+edition.workspace = true
+description = "Provider-neutral inline AI agent sessions and event contracts"
+license = "MIT"
+
+[dependencies]

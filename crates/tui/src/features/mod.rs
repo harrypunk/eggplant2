@@ -1,5 +1,6 @@
 //! User-facing workflows composed through command, input, effect, and UI registries.
 
+pub mod agent;
 pub mod buffer_grep;
 pub mod buffer_jump;
 pub mod buffer_navigation;

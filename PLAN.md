@@ -1,7 +1,7 @@
 # Eggplant first-edition plan
 
 Last updated: 2026-11-21
-Current baseline: M10 and the M11.1/M11.2 multi-provider core are complete; M12 inline AI agent is the next product priority
+Current baseline: M10, M11.1/M11.2, and M12.1 are complete; M12.2 real streaming provider is next
 
 ## Purpose
 
@@ -516,7 +516,7 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 ### Milestone 12: Inline AI agent
 
-**Status: architecture/tool documentation complete; implementation planned as the next product priority.**
+**Status: M12.1 fake streaming UI complete; real provider and production tools remain planned.**
 
 **Goal:** make agent chat and bounded coding tools a first-class inline workflow without creating a second editor, bypassing persistence, or adopting a general agent/plugin framework. Read [AI agent architecture](docs/agent.md) and [Agent tools](docs/agent-tools.md) before implementation.
 
@@ -525,7 +525,7 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 - One provider-neutral `AgentSession` drives both the inline modal popup and non-modal Agent tool panel. Hiding the popup does not cancel work.
 - Learn from the small agent/provider/tool/session boundaries in the official [Pi repository](https://github.com/earendil-works/pi), without adding Pi, Node.js, its extension host, or its TUI as runtime dependencies.
 - Preserve one Elm event/update/effect loop and one terminal owner. Stream ordered, run-scoped events through a focused effect adapter without provider-specific global messages.
-- Keep provider SDKs, Ratatui, and filesystem/editor APIs out of one another's modules. Use owned messages, `RunId`/sequence identity, cancellation, and bounded output.
+- Keep the independently publishable `eggplant-agent` crate free of TUI, filesystem, editor, Helix, Ratatui, and provider-SDK dependencies. Frontends own presentation/effects; providers own model I/O.
 - Capture explicit buffer/path/revision context at submission; never treat active-buffer UI commands as an unattended editing API.
 - Model output is untrusted. Eggplant validates every tool, requires mutation approval, and never executes tool calls from a length-truncated response. Workspace/path/revision/save invariants remain mandatory.
 - Tests use scripted fake providers and temporary directories; no real model, network, or credentials are build requirements.
@@ -533,10 +533,10 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 #### M12.1 — Shared session and fake streaming UI
 
 - [x] Document popup/panel UX, session/run identity, provider/runtime boundaries, cancellation, safety, and tool contracts.
-- [ ] Add feature-owned session/update state and concrete inline popup plus Agent tool-panel views using existing modal, focus, cursor, tool-content dispatch, and text-input policy; do not register a duplicate tools panel slot.
-- [ ] Implement a scripted fake streaming provider with ordered text deltas, completion, failure, and cancellation.
-- [ ] Coalesce high-frequency deltas where necessary, reject stale run events, bound transcript/output, and preserve state across popup hide/reopen.
-- [ ] Test narrow terminals, Unicode, modal precedence, shared panel/popup state, and ordinary editing without provider configuration.
+- [x] Add feature-owned session/update state and concrete inline popup plus Agent tool-panel views using existing modal, focus, cursor, tool-content dispatch, and text-input policy; do not register a duplicate tools panel slot.
+- [x] Implement a scripted fake streaming provider with ordered text deltas, completion, failure, and cancellation.
+- [x] Coalesce high-frequency deltas where necessary, reject stale run events, bound transcript/output, and preserve state across popup hide/reopen.
+- [x] Test narrow terminals, Unicode, modal precedence, shared panel/popup state, and ordinary editing without provider configuration.
 
 #### M12.2 — One real streaming provider
 

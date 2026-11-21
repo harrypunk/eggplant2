@@ -1,6 +1,6 @@
 # AI agent architecture
 
-Status: design only. No production agent implementation is claimed.
+Status: the M12.1 fake-provider inline workflow is implemented. Real providers and production agent tools remain design-only.
 
 The agent is a primary Eggplant workflow, not a detached chat window or an excuse to bypass editor safety. It should make a small coding task feel like a natural extension of navigation, search, diagnostics, and editing.
 
@@ -78,17 +78,19 @@ The existing tools panel gains an Agent view. It is non-modal and shows:
 
 The panel and popup read the same `AgentSession`; neither owns a separate provider connection or agent loop. Opening the panel does not move editor focus unless the user explicitly focuses it.
 
-### Suggested commands
+### Current keybindings
 
-The exact keymap is an implementation decision validated against existing contexts. Reserve a single agent leader group rather than scattering unrelated chords:
+| Action | Binding |
+| --- | --- |
+| Open inline dialog for a workspace file | `Ctrl-I` |
+| Dismiss dialog while preserving the run | `Esc` |
+| Submit prompt | `Enter` |
+| Interrupt active run | `Ctrl-F7` |
+| Toggle shared Agent tool panel | `Space a t` |
 
-- Open/hide inline agent.
-- Toggle the Agent tool panel.
-- Submit prompt.
-- Cancel active run.
-- Approve/reject one pending mutation.
+The prompt starts as `workspace/relative/path:line` and remains editable. Empty, standalone-file, and external read-only contexts are rejected. The scripted provider used in this slice streams `Simulated response to: <prompt>`; `fail` simulates a provider failure.
 
-Reserved `AgentChat` and `AgentChatDialog` contexts are placeholders only; they are not evidence of an implementation.
+`AgentChatDialog` is the inline modal context. `AgentChat` is reserved for a future direct-chat workflow.
 
 ## Session and run state
 
@@ -124,7 +126,7 @@ The intended ownership is:
 
 | Module | Responsibility |
 | --- | --- |
-| `app::agent` | UI-neutral messages, run/event identity, tool request/result values, provider and runtime ports. |
+| `eggplant-agent` | Standalone provider-neutral session, run/event identity, tool request/result values, and runtime ports; no editor/terminal/filesystem dependency. |
 | Agent runtime adapter | Provider streaming, bounded agent loop, cancellation, tool-call orchestration. |
 | `features/agent` | Session/update state, commands, typed effects/completions, popup/panel coordination. |
 | Agent components | Concrete popup and panel rendering from resolved props; no I/O or provider types. |

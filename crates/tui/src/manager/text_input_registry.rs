@@ -52,6 +52,7 @@ impl TextInputRegistry {
             .expect("reset-target text input must be unique");
         crate::vcs::branch::register_text_input(&mut registry)
             .expect("branch text input must be unique");
+        crate::agent::register_text_input(&mut registry).expect("agent text input must be unique");
         registry
     }
 

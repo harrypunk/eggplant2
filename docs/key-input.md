@@ -16,6 +16,8 @@ Available in Normal and Explorer contexts unless noted otherwise.
 | Show/hide explorer | `Space e` |
 | Find/open a file | `Space Space` or `Space f f` |
 | Select a UI theme | `Space u t` |
+| Open inline AI agent | `Ctrl-I` |
+| Toggle agent tool panel | `Space a t` |
 | Go to definition | `Space c d` |
 | Find references | `Space c r` |
 | Go to implementation | `Space c i` |
@@ -124,6 +126,19 @@ On an expanded directory, `h` folds that directory. On a file or collapsed direc
 | Action | Default binding |
 | --- | --- |
 | Enter smart-case pattern, then label | Printable input |
+
+### Agent dialog
+
+| Action | Default binding |
+| --- | --- |
+| Open inline agent for a workspace file | `Ctrl-I` |
+| Submit prompt | `Enter` |
+| Dismiss dialog without cancelling the run | `Esc` |
+| Edit prompt / delete previous character | Printable input / `Backspace` |
+| Interrupt the active run | `Ctrl-F7` |
+| Toggle the shared Agent tool panel | `Space a t` |
+
+The prompt starts as `workspace/relative/path:line` and is editable/deletable. It is available only for file-backed buffers inside the workspace; no-buffer, standalone-file, and external read-only contexts are rejected. Dismissal preserves the run and conversation. Reopening restores the current session. The fake provider streams a simulated response for this first slice; no credentials are needed.
 
 ### Current-buffer grep
 

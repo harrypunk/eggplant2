@@ -128,6 +128,15 @@ const GIT_CONTEXT: CommandMenuContext = CommandMenuContext {
     }],
 };
 
+static AI_CONTEXT: CommandMenuContext = CommandMenuContext::new(
+    "ai",
+    &[CommandMenuItem::action(
+        't',
+        "toggle agent panel",
+        CommandId("agent_toggle_panel"),
+    )],
+);
+
 static CODE_CONTEXT: CommandMenuContext = CommandMenuContext::new(
     "code",
     &[
@@ -156,6 +165,7 @@ const ROOT_CONTEXT: CommandMenuContext = CommandMenuContext {
             description: "quit",
             target: CommandMenuTarget::Submenu(&QUIT_CONTEXT),
         },
+        CommandMenuItem::submenu('a', "ai", &AI_CONTEXT),
         CommandMenuItem {
             key: 'b',
             description: "buffers",
@@ -358,6 +368,14 @@ mod tests {
         assert_eq!(
             menu.handle_key(KeyCode::Char('p')),
             CommandMenuOutcome::Action(CommandId("project_grep_open"))
+        );
+
+        menu.handle_key(KeyCode::Char(' '));
+        menu.handle_key(KeyCode::Char('a'));
+        assert_eq!(menu.context_title(), "Leader > ai");
+        assert_eq!(
+            menu.handle_key(KeyCode::Char('t')),
+            CommandMenuOutcome::Action(CommandId("agent_toggle_panel"))
         );
 
         menu.handle_key(KeyCode::Char(' '));

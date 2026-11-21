@@ -145,6 +145,7 @@ impl UiRegistry {
         crate::buffer_jump::register_ui(&mut ui).expect("buffer-jump UI must be unique");
         crate::buffer_grep::register_ui(&mut ui).expect("buffer-grep UI must be unique");
         crate::project_grep::register_ui(&mut ui).expect("project-grep UI must be unique");
+        crate::agent::register_ui(&mut ui).expect("agent UI must be unique");
         ui
     }
 
@@ -250,6 +251,16 @@ fn render_explorer_panel(model: &Model, frame: &mut Frame, area: Rect) {
 }
 
 fn render_tools_panel(model: &Model, frame: &mut Frame, area: Rect) {
+    if model.tools.active_tool == Some(crate::tools::ToolKind::Agent) {
+        crate::agent::AgentPanel::render(
+            model.agent.session(),
+            model.current_focus,
+            model.theme.ui(),
+            frame,
+            area,
+        );
+        return;
+    }
     if model.tools.active_tool == Some(crate::tools::ToolKind::Diagnostics) {
         frame.render_widget(
             DiagnosticsPanel::new(

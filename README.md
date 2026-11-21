@@ -14,7 +14,7 @@ The current application is intentionally lightweight: it is not a full IDE, a Vi
 - A separate **VCS addon** for branch display, switching/creation, changed files, staging, commits, and inline diffs.
 - Narrow boundaries for AI commands instead of direct widget or Helix access.
 
-The **inline AI agent is the next primary milestone**, with a documented popup/tool-panel session and bounded read/grep/write tools. It is currently design-only; no production agent runtime is claimed.
+The **inline AI agent fake-provider UX is available**, with editable `path:line` prompts, shared popup/panel conversations, and simulated streaming/interrupt behavior. A real provider and production tools are the next milestones.
 
 ## Run
 
@@ -30,6 +30,7 @@ The application reads `~/.eggplant/config.toml` when present. See `config.exampl
 
 ```text
 crates/
+├── agent/     # Independently publishable, provider-neutral agent session API
 ├── app/       # UI-neutral application capabilities and provider interfaces
 ├── editor/    # Documents, buffers, editing, viewport, and persistence
 ├── tui/       # Terminal runtime, application state, features, and rendering

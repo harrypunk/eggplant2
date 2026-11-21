@@ -100,6 +100,7 @@ impl CommandRegistry {
             .expect("code-navigation commands must be unique");
         crate::diagnostics::register_commands(&mut registry)
             .expect("diagnostics commands must be unique");
+        crate::agent::register_commands(&mut registry).expect("agent commands must be unique");
         registry
     }
 }
