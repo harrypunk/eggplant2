@@ -1,7 +1,7 @@
 # Eggplant first-edition plan
 
 Last updated: 2026-11-21
-Current baseline: M10, M11.1/M11.2, and M12.1 are complete; M12.2 real streaming provider is next
+Current baseline: M10, M11.1/M11.2, M12.1, and M12.2 are complete; M12.3 bounded read/grep tools are next
 
 ## Purpose
 
@@ -516,7 +516,7 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 ### Milestone 12: Inline AI agent
 
-**Status: M12.1 fake streaming UI complete; real provider and production tools remain planned.**
+**Status: M12.1 fake streaming UI and M12.2 OpenAI-compatible provider complete; M12.3 bounded read/grep tools are next.**
 
 **Goal:** make agent chat and bounded coding tools a first-class inline workflow without creating a second editor, bypassing persistence, or adopting a general agent/plugin framework. Read [AI agent architecture](docs/agent.md) and [Agent tools](docs/agent-tools.md) before implementation.
 
@@ -540,10 +540,10 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 #### M12.2 — One real streaming provider
 
-- [ ] Choose one provider through a small configuration spike; define provider/model/endpoint and environment-credential settings without persisting secrets.
-- [ ] Implement the narrow provider port behind the UI-neutral runtime, with concise redacted errors, explicit cancellation, and an authoritative final response. Provider failures are ordered session data, not panics or lost runs.
-- [ ] Prove the same session/update path with fake and real provider adapters; do not add provider branches to components or editor code.
-- [ ] Add a manual real-provider smoke test while keeping automated tests deterministic and offline.
+- [x] Choose one provider through a small configuration spike; define provider/model/endpoint and environment-credential settings without persisting secrets.
+- [x] Implement the narrow provider port behind the UI-neutral runtime, with concise redacted errors, explicit cancellation, and an authoritative final response. Provider failures are ordered session data, not panics or lost runs.
+- [x] Prove the same session/update path with fake and real provider adapters; do not add provider branches to components or editor code.
+- [x] Add a manual real-provider smoke test while keeping automated tests deterministic and offline.
 
 #### M12.3 — Read and grep tools
 

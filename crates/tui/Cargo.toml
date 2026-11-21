@@ -6,6 +6,7 @@ edition.workspace = true
 [dependencies]
 app.workspace = true
 eggplant-agent.workspace = true
+eggplant-agent-openai.workspace = true
 chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 color-eyre = "0.6.5"
 crossterm = "0.29.0"

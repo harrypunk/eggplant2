@@ -1,4 +1,6 @@
-use eggplant_agent::{AgentEvent, RunId};
+use std::{future::Future, sync::Arc};
+
+use eggplant_agent::{AgentEvent, AgentProvider, AgentRequest, CancellationToken, RunId};
 
 use super::{AgentContextProvider, EditorContext};
 use crate::{
@@ -116,6 +118,15 @@ fn submit(model: &mut Model) -> Option<Effect> {
         return notify(model, message);
     }
     let run_id = model.agent.begin_prompt()?;
+    if let Some(provider) = model.agent.provider() {
+        let cancellation = model.agent.begin_cancellation();
+        return Some(Effect::feature(ProviderAgentRun {
+            run_id,
+            prompt,
+            cancellation,
+            provider,
+        }));
+    }
     Some(Effect::feature(FakeAgentRun { run_id, prompt }))
 }
 
@@ -130,6 +141,7 @@ fn backspace(model: &mut Model) -> Option<Effect> {
 }
 
 fn interrupt(model: &mut Model) -> Option<Effect> {
+    model.agent.cancel_active();
     model.agent.session_mut().cancel();
     None
 }
@@ -205,19 +217,104 @@ impl FakeAgentRun {
     }
 }
 
-struct FakeAgentCompletion {
+struct ProviderAgentRun {
+    run_id: RunId,
+    prompt: String,
+    cancellation: CancellationToken,
+    provider: Arc<dyn AgentProvider>,
+}
+
+impl ProviderAgentRun {
+    fn perform_async(self) -> impl Future<Output = Vec<AgentEvent>> {
+        let events = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let output = events.clone();
+        let provider = self.provider.clone();
+        let request = AgentRequest {
+            prompt: self.prompt,
+            cancellation: self.cancellation,
+        };
+        async move {
+            let result = provider
+                .stream(
+                    request,
+                    Box::new(move |event| {
+                        if let Ok(mut current) = output.lock() {
+                            current.push(event);
+                        }
+                    }),
+                )
+                .await;
+            let mut events = events.lock().unwrap().clone();
+            if let Err(error) = result {
+                events.push(AgentEvent::Failed(error.0));
+            }
+            events
+        }
+    }
+}
+
+impl FeatureEffect for ProviderAgentRun {
+    fn perform(self: Box<Self>) -> crate::data_object::Message {
+        let run_id = self.run_id;
+        let events = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("agent runtime must build")
+            .block_on(self.perform_async());
+        crate::data_object::Message::FeatureCompletion(FeatureCompletion::new(AgentCompletion {
+            run_id,
+            events,
+        }))
+    }
+
+    fn execute(
+        self: Box<Self>,
+        sender: tokio::sync::mpsc::UnboundedSender<crate::data_object::Message>,
+    ) {
+        tokio::spawn(async move {
+            let run_id = self.run_id;
+            let event_sender = sender.clone();
+            let request = AgentRequest {
+                prompt: self.prompt,
+                cancellation: self.cancellation,
+            };
+            let result = self
+                .provider
+                .stream(
+                    request,
+                    Box::new(move |event| {
+                        let _ = event_sender.send(crate::data_object::Message::FeatureCompletion(
+                            FeatureCompletion::new(AgentCompletion {
+                                run_id,
+                                events: vec![event],
+                            }),
+                        ));
+                    }),
+                )
+                .await;
+            if let Err(error) = result {
+                let _ = sender.send(crate::data_object::Message::FeatureCompletion(
+                    FeatureCompletion::new(AgentCompletion {
+                        run_id,
+                        events: vec![AgentEvent::Failed(error.0)],
+                    }),
+                ));
+            }
+        });
+    }
+}
+
+struct AgentCompletion {
     run_id: RunId,
     events: Vec<AgentEvent>,
 }
 
 impl FeatureEffect for FakeAgentRun {
     fn perform(self: Box<Self>) -> crate::data_object::Message {
-        crate::data_object::Message::FeatureCompletion(FeatureCompletion::new(
-            FakeAgentCompletion {
-                run_id: self.run_id,
-                events: self.events(),
-            },
-        ))
+        crate::data_object::Message::FeatureCompletion(FeatureCompletion::new(AgentCompletion {
+            run_id: self.run_id,
+            events: self.events(),
+        }))
     }
 
     fn execute(
@@ -228,7 +325,7 @@ impl FeatureEffect for FakeAgentRun {
             for event in self.events() {
                 tokio::time::sleep(std::time::Duration::from_millis(20)).await;
                 let run_id = self.run_id;
-                let completion = FakeAgentCompletion {
+                let completion = AgentCompletion {
                     run_id,
                     events: vec![event],
                 };
@@ -245,7 +342,7 @@ impl FeatureEffect for FakeAgentRun {
     }
 }
 
-impl Completion for FakeAgentCompletion {
+impl Completion for AgentCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
         for event in self.events {
             match event {
@@ -417,5 +514,62 @@ mod tests {
         );
         assert_eq!(model.agent.session().messages().len(), 1);
         assert_eq!(model.agent.session().messages()[0].role, MessageRole::User);
+    }
+
+    #[test]
+    fn injected_provider_uses_the_shared_session_and_cancellation_token() {
+        #[derive(Debug)]
+        struct ScriptedProvider;
+
+        impl AgentProvider for ScriptedProvider {
+            fn stream<'a>(
+                &'a self,
+                request: AgentRequest,
+                mut on_event: Box<dyn FnMut(AgentEvent) + Send + 'a>,
+            ) -> std::pin::Pin<
+                Box<dyn Future<Output = Result<(), eggplant_agent::AgentError>> + Send + 'a>,
+            > {
+                Box::pin(async move {
+                    if !request.cancellation.is_cancelled() {
+                        on_event(AgentEvent::TextDelta("provider: ".to_string()));
+                        on_event(AgentEvent::TextDelta(request.prompt));
+                        on_event(AgentEvent::Complete);
+                    }
+                    Ok(())
+                })
+            }
+        }
+
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("main.rs");
+        std::fs::write(&path, "fn main() {}\n").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        model.agent.set_provider(Arc::new(ScriptedProvider));
+        open_file(&mut model, &path);
+        let manager = MessageManager::default();
+        open(&mut model);
+        let effect = submit(&mut model).unwrap();
+        perform(&manager, &mut model, effect);
+        assert_eq!(
+            model.agent.session().run().unwrap().status,
+            RunStatus::Complete
+        );
+        assert_eq!(model.agent.session().messages().len(), 2);
+        assert!(
+            model.agent.session().messages()[1]
+                .text
+                .starts_with("provider: ")
+        );
+
+        close(&mut model);
+        open(&mut model);
+        let effect = submit(&mut model).unwrap();
+        interrupt(&mut model);
+        perform(&manager, &mut model, effect);
+        assert_eq!(
+            model.agent.session().run().unwrap().status,
+            RunStatus::Cancelled
+        );
+        assert_eq!(model.agent.session().messages().len(), 3);
     }
 }

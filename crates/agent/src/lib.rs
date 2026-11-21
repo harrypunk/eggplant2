@@ -4,7 +4,55 @@
 //! dependencies. Frontends own presentation and effect scheduling; providers own
 //! model I/O.
 
+use std::{
+    future::Future,
+    pin::Pin,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
+};
+
 const MAX_MESSAGES: usize = 100;
+
+#[derive(Debug, Clone, Default)]
+pub struct CancellationToken(Arc<AtomicBool>);
+
+impl CancellationToken {
+    pub fn cancel(&self) {
+        self.0.store(true, Ordering::Relaxed);
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.0.load(Ordering::Relaxed)
+    }
+}
+
+#[derive(Debug)]
+pub struct AgentRequest {
+    pub prompt: String,
+    pub cancellation: CancellationToken,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentError(pub String);
+
+impl std::fmt::Display for AgentError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for AgentError {}
+
+/// Object-safe provider port for ordered assistant events.
+pub trait AgentProvider: std::fmt::Debug + Send + Sync {
+    fn stream<'a>(
+        &'a self,
+        request: AgentRequest,
+        on_event: Box<dyn FnMut(AgentEvent) + Send + 'a>,
+    ) -> Pin<Box<dyn Future<Output = Result<(), AgentError>> + Send + 'a>>;
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RunId(pub u64);

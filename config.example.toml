@@ -149,3 +149,10 @@ vcs_history_toggle_diff = "tab"
 vcs_history_copy_short = "c"
 vcs_history_copy_full = "shift-c"
 vcs_history_load_more = "n"
+
+[features.agent]
+# Optional: omit provider to use the offline fake provider.
+provider = "openai"
+model = "gpt-4o-mini"
+base_url = "https://api.openai.com/v1"
+api_key_env = "OPENAI_API_KEY"

@@ -5,7 +5,8 @@ pub use component::{AgentDialog, AgentPanel};
 pub use work::{handle_command, register_commands, register_text_input, register_ui};
 
 use editor::BufferId;
-use eggplant_agent::{AgentSession, RunId};
+use eggplant_agent::{AgentProvider, AgentSession, CancellationToken, RunId};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EditorContext {
@@ -22,6 +23,8 @@ pub struct AgentState {
     has_draft: bool,
     dialog_open: bool,
     context: Option<EditorContext>,
+    provider: Option<Arc<dyn AgentProvider>>,
+    active_cancellation: Option<CancellationToken>,
 }
 
 impl AgentState {
@@ -77,6 +80,26 @@ impl AgentState {
         self.prompt.clear();
         self.has_draft = false;
         Some(run_id)
+    }
+
+    pub fn set_provider(&mut self, provider: Arc<dyn AgentProvider>) {
+        self.provider = Some(provider);
+    }
+
+    pub fn provider(&self) -> Option<Arc<dyn AgentProvider>> {
+        self.provider.clone()
+    }
+
+    pub fn begin_cancellation(&mut self) -> CancellationToken {
+        let cancellation = CancellationToken::default();
+        self.active_cancellation = Some(cancellation.clone());
+        cancellation
+    }
+
+    pub fn cancel_active(&self) {
+        if let Some(cancellation) = &self.active_cancellation {
+            cancellation.cancel();
+        }
     }
 }
 

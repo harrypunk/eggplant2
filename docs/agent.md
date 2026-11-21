@@ -1,6 +1,6 @@
 # AI agent architecture
 
-Status: the M12.1 fake-provider inline workflow is implemented. Real providers and production agent tools remain design-only.
+Status: M12.1 fake-provider UX and M12.2 OpenAI-compatible streaming are implemented. Production agent tools remain design-only.
 
 The agent is a primary Eggplant workflow, not a detached chat window or an excuse to bypass editor safety. It should make a small coding task feel like a natural extension of navigation, search, diagnostics, and editing.
 
@@ -175,14 +175,21 @@ No autonomous sub-agents, background swarms, planning framework, or unrestricted
 
 ## Provider configuration
 
-Start with a fake streaming provider for deterministic tests and one real provider selected by a configuration spike. Configuration should separate:
+`eggplant-agent` exposes an object-safe `AgentProvider` port: an async method that accepts an owned `AgentRequest` and emits ordered `AgentEvent` values through a callback. `AgentRequest` includes a `CancellationToken`, so `Ctrl-F7` stops provider work as well as changing session status.
 
-- Provider type and model name.
-- Endpoint where applicable.
-- Environment variable name for credentials.
-- Request/step/output limits.
+The optional `eggplant-agent-openai` adapter implements that port for OpenAI-compatible `chat/completions` endpoints. Configure it in `~/.eggplant/config.toml`:
 
-Do not persist API keys in transcripts, configuration examples, logs, notifications, or tool output. Provider errors should be concise and must not dump authorization headers or full request bodies.
+```toml
+[features.agent]
+provider = "openai"
+model = "gpt-4o-mini"
+base_url = "https://api.openai.com/v1"
+api_key_env = "OPENAI_API_KEY"
+```
+
+`base_url`, `model`, and `api_key_env` default to the values shown. Omit `provider` to retain the offline fake provider. The adapter reads the key only when a run starts; it does not store it in TOML, transcripts, notifications, logs, or tool output. Request/transport/status errors are redacted and bounded.
+
+Streaming responses use incremental UTF-8-safe SSE decoding. Deltas arrive through the same session as the fake provider, with an authoritative completion or failure. A response stopped for length fails rather than executing tool calls. The localhost test suite verifies actual HTTP request shape, streaming events, Unicode fragmentation, status errors, and API-key redaction without external network access.
 
 ## Safety summary
 

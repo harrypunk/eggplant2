@@ -57,6 +57,16 @@ const SHARED_EDITING_BINDINGS: &[(&str, &str)] = &[
 #[serde(default)]
 pub struct FeaturesConfig {
     pub page_scroll: PageScrollConfig,
+    pub agent: AgentConfig,
+}
+
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct AgentConfig {
+    pub provider: Option<String>,
+    pub model: Option<String>,
+    pub base_url: Option<String>,
+    pub api_key_env: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
