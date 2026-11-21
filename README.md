@@ -48,6 +48,7 @@ The VCS integration is an **addon**, not a requirement of the core editor. Editi
 - [Feature architecture](docs/feature-architecture.md) — extension ownership and dependency rules.
 - [AI agent architecture](docs/agent.md) — inline chat, shared session, streaming, and runtime boundaries.
 - [Agent tools](docs/agent-tools.md) — bounded read/grep and approved revision-safe write contracts.
+- [Agent persistence](docs/agent-persistence.md) — in-memory default, proposed SeaORM/SQLite adapter, search, and cloud rollout.
 - [Language services](docs/lsp.md) — lightweight LSP navigation, diagnostics, and runtime ownership.
 - [External language-server configuration](docs/language-configuration.md) — user-configured external tools and provider-neutral interfaces.
 - [VCS addon](docs/vcs.md) — optional Git status, staging, and diff workflows.

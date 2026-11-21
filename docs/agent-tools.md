@@ -35,7 +35,7 @@ Every result has:
 - A truncation indicator when output was limited.
 - Optional UI-only detail such as a diff, without sending unnecessary data to the provider.
 
-Tool call IDs are correlation identities, not authorization tokens. A valid ID does not make an unsafe request valid.
+Tool call IDs are correlation identities, not authorization tokens. A valid ID does not make an unsafe request valid. Persist only bounded tool arguments/results when session storage is added; large artifacts need a separate reference model. See [Agent persistence](agent-persistence.md).
 
 ## Shared validation
 

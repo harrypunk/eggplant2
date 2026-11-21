@@ -105,7 +105,7 @@ Every run has a `RunId`. Streaming events also have a monotonically increasing s
 
 Only one foreground run per session is required initially. A second submission while active is rejected or queued explicitly; it must not silently race the current run.
 
-Start with in-memory or linear append-only session storage. Persist finalized messages rather than every live delta if persistence is added. Pi's parent/leaf session tree, compaction, recovery, and branching machinery are not initial requirements.
+Start with in-memory or linear append-only session storage. Persist finalized messages rather than every live delta if persistence is added. Pi's parent/leaf session tree, compaction, recovery, and branching machinery are not initial requirements. For SQLite/relational persistence and the proposed SeaORM boundary, see [Agent persistence](agent-persistence.md).
 
 ## Editor context
 
@@ -128,6 +128,7 @@ The intended ownership is:
 | --- | --- |
 | `eggplant-agent` | Standalone provider-neutral session, run/event identity, tool request/result values, and runtime ports; no editor/terminal/filesystem dependency. |
 | Agent runtime adapter | Provider streaming, bounded agent loop, cancellation, tool-call orchestration. |
+| `agent-storage` (future) | `SessionStore` port, in-memory default, and optional SeaORM adapter; see [Agent persistence](agent-persistence.md). |
 | `features/agent` | Session/update state, commands, typed effects/completions, popup/panel coordination. |
 | Agent components | Concrete popup and panel rendering from resolved props; no I/O or provider types. |
 | Existing capabilities | Filesystem/search/document/buffer/save/diff behavior and their safety checks. |

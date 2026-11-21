@@ -561,7 +561,18 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 - [ ] Report rejection, conflict, cancellation, and save failure honestly; never claim an automatic rollback or silently widen approval.
 - [ ] Defer whole-file creation/delete/rename, multi-file patches, shell commands, LSP workspace edits, and Git mutations to separately reviewed tools.
 
-**M12 exit criteria:** users can chat inline, watch the same session in the tool panel, use bounded read/grep tools, and approve safe revision-checked edits while normal editing remains usable during provider/tool failure. No arbitrary shell, autonomous sub-agent, plugin host, or automatic Git mutation is required.
+#### M12.5 — Scalable session persistence
+
+**Status: proposed; not a prerequisite for M12.2. Current sessions remain in-memory.** See [Agent persistence](docs/agent-persistence.md).
+
+- [ ] Define provider-neutral finalized session/run/message/tool records and a narrow `SessionStore` port with an in-memory default.
+- [ ] Persist finalized messages through the existing update/effect path with session/run identity; do not make rendering wait on storage I/O.
+- [ ] Add a separate SeaORM SQLite adapter with versioned migrations, transactions, batched transcript reads, and keyset pagination; keep SeaORM out of `eggplant-agent`.
+- [ ] Normalize filter/index fields and bound result text, diff previews, and tool artifacts. Use backend-specific full-text implementations only behind the storage port.
+- [ ] Test temporary SQLite stores, truncation, locked/corrupt stores, migration failure, cancellation, and ordinary editing without a configured store.
+- [ ] Treat MySQL/PostgreSQL cloud deployment separately: secret references, TLS validation, pool/timeouts, explicit migration policy, and manual deployment smoke tests. No cloud credentials are required in workspace tests.
+
+**M12 exit criteria:** users can chat inline, watch the same session in the tool panel, use bounded read/grep tools, and approve safe revision-checked edits while normal editing remains usable during provider/tool failure. No arbitrary shell, autonomous sub-agent, plugin host, or automatic Git mutation is required. Persistence is an independent storage slice, not a prerequisite for provider chat.
 
 ## TBD — much later editions
 
