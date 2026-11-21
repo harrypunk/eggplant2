@@ -12,7 +12,9 @@ The current application is intentionally lightweight: it is not a full IDE, a Vi
 - Automatic persistence after edits and before close/quit, with revision and external-change protection.
 - Fuzzy file opening, current/project search, and built-in themes.
 - A separate **VCS addon** for branch display, switching/creation, changed files, staging, commits, and inline diffs.
-- Narrow boundaries for future AI commands instead of direct widget or Helix access.
+- Narrow boundaries for AI commands instead of direct widget or Helix access.
+
+The **inline AI agent is the next primary milestone**, with a documented popup/tool-panel session and bounded read/grep/write tools. It is currently design-only; no production agent runtime is claimed.
 
 ## Run
 
@@ -43,6 +45,8 @@ The VCS integration is an **addon**, not a requirement of the core editor. Editi
 - [Key input](docs/key-input.md) — complete keybindings, input contexts, and sequence behavior.
 - [Editor design](docs/editor-design.md) — core document, buffer, viewport, and persistence invariants.
 - [Feature architecture](docs/feature-architecture.md) — extension ownership and dependency rules.
+- [AI agent architecture](docs/agent.md) — inline chat, shared session, streaming, and runtime boundaries.
+- [Agent tools](docs/agent-tools.md) — bounded read/grep and approved revision-safe write contracts.
 - [Language services](docs/lsp.md) — lightweight LSP navigation, diagnostics, and runtime ownership.
 - [External language-server configuration](docs/language-configuration.md) — user-configured external tools and provider-neutral interfaces.
 - [VCS addon](docs/vcs.md) — optional Git status, staging, and diff workflows.

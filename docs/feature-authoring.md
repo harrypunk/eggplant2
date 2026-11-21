@@ -129,7 +129,7 @@ Every feature must retain:
 - Shell-owned focus, modal precedence, layout, and cursor policy.
 - Use `ActiveEditor` for active-document navigation/viewport/editing. Do not add feature-specific policy or key handling to `EditorSession`.
 
-Future unattended edits must name an explicit buffer and expected revision; active-buffer UI commands are not an agent-safe mutation API.
+Future unattended edits must name an explicit buffer and expected revision; active-buffer UI commands are not an agent-safe mutation API. The proposed contract is documented in [Agent tools](agent-tools.md).
 
 ## 9. Required tests
 

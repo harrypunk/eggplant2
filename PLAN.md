@@ -1,7 +1,7 @@
 # Eggplant first-edition plan
 
 Last updated: 2026-11-21
-Current baseline: M10 and the M11.1/M11.2 multi-provider core are complete; configuration-depth work remains optional
+Current baseline: M10 and the M11.1/M11.2 multi-provider core are complete; M12 inline AI agent is the next product priority
 
 ## Purpose
 
@@ -514,11 +514,59 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 `helix-vcs`, `helix-lsp`, and `helix-dap` are currently mandatory transitive dependencies of `helix-view`; compilation does not mean Eggplant initializes those integrations. The VCS crate's optional `git`/`gix` feature is not currently enabled; M9 enables it and reuses that same Gitoxide dependency for operations not exposed by `helix-vcs`, rather than introducing another VCS implementation. Removing LSP/DAP code from builds would require feature-gating or splitting `helix-view` in the fork/upstream and is separate from the runtime-lightweight M9/M10 work. Do not add Eggplant feature flags that misleadingly claim to remove these transitive dependencies.
 
+### Milestone 12: Inline AI agent
+
+**Status: architecture/tool documentation complete; implementation planned as the next product priority.**
+
+**Goal:** make agent chat and bounded coding tools a first-class inline workflow without creating a second editor, bypassing persistence, or adopting a general agent/plugin framework. Read [AI agent architecture](docs/agent.md) and [Agent tools](docs/agent-tools.md) before implementation.
+
+#### Shared constraints
+
+- One provider-neutral `AgentSession` drives both the inline modal popup and non-modal Agent tool panel. Hiding the popup does not cancel work.
+- Learn from the small agent/provider/tool/session boundaries in the official [Pi repository](https://github.com/earendil-works/pi), without adding Pi, Node.js, its extension host, or its TUI as runtime dependencies.
+- Preserve one Elm event/update/effect loop and one terminal owner. Stream ordered, run-scoped events through a focused effect adapter without provider-specific global messages.
+- Keep provider SDKs, Ratatui, and filesystem/editor APIs out of one another's modules. Use owned messages, `RunId`/sequence identity, cancellation, and bounded output.
+- Capture explicit buffer/path/revision context at submission; never treat active-buffer UI commands as an unattended editing API.
+- Model output is untrusted. Eggplant validates every tool, requires mutation approval, and never executes tool calls from a length-truncated response. Workspace/path/revision/save invariants remain mandatory.
+- Tests use scripted fake providers and temporary directories; no real model, network, or credentials are build requirements.
+
+#### M12.1 — Shared session and fake streaming UI
+
+- [x] Document popup/panel UX, session/run identity, provider/runtime boundaries, cancellation, safety, and tool contracts.
+- [ ] Add feature-owned session/update state and concrete inline popup plus Agent tool-panel views using existing modal, focus, cursor, tool-content dispatch, and text-input policy; do not register a duplicate tools panel slot.
+- [ ] Implement a scripted fake streaming provider with ordered text deltas, completion, failure, and cancellation.
+- [ ] Coalesce high-frequency deltas where necessary, reject stale run events, bound transcript/output, and preserve state across popup hide/reopen.
+- [ ] Test narrow terminals, Unicode, modal precedence, shared panel/popup state, and ordinary editing without provider configuration.
+
+#### M12.2 — One real streaming provider
+
+- [ ] Choose one provider through a small configuration spike; define provider/model/endpoint and environment-credential settings without persisting secrets.
+- [ ] Implement the narrow provider port behind the UI-neutral runtime, with concise redacted errors, explicit cancellation, and an authoritative final response. Provider failures are ordered session data, not panics or lost runs.
+- [ ] Prove the same session/update path with fake and real provider adapters; do not add provider branches to components or editor code.
+- [ ] Add a manual real-provider smoke test while keeping automated tests deterministic and offline.
+
+#### M12.3 — Read and grep tools
+
+- [ ] Add stable tool request/result correlation and the bounded model → tool → result → model loop with a maximum step count.
+- [ ] Implement workspace-scoped `read` using existing regular-file/text acceptance and owned open-buffer snapshots where current text is needed.
+- [ ] Implement `grep` through existing smart-case search, project traversal, ignore rules, binary rejection, and deterministic result caps; extract a public bounded core rather than calling private `search_project` as if it were a finished agent API.
+- [ ] Render concise tool activity/output/truncation in the shared Agent panel without leaking secrets or unbounded content.
+- [ ] Test path/symlink escapes, invalid arguments, Unicode, large results, cancellation, stale calls, and iteration/output limits.
+
+#### M12.4 — Approved revision-safe writes
+
+- [ ] Start with exact-text/range replacement in an existing open buffer identified by `BufferId`, canonical path, and expected revision.
+- [ ] Compute a bounded diff and require one immutable per-call approval before mutation; any changed input requires new approval.
+- [ ] Revalidate identity/revision/exact text on the main update path and apply one undoable editor transaction through existing after-edit/save/sync behavior; coordinate non-active-buffer persistence explicitly by ID/path.
+- [ ] Report rejection, conflict, cancellation, and save failure honestly; never claim an automatic rollback or silently widen approval.
+- [ ] Defer whole-file creation/delete/rename, multi-file patches, shell commands, LSP workspace edits, and Git mutations to separately reviewed tools.
+
+**M12 exit criteria:** users can chat inline, watch the same session in the tool panel, use bounded read/grep tools, and approve safe revision-checked edits while normal editing remains usable during provider/tool failure. No arbitrary shell, autonomous sub-agent, plugin host, or automatic Git mutation is required.
+
 ## TBD — much later editions
 
 - Dynamic Helix-compatible user themes and broader visual style/theming expansion. Existing built-in themes and semantic style boundaries remain unchanged.
 - Third-party plugin/extension hosts. Do not add a native Rust dynamic-library ABI or unrestricted in-process third-party code; evaluate versioned, capability-based WebAssembly or out-of-process hosting only if justified by real requirements and stable internal contracts.
-- AI agent execution/chat and automated editing.
 - DAP/debugging, completion, hover, rename, formatting, code actions, and workspace edits.
 - Full Vim or Helix command compatibility, general Visual-mode operator grammar, macros, and named/register-selection workflows.
 - Split views as a user-facing feature.
