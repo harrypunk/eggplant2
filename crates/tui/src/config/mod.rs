@@ -10,9 +10,9 @@ const CONFIG_FILE: &str = "config.toml";
 /// Validation and conversion into runtime keybindings happen in the keymap registry.
 pub type KeymapConfig = HashMap<String, HashMap<String, String>>;
 
-pub(crate) fn keymap_context<const N: usize>(
+pub(crate) fn keymap_context(
     name: &str,
-    bindings: [(&str, &str); N],
+    bindings: impl IntoIterator<Item = (&'static str, &'static str)>,
 ) -> (String, HashMap<String, String>) {
     let bindings = bindings
         .into_iter()
@@ -20,6 +20,33 @@ pub(crate) fn keymap_context<const N: usize>(
         .collect();
     (name.to_string(), bindings)
 }
+
+/// Bindings shared by Normal-mode EditingTarget consumers.
+const SHARED_EDITING_BINDINGS: &[(&str, &str)] = &[
+    ("enter_insert_mode", "i"),
+    ("insert_after_cursor", "a"),
+    ("insert_at_line_end", "shift-a"),
+    ("insert_at_first_nonblank", "shift-i"),
+    ("open_line_below", "o"),
+    ("open_line_above", "shift-o"),
+    ("move_left", "h"),
+    ("move_right", "l"),
+    ("move_up", "k"),
+    ("move_down", "j"),
+    ("move_line_start", "0"),
+    ("move_line_end", "$"),
+    ("move_next_word_start", "w"),
+    ("move_previous_word_start", "b"),
+    ("move_next_word_end", "e"),
+    ("delete_grapheme", "x"),
+    ("delete_line_pending", "d"),
+    ("change_line_pending", "c"),
+    ("yank_line_pending", "y"),
+    ("paste_after", "p"),
+    ("paste_before", "shift-p"),
+    ("undo", "u"),
+    ("redo", "ctrl-r"),
+];
 
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
@@ -101,43 +128,20 @@ impl Default for Config {
             keymap: HashMap::from([
                 keymap_context(
                     "normal",
-                    [
-                        ("enter_insert_mode", "i"),
+                    SHARED_EDITING_BINDINGS.iter().copied().chain([
                         ("enter_visual_mode", "v"),
                         ("enter_visual_line_mode", "shift-v"),
-                        ("insert_after_cursor", "a"),
-                        ("insert_at_line_end", "shift-a"),
-                        ("insert_at_first_nonblank", "shift-i"),
-                        ("open_line_below", "o"),
-                        ("open_line_above", "shift-o"),
-                        ("move_left", "h"),
-                        ("move_right", "l"),
-                        ("move_up", "k"),
-                        ("move_down", "j"),
-                        ("move_line_start", "0"),
-                        ("move_line_end", "$"),
-                        ("move_next_word_start", "w"),
-                        ("move_previous_word_start", "b"),
-                        ("move_next_word_end", "e"),
                         ("focus_left", "ctrl-h"),
                         ("focus_down", "ctrl-j"),
                         ("focus_up", "ctrl-k"),
                         ("focus_right", "ctrl-l"),
-                        ("undo", "u"),
-                        ("redo", "ctrl-r"),
                         ("page_scroll_down", "ctrl-f"),
                         ("page_scroll_up", "ctrl-u"),
                         ("view_align_start", "z"),
                         ("buffer_jump_start", "s"),
                         ("next_buffer_pending", "]"),
                         ("previous_buffer_pending", "["),
-                        ("delete_grapheme", "x"),
-                        ("delete_line_pending", "d"),
-                        ("change_line_pending", "c"),
-                        ("yank_line_pending", "y"),
-                        ("paste_after", "p"),
-                        ("paste_before", "shift-p"),
-                    ],
+                    ]),
                 ),
                 keymap_context(
                     "visual",
@@ -180,33 +184,11 @@ impl Default for Config {
                 keymap_context("buffer_jump", []),
                 keymap_context(
                     "vcs_commit",
-                    [
+                    SHARED_EDITING_BINDINGS.iter().copied().chain([
                         ("vcs_commit_close", "q"),
                         ("vcs_commit_discard", "ctrl-c"),
                         ("vcs_commit_submit", "ctrl-s"),
-                        ("enter_insert_mode", "i"),
-                        ("insert_after_cursor", "a"),
-                        ("insert_at_line_end", "shift-a"),
-                        ("insert_at_first_nonblank", "shift-i"),
-                        ("open_line_below", "o"),
-                        ("open_line_above", "shift-o"),
-                        ("move_left", "h"),
-                        ("move_right", "l"),
-                        ("move_up", "k"),
-                        ("move_down", "j"),
-                        ("move_line_start", "0"),
-                        ("move_line_end", "$"),
-                        ("move_next_word_start", "w"),
-                        ("move_previous_word_start", "b"),
-                        ("move_next_word_end", "e"),
-                        ("delete_grapheme", "x"),
-                        ("delete_line_pending", "d"),
-                        ("yank_line_pending", "y"),
-                        ("paste_after", "p"),
-                        ("paste_before", "shift-p"),
-                        ("undo", "u"),
-                        ("redo", "ctrl-r"),
-                    ],
+                    ]),
                 ),
                 keymap_context(
                     "vcs_commit_input",

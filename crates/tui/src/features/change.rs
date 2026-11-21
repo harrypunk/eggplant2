@@ -441,6 +441,39 @@ mod tests {
     }
 
     #[test]
+    fn commit_editor_reuses_line_change_without_touching_the_main_buffer() {
+        let manager = MessageManager::default();
+        let mut model = commit_model("old line");
+        let main = create_buffer(&mut model, "main");
+        let main_revision = model.editor.buffer_version(main);
+
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("change_line_pending")),
+        );
+        assert_eq!(
+            model.pending_input.as_ref().map(PendingInput::text),
+            Some("c")
+        );
+        manager.update(&mut model, Message::TextInput('c'));
+        assert_eq!(commit_text(&model), "");
+        assert_eq!(model.vcs.commit.editor.mode(), editor::EditMode::Insert);
+        assert_eq!(model.context_stack.last(), Some(&Context::VcsCommitInput));
+
+        for character in "new line".chars() {
+            manager.update(&mut model, Message::TextInput(character));
+        }
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("exit_insert_mode")),
+        );
+
+        assert_eq!(commit_text(&model), "new line");
+        assert_eq!(model.editor.buffer_version(main), main_revision);
+        assert_eq!(model.editor.active_text_snapshot().unwrap().text, "main");
+    }
+
+    #[test]
     fn pending_dd_and_cc_use_status_and_cancel_cleanly() {
         let mut model = Model::default();
         model.context_stack.push(Context::AppNormal);

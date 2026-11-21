@@ -232,6 +232,8 @@ Linewise Visual mode starts with the full current line, including an existing li
 
 Delete and change commands cover the grapheme under the cursor, the current line, the current Visual selection, and the cursor-to-next-word-start range. Current-line change preserves the established indentation policy, while word-range capture and deletion reuse Helix's next-word-start primitive. No general operator-motion grammar is added; current bindings are centralized in [Key input, sequences, and hints](key-input.md).
 
+These operations are implemented once and composed through `editing::EditingTarget`. `MainEditingTarget` and `CommitEditingTarget` provide the active `EditorSession`, Normal/Insert contexts, register policy, mutation permission, and after-edit behavior. The main target adds auto-save and language synchronization; the commit target edits the scratch session without file persistence. `features/editing`, `features/change`, and `features/yank` all use this adapter, so a page needs semantic key bindings and an adapter—not copied editing logic. Default Normal and Commit keymaps extend the same `SHARED_EDITING_BINDINGS` list, keeping common input composition aligned as well.
+
 Pending delete/change prefixes use the shared transient pending-input display. Every accepted command uses the existing undo/redo, dirty-revision, viewport, and auto-save paths. Normal deletes commit history immediately; Visual and line/word change commands commit when their Insert session ends, preserving one-step undo. Clipboard/register synchronization is centralized separately, and all commands operate on the single cursor/selection.
 
 ### Yank and clipboard synchronization (M8.7)

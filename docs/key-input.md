@@ -202,6 +202,7 @@ File/theme pickers and both live-grep lists wrap from first to last and last to 
 | Normal movement | `h`/`j`/`k`/`l`, `w`/`b`/`e`, `0`/`$` |
 | Normal insert variants | `a`/`A`/`I`, `o`/`O` |
 | Delete grapheme / line / word | `x` / `dd` / `dw` |
+| Change line / word and enter Insert | `cc` / `cw` |
 | Yank current line / paste after / paste before | `yy` / `p` / `P` |
 | Undo / redo | `u` / `Ctrl-R` |
 
