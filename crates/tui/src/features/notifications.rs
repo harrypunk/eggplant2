@@ -2,7 +2,7 @@ use ratatui::Frame;
 
 use crate::{
     capabilities::notification::{Notification, NotificationExpiry, NotificationSink},
-    component::notification::NotificationPopup,
+    component::notification::NotificationStack,
     data_object::{Message, Model, StatusKind, StatusMessage},
     manager::effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
 };
@@ -54,12 +54,9 @@ pub fn report_rejection(model: &mut Model, message: impl Into<String>) -> Effect
     publish_status(model, status, Some("Rejected"))
 }
 
-/// Render above the active page without changing focus, context, or modality.
+/// Render the stack above the active page without changing focus, context, or modality.
 pub fn render(model: &Model, frame: &mut Frame) {
-    let Some(notification) = model.notifications.current() else {
-        return;
-    };
-    NotificationPopup::new(notification, &model.theme).render(frame, frame.area());
+    NotificationStack::new(model.notifications.iter(), &model.theme).render(frame, frame.area());
 }
 
 struct ExpiryRequest(NotificationExpiry);
@@ -98,7 +95,7 @@ mod tests {
     }
 
     #[test]
-    fn old_expiry_does_not_dismiss_a_replacement() {
+    fn older_expiry_leaves_the_newest_notification_visible() {
         let mut model = Model::default();
         let first = request(publish(&mut model, Notification::info("first")));
         let _second = request(publish(&mut model, Notification::info("second")));
@@ -108,6 +105,20 @@ mod tests {
         };
         completion.update(&mut model);
         assert_eq!(model.notifications.current().unwrap().message(), "second");
+        assert_eq!(model.notifications.iter().count(), 1);
+    }
+
+    #[test]
+    fn newest_expiry_reveals_older_notifications() {
+        let mut model = Model::default();
+        let _first = request(publish(&mut model, Notification::info("first")));
+        let second = request(publish(&mut model, Notification::info("second")));
+
+        let Message::FeatureCompletion(completion) = second.perform() else {
+            panic!("expected expiry completion");
+        };
+        completion.update(&mut model);
+        assert_eq!(model.notifications.current().unwrap().message(), "first");
     }
 
     #[test]

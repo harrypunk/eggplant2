@@ -1,6 +1,7 @@
-use std::time::Duration;
+use std::{collections::VecDeque, time::Duration};
 
 pub const DEFAULT_NOTIFICATION_DURATION: Duration = Duration::from_secs(4);
+pub const MAX_NOTIFICATIONS: usize = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NotificationKind {
@@ -78,10 +79,10 @@ struct ActiveNotification {
     notification: Notification,
 }
 
-/// Source-independent one-shot notification state. New messages replace old ones.
+/// Source-independent notification stack, ordered newest first.
 #[derive(Debug, Default)]
 pub struct NotificationCenter {
-    active: Option<ActiveNotification>,
+    active: VecDeque<ActiveNotification>,
     next_id: u64,
 }
 
@@ -92,14 +93,18 @@ pub trait NotificationSink {
 
 impl NotificationCenter {
     pub fn current(&self) -> Option<&Notification> {
-        self.active.as_ref().map(|active| &active.notification)
+        self.active.front().map(|active| &active.notification)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Notification> {
+        self.active.iter().map(|active| &active.notification)
     }
 
     pub fn dismiss(&mut self, id: u64) -> bool {
-        if self.active.as_ref().map(|active| active.id) != Some(id) {
+        let Some(index) = self.active.iter().position(|active| active.id == id) else {
             return false;
-        }
-        self.active = None;
+        };
+        self.active.remove(index);
         true
     }
 }
@@ -111,10 +116,11 @@ impl NotificationSink for NotificationCenter {
             id: self.next_id,
             after: notification.duration(),
         };
-        self.active = Some(ActiveNotification {
+        self.active.push_front(ActiveNotification {
             id: expiry.id,
             notification,
         });
+        self.active.truncate(MAX_NOTIFICATIONS);
         expiry
     }
 }
@@ -124,7 +130,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn defaults_to_four_seconds_and_expires_only_the_current_message() {
+    fn defaults_to_four_seconds_and_expires_each_message_independently() {
         let mut center = NotificationCenter::default();
         let first = center.notify(Notification::info("first"));
         assert_eq!(first.after, Duration::from_secs(4));
@@ -136,10 +142,25 @@ mod tests {
                 .with_duration(Duration::from_millis(250)),
         );
         assert_eq!(second.after, Duration::from_millis(250));
-        assert!(!center.dismiss(first.id));
+        assert_eq!(center.iter().count(), 2);
+        assert!(center.dismiss(first.id));
         assert_eq!(center.current().unwrap().message(), "second");
         assert_eq!(center.current().unwrap().title(), Some("Git"));
         assert!(center.dismiss(second.id));
         assert!(center.current().is_none());
+    }
+
+    #[test]
+    fn retains_only_the_newest_eight_notifications() {
+        let mut center = NotificationCenter::default();
+        for index in 0..10 {
+            center.notify(Notification::info(index.to_string()));
+        }
+
+        let messages = center
+            .iter()
+            .map(|notification| notification.message())
+            .collect::<Vec<_>>();
+        assert_eq!(messages, ["9", "8", "7", "6", "5", "4", "3", "2"]);
     }
 }

@@ -4,13 +4,14 @@ Transient notifications provide common one-shot feedback without changing focus,
 
 ## Behavior
 
-- Notifications appear in a non-modal popup at the top-right corner.
-- The default duration is **4 seconds**.
-- Info and error messages have distinct theme styling.
+- Notifications appear in a non-modal stack at the top-right corner.
+- The newest notification is on top and pushes older notifications downward.
+- At most **8** notifications are retained; publishing a ninth evicts the oldest.
+- The default duration is **4 seconds** per notification.
+- Info, warning, and error messages have distinct theme styling.
 - A source can provide an optional title such as `Yank`, `Rejected`, or `Git`.
-- A new notification replaces the current one.
-- An older expiry cannot dismiss a newer notification.
-- The popup renders above every application page and clamps to small terminals.
+- Every expiry removes only its matching notification; dismissing the newest reveals older entries.
+- The stack uses vertical flex layout with one-row gaps and omits entries that cannot fit the terminal.
 - Persistent status and modal-local errors remain available where needed.
 - Migrated one-shot VCS feedback clears stale workflow notices; saving/committing progress remains in the page.
 
@@ -45,7 +46,7 @@ let expiry = sink.notify(
 2. Capture the returned notification ID and duration.
 3. Sleep asynchronously without blocking terminal input.
 4. Return a typed expiry completion.
-5. Dismiss only if that ID is still current.
+5. Dismiss the entry with that ID, leaving every other notification in place.
 
 Sources must compose the returned effect:
 
@@ -79,17 +80,17 @@ Progress notices and errors owned by an open modal remain in that workflow. Addi
 
 ## Presentation
 
-`component/notification.rs` receives only a `Notification` and resolved theme. It owns wrapping and bounded placement; it does not read application state or schedule work.
+`component/notification.rs` receives borrowed notifications and a resolved theme. It owns wrapping, vertical `Layout`/`Flex::Start` stacking, and bounded placement; it does not read application state or schedule work.
 
-The popup is limited to 48 columns and 8 rows, including borders. Runtime renders it after the active page so page implementations do not need individual notification arms.
+Each popup is limited to 48 columns and 8 rows, including borders. The stack has one-row gaps, retains at most eight entries in the core, and renders only boxes that fit the available terminal height. Runtime renders it after the active page so page implementations do not need individual notification arms.
 
 ## Tests
 
 The suite covers:
 
 - Four-second defaults and per-message duration overrides.
-- Replacement and stale-expiry rejection.
-- Current-expiry dismissal.
-- Top-right placement and tiny-terminal clamping.
+- Newest-first ordering and eight-entry retention.
+- Independent older/newest expiry behavior.
+- Vertical stack placement, terminal-height clipping, and tiny-terminal clamping.
 - Yank, rejection, and Git source titles/messages.
 - Composition with existing register, refresh, and repository effects.
