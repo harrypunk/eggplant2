@@ -11,7 +11,7 @@ use ratatui::{
 use crate::{
     component::{
         popup::{self, Popup},
-        text_input::TextInput,
+        text_input::{TextInput, TextInputChange, TextInputEvent},
     },
     data_object::{Context, Message, Model, StatusMessage},
     filesystem::{self, FileKind, TransferDestination},
@@ -67,7 +67,7 @@ pub(crate) struct TransferState {
     phase: TransferPhase,
     operation: Option<TransferOperation>,
     source: Option<TransferSource>,
-    destination: String,
+    destination: TextInput,
     revision: u64,
 }
 
@@ -85,7 +85,8 @@ impl TransferState {
     }
 
     fn open(&mut self, source: TransferSource, operation: TransferOperation) {
-        self.destination = source.relative.to_string_lossy().into_owned();
+        self.destination
+            .set_value(source.relative.to_string_lossy().into_owned());
         self.source = Some(source);
         self.operation = Some(operation);
         self.phase = TransferPhase::Editing;
@@ -99,16 +100,15 @@ impl TransferState {
         self.revision = self.revision.wrapping_add(1);
     }
 
-    fn insert(&mut self, character: char) {
+    fn backspace(&mut self) {
         if self.is_editing() {
-            self.destination.push(character);
+            self.destination.backspace();
         }
     }
 
-    fn backspace(&mut self) {
-        if self.is_editing() {
-            self.destination.pop();
-        }
+    fn handle_event(&mut self, event: TextInputEvent) -> Option<TextInputChange> {
+        self.is_editing()
+            .then(|| self.destination.handle_event(event))
     }
 
     fn begin_transfer(&mut self) -> Option<u64> {
@@ -212,11 +212,11 @@ pub(super) fn backspace(model: &mut Model) -> Option<Effect> {
 }
 
 pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
-    input.register(Context::ExplorerTransfer, insert_char)
+    input.register_with_cursor(Context::ExplorerTransfer, handle_input)
 }
 
-fn insert_char(model: &mut Model, character: char) -> Option<Effect> {
-    model.explorer.transfer.insert(character);
+fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
+    model.explorer.transfer.handle_event(event);
     None
 }
 
@@ -375,7 +375,7 @@ fn cursor(model: &Model, area: Rect) -> Option<Position> {
         return None;
     }
     let (input, _) = content_areas(popup::content_area(area));
-    TextInput::new(&state.destination, model.theme.ui()).cursor_position(input)
+    state.destination.cursor_position(input, model.theme.ui())
 }
 
 struct TransferPrompt<'a> {
@@ -416,7 +416,7 @@ impl Widget for TransferContent<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let (input, status_area) = content_areas(area);
         let surface = self.styles.popup_surface();
-        TextInput::new(&self.state.destination, self.styles).render(input, buf);
+        self.state.destination.view(self.styles).render(input, buf);
         if self.state.is_running() {
             let status = Line::styled(
                 self.state
@@ -523,7 +523,7 @@ mod tests {
         let buffer = crate::test_utils::open_file(&mut model, &source);
         let manager = MessageManager::default();
         open_move(&manager, &mut model);
-        assert_eq!(model.explorer.transfer.destination, "source.txt");
+        assert_eq!(model.explorer.transfer.destination.value(), "source.txt");
         replace_destination(&manager, &mut model, "nested/destination.txt");
 
         let effect = manager
@@ -554,7 +554,7 @@ mod tests {
         let buffer = crate::test_utils::open_file(&mut model, &nested_file);
         let manager = MessageManager::default();
         open_move(&manager, &mut model);
-        assert_eq!(model.explorer.transfer.destination, "folder");
+        assert_eq!(model.explorer.transfer.destination.value(), "folder");
         replace_destination(&manager, &mut model, "renamed");
 
         let effect = manager
@@ -655,7 +655,10 @@ mod tests {
         assert_eq!(fs::read_to_string(source).unwrap(), "source");
         assert_eq!(fs::read_to_string(destination).unwrap(), "destination");
         assert!(model.explorer.transfer.is_editing());
-        assert_eq!(model.explorer.transfer.destination, "destination.txt");
+        assert_eq!(
+            model.explorer.transfer.destination.value(),
+            "destination.txt"
+        );
         assert!(
             model
                 .notifications

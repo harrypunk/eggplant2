@@ -3,7 +3,7 @@ mod state;
 mod work;
 
 pub use commands::handle_command;
-pub(crate) use commands::{close, insert_char};
+pub(crate) use commands::{close, handle_input};
 pub use state::{FileCollectionState, FileEntry, FilePickerState, PreviewState, ScanDepth};
 pub use work::FilePickerRequest;
 

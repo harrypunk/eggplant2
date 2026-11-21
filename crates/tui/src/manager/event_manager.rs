@@ -3,6 +3,7 @@ use std::time::Duration;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::crossterm::event::{self, Event};
 
+use crate::component::text_input::TextCursorMovement;
 use crate::config::Config;
 use crate::data_object::{CommandId, Context, Message, Model};
 use crate::manager::{
@@ -79,6 +80,12 @@ impl EventManager {
 
     fn unbound_key_message(&self, context: &Context, key: KeyEvent) -> Option<Message> {
         match key.code {
+            KeyCode::Left if self.text_input.accepts_cursor(context) => {
+                Some(Message::TextInputCursor(TextCursorMovement::Left))
+            }
+            KeyCode::Right if self.text_input.accepts_cursor(context) => {
+                Some(Message::TextInputCursor(TextCursorMovement::Right))
+            }
             KeyCode::Char(character)
                 if (key.modifiers.is_empty() || key.modifiers == KeyModifiers::SHIFT)
                     && self.text_input.accepts(context) =>
@@ -454,6 +461,16 @@ mod tests {
             assert!(matches!(
                 manager.translate(event, &model),
                 Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+        for (key, movement) in [
+            (KeyCode::Left, TextCursorMovement::Left),
+            (KeyCode::Right, TextCursorMovement::Right),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::TextInputCursor(actual)) if actual == movement
             ));
         }
         let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));

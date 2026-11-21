@@ -8,7 +8,7 @@ use ratatui::{
 
 use super::AgentState;
 use crate::{
-    component::{popup::Popup, popup::content_area, text_input::TextInput},
+    component::{popup::Popup, popup::content_area},
     data_object::{FocusTarget, Model},
     theme::UiTheme,
     ui::{OverlayContribution, OverlayKind, OverlayPlacement},
@@ -51,8 +51,10 @@ impl AgentDialog {
             .pending_approval()
             .is_none()
             .then(|| {
-                TextInput::new(model.agent.prompt(), model.theme.ui())
-                    .cursor_position(input_area(area))
+                model
+                    .agent
+                    .prompt_state()
+                    .cursor_position(input_area(area), model.theme.ui())
             })
             .flatten()
     }
@@ -91,7 +93,10 @@ impl AgentDialogContent<'_> {
         Paragraph::new(status_text)
             .style(self.styles.muted)
             .render(status, buffer);
-        TextInput::new(self.state.prompt(), self.styles).render(input, buffer);
+        self.state
+            .prompt_state()
+            .view(self.styles)
+            .render(input, buffer);
         let text = self
             .state
             .session()

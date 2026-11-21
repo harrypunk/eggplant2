@@ -7,6 +7,7 @@ mod write;
 pub use component::{AgentDialog, AgentPanel};
 pub use work::{handle_command, register_commands, register_text_input, register_ui};
 
+use crate::component::text_input::{TextInput, TextInputEvent};
 use editor::BufferId;
 use eggplant_agent::{
     AgentContinuation, AgentProvider, AgentSession, CancellationToken, RunId, SessionId,
@@ -31,7 +32,7 @@ struct SuspendedRun {
 #[derive(Debug)]
 pub struct AgentState {
     session: AgentSession,
-    prompt: String,
+    prompt: TextInput,
     has_draft: bool,
     dialog_open: bool,
     context: Option<EditorContext>,
@@ -51,7 +52,7 @@ impl Default for AgentState {
     fn default() -> Self {
         Self {
             session: AgentSession::default(),
-            prompt: String::new(),
+            prompt: TextInput::default(),
             has_draft: false,
             dialog_open: false,
             context: None,
@@ -71,6 +72,10 @@ impl Default for AgentState {
 
 impl AgentState {
     pub fn prompt(&self) -> &str {
+        self.prompt.value()
+    }
+
+    pub fn prompt_state(&self) -> &TextInput {
         &self.prompt
     }
 
@@ -92,7 +97,7 @@ impl AgentState {
 
     pub fn open_dialog(&mut self, context: EditorContext, label: String) {
         if !self.has_draft {
-            self.prompt = label;
+            self.prompt.set_value(label);
             self.has_draft = true;
         }
         self.context = Some(context);
@@ -103,13 +108,13 @@ impl AgentState {
         self.dialog_open = false;
     }
 
-    pub fn insert(&mut self, character: char) {
-        self.prompt.push(character);
+    pub fn handle_input_event(&mut self, event: TextInputEvent) {
+        self.prompt.handle_event(event);
         self.has_draft = true;
     }
 
     pub fn backspace(&mut self) {
-        self.prompt.pop();
+        self.prompt.backspace();
         self.has_draft = true;
     }
 

@@ -12,11 +12,12 @@ use crate::{
 };
 
 pub(super) struct ResetPopupProps<'a> {
-    pub query: &'a str,
+    pub input: &'a TextInput,
     pub targets: Vec<&'a str>,
     pub selected: Option<usize>,
     pub loading: bool,
     pub resetting: bool,
+    pub selecting: bool,
     pub target: Option<&'a str>,
     pub revision: Option<&'a str>,
     pub error: Option<&'a str>,
@@ -47,8 +48,12 @@ impl<'a> ResetPopup<'a> {
         .areas(block.inner(popup));
         frame.render_widget(block.style(styles.base), popup);
 
-        let input = TextInput::new(self.props.query, styles);
-        let cursor = input.cursor_position(query);
+        let input = self.props.input.view(styles);
+        let cursor = self
+            .props
+            .selecting
+            .then(|| input.cursor_position(query))
+            .flatten();
         frame.render_widget(input, query);
         let lines = picker::visible_lines(
             target_lines(&self.props, styles),

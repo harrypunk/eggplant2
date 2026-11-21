@@ -1,4 +1,5 @@
 use crate::{
+    component::text_input::TextInputEvent,
     data_object::{CommandId, Context, FocusTarget, Model, StatusMessage},
     document,
     manager::effect::Effect,
@@ -40,12 +41,17 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     }
 }
 
-pub(crate) fn insert_char(model: &mut Model, character: char) -> Option<Effect> {
+pub(crate) fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
     let root = model.workspace.as_ref()?.root().to_path_buf();
-    model
+    match model
         .file_picker
-        .insert(&root, character)
-        .map(Effect::feature)
+        .query
+        .handle_event(event)
+        .content_changed()
+    {
+        true => model.file_picker.update_results(&root).map(Effect::feature),
+        false => None,
+    }
 }
 
 pub(crate) fn close(model: &mut Model) {

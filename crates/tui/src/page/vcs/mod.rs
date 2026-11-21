@@ -98,7 +98,7 @@ impl Vcs {
         }
         if model.vcs.branch.is_popup_active() {
             BranchPopup::new(BranchPopupProps {
-                query: model.vcs.branch.query(),
+                input: model.vcs.branch.query_state(),
                 targets: model.vcs.branch.filtered_targets(),
                 selected: model.vcs.branch.selected(),
                 creating: model.vcs.branch.is_creating(),
@@ -115,9 +115,10 @@ impl Vcs {
         }
         if model.vcs.merge.is_active() {
             MergePopup::new(MergePopupProps {
-                query: model.vcs.merge.query(),
+                input: model.vcs.merge.query_state(),
                 targets: model.vcs.merge.filtered_targets(),
                 selected: model.vcs.merge.selected(),
+                selecting: model.vcs.merge.is_selecting(),
                 loading: model.vcs.merge.is_loading(),
                 merging: model.vcs.merge.is_merging(),
                 error: model.vcs.merge.error(),
@@ -127,9 +128,10 @@ impl Vcs {
         }
         if model.vcs.reset.is_popup_active() {
             ResetPopup::new(ResetPopupProps {
-                query: model.vcs.reset.query(),
+                input: model.vcs.reset.query_state(),
                 targets: model.vcs.reset.filtered_targets(),
                 selected: model.vcs.reset.selected(),
+                selecting: model.vcs.reset.is_selecting(),
                 loading: model.vcs.reset.is_loading(),
                 resetting: model.vcs.reset.is_resetting(),
                 target: model.vcs.reset.target(),

@@ -11,7 +11,6 @@ use crate::{
         picker,
         popup::{self, Popup},
         search_highlight::{highlighted_spans, match_highlight, style_preview},
-        text_input::TextInput,
         text_view::TextView,
     },
     data_object::{Model, Visibility},
@@ -34,7 +33,7 @@ impl<'a> ProjectGrep<'a> {
 
     pub fn cursor_position(self, area: Rect) -> Option<Position> {
         let input = picker::content_areas(popup::content_area(area)).input;
-        TextInput::new(&self.state.query, self.theme.ui()).cursor_position(input)
+        self.state.query.cursor_position(input, self.theme.ui())
     }
 }
 
@@ -89,7 +88,10 @@ impl Widget for ProjectGrepContent<'_> {
         let areas = picker::content_areas(area);
         let surface = self.theme.ui().popup_surface();
         let border = surface.patch(self.theme.ui().border);
-        TextInput::new(&self.state.query, self.theme.ui()).render(areas.input, buf);
+        self.state
+            .query
+            .view(self.theme.ui())
+            .render(areas.input, buf);
         let results = picker::visible_lines(
             result_lines(self.state, self.theme.ui()),
             self.state.selected,
@@ -188,7 +190,7 @@ mod tests {
         let path = directory.path().join("main.rs");
         std::fs::write(&path, "fn main() {}\nprintln!(\"hello\");").unwrap();
         let mut state = ProjectGrepState::default();
-        state.query = "main".to_string();
+        state.query = crate::component::text_input::TextInput::new("main");
         state.status = SearchStatus::Ready;
         state.results = vec![ProjectGrepResult {
             path: path.clone(),

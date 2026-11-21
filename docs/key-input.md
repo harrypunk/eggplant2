@@ -247,6 +247,8 @@ The picker lists local `main`/`master`, existing remote-tracking branches, and t
 
 Enter accepts, opens, or submits; arrows navigate lists or move the insertion cursor; Escape cancels or closes; Backspace edits single-line input; `y` confirms destructive Explorer deletion. These common behaviors are fixed in input routing and cannot be overridden through configuration.
 
+Every single-line popup `TextInput` supports `Left`/`Right` movement at Unicode-scalar boundaries, including insertion and Backspace at the current cursor. `Up`/`Down` remains list navigation. Normal/Insert editor buffers and the VCS commit editor retain their existing Helix cursor behavior.
+
 ## Configuration
 
 Custom `[keymap]` entries merge with defaults for application-specific actions, so only overrides need to be specified. Common keys and confirmation/cancellation are not configurable. Built-in Space leader sequences are not configured in TOML. Explicit unbinding is not implemented.

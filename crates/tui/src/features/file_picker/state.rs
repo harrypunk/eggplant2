@@ -7,7 +7,7 @@ use std::{
 use editor::{DocumentFactory, TextViewSnapshot};
 
 use super::FilePickerRequest;
-use crate::data_object::Visibility;
+use crate::{component::text_input::TextInput, data_object::Visibility};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileEntry {
@@ -41,7 +41,7 @@ pub enum PreviewState {
 #[derive(Debug)]
 pub struct FilePickerState {
     pub visibility: Visibility,
-    pub query: String,
+    pub query: TextInput,
     pub results: Vec<FileEntry>,
     pub selected: Option<usize>,
     pub collection: FileCollectionState,
@@ -60,7 +60,7 @@ impl Default for FilePickerState {
     fn default() -> Self {
         Self {
             visibility: Visibility::Hidden,
-            query: String::new(),
+            query: TextInput::default(),
             results: Vec::new(),
             selected: None,
             collection: FileCollectionState::Loading,
@@ -128,13 +128,15 @@ impl FilePickerState {
     }
 
     pub fn insert(&mut self, root: &Path, character: char) -> Option<FilePickerRequest> {
-        self.query.push(character);
+        self.query.insert(character);
         self.update_results(root)
     }
 
     pub fn backspace(&mut self, root: &Path) -> Option<FilePickerRequest> {
-        self.query.pop()?;
-        self.update_results(root)
+        self.query
+            .backspace()
+            .then(|| self.update_results(root))
+            .flatten()
     }
 
     pub fn complete_scan(
@@ -242,7 +244,7 @@ impl FilePickerState {
         None
     }
 
-    fn update_results(&mut self, root: &Path) -> Option<FilePickerRequest> {
+    pub(crate) fn update_results(&mut self, root: &Path) -> Option<FilePickerRequest> {
         match (self.collection, self.depth) {
             (FileCollectionState::Ready | FileCollectionState::Filtering, ScanDepth::TopLevel)
                 if !self.query.is_empty() =>
@@ -270,7 +272,7 @@ impl FilePickerState {
         self.filter_revision = self.filter_revision.wrapping_add(1);
         Some(FilePickerRequest::Filter {
             files: self.files.clone(),
-            query: self.query.clone(),
+            query: self.query.value().to_string(),
             revision: self.filter_revision,
         })
     }

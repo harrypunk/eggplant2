@@ -3,7 +3,7 @@ use std::{ops::Range, path::PathBuf};
 use editor::{DocumentFactory, TextViewSnapshot};
 
 use super::ProjectGrepRequest;
-use crate::data_object::Visibility;
+use crate::{component::text_input::TextInput, data_object::Visibility};
 
 pub const PREVIEW_HEIGHT: usize = 34;
 
@@ -27,7 +27,7 @@ pub enum SearchStatus {
 #[derive(Debug)]
 pub struct ProjectGrepState {
     pub visibility: Visibility,
-    pub query: String,
+    pub query: TextInput,
     pub results: Vec<ProjectGrepResult>,
     pub selected: Option<usize>,
     pub status: SearchStatus,
@@ -44,7 +44,7 @@ impl Default for ProjectGrepState {
     fn default() -> Self {
         Self {
             visibility: Visibility::Hidden,
-            query: String::new(),
+            query: TextInput::default(),
             results: Vec::new(),
             selected: None,
             status: SearchStatus::Idle,
@@ -82,13 +82,15 @@ impl ProjectGrepState {
     }
 
     pub fn insert(&mut self, character: char) -> Option<ProjectGrepRequest> {
-        self.query.push(character);
+        self.query.insert(character);
         self.start_search()
     }
 
     pub fn backspace(&mut self) -> Option<ProjectGrepRequest> {
-        self.query.pop()?;
-        self.start_search()
+        self.query
+            .backspace()
+            .then(|| self.start_search())
+            .flatten()
     }
 
     pub fn complete_search(
@@ -162,7 +164,7 @@ impl ProjectGrepState {
         self.results.get(self.selected?)
     }
 
-    fn start_search(&mut self) -> Option<ProjectGrepRequest> {
+    pub(crate) fn start_search(&mut self) -> Option<ProjectGrepRequest> {
         self.query_revision = self.query_revision.wrapping_add(1);
         self.results.clear();
         self.selected = None;
@@ -175,7 +177,7 @@ impl ProjectGrepState {
         let root = self.root.as_ref()?.clone();
         Some(ProjectGrepRequest::Search {
             root,
-            query: self.query.clone(),
+            query: self.query.value().to_string(),
             query_revision: self.query_revision,
         })
     }

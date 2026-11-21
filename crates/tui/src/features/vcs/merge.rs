@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::{
+    component::text_input::{TextInput, TextInputChange, TextInputEvent},
     data_object::{CommandId, Context, Message, Model, StatusMessage},
     manager::{
         command_registry::{Command, CommandRegistry},
@@ -30,7 +31,7 @@ enum MergeCompletionOutcome {
 #[derive(Debug, Default)]
 pub(crate) struct MergeState {
     phase: MergePhase,
-    query: String,
+    query: TextInput,
     targets: Vec<String>,
     selected: Option<usize>,
     error: Option<String>,
@@ -52,11 +53,11 @@ impl MergeState {
         self.phase == MergePhase::Merging
     }
 
-    fn is_selecting(&self) -> bool {
+    pub(crate) fn is_selecting(&self) -> bool {
         self.phase == MergePhase::Selecting
     }
 
-    pub(crate) fn query(&self) -> &str {
+    pub(crate) fn query_state(&self) -> &TextInput {
         &self.query
     }
 
@@ -94,18 +95,21 @@ impl MergeState {
         true
     }
 
-    fn insert(&mut self, character: char) {
+    fn backspace(&mut self) {
         if self.is_selecting() {
-            self.query.push(character);
+            self.query.backspace();
             self.select_first();
         }
     }
 
-    fn backspace(&mut self) {
-        if self.is_selecting() {
-            self.query.pop();
-            self.select_first();
-        }
+    fn handle_event(&mut self, event: TextInputEvent) -> Option<TextInputChange> {
+        self.is_selecting().then(|| {
+            let change = self.query.handle_event(event);
+            if change.content_changed() {
+                self.select_first();
+            }
+            change
+        })
     }
 
     fn select(&mut self, next: bool) {
@@ -246,7 +250,7 @@ pub(super) fn register_commands(commands: &mut CommandRegistry) -> color_eyre::R
 }
 
 pub(crate) fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
-    input.register(Context::VcsMerge, insert_char)
+    input.register_with_cursor(Context::VcsMerge, handle_input)
 }
 
 pub(super) fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
@@ -299,8 +303,8 @@ fn close_merge_context(model: &mut Model) {
         .pop_if(|context| context == &Context::VcsMerge);
 }
 
-fn insert_char(model: &mut Model, character: char) -> Option<Effect> {
-    model.vcs.merge.insert(character);
+fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
+    model.vcs.merge.handle_event(event);
     None
 }
 
@@ -488,7 +492,7 @@ mod tests {
             phase: MergePhase::Merging,
             repository: Some(root.clone()),
             revision: 4,
-            query: "side".to_string(),
+            query: TextInput::new("side"),
             ..MergeState::default()
         };
 
@@ -530,7 +534,7 @@ mod tests {
             None,
             Ok(vec!["main".to_string(), "other".to_string()]),
         );
-        state.insert('o');
+        state.handle_event(TextInputEvent::Character('o'));
         assert_eq!(state.filtered_targets(), ["other"]);
 
         let (target, revision) = state.submit(root.clone()).unwrap();
@@ -546,7 +550,7 @@ mod tests {
         assert!(state.cancel());
         assert!(!state.is_active());
         assert!(state.filtered_targets().is_empty());
-        assert!(state.query().is_empty());
+        assert!(state.query.is_empty());
     }
 
     #[test]
@@ -608,7 +612,7 @@ mod tests {
 
     fn type_query(model: &mut Model, query: &str) {
         for character in query.chars() {
-            insert_char(model, character);
+            handle_input(model, TextInputEvent::Character(character));
         }
     }
 

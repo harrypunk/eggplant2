@@ -47,6 +47,9 @@ impl MessageManager {
             Message::InvokeCommand(id) => return self.invoke_command(model, id),
             Message::FeatureCompletion(completion) => return completion.update(model),
             Message::TextInput(character) => return self.text_input.handle(model, character),
+            Message::TextInputCursor(movement) => {
+                return self.text_input.handle_cursor(model, movement);
+            }
             Message::SaveFinished(completion) => {
                 return Self::finish_save(model, completion);
             }

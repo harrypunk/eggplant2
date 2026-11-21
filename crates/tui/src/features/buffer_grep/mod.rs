@@ -8,6 +8,7 @@ pub use work::BufferGrepRequest;
 
 use crate::{
     command_menu::CommandMenuItem,
+    component::text_input::TextInputEvent,
     data_object::{CommandId, Context, Model, StatusMessage},
     focus,
     manager::{
@@ -60,7 +61,7 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
 }
 
 pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
-    input.register(Context::BufferGrep, handle_input)
+    input.register_with_cursor(Context::BufferGrep, handle_input)
 }
 
 pub fn register_ui(ui: &mut UiRegistry) -> color_eyre::Result<()> {
@@ -93,7 +94,7 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     None
 }
 
-pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
+pub fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
     if model.buffer_grep.source_identity() != model.editor.active_revision() {
         close(model);
         model.status = Some(StatusMessage::info(
@@ -101,7 +102,15 @@ pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
         ));
         return None;
     }
-    model.buffer_grep.insert(character).map(Effect::feature)
+    match model
+        .buffer_grep
+        .query
+        .handle_event(event)
+        .content_changed()
+    {
+        true => model.buffer_grep.start_search().map(Effect::feature),
+        false => None,
+    }
 }
 
 fn open(model: &mut Model) {

@@ -12,11 +12,12 @@ use crate::{
 };
 
 pub(super) struct MergePopupProps<'a> {
-    pub query: &'a str,
+    pub input: &'a TextInput,
     pub targets: Vec<&'a str>,
     pub selected: Option<usize>,
     pub loading: bool,
     pub merging: bool,
+    pub selecting: bool,
     pub error: Option<&'a str>,
     pub theme: &'a Theme,
 }
@@ -62,7 +63,7 @@ impl<'a> MergePopup<'a> {
         let layout = MergePopupLayout::new(block.inner(popup));
         frame.render_widget(block.style(styles.base), popup);
 
-        let cursor = render_query(self.props.query, styles, frame, layout.query);
+        let cursor = render_query(&self.props, styles, frame, layout.query);
         render_targets(&self.props, styles, frame, layout.targets);
         render_status(self.props.error, styles, frame, layout.status);
         if let Some(cursor) = cursor {
@@ -82,9 +83,17 @@ fn popup_area(area: Rect) -> Rect {
     )
 }
 
-fn render_query(query: &str, styles: &UiTheme, frame: &mut Frame, area: Rect) -> Option<Position> {
-    let input = TextInput::new(query, styles);
-    let cursor = input.cursor_position(area);
+fn render_query(
+    props: &MergePopupProps<'_>,
+    styles: &UiTheme,
+    frame: &mut Frame,
+    area: Rect,
+) -> Option<Position> {
+    let input = props.input.view(styles);
+    let cursor = props
+        .selecting
+        .then(|| input.cursor_position(area))
+        .flatten();
     frame.render_widget(input, area);
     cursor
 }
@@ -151,11 +160,13 @@ mod tests {
         let theme = Theme::default();
         let backend = TestBackend::new(80, 12);
         let mut terminal = Terminal::new(backend).unwrap();
+        let input = TextInput::new("ori");
 
         terminal
             .draw(|frame| {
                 MergePopup::new(MergePopupProps {
-                    query: "ori",
+                    input: &input,
+                    selecting: true,
                     targets: vec!["origin/main"],
                     selected: Some(0),
                     loading: false,
@@ -183,8 +194,10 @@ mod tests {
     #[test]
     fn target_lines_reflect_loading_and_merging_phases() {
         let theme = Theme::default();
+        let input = TextInput::new("");
         let mut props = MergePopupProps {
-            query: "",
+            input: &input,
+            selecting: true,
             targets: Vec::new(),
             selected: None,
             loading: true,

@@ -3,7 +3,7 @@ use std::sync::Arc;
 use editor::{BufferId, BufferTextSnapshot, EditorSession, TextViewSnapshot};
 
 use super::BufferGrepRequest;
-use crate::data_object::Visibility;
+use crate::{component::text_input::TextInput, data_object::Visibility};
 
 pub(crate) const PREVIEW_HEIGHT: usize = 34;
 
@@ -20,7 +20,7 @@ pub enum SearchStatus {
 #[derive(Debug)]
 pub struct BufferGrepState {
     pub visibility: Visibility,
-    pub query: String,
+    pub query: TextInput,
     pub results: Vec<GrepMatch>,
     pub selected: Option<usize>,
     pub status: SearchStatus,
@@ -33,7 +33,7 @@ impl Default for BufferGrepState {
     fn default() -> Self {
         Self {
             visibility: Visibility::Hidden,
-            query: String::new(),
+            query: TextInput::default(),
             results: Vec::new(),
             selected: None,
             status: SearchStatus::Idle,
@@ -68,13 +68,15 @@ impl BufferGrepState {
     }
 
     pub fn insert(&mut self, character: char) -> Option<BufferGrepRequest> {
-        self.query.push(character);
+        self.query.insert(character);
         self.start_search()
     }
 
     pub fn backspace(&mut self) -> Option<BufferGrepRequest> {
-        self.query.pop()?;
-        self.start_search()
+        self.query
+            .backspace()
+            .then(|| self.start_search())
+            .flatten()
     }
 
     pub fn complete(
@@ -141,7 +143,7 @@ impl BufferGrepState {
         };
     }
 
-    fn start_search(&mut self) -> Option<BufferGrepRequest> {
+    pub(crate) fn start_search(&mut self) -> Option<BufferGrepRequest> {
         self.query_revision = self.query_revision.wrapping_add(1);
         self.results.clear();
         self.selected = None;
@@ -155,7 +157,7 @@ impl BufferGrepState {
         let source = self.source.as_ref()?.clone();
         Some(BufferGrepRequest::new(
             source,
-            self.query.clone(),
+            self.query.value().to_string(),
             self.query_revision,
         ))
     }

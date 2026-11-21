@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use ::vcs::{BranchStartPoint, BranchSwitchOutcome};
 
 use crate::{
+    component::text_input::{TextInput, TextInputChange, TextInputEvent},
     data_object::{CommandId, Context, Message, Model, StatusMessage},
     manager::{
         command_registry::{Command, CommandRegistry},
@@ -34,7 +35,7 @@ enum BranchMode {
 pub(crate) struct BranchState {
     phase: BranchPhase,
     mode: Option<BranchMode>,
-    query: String,
+    query: TextInput,
     branches: Vec<String>,
     selected: Option<usize>,
     start: Option<BranchStartPoint>,
@@ -79,7 +80,7 @@ impl BranchState {
         self.mode == Some(BranchMode::Create)
     }
 
-    pub(crate) fn query(&self) -> &str {
+    pub(crate) fn query_state(&self) -> &TextInput {
         &self.query
     }
 
@@ -162,26 +163,30 @@ impl BranchState {
         active
     }
 
-    fn insert(&mut self, character: char) {
+    fn backspace(&mut self) {
         if self.phase != BranchPhase::Selecting && self.phase != BranchPhase::Naming {
             return;
         }
-        self.query.push(character);
+        self.query.backspace();
         self.error = None;
         if self.phase == BranchPhase::Selecting {
             self.select_first();
         }
     }
 
-    fn backspace(&mut self) {
-        if self.phase != BranchPhase::Selecting && self.phase != BranchPhase::Naming {
-            return;
-        }
-        self.query.pop();
-        self.error = None;
-        if self.phase == BranchPhase::Selecting {
-            self.select_first();
-        }
+    fn handle_event(&mut self, event: TextInputEvent) -> Option<TextInputChange> {
+        [BranchPhase::Selecting, BranchPhase::Naming]
+            .contains(&self.phase)
+            .then(|| {
+                let change = self.query.handle_event(event);
+                if change.content_changed() {
+                    self.error = None;
+                    if self.phase == BranchPhase::Selecting {
+                        self.select_first();
+                    }
+                }
+                change
+            })
     }
 
     fn select(&mut self, next: bool) {
@@ -405,7 +410,7 @@ pub(super) fn register_commands(commands: &mut CommandRegistry) -> color_eyre::R
 }
 
 pub(crate) fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
-    input.register(Context::VcsBranch, insert_char)
+    input.register_with_cursor(Context::VcsBranch, handle_input)
 }
 
 pub(super) fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
@@ -477,8 +482,8 @@ fn close_branch_context(model: &mut Model) {
         .pop_if(|context| context == &Context::VcsBranch);
 }
 
-fn insert_char(model: &mut Model, character: char) -> Option<Effect> {
-    model.vcs.branch.insert(character);
+fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
+    model.vcs.branch.handle_event(event);
     None
 }
 
@@ -643,7 +648,7 @@ mod tests {
         assert_eq!(state.selected, Some(0));
 
         for character in "abc123".chars() {
-            state.insert(character);
+            state.handle_event(TextInputEvent::Character(character));
         }
         assert_eq!(state.revision_query(), Some("abc123"));
         assert!(matches!(
@@ -656,7 +661,7 @@ mod tests {
             Some(BranchStartPoint::Revision("abc123".to_string()))
         );
         for character in "topic/test".chars() {
-            state.insert(character);
+            state.handle_event(TextInputEvent::Character(character));
         }
 
         let Some(BranchSubmission::Switch {
@@ -679,7 +684,7 @@ mod tests {
             BranchCompletionOutcome::Failed
         );
         assert!(state.is_naming());
-        assert_eq!(state.query, "topic/test");
+        assert_eq!(state.query.value(), "topic/test");
         assert!(state.error().unwrap().contains("local changes"));
     }
 

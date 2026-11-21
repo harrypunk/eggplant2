@@ -125,11 +125,14 @@ impl ThemePickerAdapter<'_> {
 }
 
 pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
-    input.register(Context::ThemePicker, insert_char)
+    input.register_with_cursor(Context::ThemePicker, handle_input)
 }
 
-fn insert_char(model: &mut Model, character: char) -> Option<Effect> {
-    model.theme_picker.push_query(character);
+fn handle_input(
+    model: &mut Model,
+    event: crate::component::text_input::TextInputEvent,
+) -> Option<Effect> {
+    model.theme_picker.handle_query_event(event);
     None
 }
 

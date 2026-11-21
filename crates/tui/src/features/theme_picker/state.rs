@@ -180,10 +180,26 @@ impl ThemePickerState {
         self.query.as_str()
     }
 
+    pub fn query_state(&self) -> &Query {
+        &self.query
+    }
+
+    pub fn handle_query_event(
+        &mut self,
+        event: crate::component::text_input::TextInputEvent,
+    ) -> crate::component::text_input::TextInputChange {
+        let change = self.query.handle_event(event);
+        if change.content_changed() {
+            self.preferred_external = None;
+            self.select_first_visible();
+        }
+        change
+    }
+
     pub fn push_query(&mut self, character: char) {
-        self.preferred_external = None;
-        self.query.push(character);
-        self.select_first_visible();
+        self.handle_query_event(crate::component::text_input::TextInputEvent::Character(
+            character,
+        ));
     }
 
     pub fn backspace_query(&mut self) {

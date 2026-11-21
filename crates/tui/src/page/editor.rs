@@ -293,7 +293,7 @@ mod tests {
         let mut model = Model::default();
         create_buffer(&mut model, "hello");
         model.file_picker.visibility = Visibility::Displayed;
-        model.file_picker.query = "hello".to_string();
+        model.file_picker.query = crate::component::text_input::TextInput::new("hello");
         let page = Editor::default();
 
         terminal.draw(|frame| page.view(&model, frame)).unwrap();

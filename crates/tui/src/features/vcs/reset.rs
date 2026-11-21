@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use ::vcs::ResetTarget;
 
 use crate::{
+    component::text_input::{TextInput, TextInputChange, TextInputEvent},
     data_object::{CommandId, Context, Message, Model, StatusMessage},
     manager::{
         command_registry::{Command, CommandRegistry},
@@ -33,7 +34,7 @@ enum ResetCompletionOutcome {
 #[derive(Debug, Default)]
 pub(crate) struct ResetState {
     phase: ResetPhase,
-    query: String,
+    query: TextInput,
     targets: Vec<ResetTarget>,
     selected: Option<usize>,
     target: Option<String>,
@@ -65,11 +66,11 @@ impl ResetState {
         self.phase == ResetPhase::Resetting
     }
 
-    fn is_selecting(&self) -> bool {
+    pub(crate) fn is_selecting(&self) -> bool {
         self.phase == ResetPhase::Selecting
     }
 
-    pub(crate) fn query(&self) -> &str {
+    pub(crate) fn query_state(&self) -> &TextInput {
         &self.query
     }
 
@@ -140,20 +141,23 @@ impl ResetState {
         active
     }
 
-    fn insert(&mut self, character: char) {
+    fn backspace(&mut self) {
         if self.is_selecting() {
-            self.query.push(character);
+            self.query.backspace();
             self.error = None;
             self.select_first();
         }
     }
 
-    fn backspace(&mut self) {
-        if self.is_selecting() {
-            self.query.pop();
-            self.error = None;
-            self.select_first();
-        }
+    fn handle_event(&mut self, event: TextInputEvent) -> Option<TextInputChange> {
+        self.is_selecting().then(|| {
+            let change = self.query.handle_event(event);
+            if change.content_changed() {
+                self.error = None;
+                self.select_first();
+            }
+            change
+        })
     }
 
     fn select(&mut self, next: bool) {
@@ -304,7 +308,7 @@ pub(super) fn register_commands(commands: &mut CommandRegistry) -> color_eyre::R
 }
 
 pub(crate) fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
-    input.register(Context::VcsReset, insert_char)
+    input.register_with_cursor(Context::VcsReset, handle_input)
 }
 
 pub(super) fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
@@ -381,8 +385,8 @@ fn close_reset_context(model: &mut Model) {
         .pop_if(|context| context == &Context::VcsReset);
 }
 
-fn insert_char(model: &mut Model, character: char) -> Option<Effect> {
-    model.vcs.reset.insert(character);
+fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
+    model.vcs.reset.handle_event(event);
     None
 }
 
@@ -537,7 +541,7 @@ mod tests {
         let revision = start(&mut model);
         targets(&mut model, revision);
         for character in "abcd".chars() {
-            insert_char(&mut model, character);
+            handle_input(&mut model, TextInputEvent::Character(character));
         }
         assert_eq!(model.vcs.reset.revision_query(), Some("abcd"));
         assert!(handle_command(&mut model, CommandId("vcs_reset_submit")).is_some());

@@ -52,7 +52,7 @@ The handler receives the model and command ID and returns an optional effect. Ke
 - Return an error status for an unexpected ID instead of silently ignoring it.
 - Let duplicate registrations and duplicate chords fail at startup.
 
-Compatibility `Message` handlers remain available for shell concerns, but new features should prefer feature handlers. For unbound printable input, register a `TextInputRegistry` handler for the feature context and consume the shared `Message::TextInput`; do not add a feature-specific character message or dispatcher arm.
+Compatibility `Message` handlers remain available for shell concerns, but new features should prefer feature handlers. For unbound printable input, register a `TextInputRegistry` handler for the feature context and consume the shared `Message::TextInput`; do not add a feature-specific character message or dispatcher arm. For an editable single-line popup, store the shared `TextInput` component and use `register_with_cursor`: it additionally routes Left/Right through `Message::TextInputCursor` to that local component. The feature should react only to `content_changed()`, never implement cursor arithmetic itself.
 
 ## 4. Keep updates pure
 

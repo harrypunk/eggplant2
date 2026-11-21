@@ -10,6 +10,7 @@ use editor::DocumentPosition;
 
 use crate::{
     command_menu::CommandMenuItem,
+    component::text_input::TextInputEvent,
     data_object::{CommandId, Context, Model, StatusMessage},
     document,
     manager::{
@@ -61,7 +62,7 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
 }
 
 pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
-    input.register(Context::ProjectGrep, handle_input)
+    input.register_with_cursor(Context::ProjectGrep, handle_input)
 }
 
 pub fn register_ui(ui: &mut UiRegistry) -> color_eyre::Result<()> {
@@ -92,8 +93,16 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     None
 }
 
-pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
-    model.project_grep.insert(character).map(Effect::feature)
+pub fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
+    match model
+        .project_grep
+        .query
+        .handle_event(event)
+        .content_changed()
+    {
+        true => model.project_grep.start_search().map(Effect::feature),
+        false => None,
+    }
 }
 
 fn open(model: &mut Model) {

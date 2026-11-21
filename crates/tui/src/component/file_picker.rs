@@ -9,7 +9,6 @@ use ratatui::{
 use super::{
     picker,
     popup::{self, Popup},
-    text_input::TextInput,
     text_view::TextView,
 };
 use crate::{
@@ -33,7 +32,7 @@ impl<'a> FilePicker<'a> {
 
     pub fn cursor_position(self, area: Rect) -> Option<Position> {
         let input = picker::content_areas(popup::content_area(area)).input;
-        TextInput::new(&self.state.query, self.theme.ui()).cursor_position(input)
+        self.state.query.cursor_position(input, self.theme.ui())
     }
 }
 
@@ -88,7 +87,10 @@ impl Widget for FilePickerContent<'_> {
         let areas = picker::content_areas(area);
         let surface = self.theme.ui().popup_surface();
         let border = surface.patch(self.theme.ui().border);
-        TextInput::new(&self.state.query, self.theme.ui()).render(areas.input, buf);
+        self.state
+            .query
+            .view(self.theme.ui())
+            .render(areas.input, buf);
         let results = picker::visible_lines(
             result_lines(self.state, self.theme.ui()),
             self.state.selected,
@@ -169,7 +171,7 @@ mod tests {
     #[test]
     fn renders_query_results_and_text_preview() {
         let mut state = FilePickerState::default();
-        state.query = "main".to_string();
+        state.query = crate::component::text_input::TextInput::new("main");
         state.collection = FileCollectionState::Ready;
         state.results = vec![FileEntry {
             path: PathBuf::from("src/main.rs"),

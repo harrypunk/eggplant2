@@ -374,6 +374,7 @@ pub mod data_object {
         InvokeCommand(CommandId),
         FeatureCompletion(FeatureCompletion),
         TextInput(char),
+        TextInputCursor(crate::component::text_input::TextCursorMovement),
         SaveFinished(SaveCompletion),
         FileOpened(crate::document::OpenFileCompletion),
         FocusLost,

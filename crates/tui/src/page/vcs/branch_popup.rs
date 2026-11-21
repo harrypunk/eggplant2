@@ -12,7 +12,7 @@ use crate::{
 };
 
 pub(super) struct BranchPopupProps<'a> {
-    pub query: &'a str,
+    pub input: &'a TextInput,
     pub targets: Vec<&'a str>,
     pub selected: Option<usize>,
     pub creating: bool,
@@ -98,7 +98,7 @@ fn render_query(
     frame: &mut Frame,
     area: Rect,
 ) -> Option<Position> {
-    let input = TextInput::new(props.query, styles);
+    let input = props.input.view(styles);
     let cursor = (props.selecting || props.naming)
         .then(|| input.cursor_position(area))
         .flatten();
@@ -179,9 +179,9 @@ mod tests {
 
     use super::*;
 
-    fn props<'a>(theme: &'a Theme) -> BranchPopupProps<'a> {
+    fn props<'a>(input: &'a TextInput, theme: &'a Theme) -> BranchPopupProps<'a> {
         BranchPopupProps {
-            query: "",
+            input,
             targets: vec!["HEAD", "main"],
             selected: Some(0),
             creating: true,
@@ -201,10 +201,11 @@ mod tests {
         let theme = Theme::default();
         let backend = TestBackend::new(80, 12);
         let mut terminal = Terminal::new(backend).unwrap();
+        let input = TextInput::new("");
 
         terminal
             .draw(|frame| {
-                BranchPopup::new(props(&theme)).render(frame, frame.area());
+                BranchPopup::new(props(&input, &theme)).render(frame, frame.area());
             })
             .unwrap();
 
@@ -223,7 +224,8 @@ mod tests {
     #[test]
     fn target_lines_show_explicit_revision_and_naming_start() {
         let theme = Theme::default();
-        let mut props = props(&theme);
+        let input = TextInput::new("");
+        let mut props = props(&input, &theme);
         props.revision = Some("abc123");
         props.targets.clear();
         assert_eq!(

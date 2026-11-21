@@ -141,7 +141,7 @@ Provider SDK types must not appear in `Model`, components, filesystem tools, or 
 
 - `manager/effect.rs` provides the generic effect/completion envelope; `features/notifications.rs` shows custom async execution, and `features/code_navigation/work.rs` already forwards multiple typed events through the shared sender. Use a similarly focused streaming adapter.
 - `tools/state.rs` owns only tool-panel visibility/active selection. Agent transcript/run state must remain in `AgentSession` so hiding the panel preserves it. Extend the existing tool-content dispatcher in `ui.rs`; do not register a duplicate `PanelSlot::Tools`.
-- `component/text_input.rs` supplies a bordered single-line input with Unicode display-width and end-of-value cursor placement. It is not a multiline prompt or arbitrary-cursor editor.
+- `component/text_input.rs` supplies a stateful bordered single-line input with local value/cursor state, Unicode-scalar Left/Right movement, and cursor-aware horizontal scrolling. It is not a multiline prompt.
 - `capabilities/document.rs` supplies safe user-visible open behavior and the lifecycle port pattern; use it for navigation rather than treating it as the agent's bounded read tool.
 - `config/mod.rs` and `main.rs` are the configuration and composition seams for an injected provider. Typed `[features.agent]` settings belong here.
 

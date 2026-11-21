@@ -59,7 +59,7 @@ impl<'a> ThemePicker<'a> {
 
     pub fn cursor_position(self, area: Rect) -> Option<Position> {
         let (input, _) = content_areas(popup::content_area(area));
-        QueryInput::new(self.state.query(), self.theme.ui()).cursor_position(input)
+        QueryInput::new(self.state.query_state(), self.theme.ui()).cursor_position(input)
     }
 }
 
@@ -110,7 +110,7 @@ impl Widget for ThemePickerContent<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let (input, results) = content_areas(area);
         let surface = self.theme.ui().popup_surface();
-        QueryInput::new(self.state.query(), self.theme.ui()).render(input, buf);
+        QueryInput::new(self.state.query_state(), self.theme.ui()).render(input, buf);
         let lines = result_lines(self.state, surface, self.theme.ui(), results.height);
         Paragraph::new(lines).style(surface).render(results, buf);
     }

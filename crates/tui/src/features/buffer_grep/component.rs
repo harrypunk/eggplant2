@@ -11,7 +11,6 @@ use crate::{
         picker,
         popup::{self, Popup},
         search_highlight::{highlighted_spans, match_highlight, style_preview},
-        text_input::TextInput,
         text_view::TextView,
     },
     data_object::{Model, Visibility},
@@ -34,7 +33,7 @@ impl<'a> BufferGrep<'a> {
 
     pub fn cursor_position(self, area: Rect) -> Option<Position> {
         let input = picker::content_areas(popup::content_area(area)).input;
-        TextInput::new(&self.state.query, self.theme.ui()).cursor_position(input)
+        self.state.query.cursor_position(input, self.theme.ui())
     }
 }
 
@@ -89,7 +88,10 @@ impl Widget for BufferGrepContent<'_> {
         let areas = picker::content_areas(area);
         let surface = self.theme.ui().popup_surface();
         let border = surface.patch(self.theme.ui().border);
-        TextInput::new(&self.state.query, self.theme.ui()).render(areas.input, buf);
+        self.state
+            .query
+            .view(self.theme.ui())
+            .render(areas.input, buf);
         let results = picker::visible_lines(
             result_lines(self.state, self.theme.ui()),
             self.state.selected,
@@ -183,7 +185,7 @@ mod tests {
             .insert_document(DocumentFactory::new().open(&path).unwrap());
         let source = model.editor.active_text_snapshot().unwrap();
         model.buffer_grep.open(source);
-        model.buffer_grep.query = "main".to_string();
+        model.buffer_grep.query = crate::component::text_input::TextInput::new("main");
         model.buffer_grep.status = SearchStatus::Ready;
         model.buffer_grep.results = vec![GrepMatch {
             line: 0,

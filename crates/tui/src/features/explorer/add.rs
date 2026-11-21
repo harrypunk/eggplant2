@@ -11,7 +11,7 @@ use ratatui::{
 use crate::{
     component::{
         popup::{self, Popup},
-        text_input::TextInput,
+        text_input::{TextInput, TextInputChange, TextInputEvent},
     },
     data_object::{Context, Message, Model, StatusMessage},
     document,
@@ -37,7 +37,7 @@ enum AddPhase {
 #[derive(Debug, Default)]
 pub(crate) struct AddState {
     phase: AddPhase,
-    path: String,
+    path: TextInput,
     revision: u64,
 }
 
@@ -56,7 +56,7 @@ impl AddState {
 
     fn open(&mut self, prefill: String) {
         self.phase = AddPhase::Editing;
-        self.path = prefill;
+        self.path.set_value(prefill);
     }
 
     fn close(&mut self) {
@@ -65,18 +65,14 @@ impl AddState {
         self.revision = self.revision.wrapping_add(1);
     }
 
-    fn insert(&mut self, character: char) {
-        if !self.is_editing() {
-            return;
+    fn backspace(&mut self) {
+        if self.is_editing() {
+            self.path.backspace();
         }
-        self.path.push(character);
     }
 
-    fn backspace(&mut self) {
-        if !self.is_editing() {
-            return;
-        }
-        self.path.pop();
+    fn handle_event(&mut self, event: TextInputEvent) -> Option<TextInputChange> {
+        self.is_editing().then(|| self.path.handle_event(event))
     }
 
     fn begin_create(&mut self) -> Option<u64> {
@@ -137,11 +133,11 @@ pub(super) fn backspace(model: &mut Model) -> Option<Effect> {
 }
 
 pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
-    input.register(Context::ExplorerAdd, insert_char)
+    input.register_with_cursor(Context::ExplorerAdd, handle_input)
 }
 
-fn insert_char(model: &mut Model, character: char) -> Option<Effect> {
-    model.explorer.add.insert(character);
+fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
+    model.explorer.add.handle_event(event);
     None
 }
 
@@ -280,7 +276,7 @@ fn cursor(model: &Model, area: Rect) -> Option<Position> {
         return None;
     }
     let (input, _) = content_areas(popup::content_area(area));
-    TextInput::new(&state.path, model.theme.ui()).cursor_position(input)
+    state.path.cursor_position(input, model.theme.ui())
 }
 
 struct AddPrompt<'a> {
@@ -311,7 +307,7 @@ impl Widget for AddContent<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let (input, status_area) = content_areas(area);
         let surface = self.styles.popup_surface();
-        TextInput::new(&self.state.path, self.styles).render(input, buf);
+        self.state.path.view(self.styles).render(input, buf);
         if self.state.is_creating() {
             let status = Line::styled("Creating…", surface.patch(self.styles.muted));
             Paragraph::new(status)
@@ -422,7 +418,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("explorer_add")),
         );
-        assert_eq!(model.explorer.add.path, "folder/");
+        assert_eq!(model.explorer.add.path.value(), "folder/");
         assert_eq!(model.context_stack.last(), Some(&Context::ExplorerAdd));
         type_path(&manager, &mut model, "new.txt");
         let effect = manager
@@ -461,7 +457,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("explorer_add")),
         );
-        assert_eq!(model.explorer.add.path, "folder/");
+        assert_eq!(model.explorer.add.path.value(), "folder/");
         type_path(&manager, &mut model, "new/");
         let effect = manager
             .update(
@@ -500,7 +496,7 @@ mod tests {
             "The path must stay within the workspace"
         );
         assert!(model.explorer.add.is_editing());
-        assert_eq!(model.explorer.add.path, "../outside");
+        assert_eq!(model.explorer.add.path.value(), "../outside");
 
         while !model.explorer.add.path.is_empty() {
             manager.update(
@@ -518,7 +514,7 @@ mod tests {
         let notification = complete_feature(&manager, &mut model, effect);
         assert!(notification.is_some());
         assert!(model.explorer.add.is_editing());
-        assert_eq!(model.explorer.add.path, "note.txt");
+        assert_eq!(model.explorer.add.path.value(), "note.txt");
         assert!(
             model
                 .notifications

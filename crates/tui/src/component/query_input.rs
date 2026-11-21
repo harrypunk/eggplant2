@@ -4,38 +4,42 @@ use ratatui::{
     widgets::Widget,
 };
 
-use super::text_input::TextInput;
+use super::text_input::{TextInput, TextInputChange, TextInputEvent};
 use crate::theme::UiTheme;
 
 /// Reusable case-insensitive substring query for picker-style filtering.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Query {
-    text: String,
+    input: TextInput,
 }
 
 impl Query {
     pub fn push(&mut self, character: char) {
-        self.text.push(character);
+        self.input.insert(character);
     }
 
     pub fn pop(&mut self) {
-        self.text.pop();
+        self.input.backspace();
     }
 
     pub fn clear(&mut self) {
-        self.text.clear();
+        self.input.clear();
+    }
+
+    pub fn handle_event(&mut self, event: TextInputEvent) -> TextInputChange {
+        self.input.handle_event(event)
     }
 
     pub fn as_str(&self) -> &str {
-        &self.text
+        self.input.value()
     }
 
     pub fn is_empty(&self) -> bool {
-        self.text.is_empty()
+        self.input.is_empty()
     }
 
     pub fn matches(&self, candidate: &str) -> bool {
-        let query = self.text.to_lowercase();
+        let query = self.input.value().to_lowercase();
         candidate.to_lowercase().contains(&query)
     }
 }
@@ -43,23 +47,23 @@ impl Query {
 /// Cursor-aware query field composed from the shared single-line text input.
 #[derive(Debug, Clone, Copy)]
 pub struct QueryInput<'a> {
-    query: &'a str,
+    query: &'a Query,
     styles: &'a UiTheme,
 }
 
 impl<'a> QueryInput<'a> {
-    pub fn new(query: &'a str, styles: &'a UiTheme) -> Self {
+    pub fn new(query: &'a Query, styles: &'a UiTheme) -> Self {
         Self { query, styles }
     }
 
     pub fn cursor_position(self, area: Rect) -> Option<Position> {
-        TextInput::new(self.query, self.styles).cursor_position(area)
+        self.query.input.cursor_position(area, self.styles)
     }
 }
 
 impl Widget for QueryInput<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
-        TextInput::new(self.query, self.styles).render(area, buf);
+        self.query.input.view(self.styles).render(area, buf);
     }
 }
 

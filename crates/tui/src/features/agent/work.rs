@@ -10,6 +10,7 @@ use super::{
     tools::{BufferContext, ToolContext},
 };
 use crate::{
+    component::text_input::TextInputEvent,
     data_object::{CommandId, Context, Model, StatusMessage, Visibility},
     manager::{
         command_registry::{Command, CommandRegistry},
@@ -60,7 +61,12 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
 }
 
 pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
-    input.register(Context::AgentChatDialog, insert)
+    input.register_with_cursor(Context::AgentChatDialog, handle_input)
+}
+
+fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
+    model.agent.handle_input_event(event);
+    None
 }
 
 pub fn register_ui(ui: &mut UiRegistry) -> color_eyre::Result<()> {
@@ -214,11 +220,6 @@ fn resolve_write(model: &mut Model, approved: bool) -> Option<Effect> {
     });
     transition_to_chat(model);
     Effect::combine(after_edit, Some(resume))
-}
-
-fn insert(model: &mut Model, character: char) -> Option<Effect> {
-    model.agent.insert(character);
-    None
 }
 
 fn backspace(model: &mut Model) -> Option<Effect> {
@@ -847,7 +848,7 @@ mod tests {
 
         open(&mut model);
         assert_eq!(model.agent.prompt(), "main.rs:2");
-        insert(&mut model, '?');
+        handle_input(&mut model, TextInputEvent::Character('?'));
         assert_eq!(model.agent.prompt(), "main.rs:2?");
         backspace(&mut model);
         assert_eq!(model.agent.prompt(), "main.rs:2");
@@ -861,6 +862,37 @@ mod tests {
         close(&mut model);
         open(&mut model);
         assert_eq!(model.agent.prompt(), "");
+    }
+
+    #[test]
+    fn prompt_cursor_moves_and_inserts_at_unicode_boundaries() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("main.rs");
+        std::fs::write(&path, "first\nsecond").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        open_file(&mut model, &path);
+        open(&mut model);
+
+        handle_input(
+            &mut model,
+            TextInputEvent::Cursor(crate::component::text_input::TextCursorMovement::Left),
+        );
+        handle_input(
+            &mut model,
+            TextInputEvent::Cursor(crate::component::text_input::TextCursorMovement::Left),
+        );
+        handle_input(&mut model, TextInputEvent::Character('界'));
+        assert_eq!(model.agent.prompt(), "main.rs界:1");
+        backspace(&mut model);
+        assert_eq!(model.agent.prompt(), "main.rs:1");
+        handle_input(&mut model, TextInputEvent::Character('X'));
+        assert_eq!(model.agent.prompt(), "main.rsX:1");
+        handle_input(
+            &mut model,
+            TextInputEvent::Cursor(crate::component::text_input::TextCursorMovement::Right),
+        );
+        handle_input(&mut model, TextInputEvent::Character('Y'));
+        assert_eq!(model.agent.prompt(), "main.rsX:Y1");
     }
 
     #[test]
@@ -909,7 +941,9 @@ mod tests {
             model.agent.backspace();
         }
         for character in "fail".chars() {
-            model.agent.insert(character);
+            model
+                .agent
+                .handle_input_event(TextInputEvent::Character(character));
         }
         let effect = submit(&mut model).unwrap();
         perform(&manager, &mut model, effect);
