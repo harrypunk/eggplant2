@@ -7,8 +7,8 @@ pub use component::overlay;
 pub use work::{close_document, handle_command, register_commands, synchronize};
 
 use app::language::{
-    DocumentEvent, LanguageError, LanguageService, NavigationKind, NavigationRequest,
-    NavigationRequestId, SourceLocation,
+    DocumentEvent, LanguageError, LanguageServerSpec, LanguageService, NavigationKind,
+    NavigationRequest, NavigationRequestId, SourceLocation,
 };
 use editor::{BufferId, DocumentPosition};
 
@@ -28,6 +28,8 @@ pub struct CodeNavigationState {
     locations: Vec<SourceLocation>,
     selected: Option<usize>,
     service: Option<Box<dyn LanguageService>>,
+    service_spec: Option<LanguageServerSpec>,
+    operation_spec: Option<LanguageServerSpec>,
     service_failed: bool,
     operation_active: bool,
     trailing_sync: VecDeque<DocumentEvent>,
@@ -41,6 +43,8 @@ impl std::fmt::Debug for CodeNavigationState {
             .field("locations", &self.locations)
             .field("selected", &self.selected)
             .field("has_service", &self.service.is_some())
+            .field("service_spec", &self.service_spec)
+            .field("operation_spec", &self.operation_spec)
             .field("service_failed", &self.service_failed)
             .field("operation_active", &self.operation_active)
             .field("has_trailing_sync", &!self.trailing_sync.is_empty())
@@ -88,6 +92,7 @@ impl CodeNavigationState {
         }
         self.pending = None;
         self.operation_active = false;
+        self.operation_spec = None;
         if pending.buffer != buffer || pending.revision != revision {
             return NavigationOutcome::Ignored;
         }
@@ -125,6 +130,7 @@ impl CodeNavigationState {
 
     pub fn finish_operation(&mut self) {
         self.operation_active = false;
+        self.operation_spec = None;
     }
 
     pub fn queue_sync(&mut self, event: DocumentEvent) {
@@ -151,26 +157,68 @@ impl CodeNavigationState {
         self.trailing_sync.pop_front()
     }
 
-    pub fn take_service(&mut self) -> Option<Box<dyn LanguageService>> {
+    pub fn take_service_for(
+        &mut self,
+        spec: &LanguageServerSpec,
+    ) -> Option<Box<dyn LanguageService>> {
+        if self
+            .service_spec
+            .as_ref()
+            .is_some_and(|current| current != spec)
+        {
+            self.service = None;
+        }
+        self.service_spec = None;
+        self.operation_spec = Some(spec.clone());
         self.service_failed = false;
         self.service.take()
     }
 
     pub fn restore_service(&mut self, service: Box<dyn LanguageService>) {
+        self.restore_with_spec(service, None);
+    }
+
+    pub fn restore_service_for(
+        &mut self,
+        spec: &LanguageServerSpec,
+        service: Box<dyn LanguageService>,
+    ) {
+        self.restore_with_spec(service, Some(spec.clone()));
+    }
+
+    fn restore_with_spec(
+        &mut self,
+        service: Box<dyn LanguageService>,
+        spec: Option<LanguageServerSpec>,
+    ) {
         if self.service_failed {
             self.service_failed = false;
+            self.service_spec = None;
         } else {
             self.service = Some(service);
+            self.service_spec = spec;
         }
     }
 
     pub fn invalidate_service(&mut self) {
         self.service = None;
+        self.service_spec = None;
         self.service_failed = true;
     }
 
     pub fn has_service(&self) -> bool {
         self.service.is_some() || self.is_busy()
+    }
+
+    pub fn has_service_for(&self, spec: &LanguageServerSpec) -> bool {
+        if self.is_busy() {
+            return self.operation_spec.as_ref() == Some(spec);
+        }
+        self.service.is_some()
+            && self
+                .service_spec
+                .as_ref()
+                .is_none_or(|current| current == spec)
     }
 
     pub fn selected_location(&self) -> Option<&SourceLocation> {
@@ -215,6 +263,23 @@ mod tests {
 
     use super::*;
 
+    struct TestService;
+
+    impl LanguageService for TestService {
+        fn synchronize(&mut self, _: DocumentEvent) -> Result<(), LanguageError> {
+            Ok(())
+        }
+
+        fn navigate(&mut self, _: NavigationRequest) -> Result<Vec<SourceLocation>, LanguageError> {
+            Ok(Vec::new())
+        }
+    }
+
+    fn spec(language: &str, command: &str) -> LanguageServerSpec {
+        LanguageServerSpec::new(language, command, std::iter::empty::<&str>())
+            .with_extensions(["rs"])
+    }
+
     fn location() -> SourceLocation {
         SourceLocation {
             path: PathBuf::from("/workspace/main.rs"),
@@ -226,6 +291,31 @@ mod tests {
                 line: 1,
                 character: 4,
             },
+        }
+    }
+
+    #[test]
+    fn service_reuse_requires_the_same_server_specification() {
+        let rust = spec("rust", "rust-analyzer");
+        let same = rust.clone();
+        let typescript = spec("typescript", "typescript-language-server");
+        let changed_command = spec("rust", "another-rust-server");
+        let mut state = CodeNavigationState::default();
+        state.restore_service_for(&rust, Box::new(TestService));
+        assert!(state.has_service_for(&same));
+        assert!(!state.has_service_for(&typescript));
+
+        state.begin_sync();
+        let service = state.take_service_for(&same).unwrap();
+        state.restore_service_for(&same, service);
+        state.finish_operation();
+
+        for mismatch in [typescript, changed_command] {
+            state.restore_service_for(&rust, Box::new(TestService));
+            state.begin_sync();
+            assert!(state.take_service_for(&mismatch).is_none());
+            state.finish_operation();
+            assert!(!state.has_service());
         }
     }
 

@@ -33,7 +33,7 @@ The abstraction, injection path, and strict TOML parser are implemented. `app::l
 .rs → rust-analyzer
 ```
 
-Startup file discovery/loading is **not wired yet**. There is currently one active language service, one server per registered language, and one workspace root. The parser therefore rejects multiple providers per language. Keyed services are required before mixed-language startup loading is safe; multiple providers per document require an additional routing slice.
+Startup file discovery/loading is **not wired yet**. There is currently one active language service, one server per registered language, and one workspace root. The parser therefore rejects multiple providers per language. Service reuse requires an exact `LanguageServerSpec` match; changing language, command, arguments, or extensions drops the old service before starting another. This sequential replacement prevents cross-language process reuse. Retaining simultaneous providers and merging their diagnostics require additional routing slices.
 
 ## Supported parser format
 
@@ -66,7 +66,7 @@ Configuration parsing produces owned registry values rather than leaking TOML ty
 ## Later slices
 
 - Load user language configuration at startup, then optionally merge trusted project overrides.
-- Key running services by workspace root and server identity.
+- Retain multiple idle/running services keyed by workspace root and server identity instead of sequentially replacing the active service.
 - Allow multiple servers per document: first capable provider for navigation, merged diagnostics from all providers.
 - Add server initialization/configuration values only when the basic loader and lifecycle are proven.
 - Keep completion, hover, rename, code actions, automatic installation, and other full-IDE features out of scope.

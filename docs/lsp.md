@@ -55,6 +55,7 @@ Transient server information, missing results, startup failures, and protocol fa
 - Synchronization uses owned full-text events with document versions.
 - Opening a supported document starts or reuses the service; ordinary edits synchronize current text.
 - One operation owns the service at a time. While busy, only the newest text update is retained per path, and close events are never coalesced away.
+- Service reuse requires an exact language-server specification match. A language, command, argument, or extension change drops the old service before starting another, so documents never cross server boundaries.
 - Successful buffer closes send `didClose` and clear the path's diagnostics.
 - Navigation completions require the latest request ID plus matching buffer identity and revision.
 - Diagnostic batches carry path, optional version, and server generation. Older document versions and old-server batches are ignored.

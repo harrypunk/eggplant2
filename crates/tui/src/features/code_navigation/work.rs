@@ -119,7 +119,8 @@ pub fn synchronize(model: &mut Model) -> Option<Effect> {
 /// Close one document without starting a server when none is running.
 pub fn close_document(model: &mut Model, path: PathBuf) -> Option<Effect> {
     model.diagnostics.clear_path(&path);
-    if !model.code_navigation.has_service() {
+    let spec = model.language_servers.find_for_path(&path)?;
+    if !model.code_navigation.has_service_for(&spec) {
         return None;
     }
     if model.code_navigation.is_busy() {
@@ -180,7 +181,7 @@ fn language_work(
     let spec = model
         .language_servers
         .find_for_path(document_path(&document))?;
-    let service = model.code_navigation.take_service();
+    let service = model.code_navigation.take_service_for(&spec);
     let starting = service.is_none();
     let restarting = starting && model.diagnostics.server_generation() > 0;
     if starting {
@@ -316,6 +317,7 @@ impl FeatureEffect for LanguageWork {
                             spec.command(),
                             error.0
                         ))),
+                        spec,
                     );
                 }
             },
@@ -324,7 +326,7 @@ impl FeatureEffect for LanguageWork {
             LanguageAction::Navigate(request) => service.navigate(request.clone()),
             LanguageAction::Synchronize => Ok(Vec::new()),
         });
-        completion(action, Some(service), result)
+        completion(action, Some(service), result, spec)
     }
 
     fn execute(
@@ -343,11 +345,13 @@ fn completion(
     action: LanguageAction,
     service: Option<Box<dyn LanguageService>>,
     result: Result<Vec<app::language::SourceLocation>, LanguageError>,
+    spec: LanguageServerSpec,
 ) -> crate::data_object::Message {
     crate::data_object::Message::FeatureCompletion(FeatureCompletion::new(LanguageCompletion {
         action,
         service,
         result,
+        spec,
     }))
 }
 
@@ -355,18 +359,25 @@ struct LanguageCompletion {
     action: LanguageAction,
     service: Option<Box<dyn LanguageService>>,
     result: Result<Vec<app::language::SourceLocation>, LanguageError>,
+    spec: LanguageServerSpec,
 }
 
 impl Completion for LanguageCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        if let Some(service) = self.service {
-            model.code_navigation.restore_service(service);
+        let Self {
+            action,
+            service,
+            result,
+            spec,
+        } = *self;
+        if let Some(service) = service {
+            model.code_navigation.restore_service_for(&spec, service);
         }
-        let effect = match self.action {
-            LanguageAction::Navigate(request) => navigate_completion(model, request, self.result),
+        let effect = match action {
+            LanguageAction::Navigate(request) => navigate_completion(model, request, result),
             LanguageAction::Synchronize => {
                 model.code_navigation.finish_operation();
-                match self.result {
+                match result {
                     Ok(_) => None,
                     Err(error) => notify_lsp(model, StatusMessage::error(error.0)),
                 }
@@ -620,6 +631,8 @@ mod tests {
             result: Err(LanguageError(
                 "Failed to start language server `rust-analyzer`: unavailable".to_string(),
             )),
+            spec: LanguageServerSpec::new("rust", "rust-analyzer", std::iter::empty::<&str>())
+                .with_extensions(["rs"]),
         })
         .update(&mut model);
         let notification = model.notifications.current().unwrap();
