@@ -27,13 +27,18 @@ The application composition root injects `Arc<dyn LanguageServerRegistry>` into 
 
 ## Current implementation status
 
-The abstraction, injection path, strict TOML parser, and user-file loading are implemented. `app::language_config::parse_language_servers` produces owned registry data without exposing TOML types to workflows. Production startup loads `~/.eggplant/languages.toml` before terminal initialization. If the file is absent, compatibility behavior registers only:
+The abstraction, injection path, strict TOML parser, and user-file loading are implemented. `app::language_config::parse_language_servers` produces owned registry data without exposing TOML types to workflows. Production startup loads `~/.eggplant/languages.toml` before terminal initialization. If the file is absent, community defaults provide these external commands:
 
-```text
-.rs → rust-analyzer
-```
+| Languages | Extensions | Command |
+| --- | --- | --- |
+| Rust | `rs` | `rust-analyzer` |
+| TypeScript / TypeScript React | `ts`, `mts`, `cts`, `tsx` | `typescript-language-server --stdio` |
+| JavaScript / JavaScript React | `js`, `mjs`, `cjs`, `jsx` | `typescript-language-server --stdio` |
+| Python | `py`, `pyi` | `pyright-langserver --stdio` |
 
-A present language file replaces the compatibility registry; an empty file disables language services explicitly. There is currently one active language service, one server per registered language, and one workspace root. The parser therefore rejects multiple providers per language. Service reuse requires an exact `LanguageServerSpec` match; changing language, command, arguments, or extensions drops the old service before starting another. This sequential replacement prevents cross-language process reuse. Retaining simultaneous providers and merging their diagnostics require additional routing slices.
+Only command recipes are included; the executables must be installed separately.
+
+A present language file replaces the community defaults; an empty file disables language services explicitly. There is currently one active language service, one server per registered language, and one workspace root. The parser therefore rejects multiple providers per language. Service reuse requires an exact `LanguageServerSpec` match; changing language, command, arguments, or extensions drops the old service before starting another. This sequential replacement prevents cross-language process reuse. Retaining simultaneous providers and merging their diagnostics require additional routing slices.
 
 ## User configuration
 
@@ -70,7 +75,7 @@ language-servers = ["basedpyright"]
 
 The language `name` is also the LSP `languageId`, so React file types use `typescriptreact` or `javascriptreact`. For Ruff's lint-focused Python diagnostics instead of Basedpyright, set Python's `language-servers = ["ruff"]`. Running both providers together is not supported yet.
 
-See the complete [`languages.example.toml`](../languages.example.toml), which also retains Rust and configures JS/JSX. A present configuration replaces the compatibility registry, so include Rust explicitly if desired.
+See the complete [`languages.example.toml`](../languages.example.toml), which also retains Rust and configures JS/JSX. A present configuration replaces the community defaults, so include every language you want to keep.
 
 Install the configured executables separately and ensure they are available on `PATH`. Configuration is loaded before terminal initialization; read and validation errors report the language-file path. Unsupported files and unavailable executables do not prevent ordinary editing.
 
@@ -78,8 +83,10 @@ Configuration parsing produces owned registry values rather than leaking TOML ty
 
 ## Later slices
 
-- Optionally merge trusted project overrides into the user language configuration.
-- Retain multiple idle/running services keyed by workspace root and server identity instead of sequentially replacing the active service.
-- Allow multiple servers per document: first capable provider for navigation, merged diagnostics from all providers.
-- Add server initialization/configuration values only when the basic loader and lifecycle are proven.
-- Keep completion, hover, rename, code actions, automatic installation, and other full-IDE features out of scope.
+Detailed acceptance criteria live in [PLAN Milestone 11](../PLAN.md#milestone-11-multi-provider-language-workflows).
+
+1. Introduce stable configured server IDs, retain compatible services keyed by workspace/server, and make diagnostics generations and per-path contributions provider-specific (M11.1).
+2. Accept ordered multi-provider language lists, synchronize all attached providers, use first-capable navigation, and merge diagnostics (M11.2).
+3. Add server initialization/configuration values only after basic multi-provider lifecycle and stale-result tests are proven (M11.3).
+4. Consider trusted project overrides and safe process reuse across language IDs; never execute project configuration without an explicit trust policy (M11.3).
+5. Keep completion, hover, rename, code actions, automatic installation, and other full-IDE features out of scope.

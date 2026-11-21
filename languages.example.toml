@@ -1,5 +1,5 @@
 # Copy to ~/.eggplant/languages.toml.
-# A present file replaces the Rust-only compatibility registry, so this example
+# A present file replaces the default community registry, so this example
 # retains Rust explicitly. Install every configured executable separately.
 
 [language-server.rust-analyzer]

@@ -1,7 +1,7 @@
 # Eggplant first-edition plan
 
-Last updated: 2026-11-15
-Current baseline: Milestone 9 complete
+Last updated: 2026-11-21
+Current baseline: Milestones 1–10 complete for the lightweight single-provider LSP scope; multi-provider workflows are next
 
 ## Purpose
 
@@ -69,7 +69,7 @@ The complete context/action/binding table lives in [Key input, sequences, and hi
 
 - Tools panel is hidden and remains a placeholder for future agent/search/file-info panels.
 - No new-file or Save As workflow.
-- No soft-wrap rendering, VCS/LSP integration, or split views.
+- No soft-wrap rendering or split views.
 - Explicit keymap unbinding and advanced rule editing are not implemented; custom entries otherwise merge with defaults.
 
 ## Roadmap
@@ -425,44 +425,89 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 **Exit criteria:** users can inspect branch/status, changed files, active-buffer and commit diffs, and bounded history; switch or create local branches with compatible local changes; explicitly commit staged changes; and perform safe fast-forward-only merges. All operations reuse the Helix/Gitoxide stack, preserve editing and persistence invariants, and leave ordinary editing usable when Git is unavailable. Unsupported operations fail closed with concise feedback.
 
-### Milestone 10: Minimal opt-in LSP
+### Milestone 10: Lightweight external LSP
 
-**Status: planned.**
+**Status: complete for one provider per language; sequential mixed-language replacement and user configuration are implemented.**
 
-**Goal:** provide useful language-server diagnostics and navigation with user-installed servers, explicit configuration, and bounded process/resource use. Start with one configured server, such as `rust-analyzer`, rather than enabling every language configuration at once.
+**Goal:** provide useful navigation and diagnostics through user-installed external servers without bundling language runtimes or turning Eggplant into a full IDE.
 
 #### Shared constraints
 
-- LSP is disabled unless explicitly enabled and configured for a language. Do not bundle language servers, Node.js, Python, downloaders, or automatic installation frameworks.
-- Add a focused `features/lsp/` extension and a narrow client capability around the already-compiled `helix-lsp` pieces where practical. Do not adopt `helix-view::Editor` or move LSP orchestration into `EditorSession`.
-- Share at most one process per workspace/server, not one per buffer. Cap restart behavior and result sizes, and shut down every child process during application cleanup.
-- Use asynchronous protocol work and typed completions. Associate requests with canonical paths, `BufferId`, document revisions, and request generations so stale responses cannot affect current state.
-- Missing executables, server failures, and unsupported capabilities must leave normal editing available with concise non-blocking feedback.
-- Use a small fake server for lifecycle/protocol tests; workspace tests must not require `rust-analyzer` or another external server to be installed.
+- Ship generic protocol support and a small set of community command recipes, not server executables, Node.js, Python, downloaders, or automatic installation. An empty `languages.toml` disables language services.
+- Keep provider-neutral contracts in `app::language`; keep stdio/JSON-RPC/LSP mapping in `app::lsp`. TUI features own commands, popups, notifications, and diagnostics presentation. Do not move language orchestration into `EditorSession`.
+- Permit one active service in the current slice. Reuse requires an exact server-specification match; changing language, command, arguments, or extensions drops the old service before starting another. Multi-provider retention is M11, not an implicit side effect of configuration.
+- Run blocking transport work outside the UI thread. Never hold a service/document mutex during blocking I/O. Bound queued text synchronization, preserve close events, terminate/reap children, and join runtime threads during teardown.
+- Associate navigation with request ID, canonical path, `BufferId`, and document revision. Associate diagnostics with path, optional document version, and server generation so replaced servers cannot affect current state.
+- Missing executables, malformed messages, and server failures leave normal editing available with concise non-blocking feedback.
+- Use fake services and fake stdio servers for tests; no workspace test requires a community server to be installed.
 
-#### M10.1 — Client lifecycle and document synchronization
+#### M10.1 — Lifecycle and full-text synchronization
 
-- [ ] Implement initialize/initialized and shutdown/exit for one explicitly configured server.
-- [ ] Implement `didOpen`, `didChange`, `didSave`, and `didClose`, respecting negotiated synchronization and position-encoding behavior.
-- [ ] Share a server across compatible buffers and reject stale work after buffer closure or workspace changes.
-- [ ] Test startup, missing executable, server crash, bounded restart, revision ordering, buffer close, and clean application shutdown.
+- [x] Implement stdio framing, JSON-RPC envelopes, initialize/initialized, request correlation, and child cleanup.
+- [x] Implement full-text `didOpen`, `didChange`, and `didClose` with owned document events and versions. `didSave`, incremental synchronization, and negotiated position encodings are not claimed.
+- [x] Split runtime reading/writing so diagnostics, server messages, and progress arrive concurrently with navigation.
+- [x] Answer the minimal server-request subset needed by real servers, including capability registration, configuration, workspace folders, and progress creation.
+- [x] Synchronize supported documents on open/edit without a navigation command; coalesce same-path text while busy and preserve every close.
+- [x] Clear diagnostics on close and invalidate failed services; the next edit/navigation starts a replacement while stale failures cannot damage it.
 
-#### M10.2 — Diagnostics and navigation to results
+#### M10.2 — Diagnostics and navigation
 
-- [ ] Store diagnostics by buffer identity and generation, converting positions with the server's negotiated encoding.
-- [ ] Show error/warning counts and a diagnostics list; render editor annotations through feature contributions rather than LSP policy in `EditorSession`.
-- [ ] Jump to diagnostics through generic document navigation while tolerating eventually consistent server positions.
-- [ ] Test stale diagnostics, Unicode positions, closed buffers, empty diagnostics, and small viewports.
+- [x] Decode severity, source, version, ranges, and UTF-16 positions into provider-neutral diagnostics.
+- [x] Store complete per-path batches, ignore stale document/server generations, and clear a path on an empty batch.
+- [x] Show the non-modal diagnostics side panel with `Space c l`; keep persistent diagnostics separate from transient notifications.
+- [x] Add definition, references, and implementation through `Space c d`/`r`/`i` with latest-request/revision checks.
+- [x] Open one result directly through `document::open_file_at`; use the shared location popup for multiple results.
+- [x] Open out-of-workspace results as read-only buffers while preserving movement, selection, yanking, and further navigation.
 
-#### M10.3 — Definition and references
+#### M10.3 — Lifecycle feedback and protocol robustness
 
-- [ ] Add definition and references requests for servers that support them.
-- [ ] Reuse picker UI for multiple results and `document::open_file_at` for safe result acceptance.
-- [ ] Reject stale responses and preserve editor state on cancellation, empty results, or request failure.
+- [x] Report start/restart/success/failure, `window/showMessage`, and `$/progress` through existing notifications.
+- [x] Preserve independent diagnostics delivery, server-request responses, and navigation in real-process tests.
+- [x] Distinguish terminal runtime failure from malformed individual notifications so a live server is not restarted unnecessarily.
+- [x] Cover UTF-16/non-ASCII positions, stale responses, close cleanup, crash recovery, partial frames, and missing executables.
 
-**Exit criteria:** one explicitly configured external server can synchronize buffers, publish usable diagnostics, and answer definition/reference requests without blocking editing or weakening save/revision invariants. With LSP disabled or unavailable, Eggplant has no LSP processes and retains its current behavior.
+#### M10.4 — External configuration and community defaults
 
-**Deferred LSP scope:** completion, hover, rename, formatting, code actions, workspace edits, and multi-server orchestration require separate reviewable slices. DAP/debugging remains outside this roadmap until a concrete need justifies it.
+- [x] Make `LanguageServerSpec` owned configuration data and inject `Arc<dyn LanguageServerRegistry>` at composition rather than calling built-ins in workflows.
+- [x] Parse and validate a strict Helix-style `languages.toml` subset in UI-neutral `app::language_config` code.
+- [x] Load `~/.eggplant/languages.toml` before terminal setup; a present file replaces defaults, while an empty file disables language services.
+- [x] Provide external command defaults for Rust, TS/TSX, JS/JSX (`typescript-language-server`), and Python (`pyright-langserver`), with correct React language IDs.
+- [x] Keep Basedpyright, Ruff, and other single-provider alternatives configurable through the same interface; test the example and composition path without launching real community tools.
+
+**M10 exit criteria:** users can configure or use defaults for one external provider per language, synchronize full text, navigate, inspect diagnostics, and recover from process failures without weakening editing/save invariants. Multiple providers for one document are intentionally rejected by configuration rather than silently misrouted.
+
+### Milestone 11: Multi-provider language workflows
+
+**Status: planned; implement in independently reviewable slices.**
+
+**Goal:** support common combinations such as TypeScript + ESLint and Pyright/Basedpyright + Ruff while retaining M10's lightweight scope and provider-neutral interfaces.
+
+#### M11.1 — Server-keyed ownership and diagnostic identity
+
+- [ ] Introduce a stable configured server ID separate from LSP `languageId`; key service ownership by workspace root and server ID.
+- [ ] Retain compatible idle services instead of sequentially replacing every language change, with bounded process counts and explicit cleanup.
+- [ ] Make busy/trailing state and diagnostics generations provider-specific. Do not let starting one provider invalidate healthy diagnostics from another.
+- [ ] Index diagnostic contributions by provider and path so an empty batch clears only that provider's entries before merged presentation.
+- [ ] Test independent crashes/restarts, cross-provider stale completions, close ordering, and process bounds.
+
+#### M11.2 — Multiple providers per configured language
+
+- [ ] Accept ordered `language-servers` lists instead of rejecting multiple providers.
+- [ ] Synchronize each open document to every attached provider with one in-flight operation plus latest trailing text per provider; never drop closes.
+- [ ] Route definition/references/implementation to the first configured provider that supports the request. Keep navigation completion latest-request/revision safe.
+- [ ] Merge diagnostics from all providers while preserving path/version/source identity and existing side-panel rendering.
+- [ ] Add fake TypeScript + lint and Python + lint workflows proving navigation priority, merged/empty diagnostics, edits during busy work, and buffer close.
+
+#### M11.3 — Configuration depth after routing is proven
+
+- [ ] Add optional server initialization/configuration values and map them through the existing provider-neutral spec; do not leak JSON into TUI features.
+- [ ] Consider trusted project overrides only after defining execution trust. Do not automatically execute project-specified binaries merely because a repository was opened.
+- [ ] Reuse compatible server processes across language IDs where safe, while retaining distinct `didOpen` language IDs.
+- [ ] Reassess resource caps and real-terminal smoke tests with TypeScript + ESLint and Pyright/Basedpyright + Ruff. Tests still use fakes.
+
+**M11 exit criteria:** a document can use multiple external providers with bounded lifecycle behavior, first-capable navigation, and correctly merged diagnostics. Unsupported features remain unsupported; no automatic installation or full-IDE feature expansion is required.
+
+**Deferred LSP scope:** completion, hover, rename, formatting, code actions, workspace edits, incremental/didSave synchronization, negotiated position encodings, editor diagnostic annotations/counts, and diagnostics jumping require separate explicit slices. DAP/debugging remains outside this roadmap until a concrete need justifies it.
 
 ### Build-footprint note
 

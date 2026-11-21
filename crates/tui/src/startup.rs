@@ -28,7 +28,7 @@ pub fn startup_path_from(
 
 /// Build the initial application model before terminal raw mode is enabled.
 pub fn initial_model(path: Option<PathBuf>) -> color_eyre::Result<Model> {
-    initial_model_with_languages(path, Arc::new(LanguageServers::rust_defaults()))
+    initial_model_with_languages(path, Arc::new(LanguageServers::defaults()))
 }
 
 /// Compose a model with an externally constructed language-server registry.

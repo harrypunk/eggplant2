@@ -282,12 +282,12 @@ impl Config {
     }
 }
 
-/// Load `~/.eggplant/languages.toml`, preserving Rust defaults when it is absent.
+/// Load `~/.eggplant/languages.toml`, preserving community defaults when it is absent.
 pub fn load_language_servers() -> color_eyre::Result<LanguageServers> {
     let Some(path) =
         std::env::home_dir().map(|home| home.join(DEFAULT_FOLDER).join(LANGUAGES_FILE))
     else {
-        return Ok(LanguageServers::rust_defaults());
+        return Ok(LanguageServers::defaults());
     };
     load_language_servers_from(&path)
 }
@@ -298,7 +298,7 @@ pub(crate) fn load_language_servers_from(
     match fs::read_to_string(path) {
         Ok(content) => parse_language_servers(&content)
             .wrap_err_with(|| format!("failed to parse `{}`", path.display())),
-        Err(error) if error.kind() == ErrorKind::NotFound => Ok(LanguageServers::rust_defaults()),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(LanguageServers::defaults()),
         Err(error) => Err(error).wrap_err_with(|| format!("failed to read `{}`", path.display())),
     }
 }
@@ -400,6 +400,8 @@ mod tests {
         let missing = directory.path().join("missing.toml");
         let defaults = load_language_servers_from(&missing).unwrap();
         assert!(defaults.find_for_path(Path::new("main.rs")).is_some());
+        assert!(defaults.find_for_path(Path::new("main.ts")).is_some());
+        assert!(defaults.find_for_path(Path::new("main.py")).is_some());
 
         let path = directory.path().join("languages.toml");
         fs::write(

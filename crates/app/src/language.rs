@@ -123,11 +123,29 @@ pub trait LanguageServerRegistry: std::fmt::Debug + Send + Sync {
 }
 
 impl LanguageServers {
-    pub fn rust_defaults() -> Self {
+    pub fn defaults() -> Self {
         Self {
             specs: vec![
                 LanguageServerSpec::new("rust", "rust-analyzer", std::iter::empty::<&str>())
                     .with_extensions(["rs"]),
+                LanguageServerSpec::new("typescript", "typescript-language-server", ["--stdio"])
+                    .with_extensions(["ts", "mts", "cts"]),
+                LanguageServerSpec::new(
+                    "typescriptreact",
+                    "typescript-language-server",
+                    ["--stdio"],
+                )
+                .with_extensions(["tsx"]),
+                LanguageServerSpec::new("javascript", "typescript-language-server", ["--stdio"])
+                    .with_extensions(["js", "mjs", "cjs"]),
+                LanguageServerSpec::new(
+                    "javascriptreact",
+                    "typescript-language-server",
+                    ["--stdio"],
+                )
+                .with_extensions(["jsx"]),
+                LanguageServerSpec::new("python", "pyright-langserver", ["--stdio"])
+                    .with_extensions(["py", "pyi"]),
             ],
         }
     }
@@ -310,16 +328,43 @@ mod tests {
     }
 
     #[test]
-    fn server_registry_selects_known_languages_and_rejects_duplicates() {
-        let mut servers = LanguageServers::rust_defaults();
+    fn community_defaults_select_external_servers_and_reject_duplicates() {
+        let mut servers = LanguageServers::defaults();
         let rust = servers.find("rust").unwrap();
         assert_eq!(rust.command(), "rust-analyzer");
         assert!(rust.args().is_empty());
         assert!(servers.find("unknown").is_none());
-        assert!(
-            servers
-                .find_for_path(std::path::Path::new("main.rs"))
-                .is_some()
+        for (path, language) in [
+            ("main.rs", "rust"),
+            ("main.ts", "typescript"),
+            ("main.mts", "typescript"),
+            ("main.cts", "typescript"),
+            ("component.tsx", "typescriptreact"),
+            ("main.js", "javascript"),
+            ("main.mjs", "javascript"),
+            ("main.cjs", "javascript"),
+            ("component.jsx", "javascriptreact"),
+            ("main.py", "python"),
+            ("main.pyi", "python"),
+        ] {
+            let spec = servers.find_for_path(std::path::Path::new(path)).unwrap();
+            assert_eq!(spec.language(), language, "wrong language for {path}");
+            let command = if language == "python" {
+                "pyright-langserver"
+            } else if language == "rust" {
+                "rust-analyzer"
+            } else {
+                "typescript-language-server"
+            };
+            assert_eq!(spec.command(), command, "wrong command for {path}");
+        }
+        assert_eq!(
+            servers.find("typescript").unwrap().args(),
+            &[String::from("--stdio")]
+        );
+        assert_eq!(
+            servers.find("python").unwrap().args(),
+            &[String::from("--stdio")]
         );
         assert!(
             servers
