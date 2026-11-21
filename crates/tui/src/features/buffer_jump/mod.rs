@@ -5,7 +5,7 @@ mod state;
 pub use state::BufferJumpState;
 
 use crate::{
-    command_menu::{CommandMenuContext, CommandMenuItem},
+    command_menu::CommandMenuItem,
     data_object::{CommandId, Context, Model, StatusMessage},
     focus,
     manager::{
@@ -16,19 +16,10 @@ use crate::{
     ui::UiRegistry,
 };
 
-pub static CODE_CONTEXT: CommandMenuContext = CommandMenuContext::new(
-    "code",
-    &[
-        CommandMenuItem::action(
-            'j',
-            "jump in visible buffer",
-            CommandId("buffer_jump_start"),
-        ),
-        CommandMenuItem::action('d', "definition", CommandId("code_definition")),
-        CommandMenuItem::action('r', "references", CommandId("code_references")),
-        CommandMenuItem::action('i', "implementation", CommandId("code_implementation")),
-        CommandMenuItem::action('l', "diagnostics", CommandId("code_diagnostics")),
-    ],
+pub const SEARCH_MENU_ITEM: CommandMenuItem = CommandMenuItem::action(
+    'j',
+    "jump in visible buffer",
+    CommandId("buffer_jump_start"),
 );
 
 pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<()> {
@@ -166,7 +157,7 @@ mod tests {
     };
 
     fn start_jump(model: &mut Model, manager: &MessageManager) {
-        for key in [' ', 'c', 'j'] {
+        for key in [' ', 's', 'j'] {
             manager.update(model, Message::CommandMenuKey(KeyCode::Char(key)));
         }
         assert!(model.buffer_jump.is_active());

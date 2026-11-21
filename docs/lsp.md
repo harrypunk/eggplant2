@@ -37,7 +37,6 @@ Server-initiated requests receive minimal responses rather than being dropped: c
 | References | `Space c r` |
 | Implementation | `Space c i` |
 | Diagnostics panel | `Space c l` |
-| Existing visible-buffer jump | `Space c j` |
 
 Navigation results behave as follows:
 

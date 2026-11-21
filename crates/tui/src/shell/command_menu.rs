@@ -128,9 +128,20 @@ const GIT_CONTEXT: CommandMenuContext = CommandMenuContext {
     }],
 };
 
+static CODE_CONTEXT: CommandMenuContext = CommandMenuContext::new(
+    "code",
+    &[
+        CommandMenuItem::action('d', "definition", CommandId("code_definition")),
+        CommandMenuItem::action('r', "references", CommandId("code_references")),
+        CommandMenuItem::action('i', "implementation", CommandId("code_implementation")),
+        CommandMenuItem::action('l', "diagnostics", CommandId("code_diagnostics")),
+    ],
+);
+
 static SEARCH_CONTEXT: CommandMenuContext = CommandMenuContext::new(
     "search",
     &[
+        crate::buffer_jump::SEARCH_MENU_ITEM,
         crate::buffer_grep::CURRENT_FILE_MENU_ITEM,
         crate::project_grep::PROJECT_MENU_ITEM,
     ],
@@ -150,7 +161,7 @@ const ROOT_CONTEXT: CommandMenuContext = CommandMenuContext {
             description: "buffers",
             target: CommandMenuTarget::Submenu(&BUFFER_CONTEXT),
         },
-        CommandMenuItem::submenu('c', "code", &crate::buffer_jump::CODE_CONTEXT),
+        CommandMenuItem::submenu('c', "code", &CODE_CONTEXT),
         CommandMenuItem {
             key: 'e',
             description: "toggle files",
@@ -310,11 +321,10 @@ mod tests {
         menu.handle_key(KeyCode::Char('c'));
         assert_eq!(menu.context_title(), "Leader > code");
         assert_eq!(
-            menu.handle_key(KeyCode::Char('j')),
-            CommandMenuOutcome::Action(CommandId("buffer_jump_start"))
+            menu.handle_key(KeyCode::Char('d')),
+            CommandMenuOutcome::Action(CommandId("code_definition"))
         );
         for (key, command) in [
-            ('d', "code_definition"),
             ('r', "code_references"),
             ('i', "code_implementation"),
             ('l', "code_diagnostics"),
@@ -326,6 +336,14 @@ mod tests {
                 CommandMenuOutcome::Action(CommandId(command))
             );
         }
+
+        menu.handle_key(KeyCode::Char(' '));
+        menu.handle_key(KeyCode::Char('s'));
+        assert_eq!(menu.context_title(), "Leader > search");
+        assert_eq!(
+            menu.handle_key(KeyCode::Char('j')),
+            CommandMenuOutcome::Action(CommandId("buffer_jump_start"))
+        );
 
         menu.handle_key(KeyCode::Char(' '));
         menu.handle_key(KeyCode::Char('s'));

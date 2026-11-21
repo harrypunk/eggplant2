@@ -223,7 +223,7 @@ This is not a promise that new code requires zero wiring. A new feature may be r
 
 Start with a two-character, Leap-style jump limited to the active buffer's visible snapshot. Workspace-wide grep remains a separate later feature.
 
-- [x] Start with `Space c j`, accept a smart-case two-character pattern, assign one-key labels for up to 26 matches or two-key labels above that, and jump when a complete label is entered.
+- [x] Start with `Space s j`, accept a smart-case two-character pattern, assign one-key labels for up to 26 matches or two-key labels above that, and jump when a complete label is entered.
 - [x] Add Normal-mode `s` as a direct route to the same semantic jump command.
 - [x] Highlight the character following each visible smart-case match immediately after the first typed character through the model-free `VisibleJumpView` matching interface.
 - [x] Keep pattern, label, targets, and active-buffer identity in the `buffer_jump` extension; use generic absolute cursor navigation only on acceptance.
