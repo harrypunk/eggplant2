@@ -302,7 +302,7 @@ read_frame
     #[test]
     fn launches_and_initializes_a_real_stdio_process() {
         let workspace = tempfile::tempdir().unwrap();
-        let spec = LanguageServerSpec::new("test", "bash", &["-c", FAKE_SERVER]);
+        let spec = LanguageServerSpec::new("test", "bash", ["-c", FAKE_SERVER]);
 
         let process = LspProcess::spawn(&spec, workspace.path()).unwrap();
         drop(process);
@@ -311,7 +311,7 @@ read_frame
     #[test]
     fn failed_handshake_cleans_up_the_process() {
         let workspace = tempfile::tempdir().unwrap();
-        let spec = LanguageServerSpec::new("test", "bash", &["-c", "exit 0"]);
+        let spec = LanguageServerSpec::new("test", "bash", ["-c", "exit 0"]);
 
         assert!(LspProcess::spawn(&spec, workspace.path()).is_err());
     }
@@ -347,7 +347,7 @@ printf 'Content-Length: %s\r\n\r\n%s' "${#body}" "$body"
 read_frame
 "#;
         let workspace = tempfile::tempdir().unwrap();
-        let spec = LanguageServerSpec::new("test", "bash", &["-c", SERVER]);
+        let spec = LanguageServerSpec::new("test", "bash", ["-c", SERVER]);
         let mut process = LspProcess::spawn(&spec, workspace.path()).unwrap();
         let path = workspace.path().join("note.txt");
         process

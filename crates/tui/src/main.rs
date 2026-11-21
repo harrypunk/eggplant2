@@ -1,12 +1,14 @@
+use std::sync::Arc;
+
 use tui::{
-    capabilities::page_scroll::PageScroll,
+    capabilities::{language::LanguageServers, page_scroll::PageScroll},
     config::Config,
     manager::{
         command_registry::CommandRegistry, keyboard_input_registry::Registry,
         text_input_registry::TextInputRegistry,
     },
     runtime,
-    startup::{initial_model, startup_path_from},
+    startup::{initial_model_with_languages, startup_path_from},
     terminal,
     ui::UiRegistry,
 };
@@ -14,8 +16,9 @@ use tui::{
 #[tokio::main]
 async fn main() -> color_eyre::Result<()> {
     let initial_path = startup_path_from(std::env::args_os().skip(1))?;
-    let mut model = initial_model(initial_path)?;
     let config = Config::load()?;
+    let languages = Arc::new(LanguageServers::rust_defaults());
+    let mut model = initial_model_with_languages(initial_path, languages)?;
     model.theme = config.theme.fallback_theme()?;
     model.page_scroll = PageScroll::from_step(&config.features.page_scroll.step)?;
     let commands = CommandRegistry::builtin();

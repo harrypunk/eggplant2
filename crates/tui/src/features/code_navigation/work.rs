@@ -2,8 +2,8 @@ use std::path::PathBuf;
 
 use app::language::{
     DocumentEvent, LanguageError, LanguageEvent, LanguageMessage, LanguageMessageKind,
-    LanguageProgress, LanguageProgressStage, LanguageServerSpec, LanguageServers, LanguageService,
-    NavigationKind, NavigationRequest,
+    LanguageProgress, LanguageProgressStage, LanguageServerSpec, LanguageService, NavigationKind,
+    NavigationRequest,
 };
 
 use super::NavigationOutcome;
@@ -160,7 +160,7 @@ fn active_document(model: &Model) -> Option<ActiveDocument> {
     let path = model.editor.buffer_path(buffer)?.to_path_buf();
     let (_, revision) = model.editor.active_revision()?;
     let snapshot = model.editor.active_text_snapshot()?;
-    let spec = LanguageServers::builtin().find_for_path(&path)?.clone();
+    let spec = model.language_servers.find_for_path(&path)?;
 
     Some(ActiveDocument {
         buffer,
@@ -177,9 +177,9 @@ fn language_work(
     action: LanguageAction,
 ) -> Option<Effect> {
     let root = model.workspace.as_ref()?.root().to_path_buf();
-    let spec = LanguageServers::builtin()
-        .find_for_path(document_path(&document))
-        .cloned()?;
+    let spec = model
+        .language_servers
+        .find_for_path(document_path(&document))?;
     let service = model.code_navigation.take_service();
     let starting = service.is_none();
     let restarting = starting && model.diagnostics.server_generation() > 0;

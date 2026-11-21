@@ -10,15 +10,15 @@ Eggplant's LSP support is intentionally limited to source navigation and diagnos
 - Server messages and work-progress begin/report/end notifications.
 - One workspace root and the registered server for the current file type.
 
-Currently the built-in registry maps Rust files (`.rs`) to `rust-analyzer`. Servers are not downloaded automatically. Unsupported files and unavailable servers leave ordinary editing intact and report feedback through notifications.
+The compatibility startup registry currently maps Rust files (`.rs`) to `rust-analyzer`. Server specifications are owned configuration-ready values and lookup goes through the injected `LanguageServerRegistry` interface; user file loading is documented as a next slice in [External language-server configuration](language-configuration.md). Servers are not downloaded automatically. Unsupported files and unavailable servers leave ordinary editing intact and report feedback through notifications.
 
-Non-goals include completion, hover, rename, code actions, formatting, semantic tokens, workspace symbols, multiple workspace folders, and incremental document synchronization.
+Non-goals include completion, hover, rename, code actions, formatting, semantic tokens, workspace symbols, multiple workspace folders, incremental document synchronization, and bundling a catalog of external language tools.
 
 ## Ownership
 
 | Module | Responsibility |
 | --- | --- |
-| `app::language` | UI-neutral requests, locations, diagnostics, document events, server metadata, and the `LanguageService` port. |
+| `app::language` | UI-neutral requests, locations, diagnostics, document events, owned server metadata, the `LanguageServerRegistry` lookup interface, and the `LanguageService` port. |
 | `app::lsp` | Stdio framing, JSON-RPC envelopes, navigation/diagnostics mapping, process lifecycle, and the split runtime. |
 | `editor` | Buffer identity, text, revisions, logical cursor positions, and document opening. It has no LSP dependency. |
 | `features/code_navigation` | Latest-request state, service ownership, command handling, effect completion, and the shared location popup. |

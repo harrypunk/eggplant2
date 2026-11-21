@@ -60,60 +60,74 @@ impl Error for LanguageError {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LanguageServerSpec {
-    language: &'static str,
-    command: &'static str,
-    args: &'static [&'static str],
-    extensions: &'static [&'static str],
+    language: String,
+    command: String,
+    args: Vec<String>,
+    extensions: Vec<String>,
 }
 
 impl LanguageServerSpec {
-    pub const fn new(
-        language: &'static str,
-        command: &'static str,
-        args: &'static [&'static str],
-    ) -> Self {
+    pub fn new<I, S>(language: &str, command: &str, args: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
         Self {
-            language,
-            command,
-            args,
-            extensions: &[],
+            language: language.to_string(),
+            command: command.to_string(),
+            args: args.into_iter().map(Into::into).collect(),
+            extensions: Vec::new(),
         }
     }
 
-    pub const fn with_extensions(mut self, extensions: &'static [&'static str]) -> Self {
-        self.extensions = extensions;
+    pub fn with_extensions<I, S>(mut self, extensions: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.extensions = extensions.into_iter().map(Into::into).collect();
         self
     }
 
     pub fn matches_path(&self, path: &std::path::Path) -> bool {
         path.extension()
             .and_then(|extension| extension.to_str())
-            .is_some_and(|extension| self.extensions.contains(&extension))
+            .is_some_and(|extension| {
+                self.extensions
+                    .iter()
+                    .any(|candidate| candidate == extension)
+            })
     }
 
-    pub fn language(&self) -> &'static str {
-        self.language
+    pub fn language(&self) -> &str {
+        &self.language
     }
 
-    pub fn command(&self) -> &'static str {
-        self.command
+    pub fn command(&self) -> &str {
+        &self.command
     }
 
-    pub fn args(&self) -> &'static [&'static str] {
-        self.args
+    pub fn args(&self) -> &[String] {
+        &self.args
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct LanguageServers {
     specs: Vec<LanguageServerSpec>,
 }
 
+/// Provider-neutral lookup used by application features instead of hard-coded catalogs.
+pub trait LanguageServerRegistry: std::fmt::Debug + Send + Sync {
+    fn find_for_path(&self, path: &std::path::Path) -> Option<LanguageServerSpec>;
+}
+
 impl LanguageServers {
-    pub fn builtin() -> Self {
+    pub fn rust_defaults() -> Self {
         Self {
             specs: vec![
-                LanguageServerSpec::new("rust", "rust-analyzer", &[]).with_extensions(&["rs"]),
+                LanguageServerSpec::new("rust", "rust-analyzer", std::iter::empty::<&str>())
+                    .with_extensions(["rs"]),
             ],
         }
     }
@@ -139,6 +153,15 @@ impl LanguageServers {
 
     pub fn find_for_path(&self, path: &std::path::Path) -> Option<&LanguageServerSpec> {
         self.specs.iter().find(|spec| spec.matches_path(path))
+    }
+}
+
+impl LanguageServerRegistry for LanguageServers {
+    fn find_for_path(&self, path: &std::path::Path) -> Option<LanguageServerSpec> {
+        self.specs
+            .iter()
+            .find(|spec| spec.matches_path(path))
+            .cloned()
     }
 }
 
@@ -288,7 +311,7 @@ mod tests {
 
     #[test]
     fn server_registry_selects_known_languages_and_rejects_duplicates() {
-        let mut servers = LanguageServers::builtin();
+        let mut servers = LanguageServers::rust_defaults();
         let rust = servers.find("rust").unwrap();
         assert_eq!(rust.command(), "rust-analyzer");
         assert!(rust.args().is_empty());
@@ -304,9 +327,30 @@ mod tests {
                 .is_none()
         );
 
-        let duplicate = LanguageServerSpec::new("rust", "another-server", &[]);
+        let duplicate =
+            LanguageServerSpec::new("rust", "another-server", std::iter::empty::<&str>());
         let error = servers.register(duplicate).unwrap_err();
         assert!(error.0.contains("duplicate language server"));
         assert_eq!(servers.find("rust").unwrap().command(), "rust-analyzer");
+    }
+
+    #[test]
+    fn registry_accepts_owned_configuration_through_the_abstract_interface() {
+        let mut servers = LanguageServers::default();
+        let language = String::from("typescript");
+        let command = String::from("typescript-language-server");
+        servers
+            .register(
+                LanguageServerSpec::new(&language, &command, [String::from("--stdio")])
+                    .with_extensions([String::from("ts"), String::from("tsx")]),
+            )
+            .unwrap();
+
+        let spec =
+            LanguageServerRegistry::find_for_path(&servers, std::path::Path::new("component.tsx"))
+                .unwrap();
+        assert_eq!(spec.language(), "typescript");
+        assert_eq!(spec.command(), "typescript-language-server");
+        assert_eq!(spec.args(), &[String::from("--stdio")]);
     }
 }

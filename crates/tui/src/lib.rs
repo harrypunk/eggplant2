@@ -30,8 +30,10 @@ pub mod data_object {
     use std::{
         borrow::Borrow,
         path::{Path, PathBuf},
+        sync::Arc,
     };
 
+    use app::language::{LanguageServerRegistry, LanguageServers};
     use editor::{BufferId, DocumentPosition, EditorSession, SaveCompletion};
 
     use crate::manager::effect::FeatureCompletion;
@@ -126,6 +128,7 @@ pub mod data_object {
 
         // Editor-owned document and editing state.
         pub editor: EditorSession,
+        pub language_servers: Arc<dyn LanguageServerRegistry>,
 
         // Fixed workspace and its derived, visible filesystem tree.
         pub workspace: Option<Workspace>,
@@ -174,6 +177,7 @@ pub mod data_object {
                 running_state: RunningState::Running,
                 active_page: AppPage::Editor,
                 editor: EditorSession::default(),
+                language_servers: Arc::new(LanguageServers::default()),
                 workspace: None,
                 explorer: ExplorerState::default(),
                 tools: ToolsPanelState::default(),

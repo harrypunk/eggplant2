@@ -1,4 +1,6 @@
-use std::{ffi::OsString, path::PathBuf};
+use std::{ffi::OsString, path::PathBuf, sync::Arc};
+
+use app::language::{LanguageServerRegistry, LanguageServers};
 
 use color_eyre::eyre::{WrapErr, bail};
 use editor::DocumentFactory;
@@ -26,7 +28,18 @@ pub fn startup_path_from(
 
 /// Build the initial application model before terminal raw mode is enabled.
 pub fn initial_model(path: Option<PathBuf>) -> color_eyre::Result<Model> {
-    let mut model = Model::default();
+    initial_model_with_languages(path, Arc::new(LanguageServers::rust_defaults()))
+}
+
+/// Compose a model with an externally constructed language-server registry.
+pub fn initial_model_with_languages(
+    path: Option<PathBuf>,
+    language_servers: Arc<dyn LanguageServerRegistry>,
+) -> color_eyre::Result<Model> {
+    let mut model = Model {
+        language_servers,
+        ..Model::default()
+    };
     model.context_stack.push(Context::AppNormal);
 
     match path {
@@ -78,6 +91,8 @@ pub fn initial_effects(model: &mut Model, source: &ThemeConfig) -> Option<Effect
 
 #[cfg(test)]
 mod tests {
+    use app::language::LanguageServerSpec;
+
     use super::*;
     use crate::file_picker::FileCollectionState;
 
@@ -103,6 +118,25 @@ mod tests {
         assert!(model.editor.active_buffer().is_some());
         assert!(model.workspace.is_none());
         assert_eq!(model.current_focus, FocusTarget::Editor);
+    }
+
+    #[test]
+    fn language_registry_is_injected_at_composition() {
+        let mut servers = LanguageServers::default();
+        servers
+            .register(
+                LanguageServerSpec::new("typescript", "typescript-language-server", ["--stdio"])
+                    .with_extensions(["ts", "tsx"]),
+            )
+            .unwrap();
+
+        let model = initial_model_with_languages(None, Arc::new(servers)).unwrap();
+        let spec = model
+            .language_servers
+            .find_for_path(std::path::Path::new("main.ts"))
+            .unwrap();
+        assert_eq!(spec.command(), "typescript-language-server");
+        assert_eq!(spec.args(), &[String::from("--stdio")]);
     }
 
     #[test]

@@ -365,7 +365,7 @@ printf 'Content-Length: %s\r\n\r\n%s' "${#body}" "$body"
     #[test]
     fn runtime_routes_diagnostics_and_navigation_independently() {
         let workspace = tempfile::tempdir().unwrap();
-        let spec = LanguageServerSpec::new("test", "bash", &["-c", SERVER]);
+        let spec = LanguageServerSpec::new("test", "bash", ["-c", SERVER]);
         let process = LspProcess::spawn(&spec, workspace.path()).unwrap();
         let (sender, receiver) = mpsc::channel();
         let mut runtime = LspRuntime::start(process, move |result| {
