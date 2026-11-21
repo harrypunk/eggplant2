@@ -2,7 +2,9 @@
 
 use std::time::Duration;
 
-use eggplant_agent::{AgentError, AgentEvent, AgentProvider, AgentRequest};
+use eggplant_agent::{
+    AgentError, AgentEvent, AgentProvider, AgentRequest, ProviderMessageRole, ToolCall,
+};
 use futures_util::StreamExt as _;
 use serde_json::Value;
 
@@ -84,7 +86,8 @@ impl AgentProvider for OpenAiProvider {
                 .bearer_auth(api_key)
                 .json(&serde_json::json!({
                     "model": self.config.model,
-                    "messages": [{"role": "user", "content": request.prompt}],
+                    "messages": request_messages(&request),
+                    "tools": tool_declarations(),
                     "stream": true,
                 }))
                 .send()
@@ -113,9 +116,86 @@ impl AgentProvider for OpenAiProvider {
     }
 }
 
+fn request_messages(request: &AgentRequest) -> Value {
+    if request.history.is_empty() {
+        return serde_json::json!([{"role": "user", "content": request.prompt}]);
+    }
+    request
+        .history
+        .iter()
+        .map(|message| {
+            let mut value = serde_json::json!({
+                "role": match message.role {
+                    ProviderMessageRole::System => "system",
+                    ProviderMessageRole::User => "user",
+                    ProviderMessageRole::Assistant => "assistant",
+                    ProviderMessageRole::Tool => "tool",
+                },
+                "content": message.content,
+            });
+            if !message.tool_calls.is_empty() {
+                value["tool_calls"] = message
+                    .tool_calls
+                    .iter()
+                    .map(|call| {
+                        serde_json::json!({
+                            "id": call.id,
+                            "type": "function",
+                            "function": {"name": call.name, "arguments": call.arguments},
+                        })
+                        .clone()
+                    })
+                    .collect();
+            }
+            if let Some(call_id) = &message.tool_call_id {
+                value["tool_call_id"] = Value::String(call_id.clone());
+            }
+            value
+        })
+        .collect()
+}
+
+fn tool_declarations() -> Value {
+    serde_json::json!([
+        {
+            "type": "function",
+            "function": {
+                "name": "read",
+                "description": "Read a bounded range from one workspace text file",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "Workspace-relative file path"},
+                        "offset": {"type": "integer", "minimum": 1},
+                        "limit": {"type": "integer", "minimum": 1, "maximum": 200}
+                    },
+                    "required": ["path"]
+                }
+            }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "grep",
+                "description": "Search workspace text with a smart-case regex",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                        "path": {"type": "string", "description": "Optional workspace-relative file path"},
+                        "context": {"type": "integer", "minimum": 0, "maximum": 2}
+                    },
+                    "required": ["query"]
+                }
+            }
+        }
+    ])
+}
+
 #[derive(Default)]
 struct SseDecoder {
     buffer: Vec<u8>,
+    pending: std::collections::BTreeMap<usize, ToolCall>,
 }
 
 impl SseDecoder {
@@ -133,7 +213,7 @@ impl SseDecoder {
                 continue;
             };
             let data = trim_ascii_start(data);
-            if let Some(event) = decode_event(data) {
+            if let Some(event) = decode_event(self, data) {
                 on_event(event);
             }
         }
@@ -147,7 +227,7 @@ fn trim_ascii_start(mut value: &[u8]) -> &[u8] {
     value
 }
 
-fn decode_event(data: &[u8]) -> Option<AgentEvent> {
+fn decode_event(decoder: &mut SseDecoder, data: &[u8]) -> Option<AgentEvent> {
     if data == b"[DONE]" {
         return Some(AgentEvent::Complete);
     }
@@ -157,8 +237,30 @@ fn decode_event(data: &[u8]) -> Option<AgentEvent> {
     }
     let choice = &value["choices"][0];
     if choice["finish_reason"].as_str() == Some("length") {
+        std::mem::take(&mut decoder.pending);
         return Some(AgentEvent::Failed(
             "OpenAI response stopped for length".to_string(),
+        ));
+    }
+    if let Some(calls) = choice["delta"]["tool_calls"].as_array() {
+        for (position, call) in calls.iter().enumerate() {
+            let index = call["index"].as_u64().unwrap_or(position as u64) as usize;
+            let pending = decoder.pending.entry(index).or_default();
+            if let Some(id) = call["id"].as_str() {
+                pending.id = id.to_string();
+            }
+            if let Some(name) = call["function"]["name"].as_str() {
+                pending.name = name.to_string();
+            }
+            if let Some(arguments) = call["function"]["arguments"].as_str() {
+                pending.arguments.push_str(arguments);
+            }
+        }
+    }
+    let finished = choice["finish_reason"].as_str();
+    if finished == Some("tool_calls") || (finished == Some("stop") && !decoder.pending.is_empty()) {
+        return Some(AgentEvent::ToolCalls(
+            std::mem::take(&mut decoder.pending).into_values().collect(),
         ));
     }
     choice["delta"]["content"]
@@ -175,7 +277,7 @@ fn bounded(message: &str) -> String {
 mod tests {
     use std::sync::Arc;
 
-    use eggplant_agent::CancellationToken;
+    use eggplant_agent::{CancellationToken, ProviderMessage};
 
     use super::*;
 
@@ -196,16 +298,70 @@ mod tests {
     }
 
     #[test]
+    fn merges_function_call_deltas_and_serializes_tool_history() {
+        let mut decoder = SseDecoder::default();
+        let first = br#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call-1","function":{"name":"read","arguments":"{\"path\":\""}}]}}]}
+"#;
+        let second = br#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"main.rs\"}"}}]},"finish_reason":"tool_calls"}]}
+"#;
+        let mut events = Vec::new();
+        decoder.push(first, &mut |event| events.push(event));
+        decoder.push(second, &mut |event| events.push(event));
+        let Some(AgentEvent::ToolCalls(calls)) = events.pop() else {
+            panic!("tool call should be emitted");
+        };
+        assert_eq!(calls[0].id, "call-1");
+        assert_eq!(calls[0].name, "read");
+        assert_eq!(calls[0].arguments, "{\"path\":\"main.rs\"}");
+
+        let request = AgentRequest::follow_up(
+            vec![
+                ProviderMessage::user("read it".to_string()),
+                ProviderMessage::assistant(String::new(), calls),
+                ProviderMessage::tool("call-1".to_string(), "1:hello".to_string()),
+            ],
+            CancellationToken::default(),
+        );
+        let messages = request_messages(&request).to_string();
+        assert!(messages.contains("\"role\":\"tool\""));
+        assert!(messages.contains("\"tool_call_id\":\"call-1\""));
+    }
+
+    #[test]
+    fn length_stop_discards_pending_function_calls() {
+        let body = concat!(
+            "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call-1\",\"function\":{\"name\":\"read\",\"arguments\":\"{\\\"path\\\":\\\"main.rs\\\"}\"}}]}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"length\"}]}\n\n",
+            "data: [DONE]\n\n"
+        );
+        let mut decoder = SseDecoder::default();
+        let mut events = Vec::new();
+        body.as_bytes()
+            .chunks(3)
+            .for_each(|chunk| decoder.push(chunk, &mut |event| events.push(event)));
+
+        assert_eq!(
+            events,
+            vec![
+                AgentEvent::Failed("OpenAI response stopped for length".to_string()),
+                AgentEvent::Complete,
+            ]
+        );
+        assert!(decoder.pending.is_empty());
+    }
+
+    #[test]
     fn length_stop_and_server_errors_do_not_execute_or_emit_content() {
         let length = br#"{"choices":[{"delta":{"content":"partial"},"finish_reason":"length"}]}"#;
+        let mut decoder = SseDecoder::default();
         assert!(matches!(
-            decode_event(length),
+            decode_event(&mut decoder, length),
             Some(AgentEvent::Failed(message)) if message == "OpenAI response stopped for length"
         ));
 
         let error = br#"{"error":{"message":"invalid request"}}"#;
         assert_eq!(
-            decode_event(error),
+            decode_event(&mut decoder, error),
             Some(AgentEvent::Failed("invalid request".to_string()))
         );
     }
@@ -268,10 +424,7 @@ mod tests {
         let output = events.clone();
         let result = provider
             .stream(
-                AgentRequest {
-                    prompt: "hello".to_string(),
-                    cancellation: CancellationToken::default(),
-                },
+                AgentRequest::new("hello".to_string(), CancellationToken::default()),
                 Box::new(move |event| output.lock().unwrap().push(event)),
             )
             .await;
@@ -305,10 +458,7 @@ mod tests {
         .unwrap();
         let result = provider
             .stream(
-                AgentRequest {
-                    prompt: "hello".to_string(),
-                    cancellation: CancellationToken::default(),
-                },
+                AgentRequest::new("hello".to_string(), CancellationToken::default()),
                 Box::new(|_| {}),
             )
             .await;

@@ -1,6 +1,6 @@
 # Agent tools
 
-Status: design only. This document defines the first internal tool contracts; it does not describe an external plugin ABI.
+Status: bounded `read` and `grep` are implemented through provider tool calls. Approved revision-safe `write` remains design-only.
 
 The model sees small, stable tools. Eggplant owns validation and execution. Tools reuse existing capabilities where those capabilities already enforce the required invariant, and introduce a narrow adapter where an agent-safe precondition is missing.
 
@@ -166,6 +166,22 @@ Set concrete defaults during implementation and test their boundaries. The contr
 - Tool calls per run and cumulative provider input.
 
 Limits should produce useful truncation metadata. Do not simply cut a UTF-8 string at an arbitrary byte or hide the fact that content was omitted.
+
+### M12.3 implementation defaults
+
+| Bound | Current limit |
+| --- | --- |
+| Tool arguments | 16 KiB per call; unsupported fields are rejected |
+| File/snapshot input | 1 MiB per file, read with an extra-byte overflow check |
+| `read` range | One-based offset; 1–200 lines per call |
+| `grep` results | Smart-case regex compiled once; 50 matching lines and 0–2 context lines |
+| Tool result | 50 KiB per call, with a UTF-8-safe `[truncated]` marker |
+| Run tool activity | Three execution rounds and eight calls |
+| Cumulative provider tool output | 100 KiB per run; another tool round after exhaustion fails explicitly |
+| Retained tool events | 50 entries; results correlate with both call ID and current `RunId` |
+| Panel preview | Two lines and 240 characters, plus an explicit truncation indicator |
+
+Workspace grep uses the shared ignore policy and sorted path traversal. It processes one bounded file at a time rather than retaining all workspace text. A provider-round `Complete` event is not emitted to the session until the run has no further tool work; failed or cancelled rounds never execute queued calls.
 
 ## Deferred tools
 

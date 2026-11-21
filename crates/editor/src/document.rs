@@ -1,5 +1,6 @@
 use std::{
     fmt,
+    io::Read as _,
     path::{Path, PathBuf},
     sync::{Arc, OnceLock},
 };
@@ -15,6 +16,8 @@ use thiserror::Error;
 pub enum OpenDocumentError {
     #[error("not a text file")]
     NotTextFile,
+    #[error("text file exceeds the {limit}-byte limit")]
+    TooLarge { limit: u64 },
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
     #[error(transparent)]
@@ -47,11 +50,38 @@ pub(crate) fn default_syntax_loader() -> SharedSyntaxLoader {
 
 /// Read a regular UTF-8 text file without following links or accepting NUL bytes.
 pub fn read_text_file(path: &Path) -> Result<String, OpenDocumentError> {
+    require_regular_file(path)?;
+    decode_text(std::fs::read(path)?)
+}
+
+/// Read at most `max_bytes` from a regular UTF-8 text file.
+///
+/// The extra-byte read detects files that grow after their metadata check without
+/// ever loading the remainder into memory.
+pub fn read_text_file_bounded(path: &Path, max_bytes: u64) -> Result<String, OpenDocumentError> {
+    let metadata = require_regular_file(path)?;
+    if metadata.len() > max_bytes {
+        return Err(OpenDocumentError::TooLarge { limit: max_bytes });
+    }
+    let mut bytes = Vec::new();
+    std::fs::File::open(path)?
+        .take(max_bytes.saturating_add(1))
+        .read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > max_bytes {
+        return Err(OpenDocumentError::TooLarge { limit: max_bytes });
+    }
+    decode_text(bytes)
+}
+
+fn require_regular_file(path: &Path) -> Result<std::fs::Metadata, OpenDocumentError> {
     let metadata = std::fs::symlink_metadata(path)?;
     if !metadata.file_type().is_file() {
         return Err(OpenDocumentError::NotTextFile);
     }
-    let bytes = std::fs::read(path)?;
+    Ok(metadata)
+}
+
+fn decode_text(bytes: Vec<u8>) -> Result<String, OpenDocumentError> {
     let text = String::from_utf8(bytes).map_err(|_| OpenDocumentError::NotTextFile)?;
     if text.contains('\0') {
         return Err(OpenDocumentError::NotTextFile);
@@ -173,5 +203,18 @@ mod tests {
             ));
         }
         assert!(factory.open(text).is_ok());
+    }
+
+    #[test]
+    fn bounded_reads_accept_utf8_and_reject_excess_bytes() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("text.txt");
+        std::fs::write(&path, "é🙂\n").unwrap();
+
+        assert_eq!(read_text_file_bounded(&path, 7).unwrap(), "é🙂\n");
+        assert!(matches!(
+            read_text_file_bounded(&path, 6),
+            Err(OpenDocumentError::TooLarge { limit: 6 })
+        ));
     }
 }

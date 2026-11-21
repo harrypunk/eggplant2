@@ -1,4 +1,5 @@
 mod component;
+mod tools;
 mod work;
 
 pub use component::{AgentDialog, AgentPanel};

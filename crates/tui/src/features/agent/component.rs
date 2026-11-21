@@ -141,7 +141,7 @@ impl AgentPanel {
         let start = entries
             .len()
             .saturating_sub(messages.height.max(1) as usize);
-        let lines = if entries.is_empty() {
+        let mut lines = if entries.is_empty() {
             vec![Line::styled("No conversation yet", styles.muted)]
         } else {
             entries[start..]
@@ -158,6 +158,35 @@ impl AgentPanel {
                 })
                 .collect::<Vec<_>>()
         };
+        lines.extend(session.tool_events().iter().map(|event| {
+            let summary = match &event.result {
+                Some(result) => {
+                    let status = match result.status {
+                        eggplant_agent::ToolResultStatus::Success => "ok",
+                        eggplant_agent::ToolResultStatus::Error => "error",
+                        eggplant_agent::ToolResultStatus::Rejected => "rejected",
+                        eggplant_agent::ToolResultStatus::Cancelled => "cancelled",
+                    };
+                    let preview = result
+                        .content
+                        .lines()
+                        .take(2)
+                        .collect::<Vec<_>>()
+                        .join(" · ")
+                        .chars()
+                        .take(240)
+                        .collect::<String>();
+                    let truncated = if result.truncated {
+                        " · truncated"
+                    } else {
+                        ""
+                    };
+                    format!("tool {}: {status} · {preview}{truncated}", event.name)
+                }
+                None => format!("tool {}: pending", event.name),
+            };
+            Line::styled(summary, styles.muted)
+        }));
         Paragraph::new(lines)
             .wrap(Wrap { trim: false })
             .style(styles.base)

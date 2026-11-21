@@ -1,7 +1,7 @@
 # Eggplant first-edition plan
 
 Last updated: 2026-11-21
-Current baseline: M10, M11.1/M11.2, M12.1, and M12.2 are complete; M12.3 bounded read/grep tools are next
+Current baseline: M10, M11.1/M11.2, M12.1, M12.2, and M12.3 are complete; M12.4 approved revision-safe writes are next
 
 ## Purpose
 
@@ -516,7 +516,7 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 ### Milestone 12: Inline AI agent
 
-**Status: M12.1 fake streaming UI and M12.2 OpenAI-compatible provider complete; M12.3 bounded read/grep tools are next.**
+**Status: M12.1 fake streaming UI, M12.2 OpenAI-compatible provider, and M12.3 bounded read/grep tools complete; M12.4 approved writes are next.**
 
 **Goal:** make agent chat and bounded coding tools a first-class inline workflow without creating a second editor, bypassing persistence, or adopting a general agent/plugin framework. Read [AI agent architecture](docs/agent.md) and [Agent tools](docs/agent-tools.md) before implementation.
 
@@ -547,11 +547,11 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 #### M12.3 — Read and grep tools
 
-- [ ] Add stable tool request/result correlation and the bounded model → tool → result → model loop with a maximum step count.
-- [ ] Implement workspace-scoped `read` using existing regular-file/text acceptance and owned open-buffer snapshots where current text is needed.
-- [ ] Implement `grep` through existing smart-case search, project traversal, ignore rules, binary rejection, and deterministic result caps; extract a public bounded core rather than calling private `search_project` as if it were a finished agent API.
-- [ ] Render concise tool activity/output/truncation in the shared Agent panel without leaking secrets or unbounded content.
-- [ ] Test path/symlink escapes, invalid arguments, Unicode, large results, cancellation, stale calls, and iteration/output limits.
+- [x] Add stable tool request/result correlation and the bounded model → tool → result → model loop with a maximum step count.
+- [x] Implement workspace-scoped `read` using existing regular-file/text acceptance and owned open-buffer snapshots where current text is needed.
+- [x] Implement `grep` through existing smart-case search, project traversal, ignore rules, binary rejection, and deterministic result caps; extract a public bounded core rather than calling private `search_project` as if it were a finished agent API.
+- [x] Render concise tool activity/output/truncation in the shared Agent panel without leaking secrets or unbounded content.
+- [x] Test path/symlink escapes, invalid arguments, Unicode, large results, cancellation, stale calls, and iteration/output limits.
 
 #### M12.4 — Approved revision-safe writes
 

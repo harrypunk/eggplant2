@@ -10,7 +10,7 @@ mod snapshot;
 mod viewport;
 
 pub use active_editor::ActiveEditor;
-pub use document::{DocumentFactory, OpenDocumentError, read_text_file};
+pub use document::{DocumentFactory, OpenDocumentError, read_text_file, read_text_file_bounded};
 pub use open::{DocumentOpenCompletion, DocumentOpenRequest, OpenedDocument};
 pub use preview::{preview_document, preview_document_at};
 pub use save::{SaveCompletion, SaveError, SaveRequest};

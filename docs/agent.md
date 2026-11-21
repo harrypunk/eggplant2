@@ -1,6 +1,6 @@
 # AI agent architecture
 
-Status: M12.1 fake-provider UX and M12.2 OpenAI-compatible streaming are implemented. Production agent tools remain design-only.
+Status: M12.1 fake-provider UX, M12.2 OpenAI-compatible streaming, and M12.3 bounded read/grep tools are implemented. Approved revision-safe writes remain the next milestone.
 
 The agent is a primary Eggplant workflow, not a detached chat window or an excuse to bypass editor safety. It should make a small coding task feel like a natural extension of navigation, search, diagnostics, and editing.
 
@@ -191,6 +191,8 @@ api_key_env = "OPENAI_API_KEY"
 
 Streaming responses use incremental UTF-8-safe SSE decoding. Deltas arrive through the same session as the fake provider, with an authoritative completion or failure. A response stopped for length fails rather than executing tool calls. The localhost test suite verifies actual HTTP request shape, streaming events, Unicode fragmentation, status errors, and API-key redaction without external network access.
 
+The adapter also declares bounded `read` and `grep` functions and merges incremental `tool_calls` deltas by index. Tool execution receives owned workspace/buffer context, not `Model`. Follow-up requests serialize user, assistant, and tool-role history so the model can consume results without a second conversation or UI event loop. A `[DONE]` completion closes only the current provider round; the overall run completes after the final model response. The declarative run state machine allows three tool-execution rounds, eight calls, and 100 KiB of cumulative tool output, and rejects invalid or duplicate call IDs before execution.
+
 ## Safety summary
 
 - Read and grep are bounded and workspace-scoped by default.
@@ -215,7 +217,7 @@ See [Agent tools](agent-tools.md) for path, result, revision, and approval contr
 ## Decisions deferred to concrete spikes
 
 - The first real provider and its minimal streaming/configuration interface.
-- Exact token/byte/line/step limits, informed by provider behavior and terminal responsiveness.
+- Future tuning of the implemented byte/line/step limits, informed by provider behavior and terminal responsiveness.
 - Final keybindings after conflict and context tests.
 - Session persistence/resume format; the first useful workflow may remain in-memory.
 - Token accounting and context compaction after transcript/tool limits are measured.
