@@ -1724,3 +1724,121 @@ fn switching_buffers_preserves_cursor_and_scroll() {
     assert_eq!(document.view_offset(view.id), expected_offset);
     assert!(view.is_cursor_in_view(document, 0));
 }
+
+#[test]
+fn exact_replacement_supports_inactive_unicode_edits_and_one_step_undo() {
+    let directory = tempfile::tempdir().unwrap();
+    let first_path = directory.path().join("first.txt");
+    let second_path = directory.path().join("second.txt");
+    std::fs::write(&first_path, "héllo🙂\n").unwrap();
+    std::fs::write(&second_path, "second").unwrap();
+    let mut session = EditorSession::new();
+    let first = open_file(&mut session, &first_path);
+    let second = open_file(&mut session, &second_path);
+    session.resize_active_view(80, 24);
+    let expected_cursor = active_cursor(&mut session);
+    let revision = session.buffer_version(first).unwrap();
+
+    let applied = session
+        .replace_exact_text(ExactTextReplacement {
+            buffer_id: first,
+            path: &first_path,
+            expected_revision: revision,
+            old_text: "llo🙂",
+            new_text: "LLO!",
+        })
+        .unwrap();
+
+    assert_ne!(applied.revision, revision);
+    assert_eq!(session.active_buffer(), Some(second));
+    assert_eq!(active_cursor(&mut session), expected_cursor);
+    assert_eq!(
+        session.buffer_text_snapshot(first).unwrap().text,
+        "héLLO!\n"
+    );
+
+    session.activate_buffer(first).unwrap();
+    assert!(session.active_editor().unwrap().undo().unwrap());
+    assert_eq!(
+        session.buffer_text_snapshot(first).unwrap().text,
+        "héllo🙂\n"
+    );
+}
+
+#[test]
+fn exact_replacement_rejects_path_revision_and_text_conflicts_without_mutation() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("first.txt");
+    let other = directory.path().join("other.txt");
+    std::fs::write(&path, "repeat repeat").unwrap();
+    let mut session = EditorSession::new();
+    let id = open_file(&mut session, &path);
+    let revision = session.buffer_version(id).unwrap();
+    let replacement = ExactTextReplacement {
+        buffer_id: id,
+        path: &path,
+        expected_revision: revision,
+        old_text: "repeat",
+        new_text: "changed",
+    };
+
+    assert_eq!(
+        session.replace_exact_text(ExactTextReplacement {
+            path: &other,
+            ..replacement
+        }),
+        Err(ExactTextError::PathMismatch(id))
+    );
+    assert_eq!(
+        session.replace_exact_text(ExactTextReplacement {
+            expected_revision: revision + 1,
+            ..replacement
+        }),
+        Err(ExactTextError::RevisionConflict {
+            buffer_id: id,
+            expected: revision + 1,
+            actual: revision,
+        })
+    );
+    assert_eq!(
+        session.replace_exact_text(replacement),
+        Err(ExactTextError::ExactTextConflict(id))
+    );
+    assert_eq!(
+        session.replace_exact_text(ExactTextReplacement {
+            old_text: "missing",
+            ..replacement
+        }),
+        Err(ExactTextError::ExactTextConflict(id))
+    );
+    assert_eq!(
+        session.buffer_text_snapshot(id).unwrap().text,
+        "repeat repeat"
+    );
+}
+
+#[tokio::test]
+async fn exact_replacement_rejects_a_save_in_progress() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("first.txt");
+    std::fs::write(&path, "before").unwrap();
+    let mut session = EditorSession::new();
+    let id = open_file(&mut session, &path);
+    let revision = session.buffer_version(id).unwrap();
+    let save = session.save_buffer(id).unwrap();
+
+    assert_eq!(
+        session.replace_exact_text(ExactTextReplacement {
+            buffer_id: id,
+            path: &path,
+            expected_revision: revision,
+            old_text: "before",
+            new_text: "after",
+        }),
+        Err(ExactTextError::SaveInProgress(id))
+    );
+    assert_eq!(session.buffer_text_snapshot(id).unwrap().text, "before");
+
+    let completion = save.perform().await;
+    session.complete_save(completion).unwrap();
+}

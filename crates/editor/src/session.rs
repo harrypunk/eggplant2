@@ -31,6 +31,17 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BufferId(u64);
 
+impl BufferId {
+    /// Reconstruct an untrusted external identity for lookup in open editor state.
+    pub const fn from_raw(raw: u64) -> Self {
+        Self(raw)
+    }
+
+    pub const fn as_raw(self) -> u64 {
+        self.0
+    }
+}
+
 impl fmt::Display for BufferId {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         self.0.fmt(formatter)
@@ -113,6 +124,42 @@ impl From<VerticalDirection> for CursorMovement {
             VerticalDirection::Down => Self::Down,
         }
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct ExactTextReplacement<'a> {
+    pub buffer_id: BufferId,
+    pub path: &'a Path,
+    pub expected_revision: i32,
+    pub old_text: &'a str,
+    pub new_text: &'a str,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AppliedTextEdit {
+    pub revision: i32,
+}
+
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum ExactTextError {
+    #[error("no active editor view")]
+    NoActiveView,
+    #[error("buffer {0} does not exist")]
+    UnknownBuffer(BufferId),
+    #[error("buffer {0} path does not match the approved path")]
+    PathMismatch(BufferId),
+    #[error("buffer {buffer_id} revision changed from {expected} to {actual}")]
+    RevisionConflict {
+        buffer_id: BufferId,
+        expected: i32,
+        actual: i32,
+    },
+    #[error("buffer {0} has a save in progress")]
+    SaveInProgress(BufferId),
+    #[error("old text must be non-empty and differ from new text")]
+    InvalidReplacement,
+    #[error("buffer {0} no longer contains exactly one approved old-text match")]
+    ExactTextConflict(BufferId),
 }
 
 #[derive(Debug, Error)]
@@ -428,15 +475,20 @@ impl EditorSession {
         Some((active.buffer, document.version()))
     }
 
-    /// Clone active text into an owned snapshot suitable for background search.
-    pub fn active_text_snapshot(&self) -> Option<BufferTextSnapshot> {
-        let (buffer_id, revision) = self.active_revision()?;
-        let text = self.buffers.get(&buffer_id)?.document.text().to_string();
+    /// Clone one buffer's text into an owned snapshot suitable for background work.
+    pub fn buffer_text_snapshot(&self, buffer_id: BufferId) -> Option<BufferTextSnapshot> {
+        let document = &self.buffers.get(&buffer_id)?.document;
         Some(BufferTextSnapshot {
             buffer_id,
-            revision,
-            text,
+            revision: document.version(),
+            text: document.text().to_string(),
         })
+    }
+
+    /// Clone active text into an owned snapshot suitable for background search.
+    pub fn active_text_snapshot(&self) -> Option<BufferTextSnapshot> {
+        self.active_buffer()
+            .and_then(|buffer_id| self.buffer_text_snapshot(buffer_id))
     }
 
     /// Project a match-centered active-buffer range with current syntax highlights.
@@ -573,6 +625,70 @@ impl EditorSession {
             view.ensure_cursor_in_view(document, self.scrolloff);
         }
         Ok(true)
+    }
+
+    /// Apply one approved exact-text replacement without changing the active buffer.
+    pub fn replace_exact_text(
+        &mut self,
+        replacement: ExactTextReplacement<'_>,
+    ) -> Result<AppliedTextEdit, ExactTextError> {
+        if replacement.old_text.is_empty() || replacement.old_text == replacement.new_text {
+            return Err(ExactTextError::InvalidReplacement);
+        }
+        if self.saving_buffers.contains(&replacement.buffer_id) {
+            return Err(ExactTextError::SaveInProgress(replacement.buffer_id));
+        }
+        let active_buffer = self.active_buffer();
+        let view = &mut self
+            .active_view
+            .as_mut()
+            .ok_or(ExactTextError::NoActiveView)?
+            .view;
+        let document = &mut self
+            .buffers
+            .get_mut(&replacement.buffer_id)
+            .ok_or(ExactTextError::UnknownBuffer(replacement.buffer_id))?
+            .document;
+        if document.path() != Some(replacement.path) {
+            return Err(ExactTextError::PathMismatch(replacement.buffer_id));
+        }
+        let actual = document.version();
+        if actual != replacement.expected_revision {
+            return Err(ExactTextError::RevisionConflict {
+                buffer_id: replacement.buffer_id,
+                expected: replacement.expected_revision,
+                actual,
+            });
+        }
+        let text = document.text().to_string();
+        let matches = text
+            .match_indices(replacement.old_text)
+            .take(2)
+            .collect::<Vec<_>>();
+        let (start_byte, end_byte) = match matches.as_slice() {
+            [(start, _)] => (*start, *start + replacement.old_text.len()),
+            _ => return Err(ExactTextError::ExactTextConflict(replacement.buffer_id)),
+        };
+        let (start, end) = (
+            document.text().byte_to_char(start_byte),
+            document.text().byte_to_char(end_byte),
+        );
+        let transaction = helix_core::Transaction::change(
+            document.text(),
+            [(start, end, Some(replacement.new_text.into()))].into_iter(),
+        );
+        document.ensure_view_init(view.id);
+        document
+            .apply(&transaction, view.id)
+            .then_some(())
+            .ok_or(ExactTextError::ExactTextConflict(replacement.buffer_id))?;
+        document.append_changes_to_history(view);
+        let revision = document.version();
+
+        if active_buffer == Some(replacement.buffer_id) {
+            view.ensure_cursor_in_view(document, self.scrolloff);
+        }
+        Ok(AppliedTextEdit { revision })
     }
 
     /// Prepare an asynchronous save of one buffer's current snapshot.
