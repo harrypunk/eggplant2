@@ -19,6 +19,7 @@ pub(crate) mod history;
 pub(crate) mod merge;
 pub(crate) mod navigation;
 mod repository;
+pub(crate) mod reset;
 
 use branch::BranchState;
 use buffer_diff::BufferDiffState;
@@ -35,6 +36,7 @@ use history::{
 };
 use merge::MergeState;
 use repository::RepositoryState;
+use reset::ResetState;
 
 pub(crate) use change_workflow::{refresh_changes, sync_changes};
 pub use changes::ChangesState;
@@ -70,6 +72,7 @@ pub struct VcsState {
     pub(crate) branch: BranchState,
     pub(crate) commit: CommitState,
     pub(crate) merge: MergeState,
+    pub(crate) reset: ResetState,
     documents: DocumentFactory,
 }
 
@@ -85,6 +88,7 @@ impl Default for VcsState {
             branch: BranchState::default(),
             commit: CommitState::default(),
             merge: MergeState::default(),
+            reset: ResetState::default(),
             documents: DocumentFactory::new(),
         }
     }
@@ -248,7 +252,8 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
     .try_for_each(|command| commands.register(command))?;
     commit::register_commands(commands)?;
     branch::register_commands(commands)?;
-    merge::register_commands(commands)
+    merge::register_commands(commands)?;
+    reset::register_commands(commands)
 }
 
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {

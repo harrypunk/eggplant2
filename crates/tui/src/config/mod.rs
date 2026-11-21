@@ -209,6 +209,8 @@ impl Default for Config {
                         ("vcs_history_load_more", "n"),
                     ],
                 ),
+                keymap_context("vcs_reset_menu", [("vcs_reset_soft", "s")]),
+                keymap_context("vcs_reset", []),
                 keymap_context(
                     "vcs_branch_menu",
                     [("vcs_branch_create", "c"), ("vcs_branch_switch", "s")],
@@ -229,6 +231,7 @@ impl Default for Config {
                         ("vcs_help_placeholder", "?"),
                         ("open_vcs_history", "l"),
                         ("vcs_merge_start", "m"),
+                        ("vcs_reset_menu", "r"),
                         ("vcs_branch_menu", "b"),
                     ],
                 ),

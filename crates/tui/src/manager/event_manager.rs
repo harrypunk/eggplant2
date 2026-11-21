@@ -111,6 +111,9 @@ fn menu_navigation_alias(context: &Context, key: KeyEvent) -> Option<KeyChord> {
             Context::ThemePicker,
             Context::BufferGrep,
             Context::ProjectGrep,
+            Context::VcsBranch,
+            Context::VcsMerge,
+            Context::VcsReset,
         ]
         .contains(context)
     {
@@ -353,6 +356,7 @@ mod tests {
             (KeyCode::Char('?'), "vcs_help_placeholder"),
             (KeyCode::Char('l'), "open_vcs_history"),
             (KeyCode::Char('m'), "vcs_merge_start"),
+            (KeyCode::Char('r'), "vcs_reset_menu"),
             (KeyCode::Char('b'), "vcs_branch_menu"),
         ] {
             let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
@@ -425,6 +429,64 @@ mod tests {
                 manager.translate(event, &model),
                 Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
             ));
+        }
+    }
+
+    #[test]
+    fn routes_vcs_reset_menu_and_popup_keys() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::VcsResetMenu);
+        for (key, command) in [
+            (KeyCode::Esc, "vcs_reset_menu_close"),
+            (KeyCode::Char('s'), "vcs_reset_soft"),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+
+        model.context_stack.pop();
+        model.context_stack.push(Context::VcsReset);
+        for (key, command) in [
+            (KeyCode::Backspace, "vcs_reset_backspace"),
+            (KeyCode::Down, "vcs_reset_next"),
+            (KeyCode::Up, "vcs_reset_previous"),
+            (KeyCode::Enter, "vcs_reset_submit"),
+            (KeyCode::Esc, "vcs_reset_cancel"),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::TextInput('a'))
+        ));
+    }
+
+    #[test]
+    fn vcs_selectors_share_ctrl_navigation_aliases() {
+        let manager = event_manager();
+        for (context, next, previous) in [
+            (Context::VcsBranch, "vcs_branch_next", "vcs_branch_previous"),
+            (Context::VcsMerge, "vcs_merge_next", "vcs_merge_previous"),
+            (Context::VcsReset, "vcs_reset_next", "vcs_reset_previous"),
+        ] {
+            let mut model = Model::default();
+            model.context_stack.push(context);
+            for (key, command) in [(KeyCode::Char('n'), next), (KeyCode::Char('p'), previous)] {
+                let event = Event::Key(KeyEvent::new(key, KeyModifiers::CONTROL));
+                assert!(matches!(
+                    manager.translate(event, &model),
+                    Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+                ));
+            }
         }
     }
 

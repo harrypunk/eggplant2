@@ -70,6 +70,7 @@ Use a repository containing both staged and unstaged changes, then open the Git 
 - [ ] Repeated operations preserve a usable selection without a full-page loading flash.
 - [ ] While a mutation is running, another stage/unstage command is rejected with `Git operation in progress`. After completion, the sections match `git status` and another operation can start.
 - [ ] `x` on an unstaged tracked modification or deletion restores the index version, preserves any staged version of the path, refreshes status, and reloads a clean open buffer. Staged, untracked, conflicted, and renamed selections are rejected without mutation.
+- [ ] `r`, then `s`, opens Soft reset with local `main`/`master`, existing remote-tracking refs, and five recent commits. Filter and select a ref with Down/Up or Ctrl-N/P, then repeat with a typed commit hash. Confirm reset moves HEAD/current branch without changing index/worktree bytes, refreshes HEAD/history/status/diffs, and makes the undone commit's changes ready to recommit. An invalid hash returns to the picker with an error.
 - [ ] `c` opens the commit-message page when staged changes exist.
 
 ### Inline diffs

@@ -389,6 +389,8 @@ pub mod data_object {
         VcsCommit,
         VcsCommitInput,
         VcsMerge,
+        VcsResetMenu,
+        VcsReset,
         VcsBranchMenu,
         VcsBranch,
         EditorInput,

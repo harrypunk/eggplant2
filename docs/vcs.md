@@ -18,8 +18,11 @@ The addon provides:
 - Bounded commit history with commit details and hash copying.
 - Plain local-branch switching and creation with compatible local changes preserved.
 - Switch-and-fast-forward merges to local target branches without fetching or rewriting history.
+- Soft reset to local main/master, existing remote-tracking refs, recent commits, or a typed commit hash.
 
 `x` discards the selected unstaged regular-file modification or deletion by restoring the index version. If the same path also has staged changes, that staged version is preserved. Untracked, conflicted, renamed, and staged selections are rejected. Pending editor saves block the operation; success refreshes status and schedules the normal revision-checked reload for an open buffer.
+
+`r` then `s` opens the soft-reset picker. It lists local `main`/`master`, remote-tracking branches already present locally, and five recent commits; typing a hexadecimal revision of at least four characters submits that hash instead. Reset uses compare-and-swap on the current HEAD commit and changes only HEAD or its current branch. Index and worktree contents are not rewritten or reloaded. Success refreshes HEAD, history, changed-file status, and diff bases. Invalid hashes return to the picker with an error.
 
 ## Ownership and dependency direction
 
@@ -36,8 +39,10 @@ The addon provides:
 - `RepositoryState` owns HEAD refresh identity.
 - `HistoryController` owns history list/detail state, selection, caching, and refresh/pagination completion.
 - `BranchState` owns branch-menu, start-point, naming, and switching phases.
+- `MergeState` owns target selection and fast-forward operation phases.
+- `ResetState` owns reset-menu, target-loading, selection, typed-hash, and soft-reset phases.
 - Active-buffer diff-base identity has a separate state object.
-- `history.rs`, `change_workflow.rs`, `repository.rs`, and `branch.rs` contain adapters and request/completion implementations instead of growing `mod.rs`.
+- `history.rs`, `change_workflow.rs`, `repository.rs`, `branch.rs`, `merge.rs`, and `reset.rs` contain adapters and request/completion implementations instead of growing `mod.rs`.
 
 History-detail completions match repository, generation, and commit identity. Cached or cross-commit transitions invalidate older detail work.
 

@@ -1,6 +1,7 @@
 mod branch_popup;
 mod change_section;
 mod merge_popup;
+mod reset_popup;
 
 use ratatui::{
     Frame,
@@ -21,6 +22,7 @@ use self::{
     branch_popup::{BranchPopup, BranchPopupProps},
     change_section::{ChangeSection, ChangeSectionProps},
     merge_popup::{MergePopup, MergePopupProps},
+    reset_popup::{ResetPopup, ResetPopupProps},
 };
 
 #[derive(Debug, Default)]
@@ -32,6 +34,7 @@ impl Vcs {
             frame.area(),
             model.vcs.help_visible,
             model.vcs.branch.is_menu(),
+            model.vcs.reset.is_menu(),
         );
         let styles = model.theme.ui();
         let heading = styles
@@ -40,7 +43,7 @@ impl Vcs {
             .add_modifier(Modifier::BOLD);
 
         let mut hints = vec![Line::styled(
-            "Tab toggle  s stage  u unstage  c commit  b branch  ? help",
+            "Tab toggle  s stage  u unstage  c commit  b branch  r reset  ? help",
             heading,
         )];
         if let Some(notice) = &model.vcs.notice {
@@ -90,6 +93,9 @@ impl Vcs {
         if model.vcs.branch.is_menu() {
             render_branch_menu(model, frame, areas.bottom);
         }
+        if model.vcs.reset.is_menu() {
+            render_reset_menu(model, frame, areas.bottom);
+        }
         if model.vcs.branch.is_popup_active() {
             BranchPopup::new(BranchPopupProps {
                 query: model.vcs.branch.query(),
@@ -119,6 +125,20 @@ impl Vcs {
             })
             .render(frame, frame.area());
         }
+        if model.vcs.reset.is_popup_active() {
+            ResetPopup::new(ResetPopupProps {
+                query: model.vcs.reset.query(),
+                targets: model.vcs.reset.filtered_targets(),
+                selected: model.vcs.reset.selected(),
+                loading: model.vcs.reset.is_loading(),
+                resetting: model.vcs.reset.is_resetting(),
+                target: model.vcs.reset.target(),
+                revision: model.vcs.reset.revision_query(),
+                error: model.vcs.reset.error(),
+                theme: &model.theme,
+            })
+            .render(frame, frame.area());
+        }
     }
 }
 
@@ -130,10 +150,10 @@ struct VcsLayout {
 }
 
 impl VcsLayout {
-    fn new(area: Rect, help_visible: bool, branch_menu: bool) -> Self {
+    fn new(area: Rect, help_visible: bool, branch_menu: bool, reset_menu: bool) -> Self {
         let bottom_height = if help_visible {
             5
-        } else if branch_menu {
+        } else if branch_menu || reset_menu {
             3
         } else {
             0
@@ -167,7 +187,7 @@ fn render_help(model: &Model, frame: &mut Frame, area: Rect) {
     let styles = model.theme.ui();
     let lines = vec![
         Line::raw("s stage   u unstage   Ctrl-s stage all   U unstage all"),
-        Line::raw("Tab toggle  Enter open  l history  c commit  b branch  m merge"),
+        Line::raw("Tab toggle  Enter open  l history  c commit  b branch  m merge  r reset"),
         Line::raw("? / Esc close help    x discard unstaged changes"),
     ];
     let help = Paragraph::new(lines).block(
@@ -187,6 +207,17 @@ fn render_branch_menu(model: &Model, frame: &mut Frame, area: Rect) {
     .block(
         Block::new()
             .title("Branch")
+            .borders(Borders::ALL)
+            .border_style(styles.base.patch(styles.focused_border)),
+    );
+    frame.render_widget(menu.style(styles.base), area);
+}
+
+fn render_reset_menu(model: &Model, frame: &mut Frame, area: Rect) {
+    let styles = model.theme.ui();
+    let menu = Paragraph::new(Line::raw("s reset soft   Esc cancel")).block(
+        Block::new()
+            .title("Reset")
             .borders(Borders::ALL)
             .border_style(styles.base.patch(styles.focused_border)),
     );

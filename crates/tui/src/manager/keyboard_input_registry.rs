@@ -185,6 +185,17 @@ fn common_bindings() -> KeymapConfig {
                 ("vcs_merge_backspace", "backspace"),
             ],
         ),
+        keymap_context(
+            "vcs_reset",
+            [
+                ("vcs_reset_submit", "enter"),
+                ("vcs_reset_next", "down"),
+                ("vcs_reset_previous", "up"),
+                ("vcs_reset_cancel", "esc"),
+                ("vcs_reset_backspace", "backspace"),
+            ],
+        ),
+        keymap_context("vcs_reset_menu", [("vcs_reset_menu_close", "esc")]),
         keymap_context("vcs_branch_menu", [("vcs_branch_menu_close", "esc")]),
         keymap_context(
             "vcs_branch",
@@ -261,6 +272,8 @@ fn parse_context(value: &str) -> Option<Context> {
         "vcs_commit" => Some(Context::VcsCommit),
         "vcs_commit_input" => Some(Context::VcsCommitInput),
         "vcs_merge" => Some(Context::VcsMerge),
+        "vcs_reset_menu" => Some(Context::VcsResetMenu),
+        "vcs_reset" => Some(Context::VcsReset),
         "vcs_branch_menu" => Some(Context::VcsBranchMenu),
         "vcs_branch" => Some(Context::VcsBranch),
         "editor_input" => Some(Context::EditorInput),

@@ -98,7 +98,11 @@ vcs_commit_placeholder = "c"
 vcs_help_placeholder = "?"
 open_vcs_history = "l"
 vcs_merge_start = "m"
+vcs_reset_menu = "r"
 vcs_branch_menu = "b"
+
+[keymap.vcs_reset_menu]
+vcs_reset_soft = "s"
 
 [keymap.vcs_branch_menu]
 vcs_branch_create = "c"

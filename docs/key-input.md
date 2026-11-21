@@ -141,7 +141,7 @@ On an expanded directory, `h` folds that directory. On a file or collapsed direc
 
 File/theme pickers and both live-grep lists wrap from first to last and last to first. Their rendered list window follows the selection so the selected row remains visible, including after wraparound and in small terminals.
 
-`Ctrl-N`/`Ctrl-P` are built-in aliases for Down/Up navigation. An explicit `Ctrl-N`/`Ctrl-P` binding for a custom action in the same context takes priority.
+`Ctrl-N`/`Ctrl-P` are built-in aliases for Down/Up navigation in those pickers and in the VCS branch, merge, and reset selectors. An explicit `Ctrl-N`/`Ctrl-P` binding for a custom action in the same context takes priority.
 
 ### VCS status page
 
@@ -156,7 +156,18 @@ File/theme pickers and both live-grep lists wrap from first to last and last to 
 | Open commit-message page for staged changes | `c` |
 | Open bottom branch actions | `b` |
 | Open switch-and-fast-forward picker (requires clean status) | `m` |
+| Open reset actions | `r` |
 | Discard unstaged changes in the selected tracked file | `x` |
+
+### VCS soft reset
+
+| Action | Default binding |
+| --- | --- |
+| Open soft-reset target picker | `r`, then `s` |
+| Filter targets / enter a commit hash | Printable characters |
+| Select target / submit / cancel | `Down`/`Up` or `Ctrl-N`/`Ctrl-P`; `Enter`; `Escape` |
+
+The picker lists local `main`/`master`, existing remote-tracking branches, and the newest five commits from `HEAD`. No fetch is performed. A hexadecimal query of at least four characters is submitted as a commit hash. Soft reset moves `HEAD` or its current branch to the resolved commit without changing the index or working tree; differences from the selected target consequently appear in staged/unstaged status as appropriate.
 
 ### VCS branch menu
 
@@ -169,7 +180,7 @@ File/theme pickers and both live-grep lists wrap from first to last and last to 
 | Action | Default binding |
 | --- | --- |
 | Filter branches or enter a short/full commit start point | Printable characters |
-| Select next / previous start point or branch | `Down` / `Up` |
+| Select next / previous start point or branch | `Down` / `Up` or `Ctrl-N` / `Ctrl-P` |
 | Accept selection or submit new branch name | `Enter` |
 
 ### VCS merge selector
@@ -177,7 +188,7 @@ File/theme pickers and both live-grep lists wrap from first to last and last to 
 | Action | Default binding |
 | --- | --- |
 | Type to filter branches | Printable characters |
-| Select next / previous branch | `Down` / `Up` |
+| Select next / previous branch | `Down` / `Up` or `Ctrl-N` / `Ctrl-P` |
 | Submit selected target | `Enter` |
 
 ### VCS history and commit detail

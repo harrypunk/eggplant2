@@ -1,4 +1,7 @@
 mod branch;
+mod reset;
+
+pub use reset::{ResetTarget, reset_soft, reset_targets};
 
 pub use branch::{
     BranchStartPoint, BranchSwitchOutcome, create_branch_and_switch, local_branches, switch_branch,
@@ -2353,6 +2356,67 @@ mod tests {
 
         assert!(matches!(error, MutationError::Failed(_)));
         assert_eq!(head_id(repository.path()), parent);
+    }
+
+    #[test]
+    fn reset_targets_include_main_master_remote_and_five_recent_commits() {
+        let repository = repository();
+        for index in 0..5 {
+            let message = format!("commit {index}");
+            git(
+                repository.path(),
+                &["commit", "--allow-empty", "--quiet", "-m", &message],
+            );
+        }
+        git(repository.path(), &["branch", "master"]);
+        git(
+            repository.path(),
+            &["update-ref", "refs/remotes/origin/main", "HEAD"],
+        );
+
+        let targets = reset_targets(repository.path()).unwrap();
+        let labels = targets
+            .iter()
+            .map(|target| target.label.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(&labels[..3], ["main", "master", "origin/main"]);
+        assert_eq!(targets.len(), 8);
+        assert!(labels[3].contains("commit 4"));
+        assert!(labels[7].contains("commit 0"));
+        assert!(!labels.iter().any(|label| label.contains("initial")));
+    }
+
+    #[test]
+    fn soft_reset_to_typed_hash_moves_only_head() {
+        let repository = repository();
+        let initial = head_id(repository.path());
+        let tracked = repository.path().join("note.txt");
+        std::fs::write(&tracked, "second\n").unwrap();
+        git(repository.path(), &["add", "note.txt"]);
+        git(repository.path(), &["commit", "--quiet", "-m", "second"]);
+        let indexed = index_entry(
+            &open_repository(repository.path()).unwrap(),
+            BStr::new("note.txt"),
+        );
+        std::fs::write(&tracked, "local\n").unwrap();
+
+        reset_soft(repository.path(), &initial.to_string()).unwrap();
+
+        assert_eq!(head_id(repository.path()), initial);
+        assert_eq!(
+            index_entry(
+                &open_repository(repository.path()).unwrap(),
+                BStr::new("note.txt"),
+            ),
+            indexed
+        );
+        assert_eq!(std::fs::read_to_string(tracked).unwrap(), "local\n");
+        let changed = changes(repository.path()).unwrap();
+        assert!(changed.iter().any(|change| change.staged));
+        assert!(changed.iter().any(|change| !change.staged));
+
+        assert!(reset_soft(repository.path(), "not-a-ref").is_err());
+        assert_eq!(head_id(repository.path()), initial);
     }
 
     #[test]
