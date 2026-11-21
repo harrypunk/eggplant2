@@ -8,7 +8,7 @@ Eggplant's LSP support is intentionally limited to source navigation and diagnos
 - Full-text document open/change/close synchronization.
 - Error, warning, information, and hint diagnostics.
 - Server messages and work-progress begin/report/end notifications.
-- One workspace root and the registered server for the current file type.
+- One workspace root and ordered providers for the current file type.
 
 At startup Eggplant loads `~/.eggplant/languages.toml`; if it is absent, community defaults configure external `rust-analyzer`, `typescript-language-server` (TS/TSX/JS/JSX), and `pyright-langserver` commands. A present file replaces those defaults and uses owned specifications through the injected `LanguageServerRegistry` interface. See [External language-server configuration](language-configuration.md) for the supported format. No server binaries are bundled or downloaded automatically. Unsupported files and unavailable servers leave ordinary editing intact and report feedback through notifications.
 
@@ -21,6 +21,7 @@ Non-goals include completion, hover, rename, code actions, formatting, semantic 
 | `app::language` | UI-neutral requests, locations, diagnostics, document events, owned server metadata, the `LanguageServerRegistry` lookup interface, and the `LanguageService` port. |
 | `app::lsp` | Stdio framing, JSON-RPC envelopes, navigation/diagnostics mapping, process lifecycle, and the split runtime. |
 | `editor` | Buffer identity, text, revisions, logical cursor positions, and document opening. It has no LSP dependency. |
+| `capabilities/document` | Generic document opening and the injected `DocumentCloseHandler` port; shell lifecycle has no language-service dependency. |
 | `features/code_navigation` | Latest-request state, service ownership, command handling, effect completion, and the shared location popup. |
 | `features/diagnostics` | Diagnostic storage, stale-version checks, typed completions, and side-panel visibility. |
 | `component/diagnostics_panel` | Severity/path/position/message rendering without protocol or process knowledge. |
@@ -38,7 +39,7 @@ Server-initiated requests receive minimal responses rather than being dropped: c
 | Implementation | `Space c i` |
 | Diagnostics panel | `Space c l` |
 
-Navigation results behave as follows:
+Navigation uses the first configured provider, so primary navigation servers should precede lint-only providers. Navigation results behave as follows:
 
 - No locations: a transient notification.
 - One location: open it through the existing document capability.
@@ -53,14 +54,13 @@ Transient server information, missing results, startup failures, and protocol fa
 ## Synchronization and stale safety
 
 - Synchronization uses owned full-text events with document versions.
-- Opening a supported document starts or reuses the service; ordinary edits synchronize current text.
-- One operation owns the service at a time. While busy, only the newest text update is retained per path, and close events are never coalesced away.
-- Services are retained by stable server ID, with at most one operation active across providers. While a provider is busy, only the newest text update is retained per path, and close events are never coalesced away.
-- Successful buffer closes send `didClose` and clear the path's diagnostics.
+- Opening a supported document starts or reuses every configured provider; ordinary edits synchronize current text with all of them.
+- Services are retained by stable server ID, with one worker operation active across providers. Queue entries retain only the newest text per provider/path and never coalesce close events away.
+- Successful buffer closes send `didClose` to existing providers and clear the path's diagnostics through the generic document-close port.
 - Navigation completions require the latest request ID plus matching buffer identity and revision.
-- Diagnostic batches carry path, optional version, and server generation. Older document versions and old-server batches are ignored.
-- Empty diagnostic batches clear the path without reading document text.
-- Terminal reader/transport failures invalidate the service and clear old diagnostics; the next edit or navigation starts a replacement. Failures from older server generations are ignored, while malformed individual notifications report an error without invalidating a live service.
+- Diagnostic batches carry provider ID, path, optional version, and provider generation. Older document versions and old-server batches are ignored.
+- Empty diagnostic batches clear only that provider/path contribution without reading document text or erasing other providers.
+- Terminal reader/transport failures invalidate only that provider and clear its old diagnostics; the next edit or navigation starts a replacement. Failures from older generations are ignored, while malformed individual notifications report an error without invalidating a live service.
 - LSP positions are converted between UTF-16 code units and editor character offsets, including non-ASCII text.
 
 There is no application-level request cancellation yet. Stale results are discarded rather than cancelled on the server.

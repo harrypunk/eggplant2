@@ -23,6 +23,12 @@ pub enum NavigationOutcome {
     Locations,
 }
 
+#[derive(Debug, Clone)]
+pub struct PendingSync {
+    pub spec: LanguageServerSpec,
+    pub event: DocumentEvent,
+}
+
 /// Latest-navigation intent and the locations produced by its accepted completion.
 #[derive(Default)]
 pub struct CodeNavigationState {
@@ -34,7 +40,7 @@ pub struct CodeNavigationState {
     operation_spec: Option<LanguageServerSpec>,
     service_failed: bool,
     operation_active: bool,
-    trailing_sync: VecDeque<DocumentEvent>,
+    trailing_sync: VecDeque<PendingSync>,
 }
 
 impl std::fmt::Debug for CodeNavigationState {
@@ -134,27 +140,34 @@ impl CodeNavigationState {
         self.operation_spec = None;
     }
 
-    pub fn queue_sync(&mut self, event: DocumentEvent) {
-        let replace = match (&event, self.trailing_sync.back()) {
-            (DocumentEvent::Close { .. }, _) | (_, Some(DocumentEvent::Close { .. })) => false,
-            (_, None) => false,
-            (event, Some(previous)) => event_path(event) == event_path(previous),
-        };
-        if replace {
-            *self
-                .trailing_sync
-                .back_mut()
-                .expect("queued event must exist") = event;
-        } else {
-            self.trailing_sync.push_back(event);
+    pub fn queue_sync(&mut self, spec: LanguageServerSpec, event: DocumentEvent) {
+        if matches!(&event, DocumentEvent::Close { .. }) {
+            self.trailing_sync.push_back(PendingSync { spec, event });
+            return;
         }
+        let same_target = |pending: &PendingSync| {
+            pending.spec.id() == spec.id() && event_path(&pending.event) == event_path(&event)
+        };
+        let replacement = self.trailing_sync.iter().rposition(|pending| {
+            same_target(pending) && !matches!(&pending.event, DocumentEvent::Close { .. })
+        });
+        if let Some(index) = replacement {
+            let close_after = self.trailing_sync.iter().skip(index + 1).any(|pending| {
+                same_target(pending) && matches!(&pending.event, DocumentEvent::Close { .. })
+            });
+            if !close_after {
+                self.trailing_sync[index] = PendingSync { spec, event };
+                return;
+            }
+        }
+        self.trailing_sync.push_back(PendingSync { spec, event });
     }
 
     pub fn has_trailing_sync(&self) -> bool {
         !self.trailing_sync.is_empty()
     }
 
-    pub fn take_trailing_sync(&mut self) -> Option<DocumentEvent> {
+    pub fn take_trailing_sync(&mut self) -> Option<PendingSync> {
         self.trailing_sync.pop_front()
     }
 
@@ -350,24 +363,31 @@ mod tests {
     fn close_events_are_not_coalesced_away() {
         let mut state = CodeNavigationState::default();
         let path = |name| PathBuf::from(name);
-        state.queue_sync(DocumentEvent::Open {
-            path: path("a.rs"),
-            language: "rust".to_string(),
-            version: 1,
-            text: "first".to_string(),
-        });
-        state.queue_sync(DocumentEvent::Change {
-            path: path("a.rs"),
-            version: 2,
-            text: "latest".to_string(),
-        });
-        state.queue_sync(DocumentEvent::Close { path: path("a.rs") });
-        state.queue_sync(DocumentEvent::Close { path: path("b.rs") });
+        let spec = spec("rust", "rust-analyzer");
+        state.queue_sync(
+            spec.clone(),
+            DocumentEvent::Open {
+                path: path("a.rs"),
+                language: "rust".to_string(),
+                version: 1,
+                text: "first".to_string(),
+            },
+        );
+        state.queue_sync(
+            spec.clone(),
+            DocumentEvent::Change {
+                path: path("a.rs"),
+                version: 2,
+                text: "latest".to_string(),
+            },
+        );
+        state.queue_sync(spec.clone(), DocumentEvent::Close { path: path("a.rs") });
+        state.queue_sync(spec, DocumentEvent::Close { path: path("b.rs") });
 
         let first = state.take_trailing_sync().unwrap();
-        assert_eq!(event_path(&first), path("a.rs"));
+        assert_eq!(event_path(&first.event), path("a.rs"));
         assert_eq!(
-            first,
+            first.event,
             DocumentEvent::Change {
                 path: path("a.rs"),
                 version: 2,
@@ -376,11 +396,11 @@ mod tests {
         );
         assert!(state.has_trailing_sync());
         assert_eq!(
-            state.take_trailing_sync(),
+            state.take_trailing_sync().map(|pending| pending.event),
             Some(DocumentEvent::Close { path: path("a.rs") })
         );
         assert_eq!(
-            state.take_trailing_sync(),
+            state.take_trailing_sync().map(|pending| pending.event),
             Some(DocumentEvent::Close { path: path("b.rs") })
         );
         assert!(!state.has_trailing_sync());

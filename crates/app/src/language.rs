@@ -130,7 +130,11 @@ pub struct LanguageServers {
 
 /// Provider-neutral lookup used by application features instead of hard-coded catalogs.
 pub trait LanguageServerRegistry: std::fmt::Debug + Send + Sync {
-    fn find_for_path(&self, path: &std::path::Path) -> Option<LanguageServerSpec>;
+    fn servers_for_path(&self, path: &std::path::Path) -> Vec<LanguageServerSpec>;
+
+    fn find_for_path(&self, path: &std::path::Path) -> Option<LanguageServerSpec> {
+        self.servers_for_path(path).into_iter().next()
+    }
 }
 
 impl LanguageServers {
@@ -165,7 +169,7 @@ impl LanguageServers {
         if self
             .specs
             .iter()
-            .any(|current| current.language == spec.language)
+            .any(|current| current.language == spec.language && current.id == spec.id)
         {
             return Err(LanguageError(format!(
                 "duplicate language server for `{}`",
@@ -183,14 +187,23 @@ impl LanguageServers {
     pub fn find_for_path(&self, path: &std::path::Path) -> Option<&LanguageServerSpec> {
         self.specs.iter().find(|spec| spec.matches_path(path))
     }
+
+    pub fn servers_for_path(&self, path: &std::path::Path) -> Vec<LanguageServerSpec> {
+        self.specs
+            .iter()
+            .filter(|spec| spec.matches_path(path))
+            .cloned()
+            .collect()
+    }
 }
 
 impl LanguageServerRegistry for LanguageServers {
-    fn find_for_path(&self, path: &std::path::Path) -> Option<LanguageServerSpec> {
+    fn servers_for_path(&self, path: &std::path::Path) -> Vec<LanguageServerSpec> {
         self.specs
             .iter()
-            .find(|spec| spec.matches_path(path))
+            .filter(|spec| spec.matches_path(path))
             .cloned()
+            .collect()
     }
 }
 
@@ -384,7 +397,8 @@ mod tests {
         );
 
         let duplicate =
-            LanguageServerSpec::new("rust", "another-server", std::iter::empty::<&str>());
+            LanguageServerSpec::new("rust", "another-server", std::iter::empty::<&str>())
+                .with_id("rust-analyzer");
         let error = servers.register(duplicate).unwrap_err();
         assert!(error.0.contains("duplicate language server"));
         assert_eq!(servers.find("rust").unwrap().command(), "rust-analyzer");

@@ -38,7 +38,7 @@ The abstraction, injection path, strict TOML parser, and user-file loading are i
 
 Only command recipes are included; the executables must be installed separately.
 
-A present language file replaces the community defaults; an empty file disables language services explicitly. Configuration currently accepts one provider per language. Services are retained by stable server ID, and one operation is active at a time across providers. Diagnostics batches and generations are provider-specific, so restarts and empty batches do not clear other providers. Multi-provider scheduling and merged same-document diagnostics are the next slice.
+A present language file replaces the community defaults; an empty file disables language services explicitly. Configuration accepts ordered provider lists. Services are retained by stable server ID, and one worker operation is active at a time across providers. Queue entries retain newest text per provider/path and preserve every close. Diagnostics generations and batches are provider-specific, so restarts and empty batches do not clear other providers. Navigation uses the first configured (primary) provider; list lint-only providers after the primary.
 
 ## User configuration
 
@@ -53,6 +53,10 @@ args = ["--stdio"]
 command = "basedpyright-langserver"
 args = ["--stdio"]
 
+[language-server.vscode-eslint-language-server]
+command = "vscode-eslint-language-server"
+args = ["--stdio"]
+
 [language-server.ruff]
 command = "ruff"
 args = ["server"]
@@ -60,33 +64,32 @@ args = ["server"]
 [[language]]
 name = "typescript"
 file-types = ["ts", "mts", "cts"]
-language-servers = ["typescript-language-server"]
+language-servers = ["typescript-language-server", "vscode-eslint-language-server"]
 
 [[language]]
 name = "typescriptreact"
 file-types = ["tsx"]
-language-servers = ["typescript-language-server"]
+language-servers = ["typescript-language-server", "vscode-eslint-language-server"]
 
 [[language]]
 name = "python"
 file-types = ["py", "pyi"]
-language-servers = ["basedpyright"]
+language-servers = ["basedpyright", "ruff"]
 ```
 
-The language `name` is also the LSP `languageId`, so React file types use `typescriptreact` or `javascriptreact`. For Ruff's lint-focused Python diagnostics instead of Basedpyright, set Python's `language-servers = ["ruff"]`. Running both providers together is not supported yet.
+The language `name` is also the LSP `languageId`, so React file types use `typescriptreact` or `javascriptreact`. Keep the primary navigation provider first: TypeScript handles navigation while ESLint adds diagnostics, and Basedpyright handles Python navigation while Ruff adds lint diagnostics. Diagnostics from all configured providers are merged.
 
 See the complete [`languages.example.toml`](../languages.example.toml), which also retains Rust and configures JS/JSX. A present configuration replaces the community defaults, so include every language you want to keep.
 
 Install the configured executables separately and ensure they are available on `PATH`. Configuration is loaded before terminal initialization; read and validation errors report the language-file path. Unsupported files and unavailable executables do not prevent ordinary editing.
 
-Configuration parsing produces owned registry values rather than leaking TOML types into application features. Unknown server references, duplicate languages, empty commands, missing/empty file types, unsupported fields, and multiple servers for one language fail with actionable errors. Missing executables remain runtime notifications and must not prevent ordinary editing.
+Configuration parsing produces owned registry values rather than leaking TOML types into application features. Unknown server references, duplicate language/server pairs, empty commands, missing/empty file types, empty provider lists, and unsupported fields fail with actionable errors. Missing executables remain runtime notifications and must not prevent ordinary editing.
 
 ## Later slices
 
 Detailed acceptance criteria live in [PLAN Milestone 11](../PLAN.md#milestone-11-multi-provider-language-workflows).
 
-1. Introduce stable configured server IDs, retain compatible services keyed by workspace/server, and make diagnostics generations and per-path contributions provider-specific (M11.1).
-2. Accept ordered multi-provider language lists, synchronize all attached providers, use first-capable navigation, and merge diagnostics (M11.2).
-3. Add server initialization/configuration values only after basic multi-provider lifecycle and stale-result tests are proven (M11.3).
-4. Consider trusted project overrides and safe process reuse across language IDs; never execute project configuration without an explicit trust policy (M11.3).
-5. Keep completion, hover, rename, code actions, automatic installation, and other full-IDE features out of scope.
+1. Add server initialization/configuration values only after the basic lifecycle is extended deliberately (M11.3).
+2. Consider trusted project overrides; never execute project configuration without an explicit trust policy (M11.3).
+3. Optionally try later navigation providers when the primary returns an unsupported-method error; current navigation uses the primary only.
+4. Keep completion, hover, rename, code actions, automatic installation, and other full-IDE features out of scope.

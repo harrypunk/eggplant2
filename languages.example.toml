@@ -13,6 +13,10 @@ args = ["--stdio"]
 command = "basedpyright-langserver"
 args = ["--stdio"]
 
+[language-server.vscode-eslint-language-server]
+command = "vscode-eslint-language-server"
+args = ["--stdio"]
+
 [language-server.ruff]
 command = "ruff"
 args = ["server"]
@@ -25,27 +29,26 @@ language-servers = ["rust-analyzer"]
 [[language]]
 name = "typescript"
 file-types = ["ts", "mts", "cts"]
-language-servers = ["typescript-language-server"]
+language-servers = ["typescript-language-server", "vscode-eslint-language-server"]
 
 [[language]]
 name = "typescriptreact"
 file-types = ["tsx"]
-language-servers = ["typescript-language-server"]
+language-servers = ["typescript-language-server", "vscode-eslint-language-server"]
 
 [[language]]
 name = "javascript"
 file-types = ["js", "mjs", "cjs"]
-language-servers = ["typescript-language-server"]
+language-servers = ["typescript-language-server", "vscode-eslint-language-server"]
 
 [[language]]
 name = "javascriptreact"
 file-types = ["jsx"]
-language-servers = ["typescript-language-server"]
+language-servers = ["typescript-language-server", "vscode-eslint-language-server"]
 
-# Basedpyright supplies Python navigation and type diagnostics.
-# For Ruff's lint-focused diagnostics instead, use language-servers = ["ruff"].
-# Running basedpyright and Ruff together is not supported yet.
+# Basedpyright supplies Python navigation and type diagnostics; Ruff adds lint diagnostics.
+# Keep the primary navigation provider first and lint providers after it.
 [[language]]
 name = "python"
 file-types = ["py", "pyi"]
-language-servers = ["basedpyright"]
+language-servers = ["basedpyright", "ruff"]

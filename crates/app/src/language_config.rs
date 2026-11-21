@@ -51,29 +51,30 @@ pub fn parse_language_servers(input: &str) -> Result<LanguageServers, LanguageEr
                 language.name
             )));
         }
-        if language.servers.len() != 1 {
+        if language.servers.is_empty() {
             return Err(LanguageError(format!(
-                "language `{}` requires exactly one language server; multiple providers are not supported yet",
+                "language `{}` requires at least one language server",
                 language.name
             )));
         }
-        let server_name = &language.servers[0];
-        let server = file.servers.get(server_name).ok_or_else(|| {
-            LanguageError(format!(
-                "language `{}` references unknown language server `{server_name}`",
-                language.name
-            ))
-        })?;
-        if server.command.trim().is_empty() {
-            return Err(LanguageError(format!(
-                "language server `{server_name}` requires a non-empty command"
-            )));
+        for server_name in language.servers {
+            let server = file.servers.get(&server_name).ok_or_else(|| {
+                LanguageError(format!(
+                    "language `{}` references unknown language server `{server_name}`",
+                    language.name
+                ))
+            })?;
+            if server.command.trim().is_empty() {
+                return Err(LanguageError(format!(
+                    "language server `{server_name}` requires a non-empty command"
+                )));
+            }
+            registry.register(
+                LanguageServerSpec::new(&language.name, &server.command, server.args.clone())
+                    .with_id(&server_name)
+                    .with_extensions(language.file_types.clone()),
+            )?;
         }
-        registry.register(
-            LanguageServerSpec::new(&language.name, &server.command, server.args.clone())
-                .with_id(server_name)
-                .with_extensions(language.file_types),
-        )?;
     }
     Ok(registry)
 }
@@ -139,7 +140,32 @@ language-servers = ["ruff"]
     }
 
     #[test]
-    fn rejects_unknown_empty_duplicate_and_multi_server_configuration() {
+    fn preserves_ordered_multiple_providers_for_a_language() {
+        let registry = parse_language_servers(
+            r#"
+[language-server.primary]
+command = "typescript-language-server"
+args = ["--stdio"]
+[language-server.lint]
+command = "vscode-eslint-language-server"
+args = ["--stdio"]
+[[language]]
+name = "typescript"
+file-types = ["ts"]
+language-servers = ["primary", "lint"]
+"#,
+        )
+        .unwrap();
+
+        let specs = registry.servers_for_path(Path::new("main.ts"));
+        assert_eq!(specs.len(), 2);
+        assert_eq!(specs[0].id(), "primary");
+        assert_eq!(specs[1].id(), "lint");
+        assert!(specs.iter().all(|spec| spec.language() == "typescript"));
+    }
+
+    #[test]
+    fn rejects_invalid_configuration() {
         for (input, expected) in [
             (
                 r#"
@@ -181,9 +207,9 @@ command = "typescript-language-server"
 [[language]]
 name = "typescript"
 file-types = ["ts"]
-language-servers = ["ts", "ts"]
+language-servers = []
 "#,
-                "multiple providers are not supported yet",
+                "at least one language server",
             ),
             (
                 r#"

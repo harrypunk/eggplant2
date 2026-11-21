@@ -1,7 +1,7 @@
 # Eggplant first-edition plan
 
 Last updated: 2026-11-21
-Current baseline: Milestones 1–10 complete; M11 provider-keyed identity foundation is implemented
+Current baseline: M10 and the M11.1/M11.2 multi-provider core are complete; configuration-depth work remains optional
 
 ## Purpose
 
@@ -427,7 +427,7 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 ### Milestone 10: Lightweight external LSP
 
-**Status: complete for one provider per language; sequential mixed-language replacement and user configuration are implemented.**
+**Status: complete; M11 adds ordered multi-provider workflows.**
 
 **Goal:** provide useful navigation and diagnostics through user-installed external servers without bundling language runtimes or turning Eggplant into a full IDE.
 
@@ -435,7 +435,7 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 - Ship generic protocol support and a small set of community command recipes, not server executables, Node.js, Python, downloaders, or automatic installation. An empty `languages.toml` disables language services.
 - Keep provider-neutral contracts in `app::language`; keep stdio/JSON-RPC/LSP mapping in `app::lsp`. TUI features own commands, popups, notifications, and diagnostics presentation. Do not move language orchestration into `EditorSession`.
-- Permit one active service in the current slice. Reuse requires an exact server-specification match; changing language, command, arguments, or extensions drops the old service before starting another. Multi-provider retention is M11, not an implicit side effect of configuration.
+- At the M10 boundary, permit one active service with exact-spec reuse. M11 replaces that restriction with server-ID retention and provider/path queues; it is not an implicit side effect of configuration.
 - Run blocking transport work outside the UI thread. Never hold a service/document mutex during blocking I/O. Bound queued text synchronization, preserve close events, terminate/reap children, and join runtime threads during teardown.
 - Associate navigation with request ID, canonical path, `BufferId`, and document revision. Associate diagnostics with path, optional document version, and server generation so replaced servers cannot affect current state.
 - Missing executables, malformed messages, and server failures leave normal editing available with concise non-blocking feedback.
@@ -474,11 +474,11 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 - [x] Provide external command defaults for Rust, TS/TSX, JS/JSX (`typescript-language-server`), and Python (`pyright-langserver`), with correct React language IDs.
 - [x] Keep Basedpyright, Ruff, and other single-provider alternatives configurable through the same interface; test the example and composition path without launching real community tools.
 
-**M10 exit criteria:** users can configure or use defaults for one external provider per language, synchronize full text, navigate, inspect diagnostics, and recover from process failures without weakening editing/save invariants. Multiple providers for one document are intentionally rejected by configuration rather than silently misrouted.
+**M10 exit criteria:** users can configure or use defaults for one external provider per language, synchronize full text, navigate, inspect diagnostics, and recover from process failures without weakening editing/save invariants. At the M10 boundary multiple providers were intentionally rejected; M11 enables them explicitly.
 
 ### Milestone 11: Multi-provider language workflows
 
-**Status: in progress; provider-keyed ownership and diagnostic identity are implemented.**
+**Status: M11.1 and M11.2 complete; M11.3 configuration-depth work is optional.**
 
 **Goal:** support common combinations such as TypeScript + ESLint and Pyright/Basedpyright + Ruff while retaining M10's lightweight scope and provider-neutral interfaces.
 
@@ -486,26 +486,27 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 - [x] Introduce a stable configured server ID separate from LSP `languageId`; key service ownership by workspace root and server ID.
 - [x] Retain compatible idle services by server ID instead of sequentially replacing every language change, with child cleanup through owned service teardown.
-- [ ] Make busy/trailing state provider-specific. Do not let starting one provider invalidate healthy diagnostics from another.
+- [x] Track the active operation's provider and key trailing entries by provider/path. A single worker may serialize operations while diagnostics remain concurrent.
 - [x] Index diagnostic contributions by provider and path so an empty batch clears only that provider's entries before merged presentation.
-- [x] Test independent crashes/restarts and cross-provider stale completions; close ordering and multi-provider process bounds remain in M11.2.
+- [x] Test independent crashes/restarts, cross-provider stale completions, close ordering, and the bounded single-worker queue.
 
 #### M11.2 — Multiple providers per configured language
 
-- [ ] Accept ordered `language-servers` lists instead of rejecting multiple providers.
-- [ ] Synchronize each open document to every attached provider with one in-flight operation plus latest trailing text per provider; never drop closes.
-- [ ] Route definition/references/implementation to the first configured provider that supports the request. Keep navigation completion latest-request/revision safe.
-- [ ] Merge diagnostics from all providers while preserving path/version/source identity and existing side-panel rendering.
-- [ ] Add fake TypeScript + lint and Python + lint workflows proving navigation priority, merged/empty diagnostics, edits during busy work, and buffer close.
+- [x] Accept ordered `language-servers` lists instead of rejecting multiple providers.
+- [x] Synchronize each open document to every attached provider through provider/path queue entries; never drop closes.
+- [x] Route definition/references/implementation to the first configured primary provider. Keep navigation completion latest-request/revision safe and list lint-only providers later.
+- [x] Merge diagnostics from all providers while preserving path/version/source identity and existing side-panel rendering.
+- [x] Add fake TypeScript + ESLint and Python + Basedpyright/Ruff open/close workflows, plus same-path provider tests for merged/empty diagnostics.
 
 #### M11.3 — Configuration depth after routing is proven
 
 - [ ] Add optional server initialization/configuration values and map them through the existing provider-neutral spec; do not leak JSON into TUI features.
 - [ ] Consider trusted project overrides only after defining execution trust. Do not automatically execute project-specified binaries merely because a repository was opened.
-- [ ] Reuse compatible server processes across language IDs where safe, while retaining distinct `didOpen` language IDs.
+- [x] Reuse compatible server processes across language IDs through stable server identity, while retaining distinct `didOpen` language IDs.
+- [ ] Optionally try later providers on unsupported navigation methods; current navigation uses the configured primary.
 - [ ] Reassess resource caps and real-terminal smoke tests with TypeScript + ESLint and Pyright/Basedpyright + Ruff. Tests still use fakes.
 
-**M11 exit criteria:** a document can use multiple external providers with bounded lifecycle behavior, first-capable navigation, and correctly merged diagnostics. Unsupported features remain unsupported; no automatic installation or full-IDE feature expansion is required.
+**M11 exit criteria:** a document can use multiple external providers with bounded lifecycle behavior, ordered primary-provider navigation, and correctly merged diagnostics. Unsupported features remain unsupported; no automatic installation or full-IDE feature expansion is required.
 
 **Deferred LSP scope:** completion, hover, rename, formatting, code actions, workspace edits, incremental/didSave synchronization, negotiated position encodings, editor diagnostic annotations/counts, and diagnostics jumping require separate explicit slices. DAP/debugging remains outside this roadmap until a concrete need justifies it.
 

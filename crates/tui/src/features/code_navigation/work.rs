@@ -6,7 +6,7 @@ use app::language::{
     NavigationRequest,
 };
 
-use super::NavigationOutcome;
+use super::{NavigationOutcome, PendingSync};
 use crate::{
     capabilities::notification::Notification,
     data_object::{CommandId, Context, Model, StatusMessage},
@@ -91,6 +91,7 @@ fn start(model: &mut Model, kind: NavigationKind) -> Option<Effect> {
         return None;
     }
     let document = active_document(model)?;
+    let spec = document.specs.first()?.clone();
     let position = model.editor.active_position()?;
     let request = model.code_navigation.begin(
         kind,
@@ -99,42 +100,77 @@ fn start(model: &mut Model, kind: NavigationKind) -> Option<Effect> {
         document.revision,
         position,
     );
-    language_work(model, document.event(), LanguageAction::Navigate(request))
-}
-
-/// Synchronize the active document, or retain only the newest event while busy.
-pub fn synchronize(model: &mut Model) -> Option<Effect> {
-    let event = model
-        .code_navigation
-        .take_trailing_sync()
-        .or_else(|| active_document(model).map(|document| document.event()))?;
-    if model.code_navigation.is_busy() {
-        model.code_navigation.queue_sync(event);
-        return None;
-    }
-    model.code_navigation.begin_sync();
-    language_work(model, event, LanguageAction::Synchronize)
-}
-
-/// Close one document without starting a server when none is running.
-pub fn close_document(model: &mut Model, path: PathBuf) -> Option<Effect> {
-    model.diagnostics.clear_path(&path);
-    let spec = model.language_servers.find_for_path(&path)?;
-    if !model.code_navigation.has_service_for(&spec) {
-        return None;
-    }
-    if model.code_navigation.is_busy() {
-        model
-            .code_navigation
-            .queue_sync(DocumentEvent::Close { path });
-        return None;
-    }
-    model.code_navigation.begin_sync();
     language_work(
         model,
-        DocumentEvent::Close { path },
-        LanguageAction::Synchronize,
+        spec.clone(),
+        document.event(&spec),
+        LanguageAction::Navigate(request),
     )
+}
+
+/// Synchronize every configured provider, retaining newest text per provider/path.
+pub fn synchronize(model: &mut Model) -> Option<Effect> {
+    if !model.code_navigation.is_busy() && model.code_navigation.has_trailing_sync() {
+        return next_sync(model);
+    }
+    let tasks = active_sync_tasks(model)?;
+    queue_tasks(model, tasks);
+    if model.code_navigation.is_busy() {
+        return None;
+    }
+    next_sync(model)
+}
+
+/// Close a document on existing providers without starting a new server.
+pub fn close_document(model: &mut Model, path: PathBuf) -> Option<Effect> {
+    model.diagnostics.clear_path(&path);
+    let specs = model.language_servers.servers_for_path(&path);
+    let tasks = specs
+        .into_iter()
+        .filter(|spec| model.code_navigation.has_service_for(spec))
+        .map(|spec| PendingSync {
+            spec,
+            event: DocumentEvent::Close { path: path.clone() },
+        })
+        .collect::<Vec<_>>();
+    if tasks.is_empty() {
+        return None;
+    }
+    queue_tasks(model, tasks);
+    if model.code_navigation.is_busy() {
+        return None;
+    }
+    next_sync(model)
+}
+
+fn active_sync_tasks(model: &Model) -> Option<Vec<PendingSync>> {
+    Some(active_document(model)?.sync_tasks())
+}
+
+fn queue_tasks(model: &mut Model, tasks: Vec<PendingSync>) {
+    for pending in tasks {
+        model
+            .code_navigation
+            .queue_sync(pending.spec, pending.event);
+    }
+}
+
+fn next_sync(model: &mut Model) -> Option<Effect> {
+    while let Some(pending) = model.code_navigation.take_trailing_sync() {
+        if matches!(&pending.event, DocumentEvent::Close { .. })
+            && !model.code_navigation.has_service_for(&pending.spec)
+        {
+            continue;
+        }
+        model.code_navigation.begin_sync();
+        return language_work(
+            model,
+            pending.spec,
+            pending.event,
+            LanguageAction::Synchronize,
+        );
+    }
+    None
 }
 
 struct ActiveDocument {
@@ -142,17 +178,27 @@ struct ActiveDocument {
     path: PathBuf,
     revision: i32,
     text: String,
-    spec: LanguageServerSpec,
+    specs: Vec<LanguageServerSpec>,
 }
 
 impl ActiveDocument {
-    fn event(&self) -> DocumentEvent {
+    fn event(&self, spec: &LanguageServerSpec) -> DocumentEvent {
         DocumentEvent::Open {
             path: self.path.clone(),
-            language: self.spec.language().to_string(),
+            language: spec.language().to_string(),
             version: self.revision,
             text: self.text.clone(),
         }
+    }
+
+    fn sync_tasks(&self) -> Vec<PendingSync> {
+        self.specs
+            .iter()
+            .map(|spec| PendingSync {
+                spec: spec.clone(),
+                event: self.event(spec),
+            })
+            .collect()
     }
 }
 
@@ -161,26 +207,27 @@ fn active_document(model: &Model) -> Option<ActiveDocument> {
     let path = model.editor.buffer_path(buffer)?.to_path_buf();
     let (_, revision) = model.editor.active_revision()?;
     let snapshot = model.editor.active_text_snapshot()?;
-    let spec = model.language_servers.find_for_path(&path)?;
+    let specs = model.language_servers.servers_for_path(&path);
+    if specs.is_empty() {
+        return None;
+    }
 
     Some(ActiveDocument {
         buffer,
         path,
         revision,
         text: snapshot.text,
-        spec,
+        specs,
     })
 }
 
 fn language_work(
     model: &mut Model,
+    spec: LanguageServerSpec,
     document: DocumentEvent,
     action: LanguageAction,
 ) -> Option<Effect> {
     let root = model.workspace.as_ref()?.root().to_path_buf();
-    let spec = model
-        .language_servers
-        .find_for_path(document_path(&document))?;
     let service = model.code_navigation.take_service_for(&spec);
     let starting = service.is_none();
     let restarting = starting && model.diagnostics.server_generation(spec.id()) > 0;
@@ -206,14 +253,6 @@ fn language_work(
         diagnostics_sender: None,
     }));
     Effect::combine(notification, work)
-}
-
-fn document_path(document: &DocumentEvent) -> &std::path::Path {
-    match document {
-        DocumentEvent::Open { path, .. }
-        | DocumentEvent::Change { path, .. }
-        | DocumentEvent::Close { path } => path,
-    }
 }
 
 enum LanguageAction {
@@ -500,7 +539,7 @@ fn notify_lsp(model: &mut Model, status: StatusMessage) -> Option<Effect> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex};
 
     use app::language::SourceLocation;
     use editor::DocumentPosition;
@@ -520,10 +559,14 @@ mod tests {
 
     struct FakeService {
         locations: Vec<SourceLocation>,
+        events: Option<Arc<Mutex<Vec<DocumentEvent>>>>,
     }
 
     impl LanguageService for FakeService {
-        fn synchronize(&mut self, _: DocumentEvent) -> Result<(), LanguageError> {
+        fn synchronize(&mut self, event: DocumentEvent) -> Result<(), LanguageError> {
+            if let Some(events) = &self.events {
+                events.lock().unwrap().push(event);
+            }
             Ok(())
         }
 
@@ -552,9 +595,13 @@ mod tests {
     ) -> (Model, MessageManager) {
         let mut model = initial_model(Some(root.to_path_buf())).unwrap();
         open_file(&mut model, &root.join("main.rs"));
-        model
-            .code_navigation
-            .restore_service_for(&rust_spec(), Box::new(FakeService { locations }));
+        model.code_navigation.restore_service_for(
+            &rust_spec(),
+            Box::new(FakeService {
+                locations,
+                events: None,
+            }),
+        );
         (model, MessageManager::default())
     }
 
@@ -591,16 +638,104 @@ language-servers = ["ts"]
         open_file(&mut model, &source);
 
         let document = active_document(&model).unwrap();
-        assert_eq!(document.spec.command(), "typescript-language-server");
-        assert_eq!(document.spec.args(), &[String::from("--stdio")]);
+        let spec = document.specs.first().unwrap();
+        assert_eq!(spec.command(), "typescript-language-server");
+        assert_eq!(spec.args(), &[String::from("--stdio")]);
         assert_eq!(
-            document.event(),
+            document.event(spec),
             DocumentEvent::Open {
                 path: source,
                 language: "typescript".to_string(),
                 version: document.revision,
                 text: "const value: number = 1;\n".to_string(),
             }
+        );
+    }
+
+    fn assert_multi_provider_open_close(
+        expected_language: &str,
+        extension: &str,
+        primary_command: &str,
+        primary_args: &[&str],
+        lint_command: &str,
+        lint_args: &[&str],
+    ) {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join(format!("main.{extension}"));
+        std::fs::write(&source, "text\n").unwrap();
+        let primary = LanguageServerSpec::new(
+            expected_language,
+            primary_command,
+            primary_args.iter().copied(),
+        )
+        .with_id("primary")
+        .with_extensions([extension]);
+        let lint =
+            LanguageServerSpec::new(expected_language, lint_command, lint_args.iter().copied())
+                .with_id("lint")
+                .with_extensions([extension]);
+        let mut registry = app::language::LanguageServers::default();
+        registry.register(primary.clone()).unwrap();
+        registry.register(lint.clone()).unwrap();
+        let mut model =
+            initial_model_with_languages(Some(directory.path().to_path_buf()), Arc::new(registry))
+                .unwrap();
+        open_file(&mut model, &source);
+        let primary_events = Arc::new(Mutex::new(Vec::new()));
+        let lint_events = Arc::new(Mutex::new(Vec::new()));
+        model.code_navigation.restore_service_for(
+            &primary,
+            Box::new(FakeService {
+                locations: Vec::new(),
+                events: Some(primary_events.clone()),
+            }),
+        );
+        model.code_navigation.restore_service_for(
+            &lint,
+            Box::new(FakeService {
+                locations: Vec::new(),
+                events: Some(lint_events.clone()),
+            }),
+        );
+
+        let manager = MessageManager::default();
+        let first = synchronize(&mut model).unwrap();
+        let second = run_feature(&manager, &mut model, first).unwrap();
+        assert!(run_feature(&manager, &mut model, second).is_none());
+        assert!(!model.code_navigation.is_busy());
+
+        let first = close_document(&mut model, source.clone()).unwrap();
+        let second = run_feature(&manager, &mut model, first).unwrap();
+        assert!(run_feature(&manager, &mut model, second).is_none());
+
+        for events in [&primary_events, &lint_events] {
+            let events = events.lock().unwrap();
+            assert_eq!(events.len(), 2);
+            assert!(matches!(
+                &events[0],
+                DocumentEvent::Open { language, .. } if language.as_str() == expected_language
+            ));
+            assert!(matches!(&events[1], DocumentEvent::Close { .. }));
+        }
+    }
+
+    #[test]
+    fn typescript_and_python_providers_receive_open_and_close_through_one_bounded_worker() {
+        assert_multi_provider_open_close(
+            "typescript",
+            "ts",
+            "typescript-language-server",
+            &["--stdio"],
+            "vscode-eslint-language-server",
+            &["--stdio"],
+        );
+        assert_multi_provider_open_close(
+            "python",
+            "py",
+            "basedpyright-langserver",
+            &["--stdio"],
+            "ruff",
+            &["server"],
         );
     }
 

@@ -3,6 +3,7 @@ use editor::{EditMode, SaveCompletion};
 use crate::{
     buffer,
     data_object::{CommandId, DeferredAction, Model, RunningState, StatusMessage},
+    document,
     manager::effect::Effect,
 };
 
@@ -77,7 +78,7 @@ fn finish_close(model: &mut Model, id: editor::BufferId) -> Option<Effect> {
             match model.editor.close_buffer(id) {
                 Ok(()) => {
                     model.status = None;
-                    path.and_then(|path| crate::code_navigation::close_document(model, path))
+                    path.and_then(|path| document::close_file(model, path))
                 }
                 Err(error) => {
                     model.status = Some(StatusMessage::error(error.to_string()));
@@ -192,7 +193,7 @@ fn finish_close_group(
 
 fn close_documents(model: &mut Model, paths: Vec<std::path::PathBuf>) -> Option<Effect> {
     paths.into_iter().fold(None, |effect, path| {
-        Effect::combine(effect, crate::code_navigation::close_document(model, path))
+        Effect::combine(effect, document::close_file(model, path))
     })
 }
 

@@ -40,6 +40,9 @@ pub fn initial_model_with_languages(
         language_servers,
         ..Model::default()
     };
+    model
+        .document_lifecycle
+        .set_on_close(crate::code_navigation::close_document);
     model.context_stack.push(Context::AppNormal);
 
     match path {

@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use editor::{
     DocumentFactory, DocumentOpenCompletion as EditorDocumentOpenCompletion, DocumentOpenRequest,
@@ -10,6 +10,20 @@ use crate::{
     data_object::{Context, Model, OpenLocation, StatusMessage},
     manager::effect::Effect,
 };
+
+pub type DocumentCloseHandler = fn(&mut Model, PathBuf) -> Option<Effect>;
+
+/// Provider-neutral document lifecycle hooks injected at composition.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct DocumentLifecycle {
+    on_close: Option<DocumentCloseHandler>,
+}
+
+impl DocumentLifecycle {
+    pub fn set_on_close(&mut self, handler: DocumentCloseHandler) {
+        self.on_close = Some(handler);
+    }
+}
 
 #[derive(Debug, Default)]
 pub struct DocumentOpening {
@@ -90,6 +104,12 @@ impl DocumentOpening {
     fn pending_location(&self) -> Option<&OpenLocation> {
         self.pending.as_ref().map(|pending| &pending.location)
     }
+}
+
+/// Notify the configured lifecycle adapter after the editor closes a file.
+pub(crate) fn close_file(model: &mut Model, path: PathBuf) -> Option<Effect> {
+    let handler = model.document_lifecycle.on_close;
+    handler.and_then(|handler| handler(model, path))
 }
 
 /// Start opening a document through the shared text-only document capability.
@@ -192,6 +212,23 @@ mod tests {
             panic!("expected an open-document effect");
         };
         let _ = finish_open_file(model, request.perform());
+    }
+
+    fn record_close(model: &mut Model, path: PathBuf) -> Option<Effect> {
+        model.status = Some(StatusMessage::info(format!("closed {}", path.display())));
+        None
+    }
+
+    #[test]
+    fn close_uses_only_the_injected_lifecycle_handler() {
+        let mut model = Model::default();
+        let path = PathBuf::from("/workspace/main.rs");
+        assert!(close_file(&mut model, path.clone()).is_none());
+        assert!(model.status.is_none());
+
+        model.document_lifecycle.set_on_close(record_close);
+        assert!(close_file(&mut model, path).is_none());
+        assert_eq!(model.status.unwrap().text, "closed /workspace/main.rs");
     }
 
     #[test]
