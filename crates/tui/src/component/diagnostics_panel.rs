@@ -136,6 +136,7 @@ mod tests {
                 version: None,
                 diagnostics,
             },
+            "rust-analyzer",
             0,
             None,
         );

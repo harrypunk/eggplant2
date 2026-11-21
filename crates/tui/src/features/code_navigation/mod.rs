@@ -1,4 +1,7 @@
-use std::{collections::VecDeque, path::PathBuf};
+use std::{
+    collections::{HashMap, VecDeque},
+    path::PathBuf,
+};
 
 mod component;
 mod work;
@@ -27,8 +30,7 @@ pub struct CodeNavigationState {
     pending: Option<NavigationRequest>,
     locations: Vec<SourceLocation>,
     selected: Option<usize>,
-    service: Option<Box<dyn LanguageService>>,
-    service_spec: Option<LanguageServerSpec>,
+    services: HashMap<String, Box<dyn LanguageService>>,
     operation_spec: Option<LanguageServerSpec>,
     service_failed: bool,
     operation_active: bool,
@@ -42,8 +44,7 @@ impl std::fmt::Debug for CodeNavigationState {
             .field("pending", &self.pending)
             .field("locations", &self.locations)
             .field("selected", &self.selected)
-            .field("has_service", &self.service.is_some())
-            .field("service_spec", &self.service_spec)
+            .field("service_count", &self.services.len())
             .field("operation_spec", &self.operation_spec)
             .field("service_failed", &self.service_failed)
             .field("operation_active", &self.operation_active)
@@ -161,21 +162,9 @@ impl CodeNavigationState {
         &mut self,
         spec: &LanguageServerSpec,
     ) -> Option<Box<dyn LanguageService>> {
-        if self
-            .service_spec
-            .as_ref()
-            .is_some_and(|current| current != spec)
-        {
-            self.service = None;
-        }
-        self.service_spec = None;
         self.operation_spec = Some(spec.clone());
         self.service_failed = false;
-        self.service.take()
-    }
-
-    pub fn restore_service(&mut self, service: Box<dyn LanguageService>) {
-        self.restore_with_spec(service, None);
+        self.services.remove(spec.id())
     }
 
     pub fn restore_service_for(
@@ -183,42 +172,28 @@ impl CodeNavigationState {
         spec: &LanguageServerSpec,
         service: Box<dyn LanguageService>,
     ) {
-        self.restore_with_spec(service, Some(spec.clone()));
-    }
-
-    fn restore_with_spec(
-        &mut self,
-        service: Box<dyn LanguageService>,
-        spec: Option<LanguageServerSpec>,
-    ) {
         if self.service_failed {
             self.service_failed = false;
-            self.service_spec = None;
         } else {
-            self.service = Some(service);
-            self.service_spec = spec;
+            self.services.insert(spec.id().to_string(), service);
         }
     }
 
-    pub fn invalidate_service(&mut self) {
-        self.service = None;
-        self.service_spec = None;
-        self.service_failed = true;
+    pub fn invalidate_service_for(&mut self, server_id: &str) {
+        self.services.remove(server_id);
+        if self.operation_spec.as_ref().map(LanguageServerSpec::id) == Some(server_id) {
+            self.service_failed = true;
+        }
     }
 
     pub fn has_service(&self) -> bool {
-        self.service.is_some() || self.is_busy()
+        !self.services.is_empty() || self.is_busy()
     }
 
     pub fn has_service_for(&self, spec: &LanguageServerSpec) -> bool {
-        if self.is_busy() {
-            return self.operation_spec.as_ref() == Some(spec);
-        }
-        self.service.is_some()
-            && self
-                .service_spec
-                .as_ref()
-                .is_none_or(|current| current == spec)
+        self.services.contains_key(spec.id())
+            || (self.is_busy()
+                && self.operation_spec.as_ref().map(LanguageServerSpec::id) == Some(spec.id()))
     }
 
     pub fn selected_location(&self) -> Option<&SourceLocation> {
@@ -295,28 +270,26 @@ mod tests {
     }
 
     #[test]
-    fn service_reuse_requires_the_same_server_specification() {
+    fn services_are_independently_owned_by_server_id() {
         let rust = spec("rust", "rust-analyzer");
-        let same = rust.clone();
         let typescript = spec("typescript", "typescript-language-server");
-        let changed_command = spec("rust", "another-rust-server");
         let mut state = CodeNavigationState::default();
         state.restore_service_for(&rust, Box::new(TestService));
-        assert!(state.has_service_for(&same));
-        assert!(!state.has_service_for(&typescript));
+        state.restore_service_for(&typescript, Box::new(TestService));
+        assert!(state.has_service_for(&rust));
+        assert!(state.has_service_for(&typescript));
 
         state.begin_sync();
-        let service = state.take_service_for(&same).unwrap();
-        state.restore_service_for(&same, service);
+        assert!(state.take_service_for(&rust).is_some());
+        assert!(state.has_service_for(&typescript));
+        state.invalidate_service_for(rust.id());
+        state.restore_service_for(&rust, Box::new(TestService));
         state.finish_operation();
 
-        for mismatch in [typescript, changed_command] {
-            state.restore_service_for(&rust, Box::new(TestService));
-            state.begin_sync();
-            assert!(state.take_service_for(&mismatch).is_none());
-            state.finish_operation();
-            assert!(!state.has_service());
-        }
+        assert!(!state.has_service_for(&rust));
+        assert!(state.has_service_for(&typescript));
+        state.begin_sync();
+        assert!(state.take_service_for(&typescript).is_some());
     }
 
     #[test]

@@ -60,6 +60,7 @@ impl Error for LanguageError {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LanguageServerSpec {
+    id: String,
     language: String,
     command: String,
     args: Vec<String>,
@@ -73,11 +74,17 @@ impl LanguageServerSpec {
         S: Into<String>,
     {
         Self {
+            id: command.to_string(),
             language: language.to_string(),
             command: command.to_string(),
             args: args.into_iter().map(Into::into).collect(),
             extensions: Vec::new(),
         }
+    }
+
+    pub fn with_id(mut self, id: &str) -> Self {
+        self.id = id.to_string();
+        self
     }
 
     pub fn with_extensions<I, S>(mut self, extensions: I) -> Self
@@ -97,6 +104,10 @@ impl LanguageServerSpec {
                     .iter()
                     .any(|candidate| candidate == extension)
             })
+    }
+
+    pub fn id(&self) -> &str {
+        &self.id
     }
 
     pub fn language(&self) -> &str {

@@ -23,18 +23,19 @@ pub enum DiagnosticsUpdate {
 /// Provider-neutral diagnostic batches indexed by canonical document path.
 #[derive(Debug, Default)]
 pub struct DiagnosticsState {
-    batches: BTreeMap<PathBuf, DiagnosticBatch>,
-    server_generation: u64,
+    batches: BTreeMap<(String, PathBuf), DiagnosticBatch>,
+    server_generations: BTreeMap<String, u64>,
 }
 
 impl DiagnosticsState {
     pub fn replace(
         &mut self,
         batch: DiagnosticBatch,
+        server_id: &str,
         server_generation: u64,
         current_version: Option<i32>,
     ) -> DiagnosticsUpdate {
-        if server_generation != self.server_generation {
+        if server_generation != self.server_generation(server_id) {
             return DiagnosticsUpdate::Ignored;
         }
         if batch
@@ -45,25 +46,31 @@ impl DiagnosticsState {
             return DiagnosticsUpdate::Ignored;
         }
 
+        let key = (server_id.to_string(), batch.path.clone());
         if batch.diagnostics.is_empty() {
-            self.batches.remove(&batch.path);
+            self.batches.remove(&key);
         } else {
-            self.batches.insert(batch.path.clone(), batch);
+            self.batches.insert(key, batch);
         }
         DiagnosticsUpdate::Applied
     }
 
-    pub fn restart_server(&mut self) {
-        self.server_generation = self.server_generation.wrapping_add(1);
-        self.batches.clear();
+    pub fn restart_server(&mut self, server_id: &str) {
+        let generation = self
+            .server_generations
+            .entry(server_id.to_string())
+            .or_default();
+        *generation = generation.wrapping_add(1);
+        self.batches
+            .retain(|(current_id, _), _| current_id != server_id);
     }
 
-    pub fn server_generation(&self) -> u64 {
-        self.server_generation
+    pub fn server_generation(&self, server_id: &str) -> u64 {
+        self.server_generations.get(server_id).copied().unwrap_or(0)
     }
 
     pub fn clear_path(&mut self, path: &Path) {
-        self.batches.remove(path);
+        self.batches.retain(|(_, batch_path), _| batch_path != path);
     }
 
     pub fn all(&self) -> impl Iterator<Item = &Diagnostic> {
@@ -87,6 +94,7 @@ pub fn toggle_panel(model: &mut Model) {
 
 pub struct DiagnosticsCompletion {
     pub batch: DiagnosticBatch,
+    pub server_id: String,
     pub server_generation: u64,
 }
 
@@ -98,27 +106,33 @@ impl Completion for DiagnosticsCompletion {
             .into_iter()
             .find(|&id| model.editor.buffer_path(id) == Some(self.batch.path.as_path()))
             .and_then(|id| model.editor.buffer_version(id));
-        model
-            .diagnostics
-            .replace(self.batch, self.server_generation, current_version);
+        model.diagnostics.replace(
+            self.batch,
+            &self.server_id,
+            self.server_generation,
+            current_version,
+        );
         None
     }
 }
 
 pub struct DiagnosticFailureCompletion {
     pub message: String,
+    pub server_id: String,
     pub server_generation: u64,
     pub fatal: bool,
 }
 
 impl Completion for DiagnosticFailureCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        if self.server_generation != model.diagnostics.server_generation() {
+        if self.server_generation != model.diagnostics.server_generation(&self.server_id) {
             return None;
         }
         if self.fatal {
-            model.code_navigation.invalidate_service();
-            model.diagnostics.restart_server();
+            model
+                .code_navigation
+                .invalidate_service_for(&self.server_id);
+            model.diagnostics.restart_server(&self.server_id);
         }
         Some(crate::notifications::report_status_titled(
             model,
@@ -179,11 +193,16 @@ mod tests {
     fn replaces_batches_and_empty_batches_clear_paths() {
         let mut state = DiagnosticsState::default();
         assert_eq!(
-            state.replace(batch("/workspace/a.rs", Some(2), "first"), 0, Some(2)),
+            state.replace(
+                batch("/workspace/a.rs", Some(2), "first"),
+                "rust",
+                0,
+                Some(2),
+            ),
             DiagnosticsUpdate::Applied
         );
         assert_eq!(
-            state.replace(batch("/workspace/b.rs", None, "second"), 0, None),
+            state.replace(batch("/workspace/b.rs", None, "second"), "rust", 0, None,),
             DiagnosticsUpdate::Applied
         );
         assert_eq!(state.all().count(), 2);
@@ -194,7 +213,7 @@ mod tests {
             diagnostics: Vec::new(),
         };
         assert_eq!(
-            state.replace(cleared, 0, Some(3)),
+            state.replace(cleared, "rust", 0, Some(3)),
             DiagnosticsUpdate::Applied
         );
         assert_eq!(state.all().count(), 1);
@@ -207,21 +226,53 @@ mod tests {
     fn stale_document_and_server_generations_are_ignored() {
         let mut state = DiagnosticsState::default();
         assert_eq!(
-            state.replace(batch("/workspace/a.rs", Some(2), "old"), 0, Some(3)),
+            state.replace(batch("/workspace/a.rs", Some(2), "old"), "rust", 0, Some(3),),
             DiagnosticsUpdate::Ignored
         );
         assert_eq!(
-            state.replace(batch("/workspace/a.rs", None, "old server"), 1, None),
+            state.replace(
+                batch("/workspace/a.rs", None, "old server"),
+                "rust",
+                1,
+                None,
+            ),
             DiagnosticsUpdate::Ignored
         );
         assert_eq!(state.all().count(), 0);
 
-        state.restart_server();
+        state.restart_server("rust");
         assert_eq!(
-            state.replace(batch("/workspace/a.rs", None, "current"), 1, None),
+            state.replace(batch("/workspace/a.rs", None, "current"), "rust", 1, None,),
             DiagnosticsUpdate::Applied
         );
         assert_eq!(state.all().count(), 1);
+    }
+
+    #[test]
+    fn providers_keep_independent_batches_and_generations_for_the_same_path() {
+        let path = "/workspace/main.ts";
+        let mut state = DiagnosticsState::default();
+        state.replace(batch(path, None, "type error"), "typescript", 0, None);
+        state.replace(batch(path, None, "lint warning"), "eslint", 0, None);
+        assert_eq!(state.all().count(), 2);
+
+        let mut empty = batch(path, None, "unused");
+        empty.diagnostics.clear();
+        state.replace(empty, "typescript", 0, None);
+        assert_eq!(state.all().count(), 1);
+        assert_eq!(state.all().next().unwrap().message, "lint warning");
+
+        state.restart_server("typescript");
+        assert_eq!(
+            state.replace(batch(path, None, "stale"), "typescript", 0, None),
+            DiagnosticsUpdate::Ignored
+        );
+        state.replace(batch(path, None, "current"), "typescript", 1, None);
+        assert_eq!(state.all().count(), 2);
+
+        state.restart_server("eslint");
+        assert_eq!(state.all().count(), 1);
+        assert_eq!(state.all().next().unwrap().message, "current");
     }
 
     #[test]
@@ -236,6 +287,7 @@ mod tests {
 
         let stale = Box::new(DiagnosticsCompletion {
             batch: batch(path.to_str().unwrap(), Some(version - 1), "stale"),
+            server_id: "rust".to_string(),
             server_generation: 0,
         });
         assert!(stale.update(&mut model).is_none());
@@ -243,6 +295,7 @@ mod tests {
 
         Box::new(DiagnosticsCompletion {
             batch: batch(path.to_str().unwrap(), Some(version), "current"),
+            server_id: "rust".to_string(),
             server_generation: 0,
         })
         .update(&mut model);

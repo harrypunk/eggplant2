@@ -183,11 +183,11 @@ fn language_work(
         .find_for_path(document_path(&document))?;
     let service = model.code_navigation.take_service_for(&spec);
     let starting = service.is_none();
-    let restarting = starting && model.diagnostics.server_generation() > 0;
+    let restarting = starting && model.diagnostics.server_generation(spec.id()) > 0;
     if starting {
-        model.diagnostics.restart_server();
+        model.diagnostics.restart_server(spec.id());
     }
-    let generation = model.diagnostics.server_generation();
+    let generation = model.diagnostics.server_generation(spec.id());
     let notification = starting.then(|| {
         let action = if restarting { "Restarting" } else { "Starting" };
         crate::notifications::publish_status(
@@ -258,6 +258,7 @@ impl FeatureEffect for LanguageWork {
                         ));
                     }
                     let sender = diagnostics_sender;
+                    let server_id = spec.id().to_string();
                     Box::new(app::lsp::runtime::LspRuntime::start(
                         process,
                         move |result| {
@@ -269,6 +270,7 @@ impl FeatureEffect for LanguageWork {
                                     crate::data_object::Message::FeatureCompletion(
                                         FeatureCompletion::new(DiagnosticsCompletion {
                                             batch,
+                                            server_id: server_id.clone(),
                                             server_generation: generation,
                                         }),
                                     )
@@ -292,6 +294,7 @@ impl FeatureEffect for LanguageWork {
                                         FeatureCompletion::new(DiagnosticFailureCompletion {
                                             message: format!("Language server failed: {}", error.0),
                                             server_generation: generation,
+                                            server_id: server_id.clone(),
                                             fatal: true,
                                         }),
                                     )
@@ -300,6 +303,7 @@ impl FeatureEffect for LanguageWork {
                                     FeatureCompletion::new(DiagnosticFailureCompletion {
                                         message: format!("Language server error: {}", error.0),
                                         server_generation: generation,
+                                        server_id: server_id.clone(),
                                         fatal: false,
                                     }),
                                 ),
@@ -509,6 +513,11 @@ mod tests {
         test_utils::open_file,
     };
 
+    fn rust_spec() -> LanguageServerSpec {
+        LanguageServerSpec::new("rust", "rust-analyzer", std::iter::empty::<&str>())
+            .with_extensions(["rs"])
+    }
+
     struct FakeService {
         locations: Vec<SourceLocation>,
     }
@@ -545,7 +554,7 @@ mod tests {
         open_file(&mut model, &root.join("main.rs"));
         model
             .code_navigation
-            .restore_service(Box::new(FakeService { locations }));
+            .restore_service_for(&rust_spec(), Box::new(FakeService { locations }));
         (model, MessageManager::default())
     }
 
@@ -674,8 +683,7 @@ language-servers = ["ts"]
             result: Err(LanguageError(
                 "Failed to start language server `rust-analyzer`: unavailable".to_string(),
             )),
-            spec: LanguageServerSpec::new("rust", "rust-analyzer", std::iter::empty::<&str>())
-                .with_extensions(["rs"]),
+            spec: rust_spec(),
         })
         .update(&mut model);
         let notification = model.notifications.current().unwrap();
@@ -697,12 +705,13 @@ language-servers = ["ts"]
         let directory = tempfile::tempdir().unwrap();
         std::fs::write(directory.path().join("main.rs"), "fn main() {}").unwrap();
         let (mut model, manager) = model_with_locations(directory.path(), Vec::new());
-        model.diagnostics.restart_server();
-        let generation = model.diagnostics.server_generation();
+        model.diagnostics.restart_server("rust-analyzer");
+        let generation = model.diagnostics.server_generation("rust-analyzer");
         let work = synchronize(&mut model).unwrap();
 
         Box::new(DiagnosticFailureCompletion {
             message: "Language server failed: stopped".to_string(),
+            server_id: "rust-analyzer".to_string(),
             server_generation: generation,
             fatal: true,
         })
@@ -725,6 +734,7 @@ language-servers = ["ts"]
 
         let stale = Box::new(DiagnosticFailureCompletion {
             message: "old server failed".to_string(),
+            server_id: "rust-analyzer".to_string(),
             server_generation: 1,
             fatal: true,
         })
@@ -734,6 +744,7 @@ language-servers = ["ts"]
 
         let nonfatal = Box::new(DiagnosticFailureCompletion {
             message: "bad notification".to_string(),
+            server_id: "rust-analyzer".to_string(),
             server_generation: 0,
             fatal: false,
         })

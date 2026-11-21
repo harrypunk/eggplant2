@@ -71,6 +71,7 @@ pub fn parse_language_servers(input: &str) -> Result<LanguageServers, LanguageEr
         }
         registry.register(
             LanguageServerSpec::new(&language.name, &server.command, server.args.clone())
+                .with_id(server_name)
                 .with_extensions(language.file_types),
         )?;
     }
@@ -111,10 +112,12 @@ language-servers = ["ruff"]
         .unwrap();
 
         let typescript = registry.find_for_path(Path::new("component.tsx")).unwrap();
+        assert_eq!(typescript.id(), "typescript-language-server");
         assert_eq!(typescript.command(), "typescript-language-server");
         assert_eq!(typescript.args(), &[String::from("--stdio")]);
         let python =
             LanguageServerRegistry::find_for_path(&registry, Path::new("main.py")).unwrap();
+        assert_eq!(python.id(), "ruff");
         assert_eq!(python.command(), "ruff");
         assert_eq!(python.args(), &[String::from("server")]);
     }

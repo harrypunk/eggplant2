@@ -1,7 +1,7 @@
 # Eggplant first-edition plan
 
 Last updated: 2026-11-21
-Current baseline: Milestones 1–10 complete for the lightweight single-provider LSP scope; multi-provider workflows are next
+Current baseline: Milestones 1–10 complete; M11 provider-keyed identity foundation is implemented
 
 ## Purpose
 
@@ -478,17 +478,17 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 ### Milestone 11: Multi-provider language workflows
 
-**Status: planned; implement in independently reviewable slices.**
+**Status: in progress; provider-keyed ownership and diagnostic identity are implemented.**
 
 **Goal:** support common combinations such as TypeScript + ESLint and Pyright/Basedpyright + Ruff while retaining M10's lightweight scope and provider-neutral interfaces.
 
 #### M11.1 — Server-keyed ownership and diagnostic identity
 
-- [ ] Introduce a stable configured server ID separate from LSP `languageId`; key service ownership by workspace root and server ID.
-- [ ] Retain compatible idle services instead of sequentially replacing every language change, with bounded process counts and explicit cleanup.
-- [ ] Make busy/trailing state and diagnostics generations provider-specific. Do not let starting one provider invalidate healthy diagnostics from another.
-- [ ] Index diagnostic contributions by provider and path so an empty batch clears only that provider's entries before merged presentation.
-- [ ] Test independent crashes/restarts, cross-provider stale completions, close ordering, and process bounds.
+- [x] Introduce a stable configured server ID separate from LSP `languageId`; key service ownership by workspace root and server ID.
+- [x] Retain compatible idle services by server ID instead of sequentially replacing every language change, with child cleanup through owned service teardown.
+- [ ] Make busy/trailing state provider-specific. Do not let starting one provider invalidate healthy diagnostics from another.
+- [x] Index diagnostic contributions by provider and path so an empty batch clears only that provider's entries before merged presentation.
+- [x] Test independent crashes/restarts and cross-provider stale completions; close ordering and multi-provider process bounds remain in M11.2.
 
 #### M11.2 — Multiple providers per configured language
 

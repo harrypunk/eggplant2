@@ -38,7 +38,7 @@ The abstraction, injection path, strict TOML parser, and user-file loading are i
 
 Only command recipes are included; the executables must be installed separately.
 
-A present language file replaces the community defaults; an empty file disables language services explicitly. There is currently one active language service, one server per registered language, and one workspace root. The parser therefore rejects multiple providers per language. Service reuse requires an exact `LanguageServerSpec` match; changing language, command, arguments, or extensions drops the old service before starting another. This sequential replacement prevents cross-language process reuse. Retaining simultaneous providers and merging their diagnostics require additional routing slices.
+A present language file replaces the community defaults; an empty file disables language services explicitly. Configuration currently accepts one provider per language. Services are retained by stable server ID, and one operation is active at a time across providers. Diagnostics batches and generations are provider-specific, so restarts and empty batches do not clear other providers. Multi-provider scheduling and merged same-document diagnostics are the next slice.
 
 ## User configuration
 
