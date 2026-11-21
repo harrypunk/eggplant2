@@ -496,12 +496,16 @@ fn notify_lsp(model: &mut Model, status: StatusMessage) -> Option<Effect> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use app::language::SourceLocation;
     use editor::DocumentPosition;
 
     use super::*;
     use crate::{
-        data_object::Message, manager::message_manager::MessageManager, startup::initial_model,
+        data_object::Message,
+        manager::message_manager::MessageManager,
+        startup::{initial_model, initial_model_with_languages},
         test_utils::open_file,
     };
 
@@ -550,6 +554,45 @@ mod tests {
             panic!("expected navigation effect");
         };
         manager.update(model, request.perform())
+    }
+
+    #[test]
+    fn configured_external_server_reaches_the_active_document_adapter() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("main.ts");
+        std::fs::write(&source, "const value: number = 1;\n").unwrap();
+        let config = directory.path().join("languages.toml");
+        std::fs::write(
+            &config,
+            r#"
+[language-server.ts]
+command = "typescript-language-server"
+args = ["--stdio"]
+[[language]]
+name = "typescript"
+file-types = ["ts"]
+language-servers = ["ts"]
+"#,
+        )
+        .unwrap();
+        let registry = crate::config::load_language_servers_from(&config).unwrap();
+        let mut model =
+            initial_model_with_languages(Some(directory.path().to_path_buf()), Arc::new(registry))
+                .unwrap();
+        open_file(&mut model, &source);
+
+        let document = active_document(&model).unwrap();
+        assert_eq!(document.spec.command(), "typescript-language-server");
+        assert_eq!(document.spec.args(), &[String::from("--stdio")]);
+        assert_eq!(
+            document.event(),
+            DocumentEvent::Open {
+                path: source,
+                language: "typescript".to_string(),
+                version: document.revision,
+                text: "const value: number = 1;\n".to_string(),
+            }
+        );
     }
 
     #[test]

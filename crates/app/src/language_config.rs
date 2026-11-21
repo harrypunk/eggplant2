@@ -120,6 +120,22 @@ language-servers = ["ruff"]
     }
 
     #[test]
+    fn example_configures_all_documented_external_servers() {
+        let registry = parse_language_servers(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../languages.example.toml"
+        )))
+        .unwrap();
+
+        for path in ["main.rs", "main.ts", "component.tsx", "main.js", "main.py"] {
+            assert!(
+                registry.find_for_path(Path::new(path)).is_some(),
+                "missing example language for {path}"
+            );
+        }
+    }
+
+    #[test]
     fn rejects_unknown_empty_duplicate_and_multi_server_configuration() {
         for (input, expected) in [
             (

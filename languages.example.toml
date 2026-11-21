@@ -1,0 +1,51 @@
+# Copy to ~/.eggplant/languages.toml.
+# A present file replaces the Rust-only compatibility registry, so this example
+# retains Rust explicitly. Install every configured executable separately.
+
+[language-server.rust-analyzer]
+command = "rust-analyzer"
+
+[language-server.typescript-language-server]
+command = "typescript-language-server"
+args = ["--stdio"]
+
+[language-server.basedpyright]
+command = "basedpyright-langserver"
+args = ["--stdio"]
+
+[language-server.ruff]
+command = "ruff"
+args = ["server"]
+
+[[language]]
+name = "rust"
+file-types = ["rs"]
+language-servers = ["rust-analyzer"]
+
+[[language]]
+name = "typescript"
+file-types = ["ts", "mts", "cts"]
+language-servers = ["typescript-language-server"]
+
+[[language]]
+name = "typescriptreact"
+file-types = ["tsx"]
+language-servers = ["typescript-language-server"]
+
+[[language]]
+name = "javascript"
+file-types = ["js", "mjs", "cjs"]
+language-servers = ["typescript-language-server"]
+
+[[language]]
+name = "javascriptreact"
+file-types = ["jsx"]
+language-servers = ["typescript-language-server"]
+
+# Basedpyright supplies Python navigation and type diagnostics.
+# For Ruff's lint-focused diagnostics instead, use language-servers = ["ruff"].
+# Running basedpyright and Ruff together is not supported yet.
+[[language]]
+name = "python"
+file-types = ["py", "pyi"]
+language-servers = ["basedpyright"]

@@ -44,20 +44,33 @@ Save the supported Helix-style subset as `~/.eggplant/languages.toml`:
 command = "typescript-language-server"
 args = ["--stdio"]
 
+[language-server.basedpyright]
+command = "basedpyright-langserver"
+args = ["--stdio"]
+
 [language-server.ruff]
 command = "ruff"
 args = ["server"]
 
 [[language]]
 name = "typescript"
-file-types = ["ts", "tsx"]
+file-types = ["ts", "mts", "cts"]
+language-servers = ["typescript-language-server"]
+
+[[language]]
+name = "typescriptreact"
+file-types = ["tsx"]
 language-servers = ["typescript-language-server"]
 
 [[language]]
 name = "python"
 file-types = ["py", "pyi"]
-language-servers = ["ruff"]
+language-servers = ["basedpyright"]
 ```
+
+The language `name` is also the LSP `languageId`, so React file types use `typescriptreact` or `javascriptreact`. For Ruff's lint-focused Python diagnostics instead of Basedpyright, set Python's `language-servers = ["ruff"]`. Running both providers together is not supported yet.
+
+See the complete [`languages.example.toml`](../languages.example.toml), which also retains Rust and configures JS/JSX. A present configuration replaces the compatibility registry, so include Rust explicitly if desired.
 
 Install the configured executables separately and ensure they are available on `PATH`. Configuration is loaded before terminal initialization; read and validation errors report the language-file path. Unsupported files and unavailable executables do not prevent ordinary editing.
 
