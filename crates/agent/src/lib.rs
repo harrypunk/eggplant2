@@ -122,6 +122,21 @@ pub struct ToolResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ToolApproval {
+    pub call: ToolCall,
+    pub summary: String,
+    pub diff: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AgentContinuation {
+    pub step: usize,
+    pub history: Vec<ProviderMessage>,
+    pub tool_calls: usize,
+    pub tool_output: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AgentError(pub String);
 
 impl std::fmt::Display for AgentError {
@@ -149,12 +164,17 @@ pub enum AgentEvent {
     TextDelta(String),
     ToolCalls(Vec<ToolCall>),
     ToolResults(Vec<ToolResult>),
+    ApprovalRequired {
+        approval: ToolApproval,
+        continuation: AgentContinuation,
+    },
     Complete,
     Failed(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ToolEvent {
+    pub run_id: RunId,
     pub call_id: String,
     pub name: String,
     pub arguments: String,
@@ -178,6 +198,7 @@ pub struct ChatMessage {
 pub enum RunStatus {
     Waiting,
     Streaming,
+    WaitingForApproval,
     Complete,
     Failed(String),
     Cancelled,
@@ -185,13 +206,17 @@ pub enum RunStatus {
 
 impl RunStatus {
     pub fn is_running(&self) -> bool {
-        matches!(self, Self::Waiting | Self::Streaming)
+        matches!(
+            self,
+            Self::Waiting | Self::Streaming | Self::WaitingForApproval
+        )
     }
 
     pub fn label(&self) -> &'static str {
         match self {
             Self::Waiting => "Waiting for assistant",
             Self::Streaming => "Streaming",
+            Self::WaitingForApproval => "Waiting for approval",
             Self::Complete => "Complete",
             Self::Failed(_) => "Failed",
             Self::Cancelled => "Cancelled",
@@ -211,6 +236,7 @@ pub struct AgentSession {
     run: Option<AgentRun>,
     messages: Vec<ChatMessage>,
     tool_events: Vec<ToolEvent>,
+    pending_approval: Option<ToolApproval>,
 }
 
 impl AgentSession {
@@ -226,6 +252,7 @@ impl AgentSession {
             run_id: id,
             text: prompt,
         });
+        self.pending_approval = None;
         self.run = Some(AgentRun {
             id,
             status: RunStatus::Waiting,
@@ -272,6 +299,7 @@ impl AgentSession {
             return false;
         };
         run.status = RunStatus::Cancelled;
+        self.pending_approval = None;
         true
     }
 
@@ -284,6 +312,7 @@ impl AgentSession {
             return false;
         };
         run.status = status;
+        self.pending_approval = None;
         true
     }
 
@@ -319,6 +348,7 @@ impl AgentSession {
             self.tool_events.remove(0);
         }
         self.tool_events.push(ToolEvent {
+            run_id,
             call_id: call.id.clone(),
             name: call.name.clone(),
             arguments: call.arguments.clone(),
@@ -337,12 +367,54 @@ impl AgentSession {
             .tool_events
             .iter_mut()
             .rev()
-            .find(|event| event.call_id == result.call_id)
+            .find(|event| event.run_id == run_id && event.call_id == result.call_id)
         else {
             return false;
         };
         event.result = Some(result);
         true
+    }
+
+    pub fn request_approval(&mut self, run_id: RunId, approval: ToolApproval) -> bool {
+        let call_pending = self.tool_events.iter().any(|event| {
+            event.run_id == run_id && event.call_id == approval.call.id && event.result.is_none()
+        });
+        let run_ready = self
+            .run
+            .as_ref()
+            .is_some_and(|run| run.id == run_id && run.status.is_running());
+        if !call_pending || !run_ready || self.pending_approval.is_some() {
+            return false;
+        }
+        self.pending_approval = Some(approval);
+        self.run = self.run.take().map(|run| AgentRun {
+            status: RunStatus::WaitingForApproval,
+            ..run
+        });
+        true
+    }
+
+    pub fn resolve_approval(&mut self, run_id: RunId, call_id: &str) -> Option<ToolApproval> {
+        let matches = self
+            .run
+            .as_ref()
+            .is_some_and(|run| run.id == run_id && run.status == RunStatus::WaitingForApproval)
+            && self
+                .pending_approval
+                .as_ref()
+                .is_some_and(|approval| approval.call.id == call_id);
+        if !matches {
+            return None;
+        }
+        self.run = self.run.take().map(|run| AgentRun {
+            status: RunStatus::Streaming,
+            ..run
+        });
+        self.pending_approval.take()
+    }
+
+    pub fn pending_approval(&self) -> Option<&ToolApproval> {
+        self.pending_approval.as_ref()
     }
 
     pub fn tool_events(&self) -> &[ToolEvent] {
@@ -414,5 +486,52 @@ mod tests {
         assert_ne!(first, second);
         assert!(!session.complete_tool_call(first, result));
         assert_eq!(session.tool_events().len(), 1);
+    }
+
+    #[test]
+    fn approval_is_single_shot_and_bound_to_run_and_call() {
+        let mut session = AgentSession::default();
+        let run = session.begin("change".to_string()).unwrap();
+        let call = ToolCall {
+            id: "write-1".to_string(),
+            name: "write".to_string(),
+            arguments: "{}".to_string(),
+        };
+        let approval = ToolApproval {
+            call: call.clone(),
+            summary: "Replace text".to_string(),
+            diff: "-old\n+new".to_string(),
+        };
+        assert!(session.record_tool_call(run, &call));
+        assert!(session.request_approval(run, approval.clone()));
+        assert!(!session.request_approval(run, approval.clone()));
+        assert_eq!(session.run().unwrap().status, RunStatus::WaitingForApproval);
+        assert!(session.resolve_approval(run, "another-call").is_none());
+        assert_eq!(session.resolve_approval(run, &call.id), Some(approval));
+        assert_eq!(session.run().unwrap().status, RunStatus::Streaming);
+        assert!(session.pending_approval().is_none());
+    }
+
+    #[test]
+    fn cancellation_discards_pending_approval() {
+        let mut session = AgentSession::default();
+        let run = session.begin("change".to_string()).unwrap();
+        let call = ToolCall {
+            id: "write-1".to_string(),
+            name: "write".to_string(),
+            arguments: "{}".to_string(),
+        };
+        assert!(session.record_tool_call(run, &call));
+        assert!(session.request_approval(
+            run,
+            ToolApproval {
+                call,
+                summary: "Replace text".to_string(),
+                diff: String::new(),
+            }
+        ));
+        assert!(session.cancel());
+        assert!(session.pending_approval().is_none());
+        assert_eq!(session.run().unwrap().status, RunStatus::Cancelled);
     }
 }
