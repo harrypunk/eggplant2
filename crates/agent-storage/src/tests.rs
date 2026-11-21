@@ -145,6 +145,47 @@ async fn recent_transcript_and_search_share_deterministic_keysets() {
 }
 
 #[tokio::test]
+async fn recent_sessions_orders_timestamp_ties_and_filters_workspace() {
+    let store = InMemoryStore::new();
+    store
+        .finalize_run(finalized("session-b", 10), CancellationToken::default())
+        .await
+        .unwrap();
+    store
+        .finalize_run(finalized("session-a", 10), CancellationToken::default())
+        .await
+        .unwrap();
+
+    let first = store
+        .recent_sessions(RecentQuery {
+            limit: 1,
+            ..RecentQuery::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(first.sessions[0].id, SessionId::from("session-b"));
+    let second = store
+        .recent_sessions(RecentQuery {
+            before: first.next,
+            limit: 1,
+            ..RecentQuery::default()
+        })
+        .await
+        .unwrap();
+    assert_eq!(second.sessions[0].id, SessionId::from("session-a"));
+    assert_eq!(second.next, None);
+
+    let other_workspace = store
+        .recent_sessions(RecentQuery {
+            workspace: Some("/other".to_string()),
+            ..RecentQuery::default()
+        })
+        .await
+        .unwrap();
+    assert!(other_workspace.sessions.is_empty());
+}
+
+#[tokio::test]
 async fn bounds_identity_and_cancellation_are_enforced_before_writes() {
     let store = InMemoryStore::new();
     let mut large = finalized("large", 10);

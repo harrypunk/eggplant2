@@ -66,44 +66,23 @@ impl SessionStore for InMemoryStore {
 
     fn recent_sessions<'a>(&'a self, query: RecentQuery) -> StoreFuture<'a, RecentPage> {
         Box::pin(async move {
+            let RecentQuery {
+                workspace,
+                before,
+                limit,
+            } = query;
             let state = self
                 .state
                 .read()
                 .map_err(|_| StorageError::Backend("in-memory store lock failed".to_string()))?;
-            let mut sessions = state
+            let sessions = state
                 .sessions
                 .values()
-                .filter(|session| {
-                    query
-                        .workspace
-                        .as_ref()
-                        .is_none_or(|workspace| session.workspace.as_ref() == Some(workspace))
-                        && query.before.as_ref().is_none_or(|before| {
-                            session.updated_at < before.updated_at
-                                || (session.updated_at == before.updated_at
-                                    && session.id < before.id)
-                        })
-                })
+                .filter(|session| matches_workspace(session, workspace.as_deref()))
+                .filter(|session| is_before_cursor(session, before.as_ref()))
                 .cloned()
-                .collect::<Vec<_>>();
-            sessions.sort_by(|left, right| {
-                right
-                    .updated_at
-                    .cmp(&left.updated_at)
-                    .then_with(|| right.id.cmp(&left.id))
-            });
-            let limit = page_limit(query.limit);
-            let next = (sessions.len() > limit)
-                .then(|| sessions.get(limit - 1))
-                .flatten()
-                .map(|session| SessionCursor {
-                    updated_at: session.updated_at,
-                    id: session.id.clone(),
-                });
-            Ok(RecentPage {
-                sessions: sessions.into_iter().take(limit).collect(),
-                next,
-            })
+                .collect();
+            Ok(recent_page(sessions, limit))
         })
     }
 
@@ -233,6 +212,37 @@ impl SessionStore for InMemoryStore {
                 next,
             })
         })
+    }
+}
+
+fn matches_workspace(session: &SessionRecord, workspace: Option<&str>) -> bool {
+    workspace.is_none_or(|expected| session.workspace.as_deref() == Some(expected))
+}
+
+fn is_before_cursor(session: &SessionRecord, before: Option<&SessionCursor>) -> bool {
+    before.is_none_or(|cursor| (session.updated_at, &session.id) < (cursor.updated_at, &cursor.id))
+}
+
+fn by_recency(left: &SessionRecord, right: &SessionRecord) -> std::cmp::Ordering {
+    right
+        .updated_at
+        .cmp(&left.updated_at)
+        .then_with(|| right.id.cmp(&left.id))
+}
+
+fn recent_page(mut sessions: Vec<SessionRecord>, limit: usize) -> RecentPage {
+    sessions.sort_by(by_recency);
+    let limit = page_limit(limit);
+    let next = sessions
+        .get(limit)
+        .and_then(|_| sessions.get(limit - 1))
+        .map(|session| SessionCursor {
+            updated_at: session.updated_at,
+            id: session.id.clone(),
+        });
+    RecentPage {
+        sessions: sessions.into_iter().take(limit).collect(),
+        next,
     }
 }
 
