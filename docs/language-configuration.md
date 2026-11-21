@@ -27,17 +27,17 @@ The application composition root injects `Arc<dyn LanguageServerRegistry>` into 
 
 ## Current implementation status
 
-The abstraction and injection path are implemented. Compatibility behavior still constructs `LanguageServers::rust_defaults()` at production startup, which registers only:
+The abstraction, injection path, and strict TOML parser are implemented. `app::language_config::parse_language_servers` produces owned registry data without exposing TOML types to workflows. Compatibility production behavior still constructs `LanguageServers::rust_defaults()` at startup, which registers only:
 
 ```text
 .rs → rust-analyzer
 ```
 
-User `languages.toml` loading is **not implemented yet**. There is currently one active language service, one server per registered language, and one workspace root. Keyed services and multiple providers per document are required before mixed-language or TypeScript-plus-ESLint setups are safe.
+Startup file discovery/loading is **not wired yet**. There is currently one active language service, one server per registered language, and one workspace root. The parser therefore rejects multiple providers per language. Keyed services are required before mixed-language startup loading is safe; multiple providers per document require an additional routing slice.
 
-## Planned file format
+## Supported parser format
 
-The next slice can load a small Helix-style subset such as:
+The app-layer parser accepts this Helix-style subset:
 
 ```toml
 [language-server.typescript-language-server]
@@ -59,9 +59,9 @@ file-types = ["py", "pyi"]
 language-servers = ["ruff"]
 ```
 
-This example illustrates the intended format; it is not currently accepted by Eggplant.
+The parser accepts this format in application/library calls, but production startup does not yet read a language configuration file.
 
-Configuration parsing should produce the same owned registry interface rather than leaking TOML types into application features. Invalid references, duplicate definitions, and empty commands should fail with actionable configuration errors. Missing executables remain runtime notifications and must not prevent ordinary editing.
+Configuration parsing produces owned registry values rather than leaking TOML types into application features. Unknown server references, duplicate languages, empty commands, missing/empty file types, unsupported fields, and multiple servers for one language fail with actionable errors. Missing executables remain runtime notifications and must not prevent ordinary editing.
 
 ## Later slices
 

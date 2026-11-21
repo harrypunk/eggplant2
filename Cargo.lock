@@ -65,8 +65,10 @@ name = "app"
 version = "0.1.0"
 dependencies = [
  "editor",
+ "serde",
  "serde_json",
  "tempfile",
+ "toml",
  "url",
 ]
 
