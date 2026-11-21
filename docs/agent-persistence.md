@@ -1,6 +1,6 @@
 # Agent persistence
 
-Status: proposed architecture. Current agent sessions are in-memory; there is no text-file session store to migrate and no production database adapter yet.
+Status: provider-neutral finalized records, the asynchronous `SessionStore` port, and in-memory keyset/search behavior are implemented. The TUI still uses in-memory sessions by default; the SeaORM SQLite adapter is next.
 
 ## Recommendation
 
@@ -30,7 +30,7 @@ AgentSession / provider-neutral records
 
 The TUI/composition root selects the implementation. Provider code, popup/panel rendering, and editor mutation must not depend on SeaORM entities or SQL.
 
-A future adapter may live in a separate `agent-storage` crate. Do not add it until the real session workflow needs persistence.
+The port and in-memory implementation live in `agent-storage`. Relational drivers belong in separate adapters; neither `eggplant-agent` nor editor code depends on them.
 
 ## Storage port
 
@@ -147,7 +147,7 @@ Dependency, compile time, binary size, and migration complexity are real costs. 
 
 ## Implementation sequence
 
-1. Define provider-neutral finalized session/run/message records and an in-memory `SessionStore`.
+1. **Implemented:** provider-neutral finalized session/run/message records and an in-memory `SessionStore`.
 2. Prove fake-provider persistence through the existing update/effect path.
 3. Add the SeaORM SQLite adapter with migrations and keyset reads.
 4. Add filter/search and truncation tests, failure handling, and corrupt/locked database behavior.

@@ -690,6 +690,9 @@ dependencies = [
 [[package]]
 name = "eggplant-agent"
 version = "0.1.0"
+dependencies = [
+ "uuid",
+]
 
 [[package]]
 name = "eggplant-agent-openai"
@@ -699,6 +702,14 @@ dependencies = [
  "futures-util",
  "reqwest",
  "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "eggplant-agent-storage"
+version = "0.1.0"
+dependencies = [
+ "eggplant-agent",
  "tokio",
 ]
 

@@ -31,6 +31,7 @@ The application reads `~/.eggplant/config.toml` when present. See `config.exampl
 ```text
 crates/
 ├── agent-openai/ # OpenAI-compatible provider adapter with SSE decoding
+├── agent-storage/ # Provider-neutral storage port and in-memory implementation
 ├── agent/     # Independently publishable, provider-neutral agent session API
 ├── app/       # UI-neutral application capabilities and provider interfaces
 ├── editor/    # Documents, buffers, editing, viewport, and persistence

@@ -156,7 +156,38 @@ pub trait AgentProvider: std::fmt::Debug + Send + Sync {
     ) -> Pin<Box<dyn Future<Output = Result<(), AgentError>> + Send + 'a>>;
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SessionId(String);
+
+impl SessionId {
+    pub fn new() -> Self {
+        Self(uuid::Uuid::new_v4().to_string())
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl Default for SessionId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl From<String> for SessionId {
+    fn from(value: String) -> Self {
+        Self(value)
+    }
+}
+
+impl From<&str> for SessionId {
+    fn from(value: &str) -> Self {
+        Self(value.to_string())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct RunId(pub u64);
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -232,6 +263,7 @@ pub struct AgentRun {
 
 #[derive(Debug, Default)]
 pub struct AgentSession {
+    id: SessionId,
     next_id: u64,
     run: Option<AgentRun>,
     messages: Vec<ChatMessage>,
@@ -240,6 +272,10 @@ pub struct AgentSession {
 }
 
 impl AgentSession {
+    pub fn id(&self) -> &SessionId {
+        &self.id
+    }
+
     pub fn begin(&mut self, prompt: String) -> Option<RunId> {
         if prompt.trim().is_empty() || self.run.as_ref().is_some_and(|run| run.status.is_running())
         {

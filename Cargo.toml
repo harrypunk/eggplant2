@@ -9,6 +9,7 @@ edition = "2024"
 [workspace.dependencies]
 eggplant-agent = { path = "crates/agent" }
 eggplant-agent-openai = { path = "crates/agent-openai" }
+eggplant-agent-storage = { path = "crates/agent-storage" }
 app = { path = "crates/app" }
 editor = { path = "crates/editor" }
 vcs = { path = "crates/vcs" }

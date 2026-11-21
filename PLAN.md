@@ -563,9 +563,9 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 #### M12.5 — Scalable session persistence
 
-**Status: proposed; not a prerequisite for M12.2. Current sessions remain in-memory.** See [Agent persistence](docs/agent-persistence.md).
+**Status: in progress; provider-neutral records and the in-memory `SessionStore` are complete. Current TUI sessions remain in-memory.** See [Agent persistence](docs/agent-persistence.md).
 
-- [ ] Define provider-neutral finalized session/run/message/tool records and a narrow `SessionStore` port with an in-memory default.
+- [x] Define provider-neutral finalized session/run/message/tool records and a narrow `SessionStore` port with an in-memory default.
 - [ ] Persist finalized messages through the existing update/effect path with session/run identity; do not make rendering wait on storage I/O.
 - [ ] Add a separate SeaORM SQLite adapter with versioned migrations, transactions, batched transcript reads, and keyset pagination; keep SeaORM out of `eggplant-agent`.
 - [ ] Normalize filter/index fields and bound result text, diff previews, and tool artifacts. Use backend-specific full-text implementations only behind the storage port.
