@@ -224,7 +224,7 @@ impl Default for Config {
                         ("vcs_stage_all", "ctrl-s"),
                         ("vcs_unstage_all", "shift-u"),
                         ("vcs_toggle_diff", "tab"),
-                        ("vcs_discard_placeholder", "x"),
+                        ("vcs_discard", "x"),
                         ("vcs_commit_placeholder", "c"),
                         ("vcs_help_placeholder", "?"),
                         ("open_vcs_history", "l"),

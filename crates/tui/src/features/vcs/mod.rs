@@ -23,7 +23,8 @@ mod repository;
 use branch::BranchState;
 use buffer_diff::BufferDiffState;
 use change_workflow::{
-    mutate_all_changes, mutate_selected_change, open_selected_change, select_change, toggle_diff,
+    discard_selected_change, mutate_all_changes, mutate_selected_change, open_selected_change,
+    select_change, toggle_diff,
 };
 use changes::ChangesController;
 use commit::CommitState;
@@ -228,7 +229,7 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
             handle_command,
         ),
         Command::feature(
-            CommandId("vcs_discard_placeholder"),
+            CommandId("vcs_discard"),
             "discard changed file",
             handle_command,
         ),
@@ -285,7 +286,7 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         "vcs_stage_all" => mutate_all_changes(model, true),
         "vcs_unstage_all" => mutate_all_changes(model, false),
         "vcs_toggle_diff" => toggle_diff(model),
-        "vcs_discard_placeholder" => placeholder(model, "Discard is not implemented"),
+        "vcs_discard" => discard_selected_change(model),
         "vcs_commit_placeholder" => commit::open(model),
         "vcs_help_placeholder" => {
             model.vcs.help_visible = !model.vcs.help_visible;
@@ -703,6 +704,7 @@ mod tests {
 
         let refresh = Box::new(OperationCompletion {
             kind: OperationKind::Stage,
+            path: root.join("note.txt"),
             target: root,
             revision,
             result: Ok(()),
@@ -728,6 +730,7 @@ mod tests {
         let revision = model.vcs.changes.operation_revision();
         let stale = Box::new(OperationCompletion {
             kind: OperationKind::Stage,
+            path: root.join("note.txt"),
             target: root.clone(),
             revision: revision.wrapping_sub(1),
             result: Ok(()),
@@ -739,6 +742,7 @@ mod tests {
 
         let refresh = Box::new(OperationCompletion {
             kind: OperationKind::Stage,
+            path: root.join("note.txt"),
             target: root.clone(),
             revision,
             result: Ok(()),
@@ -861,6 +865,7 @@ mod tests {
 
         let effect = Box::new(OperationCompletion {
             kind: OperationKind::Stage,
+            path: root.join("note.txt"),
             target: root,
             revision: model.vcs.changes.operation_revision(),
             result: Err("index locked".to_string()),
@@ -1289,13 +1294,59 @@ mod tests {
     }
 
     #[test]
-    fn discard_placeholder_explains_that_it_does_not_mutate() {
-        let mut model = Model::default();
-        assert!(handle_command(&mut model, CommandId("vcs_discard_placeholder")).is_some());
-        assert_eq!(model.vcs.notice, None);
+    fn discard_validates_the_selection_and_uses_the_shared_operation_workflow() {
+        let root = PathBuf::from("/workspace");
+        let mut model = Model {
+            workspace: Some(Workspace::new(root.clone())),
+            ..Model::default()
+        };
+        let mut staged = change(root.join("note.txt"), ChangeKind::Modified);
+        staged.staged = true;
+        model.vcs.changes.state = ChangesState::Ready(vec![staged]);
+        model.vcs.changes.selected = Some(0);
+        assert!(handle_command(&mut model, CommandId("vcs_discard")).is_some());
         assert_eq!(
             model.notifications.current().unwrap().message(),
-            "Discard is not implemented"
+            "Select an unstaged change to discard"
+        );
+        assert!(!model.vcs.changes.operation_in_progress());
+
+        for (kind, message) in [
+            (ChangeKind::Untracked, "Cannot restore an untracked file"),
+            (ChangeKind::Conflict, "Conflicted files cannot be restored"),
+            (
+                ChangeKind::Renamed,
+                "This unstaged change cannot be restored",
+            ),
+        ] {
+            model.vcs.changes.state =
+                ChangesState::Ready(vec![change(root.join("note.txt"), kind)]);
+            model.vcs.changes.selected = Some(0);
+            handle_command(&mut model, CommandId("vcs_discard"));
+            assert_eq!(model.notifications.current().unwrap().message(), message);
+            assert!(!model.vcs.changes.operation_in_progress());
+        }
+
+        model.vcs.changes.state =
+            ChangesState::Ready(vec![change(root.join("note.txt"), ChangeKind::Modified)]);
+        model.vcs.changes.selected = Some(0);
+        assert!(handle_command(&mut model, CommandId("vcs_discard")).is_some());
+        assert!(model.vcs.changes.operation_in_progress());
+        let completion = Box::new(OperationCompletion {
+            kind: OperationKind::Discard,
+            path: root.join("note.txt"),
+            target: root,
+            revision: model.vcs.changes.operation_revision(),
+            result: Ok(()),
+        });
+        assert!(matches!(
+            completion.update(&mut model),
+            Some(Effect::Batch(_))
+        ));
+        assert!(!model.vcs.changes.operation_in_progress());
+        assert_eq!(
+            model.notifications.current().unwrap().message(),
+            "Discarded unstaged changes"
         );
     }
 

@@ -93,6 +93,35 @@ pub(super) fn mutate_selected_change(model: &mut Model, stage: bool) -> Option<E
     }))
 }
 
+pub(super) fn discard_selected_change(model: &mut Model) -> Option<Effect> {
+    if let Some(effect) = reject_if_operation_in_progress(model) {
+        return Some(effect);
+    }
+    let change = model.vcs.selected_change()?.clone();
+    if change.staged {
+        return placeholder(model, "Select an unstaged change to discard");
+    }
+    match change.kind {
+        ChangeKind::Modified | ChangeKind::Deleted => {}
+        ChangeKind::Untracked => return placeholder(model, "Cannot restore an untracked file"),
+        ChangeKind::Conflict => return placeholder(model, "Conflicted files cannot be restored"),
+        ChangeKind::Added | ChangeKind::Renamed => {
+            return placeholder(model, "This unstaged change cannot be restored");
+        }
+    }
+    if model.editor.has_modified_buffers() || model.editor.has_saving_buffers() {
+        return placeholder(model, "Wait for pending saves before discarding changes");
+    }
+    let target = repository_target(model)?;
+    let revision = begin_operation(model, target.clone())?;
+    Some(Effect::feature(OperationRequest {
+        kind: OperationKind::Discard,
+        path: change.path,
+        target,
+        revision,
+    }))
+}
+
 pub(super) fn mutate_all_changes(model: &mut Model, stage: bool) -> Option<Effect> {
     if let Some(effect) = reject_if_operation_in_progress(model) {
         return Some(effect);
@@ -176,6 +205,7 @@ impl Completion for DiffCompletion {
 pub(super) enum OperationKind {
     Stage,
     Unstage,
+    Discard,
 }
 
 struct OperationRequest {
@@ -190,10 +220,12 @@ impl FeatureEffect for OperationRequest {
         let result = match self.kind {
             OperationKind::Stage => ::vcs::stage(&self.path),
             OperationKind::Unstage => ::vcs::unstage(&self.path),
+            OperationKind::Discard => ::vcs::restore_unstaged(&self.path),
         }
         .map_err(|error| error.to_string());
         Message::FeatureCompletion(FeatureCompletion::new(OperationCompletion {
             kind: self.kind,
+            path: self.path,
             target: self.target,
             revision: self.revision,
             result,
@@ -203,6 +235,7 @@ impl FeatureEffect for OperationRequest {
 
 pub(super) struct OperationCompletion {
     pub(super) kind: OperationKind,
+    pub(super) path: PathBuf,
     pub(super) target: PathBuf,
     pub(super) revision: u64,
     pub(super) result: Result<(), String>,
@@ -218,9 +251,16 @@ impl Completion for OperationCompletion {
                 let status = StatusMessage::info(match self.kind {
                     OperationKind::Stage => "Staged file",
                     OperationKind::Unstage => "Unstaged file",
+                    OperationKind::Discard => "Discarded unstaged changes",
                 });
                 model.vcs.changes.finish_operation();
-                Effect::combine(refresh_changes(model), Some(report(model, status)))
+                let reload = matches!(self.kind, OperationKind::Discard)
+                    .then(|| crate::external_sync::reload_buffer(model, &self.path))
+                    .flatten();
+                Effect::combine(
+                    refresh_changes(model),
+                    Effect::combine(reload, Some(report(model, status))),
+                )
             }
             Err(error) => Some(report(model, StatusMessage::error(error))),
         }

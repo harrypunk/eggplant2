@@ -348,7 +348,7 @@ mod tests {
             (KeyCode::Char('s'), "vcs_stage"),
             (KeyCode::Char('u'), "vcs_unstage"),
             (KeyCode::Tab, "vcs_toggle_diff"),
-            (KeyCode::Char('x'), "vcs_discard_placeholder"),
+            (KeyCode::Char('x'), "vcs_discard"),
             (KeyCode::Char('c'), "vcs_commit_placeholder"),
             (KeyCode::Char('?'), "vcs_help_placeholder"),
             (KeyCode::Char('l'), "open_vcs_history"),

@@ -156,7 +156,7 @@ File/theme pickers and both live-grep lists wrap from first to last and last to 
 | Open commit-message page for staged changes | `c` |
 | Open bottom branch actions | `b` |
 | Open switch-and-fast-forward picker (requires clean status) | `m` |
-| Placeholder discard | `x` |
+| Discard unstaged changes in the selected tracked file | `x` |
 
 ### VCS branch menu
 

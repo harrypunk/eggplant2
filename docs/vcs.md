@@ -11,6 +11,7 @@ The addon provides:
 - Branch or abbreviated detached-HEAD display in the editor status bar.
 - A full-screen status page with dynamic staged and unstaged sections.
 - Stage/unstage for regular files and deletions, including bulk operations.
+- Restore tracked unstaged modifications and deletions from the index.
 - Cached inline diffs for changed files and commits.
 - Safe file opening through the shared document capability.
 - Explicit commits of already-staged changes with a multiline message editor.
@@ -18,7 +19,7 @@ The addon provides:
 - Plain local-branch switching and creation with compatible local changes preserved.
 - Switch-and-fast-forward merges to local target branches without fetching or rewriting history.
 
-Discard remains a placeholder.
+`x` discards the selected unstaged regular-file modification or deletion by restoring the index version. If the same path also has staged changes, that staged version is preserved. Untracked, conflicted, renamed, and staged selections are rejected. Pending editor saves block the operation; success refreshes status and schedules the normal revision-checked reload for an open buffer.
 
 ## Ownership and dependency direction
 
@@ -236,5 +237,4 @@ External/save status requests coalesce as one in-flight read plus one trailing d
 
 ## Deferred work
 
-- Reviewed discard workflows.
 - Conflict resolution, staging of unsupported entry types, and other advanced Git behavior.

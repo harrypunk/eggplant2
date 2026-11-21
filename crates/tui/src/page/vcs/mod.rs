@@ -168,7 +168,7 @@ fn render_help(model: &Model, frame: &mut Frame, area: Rect) {
     let lines = vec![
         Line::raw("s stage   u unstage   Ctrl-s stage all   U unstage all"),
         Line::raw("Tab toggle  Enter open  l history  c commit  b branch  m merge"),
-        Line::raw("? / Esc close help    x discard (placeholder)"),
+        Line::raw("? / Esc close help    x discard unstaged changes"),
     ];
     let help = Paragraph::new(lines).block(
         Block::new()

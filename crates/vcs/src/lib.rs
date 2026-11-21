@@ -6,7 +6,7 @@ pub use branch::{
 
 use std::{
     collections::{BTreeSet, HashMap},
-    io::Write as _,
+    io::{Read as _, Write as _},
     path::Path,
     sync::atomic::AtomicBool,
 };
@@ -560,6 +560,13 @@ pub fn unstage(path: &Path) -> Result<(), MutationError> {
     unstage_inner(repository, path).map_err(|error| MutationError::Failed(error.to_string()))
 }
 
+/// Restore one tracked regular file from the index, discarding unstaged edits or deletion.
+pub fn restore_unstaged(path: &Path) -> Result<(), MutationError> {
+    let repository = open_repository(path).map_err(|_| MutationError::NotRepository)?;
+    restore_unstaged_inner(repository, path)
+        .map_err(|error| MutationError::Failed(error.to_string()))
+}
+
 /// Stage all supported unstaged files and deletions with one locked index write.
 pub fn stage_all(path: &Path) -> Result<(), MutationError> {
     let repository = open_repository(path).map_err(|_| MutationError::NotRepository)?;
@@ -960,6 +967,59 @@ fn unstage_inner(repository: Repository, path: &Path) -> anyhow::Result<()> {
     ensure_unconflicted(&index, relative.as_slice().as_bstr())?;
     restore_index_entry(&repository, &mut index, relative.as_slice().as_bstr());
     write_index(&mut index)
+}
+
+fn restore_unstaged_inner(repository: Repository, path: &Path) -> anyhow::Result<()> {
+    let relative = relative_path(&repository, path)?;
+    let relative = relative.as_slice().as_bstr();
+    let index = open_index(&repository)?;
+    ensure_unconflicted(&index, relative)?;
+    let (id, mode) = index
+        .entry_by_path_and_stage(relative, Stage::Unconflicted)
+        .map(|entry| (entry.id, entry.mode))
+        .context("file is not tracked in the index")?;
+    if mode != Mode::FILE && mode != Mode::FILE_EXECUTABLE {
+        anyhow::bail!("only regular files are supported");
+    }
+
+    let blob = read_optional_blob(&repository, Some(id))?;
+    let mut pipeline = repository.filter_pipeline(None)?;
+    let mut filtered = pipeline.0.convert_to_worktree(
+        &blob,
+        relative,
+        gix::filter::plumbing::driver::apply::Delay::Forbid,
+    )?;
+    let mut contents = Vec::new();
+    filtered.read_to_end(&mut contents)?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    if std::fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
+        std::fs::remove_file(path)?;
+    }
+    std::fs::write(path, contents)?;
+    set_executable(path, mode == Mode::FILE_EXECUTABLE)?;
+    Ok(())
+}
+
+#[cfg(unix)]
+fn set_executable(path: &Path, executable: bool) -> anyhow::Result<()> {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let mut permissions = std::fs::metadata(path)?.permissions();
+    let mode = permissions.mode();
+    permissions.set_mode(if executable {
+        mode | 0o111
+    } else {
+        mode & !0o111
+    });
+    std::fs::set_permissions(path, permissions)?;
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn set_executable(_path: &Path, _executable: bool) -> anyhow::Result<()> {
+    Ok(())
 }
 
 fn stage_all_inner(repository: Repository) -> anyhow::Result<()> {
@@ -1934,6 +1994,44 @@ mod tests {
             .unwrap();
         assert_eq!(entry.kind, ChangeKind::Modified);
         assert!(!entry.staged);
+    }
+
+    #[test]
+    fn restore_unstaged_recovers_index_content_and_deleted_files() {
+        let repository = repository();
+        let removed = repository.path().join("removed.txt");
+        std::fs::write(&removed, "remove me\n").unwrap();
+        git(repository.path(), &["add", "removed.txt"]);
+        git(
+            repository.path(),
+            &["commit", "--quiet", "-m", "add removable file"],
+        );
+
+        let tracked = repository.path().join("note.txt");
+        std::fs::write(&tracked, "staged\n").unwrap();
+        stage(&tracked).unwrap();
+        std::fs::write(&tracked, "worktree\n").unwrap();
+        std::fs::remove_file(&removed).unwrap();
+
+        restore_unstaged(&tracked).unwrap();
+        restore_unstaged(&removed).unwrap();
+
+        assert_eq!(std::fs::read_to_string(tracked).unwrap(), "staged\n");
+        assert_eq!(std::fs::read_to_string(removed).unwrap(), "remove me\n");
+        let remaining = changes(repository.path()).unwrap();
+        assert_eq!(remaining.len(), 1);
+        assert!(remaining[0].staged);
+        assert_eq!(remaining[0].kind, ChangeKind::Modified);
+    }
+
+    #[test]
+    fn restore_unstaged_rejects_untracked_files_without_deleting_them() {
+        let repository = repository();
+        let untracked = repository.path().join("untracked.txt");
+        std::fs::write(&untracked, "keep me\n").unwrap();
+
+        assert!(restore_unstaged(&untracked).is_err());
+        assert_eq!(std::fs::read_to_string(untracked).unwrap(), "keep me\n");
     }
 
     #[test]
