@@ -1,0 +1,18 @@
+[package]
+name = "eggplant-agent-storage-seaorm"
+version.workspace = true
+edition.workspace = true
+description = "SeaORM SQLite persistence adapter for Eggplant agent sessions"
+license = "MIT"
+
+[dependencies]
+eggplant-agent = { path = "../agent" }
+eggplant-agent-storage = { path = "../agent-storage" }
+sea-orm = { version = "=2.0.4", default-features = false, features = ["macros", "runtime-tokio-rustls", "sqlx-sqlite"] }
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

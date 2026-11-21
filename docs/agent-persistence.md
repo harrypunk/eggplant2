@@ -1,10 +1,10 @@
 # Agent persistence
 
-Status: provider-neutral finalized records, the asynchronous `SessionStore` port, and in-memory keyset/search behavior are implemented. The TUI still uses in-memory sessions by default; the SeaORM SQLite adapter is next.
+Status: implemented. Provider-neutral records, asynchronous `SessionStore`, in-memory storage, finalized-run effects, and a separate SeaORM SQLite adapter with migrations, transactions, keyset reads, and search are complete. In-memory remains the default; `agent-sqlite` opts into durable local storage. Cloud backends and backend-specific full-text search remain deferred.
 
 ## Recommendation
 
-Use a repository/storage port with an **in-memory implementation now** and a **SeaORM implementation for relational persistence later**. Start with SQLite, then add MySQL/Postgres only for a concrete deployment requirement.
+Use the repository/storage port with an **in-memory implementation by default** and a **replaceable SeaORM implementation for relational persistence**. SQLite is implemented; add MySQL/Postgres only for a concrete deployment requirement. The application depends on `SessionStore`, so changing the SeaORM-backed implementation does not change the TUI, editor, or provider dependencies.
 
 SeaORM is a good fit when Eggplant benefits from typed entities, migrations, and one mostly portable relational model. It is not a search engine or a scaling guarantee. Query shape, indexes, pagination, transaction boundaries, output limits, and database-specific full-text behavior remain Eggplant's responsibility.
 
@@ -30,7 +30,9 @@ AgentSession / provider-neutral records
 
 The TUI/composition root selects the implementation. Provider code, popup/panel rendering, and editor mutation must not depend on SeaORM entities or SQL.
 
-The port and in-memory implementation live in `agent-storage`. Relational drivers belong in separate adapters; neither `eggplant-agent` nor editor code depends on them.
+The port and in-memory implementation live in `agent-storage`. Relational drivers belong in separate adapters; neither `eggplant-agent` nor editor code depends on them. The TUI depends only on `SessionStore`, never SeaORM entities, SQL, connection URLs, or backend query syntax.
+
+For a lightweight default binary, in-memory storage requires no database feature. Durable local storage is opt-in with `--features agent-sqlite` and an absolute per-user `session_db` path. Configuring that path without the feature is a startup error rather than an implicit fallback. MySQL/PostgreSQL drivers and cloud URLs are not included.
 
 ## Storage port
 
@@ -47,6 +49,8 @@ The port should expose operations needed by real consumers, not generic CRUD:
 Use `SessionId` as the database identity. `RunId` remains scoped to a session and must not become a globally unique database key by itself.
 
 Storage writes belong in background effects with request/run identity. Do not hold a service or document lock during database I/O, and do not make popup rendering wait on a database query. `Effect::combine` is not a transaction barrier.
+
+The TUI captures a `FinalizedRun` only after complete, failed, or cancelled session state is applied. Live deltas and pending approvals are not persisted as finalized messages. The write effect owns all records, and its completion is accepted only for the matching `SessionId` and `RunId`. Backend failure leaves the provider result intact and produces a bounded storage warning in both Agent views; stale completions cannot clear a newer run's warning.
 
 ## Proposed relational schema
 
@@ -135,23 +139,19 @@ Cloud support is a deployment extension, not a reason to redesign the agent sess
 
 The public session/tool contracts must not expose a SQL connection, credentials, entity types, or backend-specific query strings to the TUI.
 
-## Suggested SeaORM packaging
+## SeaORM packaging
 
-At implementation time, pin and review exact versions/features rather than enabling every backend by default. Expected dependency shape:
+The adapter pins SeaORM 2.0.4 with default features disabled and only `macros`, `sqlx-sqlite`, and `runtime-tokio-rustls`. Versioned migrations use SeaORM's own schema builders, `ConnectionTrait`, transactions, and a small migration-history entity; no migration-manager or vendored upstream crate is required. This avoids unwanted defaults while preserving SeaORM's backend abstraction. SQLite-only connection setup is isolated in the adapter, and text search uses portable `LOWER`/`LIKE` expressions with escaped literal wildcards and case-insensitive matching in both stores.
 
-- `sea-orm` with `sqlx-sqlite` and `runtime-tokio-rustls` for the first adapter.
-- `sea-orm-migration` for versioned schema migrations.
-- Optional `sqlx-mysql` / `sqlx-postgres` features only when those deployments are implemented.
-
-Dependency, compile time, binary size, and migration complexity are real costs. They belong in the adapter, not in `eggplant-agent` or ordinary editing.
+Optional `sqlx-mysql` / `sqlx-postgres` features belong only to future deployment adapters. Dependency, compile time, binary size, and migration complexity remain outside `eggplant-agent` and the default TUI build.
 
 ## Implementation sequence
 
 1. **Implemented:** provider-neutral finalized session/run/message records and an in-memory `SessionStore`.
-2. Prove fake-provider persistence through the existing update/effect path.
-3. Add the SeaORM SQLite adapter with migrations and keyset reads.
-4. Add filter/search and truncation tests, failure handling, and corrupt/locked database behavior.
-5. Add backend-specific full-text search only with measured requirements.
-6. Add cloud configuration, migrations policy, TLS/pool limits, and manual deployment smoke tests.
+2. **Implemented:** fake-provider finalization flows through the existing update/effect path, with run-scoped storage warnings and no rendering barrier.
+3. **Implemented:** separate SeaORM SQLite adapter with migrations, transactions, and keyset reads.
+4. **Implemented:** filter/search and truncation tests plus corrupt, locked, overflow, migration-failure, and cancellation coverage.
+5. Deferred: add backend-specific full-text search only with measured requirements.
+6. Deferred: add cloud configuration, migrations policy, TLS/pool limits, and manual deployment smoke tests behind the same `SessionStore` boundary.
 
 Persistence must not delay M12.2's real provider. If no store is configured, the current in-memory session remains the default and hiding the popup/panel still preserves it.

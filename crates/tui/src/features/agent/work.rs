@@ -250,7 +250,7 @@ fn interrupt(model: &mut Model) -> Option<Effect> {
         });
     model.agent.clear_suspension();
     transition_to_chat(model);
-    None
+    super::storage::persist_finalized(model)
 }
 
 fn toggle_panel(model: &mut Model) -> Option<Effect> {
@@ -782,7 +782,7 @@ impl Completion for AgentCompletion {
                 model.agent.session_mut().fail(self.run_id, error);
             }
         });
-        None
+        super::storage::persist_finalized(model)
     }
 }
 
@@ -791,6 +791,7 @@ mod tests {
     use std::sync::Arc;
 
     use eggplant_agent::{MessageRole, RunStatus};
+    use eggplant_agent_storage::SessionStore as _;
 
     use super::*;
     use crate::{
@@ -918,6 +919,132 @@ mod tests {
             RunStatus::Failed("simulated provider failure".to_string())
         );
         assert_eq!(model.agent.session().messages().len(), 1);
+    }
+
+    #[test]
+    fn finalized_fake_run_is_queryable_through_the_in_memory_store() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("main.rs");
+        std::fs::write(&path, "fn main() {}\n").unwrap();
+        let store = Arc::new(eggplant_agent_storage::InMemoryStore::new());
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        model.agent.set_session_store(store.clone());
+        open_file(&mut model, &path);
+        let manager = MessageManager::default();
+        open(&mut model);
+        let effect = submit(&mut model).unwrap();
+
+        let storage = perform(&manager, &mut model, effect).unwrap();
+        perform(&manager, &mut model, storage);
+
+        tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let recent = store
+                    .recent_sessions(eggplant_agent_storage::RecentQuery::default())
+                    .await
+                    .unwrap();
+                assert_eq!(recent.sessions.len(), 1);
+                assert_eq!(recent.sessions[0].id, model.agent.session().id().clone());
+                let transcript = store
+                    .transcript(
+                        model.agent.session().id().clone(),
+                        eggplant_agent_storage::TranscriptQuery::default(),
+                    )
+                    .await
+                    .unwrap();
+                assert_eq!(transcript.messages.len(), 2);
+                assert_eq!(transcript.messages[0].role, MessageRole::User);
+                assert_eq!(transcript.messages[1].role, MessageRole::Assistant);
+                assert!(transcript.messages[1].text.contains("Simulated response"));
+                assert_eq!(transcript.runs[0].provider, "fake");
+                assert!(
+                    transcript.runs[0]
+                        .editor_context
+                        .as_ref()
+                        .is_some_and(|context| context.contains("buffer_id"))
+                );
+            });
+    }
+
+    #[derive(Debug)]
+    struct FailingStore;
+
+    impl eggplant_agent_storage::SessionStore for FailingStore {
+        fn finalize_run<'a>(
+            &'a self,
+            _run: eggplant_agent_storage::FinalizedRun,
+            _cancellation: CancellationToken,
+        ) -> eggplant_agent_storage::StoreFuture<'a, ()> {
+            Box::pin(async {
+                Err(eggplant_agent_storage::StorageError::Backend(
+                    "disk full".to_string(),
+                ))
+            })
+        }
+
+        fn recent_sessions<'a>(
+            &'a self,
+            _query: eggplant_agent_storage::RecentQuery,
+        ) -> eggplant_agent_storage::StoreFuture<'a, eggplant_agent_storage::RecentPage> {
+            Box::pin(async {
+                Err(eggplant_agent_storage::StorageError::Backend(
+                    "disk full".to_string(),
+                ))
+            })
+        }
+
+        fn transcript<'a>(
+            &'a self,
+            _session_id: eggplant_agent::SessionId,
+            _query: eggplant_agent_storage::TranscriptQuery,
+        ) -> eggplant_agent_storage::StoreFuture<'a, eggplant_agent_storage::TranscriptPage>
+        {
+            Box::pin(async {
+                Err(eggplant_agent_storage::StorageError::Backend(
+                    "disk full".to_string(),
+                ))
+            })
+        }
+
+        fn search<'a>(
+            &'a self,
+            _query: eggplant_agent_storage::SearchQuery,
+        ) -> eggplant_agent_storage::StoreFuture<'a, eggplant_agent_storage::SearchPage> {
+            Box::pin(async {
+                Err(eggplant_agent_storage::StorageError::Backend(
+                    "disk full".to_string(),
+                ))
+            })
+        }
+    }
+
+    #[test]
+    fn finalization_failure_is_a_warning_not_a_provider_failure() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("main.rs");
+        std::fs::write(&path, "fn main() {}\n").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        model.agent.set_session_store(Arc::new(FailingStore));
+        open_file(&mut model, &path);
+        let manager = MessageManager::default();
+        open(&mut model);
+        let effect = submit(&mut model).unwrap();
+
+        let storage = perform(&manager, &mut model, effect).unwrap();
+        perform(&manager, &mut model, storage);
+
+        assert_eq!(
+            model.agent.session().run().unwrap().status,
+            RunStatus::Complete
+        );
+        assert!(
+            model
+                .agent
+                .storage_error()
+                .is_some_and(|error| error.contains("disk full"))
+        );
     }
 
     #[test]
@@ -1259,7 +1386,8 @@ mod tests {
         let (provider, _seen, requests) = WriteProvider::new(write_call(&cancelled, buffer), false);
         cancelled.agent.set_provider(Arc::new(provider));
         begin_write(&mut cancelled);
-        assert!(interrupt(&mut cancelled).is_none());
+        let storage = interrupt(&mut cancelled).unwrap();
+        perform(&MessageManager::default(), &mut cancelled, storage);
 
         assert_eq!(
             cancelled.editor.buffer_text_snapshot(buffer).unwrap().text,

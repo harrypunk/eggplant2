@@ -3,10 +3,15 @@ name = "tui"
 version.workspace = true
 edition.workspace = true
 
+[features]
+agent-sqlite = ["dep:eggplant-agent-storage-seaorm"]
+
 [dependencies]
 app.workspace = true
 eggplant-agent.workspace = true
 eggplant-agent-openai.workspace = true
+eggplant-agent-storage.workspace = true
+eggplant-agent-storage-seaorm = { path = "../agent-storage-seaorm", optional = true }
 chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 color-eyre = "0.6.5"
 crossterm = "0.29.0"

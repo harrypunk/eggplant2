@@ -1,6 +1,6 @@
 # AI agent architecture
 
-Status: M12.1 fake-provider UX, M12.2 OpenAI-compatible streaming, M12.3 bounded read/grep tools, and M12.4 approved revision-safe writes are implemented. Scalable session persistence remains the next milestone.
+Status: M12.1–M12.5 are implemented. Inline chat, OpenAI streaming, bounded tools, approved writes, and in-memory/opt-in SeaORM SQLite persistence are complete. Cloud backends and backend-specific full-text search remain deferred.
 
 The agent is a primary Eggplant workflow, not a detached chat window or an excuse to bypass editor safety. It should make a small coding task feel like a natural extension of navigation, search, diagnostics, and editing.
 
@@ -128,7 +128,8 @@ The intended ownership is:
 | --- | --- |
 | `eggplant-agent` | Standalone provider-neutral session, run/event identity, tool request/result values, and runtime ports; no editor/terminal/filesystem dependency. |
 | Agent runtime adapter | Provider streaming, bounded agent loop, cancellation, tool-call orchestration. |
-| `agent-storage` (future) | `SessionStore` port, in-memory default, and optional SeaORM adapter; see [Agent persistence](agent-persistence.md). |
+| `agent-storage` | `SessionStore` port, finalized records, and in-memory default; see [Agent persistence](agent-persistence.md). |
+| `agent-storage-seaorm` | Opt-in SeaORM SQLite adapter, versioned migrations, transactions, keyset pagination, and search; no cloud drivers. |
 | `features/agent` | Session/update state, commands, typed effects/completions, popup/panel coordination. |
 | Agent components | Concrete popup and panel rendering from resolved props; no I/O or provider types. |
 | Existing capabilities | Filesystem/search/document/buffer/save/diff behavior and their safety checks. |

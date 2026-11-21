@@ -185,7 +185,7 @@ impl SessionStore for InMemoryStore {
                             && query
                                 .text
                                 .as_ref()
-                                .is_none_or(|text| message.text.contains(text))
+                                .is_none_or(|text| contains_text(&message.text, text))
                     })
                     .map(message_hit)
                     .collect::<Vec<_>>(),
@@ -203,12 +203,12 @@ impl SessionStore for InMemoryStore {
                                 .as_ref()
                                 .is_none_or(|call_id| call.call_id == *call_id)
                             && query.text.as_ref().is_none_or(|text| {
-                                call.name.contains(text)
-                                    || call.arguments.contains(text)
+                                contains_text(&call.name, text)
+                                    || contains_text(&call.arguments, text)
                                     || call
                                         .result
                                         .as_ref()
-                                        .is_some_and(|result| result.content.contains(text))
+                                        .is_some_and(|result| contains_text(&result.content, text))
                             })
                     })
                     .map(tool_hit)
@@ -234,6 +234,10 @@ impl SessionStore for InMemoryStore {
             })
         })
     }
+}
+
+fn contains_text(value: &str, query: &str) -> bool {
+    value.to_lowercase().contains(&query.to_lowercase())
 }
 
 fn message_hit(message: &MessageRecord) -> SearchHit {

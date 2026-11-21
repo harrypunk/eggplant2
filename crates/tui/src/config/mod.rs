@@ -67,6 +67,7 @@ pub struct AgentConfig {
     pub model: Option<String>,
     pub base_url: Option<String>,
     pub api_key_env: Option<String>,
+    pub session_db: Option<PathBuf>,
 }
 
 #[derive(Debug, Deserialize)]

@@ -14,7 +14,7 @@ The current application is intentionally lightweight: it is not a full IDE, a Vi
 - A separate **VCS addon** for branch display, switching/creation, changed files, staging, commits, and inline diffs.
 - Narrow boundaries for AI commands instead of direct widget or Helix access.
 
-The **inline AI agent supports fake and OpenAI-compatible providers**, editable `path:line` prompts, shared popup/panel conversations, ordered streaming/interrupt behavior, environment-based credentials, bounded `read`/`grep` tools, and per-call-approved revision-safe exact-text writes. Scalable session persistence is the next milestone.
+The **inline AI agent supports fake and OpenAI-compatible providers**, editable `path:line` prompts, shared popup/panel conversations, ordered streaming/interrupt behavior, environment-based credentials, bounded `read`/`grep` tools, per-call-approved revision-safe exact-text writes, and finalized-session storage. In-memory storage is the default; a separate opt-in SeaORM SQLite adapter provides durable local persistence without bundling cloud backends.
 
 ## Run
 
@@ -24,7 +24,7 @@ cargo run -p tui -- [FILE_OR_FOLDER]
 
 Without a path, Eggplant opens the empty editor. A file opens a buffer; a folder opens a workspace explorer without implicitly opening a document.
 
-The application reads `~/.eggplant/config.toml` when present. See `config.example.toml` for options and `docs/key-input.md` for the complete keyboard reference.
+The application reads `~/.eggplant/config.toml` when present. See `config.example.toml` for options and `docs/key-input.md` for the complete keyboard reference. Agent storage is in-memory by default; durable local sessions require the opt-in `agent-sqlite` build feature and an absolute per-user `session_db` path. MySQL/PostgreSQL drivers are not bundled.
 
 ## Architecture
 
@@ -32,6 +32,7 @@ The application reads `~/.eggplant/config.toml` when present. See `config.exampl
 crates/
 ├── agent-openai/ # OpenAI-compatible provider adapter with SSE decoding
 ├── agent-storage/ # Provider-neutral storage port and in-memory implementation
+├── agent-storage-seaorm/ # Optional SeaORM SQLite adapter and migrations
 ├── agent/     # Independently publishable, provider-neutral agent session API
 ├── app/       # UI-neutral application capabilities and provider interfaces
 ├── editor/    # Documents, buffers, editing, viewport, and persistence

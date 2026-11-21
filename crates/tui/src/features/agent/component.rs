@@ -1,4 +1,4 @@
-use eggplant_agent::{AgentSession, MessageRole, RunStatus};
+use eggplant_agent::{MessageRole, RunStatus};
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Position, Rect},
@@ -79,9 +79,14 @@ impl AgentDialogContent<'_> {
         .areas(area);
         let status_text = self
             .state
-            .session()
-            .run()
-            .map(|run| run.status.label().to_string())
+            .storage_error()
+            .map(|error| format!("Storage warning: {error}"))
+            .or_else(|| {
+                self.state
+                    .session()
+                    .run()
+                    .map(|run| run.status.label().to_string())
+            })
             .unwrap_or_else(|| "Ready".to_string());
         Paragraph::new(status_text)
             .style(self.styles.muted)
@@ -169,12 +174,13 @@ pub struct AgentPanel;
 
 impl AgentPanel {
     pub fn render(
-        session: &AgentSession,
+        state: &AgentState,
         focus: FocusTarget,
         styles: &UiTheme,
         frame: &mut Frame,
         area: Rect,
     ) {
+        let session = state.session();
         let border_style = if focus == FocusTarget::ToolsPanel {
             styles.focused_border
         } else {
@@ -191,11 +197,14 @@ impl AgentPanel {
         }
         let [status, messages] =
             Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(inner);
-        let status_text = session
-            .run()
-            .map(|run| match &run.status {
-                RunStatus::Failed(error) => format!("Failed: {error}"),
-                status => status.label().to_string(),
+        let status_text = state
+            .storage_error()
+            .map(|error| format!("Storage warning: {error}"))
+            .or_else(|| {
+                session.run().map(|run| match &run.status {
+                    RunStatus::Failed(error) => format!("Failed: {error}"),
+                    status => status.label().to_string(),
+                })
             })
             .unwrap_or_else(|| "No active run".to_string());
         Paragraph::new(status_text)
@@ -317,7 +326,7 @@ mod tests {
         panel
             .draw(|frame| {
                 AgentPanel::render(
-                    model.agent.session(),
+                    &model.agent,
                     model.current_focus,
                     model.theme.ui(),
                     frame,
@@ -390,7 +399,7 @@ mod tests {
         panel
             .draw(|frame| {
                 AgentPanel::render(
-                    model.agent.session(),
+                    &model.agent,
                     model.current_focus,
                     model.theme.ui(),
                     frame,

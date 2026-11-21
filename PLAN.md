@@ -1,7 +1,7 @@
 # Eggplant first-edition plan
 
 Last updated: 2026-11-21
-Current baseline: M10, M11.1/M11.2, and M12.1–M12.4 are complete; M12.5 scalable session persistence is next
+Current baseline: M10, M11.1/M11.2, and M12.1–M12.5 are complete; agent storage is in-memory by default with opt-in SeaORM SQLite persistence
 
 ## Purpose
 
@@ -516,7 +516,7 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 ### Milestone 12: Inline AI agent
 
-**Status: M12.1 fake streaming UI, M12.2 OpenAI-compatible provider, M12.3 bounded read/grep tools, and M12.4 approved revision-safe writes complete; M12.5 persistence is next.**
+**Status: M12.1–M12.5 complete. Inline chat, OpenAI streaming, bounded read/grep, approved writes, and scalable storage ports with opt-in SeaORM SQLite persistence are implemented.**
 
 **Goal:** make agent chat and bounded coding tools a first-class inline workflow without creating a second editor, bypassing persistence, or adopting a general agent/plugin framework. Read [AI agent architecture](docs/agent.md) and [Agent tools](docs/agent-tools.md) before implementation.
 
@@ -563,14 +563,14 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 #### M12.5 — Scalable session persistence
 
-**Status: in progress; provider-neutral records and the in-memory `SessionStore` are complete. Current TUI sessions remain in-memory.** See [Agent persistence](docs/agent-persistence.md).
+**Status: complete. In-memory remains the default; `agent-sqlite` opts into the separate SeaORM adapter. Cloud backends and backend-specific full-text search remain deferred.** See [Agent persistence](docs/agent-persistence.md).
 
 - [x] Define provider-neutral finalized session/run/message/tool records and a narrow `SessionStore` port with an in-memory default.
-- [ ] Persist finalized messages through the existing update/effect path with session/run identity; do not make rendering wait on storage I/O.
-- [ ] Add a separate SeaORM SQLite adapter with versioned migrations, transactions, batched transcript reads, and keyset pagination; keep SeaORM out of `eggplant-agent`.
-- [ ] Normalize filter/index fields and bound result text, diff previews, and tool artifacts. Use backend-specific full-text implementations only behind the storage port.
-- [ ] Test temporary SQLite stores, truncation, locked/corrupt stores, migration failure, cancellation, and ordinary editing without a configured store.
-- [ ] Treat MySQL/PostgreSQL cloud deployment separately: secret references, TLS validation, pool/timeouts, explicit migration policy, and manual deployment smoke tests. No cloud credentials are required in workspace tests.
+- [x] Persist finalized messages through the existing update/effect path with session/run identity; do not make rendering wait on storage I/O.
+- [x] Add a separate SeaORM SQLite adapter with versioned migrations, transactions, batched transcript reads, and keyset pagination; keep SeaORM out of `eggplant-agent`.
+- [x] Normalize filter/index fields and bound result text, diff previews, and tool artifacts. Use backend-specific full-text implementations only behind the storage port.
+- [x] Test temporary SQLite stores, truncation, locked/corrupt stores, migration failure, cancellation, and ordinary editing without a configured store.
+- [x] Keep MySQL/PostgreSQL cloud deployment separate and unbundled: future adapters must preserve `SessionStore`, secret references, TLS validation, pool/timeouts, explicit migration policy, and manual deployment smoke tests. No cloud drivers or credentials are required in workspace tests.
 
 **M12 exit criteria:** users can chat inline, watch the same session in the tool panel, use bounded read/grep tools, and approve safe revision-checked edits while normal editing remains usable during provider/tool failure. No arbitrary shell, autonomous sub-agent, plugin host, or automatic Git mutation is required. Persistence is an independent storage slice, not a prerequisite for provider chat.
 

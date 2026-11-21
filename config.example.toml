@@ -156,3 +156,5 @@ provider = "openai"
 model = "gpt-4o-mini"
 base_url = "https://api.openai.com/v1"
 api_key_env = "OPENAI_API_KEY"
+# Optional durable sessions; requires the `agent-sqlite` build feature and an absolute per-user path.
+# session_db = "/home/you/.eggplant/agent.db"

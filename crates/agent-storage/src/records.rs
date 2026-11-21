@@ -211,6 +211,7 @@ pub struct SearchCursor {
 pub struct SearchQuery {
     pub session_id: SessionId,
     pub kind: SearchKind,
+    /// Case-insensitive literal substring; wildcard characters are escaped by backends.
     pub text: Option<String>,
     pub role: Option<MessageRole>,
     pub tool_name: Option<String>,
