@@ -70,13 +70,13 @@ Hiding the popup does not cancel the run. Reopening restores the current session
 
 The existing tools panel gains an Agent view. It is non-modal and shows:
 
-- Conversation messages and streaming assistant text above a bottom, auto-height input shared with the dialog prompt. `Ctrl-Down` focuses panel input and `Ctrl-Up` returns to the editor; Enter uses the same submit workflow.
+- Conversation messages and streaming assistant text above a bottom, auto-height input shared with the dialog prompt. `Ctrl-L` focuses panel input and `Ctrl-H` returns to the editor; Enter uses the same submit workflow.
 - Current run state and elapsed activity where useful.
 - Tool call names, concise arguments/summaries, bounded output, and truncation.
 - Pending write approvals and their diffs.
 - Errors and cancellation without losing the previous transcript.
 
-The panel and popup read the same `AgentSession`; neither owns a separate provider connection or agent loop. Opening the panel does not move editor focus unless the user explicitly focuses it.
+The panel and popup read the same `AgentSession`; neither owns a separate provider connection or agent loop. Opening the Agent panel focuses its input, while `Ctrl-L` and `Ctrl-H` move horizontally between the editor and panel.
 
 ### Current keybindings
 
@@ -87,8 +87,8 @@ The panel and popup read the same `AgentSession`; neither owns a separate provid
 | Submit prompt | `Enter` |
 | Interrupt active run | `Ctrl-F7` |
 | Toggle shared Agent tool panel | `Space a t` |
-| Focus Agent panel input | `Ctrl-Down` |
-| Return from Agent panel to editor | `Ctrl-Up` |
+| Focus Agent panel input | `Ctrl-L` |
+| Return from Agent panel to editor | `Ctrl-H` |
 
 The prompt starts as `workspace/relative/path:line` and remains editable. Empty, standalone-file, and external read-only contexts are rejected. The scripted provider used in this slice streams `Simulated response to: <prompt>`; `fail` simulates a provider failure.
 

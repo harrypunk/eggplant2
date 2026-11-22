@@ -58,10 +58,10 @@ fn move_focus(model: &mut Model, direction: FocusDirection) {
         (FocusTarget::FileExplorer, FocusDirection::Right, _) => {
             focus_editor(model);
         }
-        (FocusTarget::Editor, FocusDirection::Down, _) => {
+        (FocusTarget::Editor, FocusDirection::Right, _) => {
             crate::agent::focus_panel_input(model);
         }
-        (FocusTarget::ToolsPanel, FocusDirection::Up, _) => {
+        (FocusTarget::ToolsPanel, FocusDirection::Left, _) => {
             crate::agent::close_panel_input(model);
         }
         _ => {}
@@ -144,6 +144,26 @@ mod tests {
             assert_eq!(model.current_focus, FocusTarget::FileExplorer);
             assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
         }
+    }
+
+    #[test]
+    fn horizontal_focus_reuses_existing_keys_for_agent_panel() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("main.rs");
+        std::fs::write(&path, "fn main() {}\n").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        crate::test_utils::open_file(&mut model, &path);
+        model.current_focus = FocusTarget::Editor;
+        model.tools.active_tool = Some(crate::tools::ToolKind::Agent);
+        model.tools.visibility = Visibility::Displayed;
+
+        handle_command(&mut model, CommandId("focus_right"));
+        assert_eq!(model.current_focus, FocusTarget::ToolsPanel);
+        assert_eq!(model.context_stack.last(), Some(&Context::AgentChat));
+
+        handle_command(&mut model, CommandId("focus_left"));
+        assert_eq!(model.current_focus, FocusTarget::Editor);
+        assert_ne!(model.context_stack.last(), Some(&Context::AgentChat));
     }
 
     #[test]

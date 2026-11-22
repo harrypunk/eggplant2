@@ -307,6 +307,7 @@ fn toggle_panel(model: &mut Model) -> Option<Effect> {
     } else {
         model.tools.active_tool = Some(ToolKind::Agent);
         model.tools.visibility = Visibility::Displayed;
+        return focus_panel_input(model);
     }
     None
 }
@@ -1002,10 +1003,16 @@ mod tests {
             model.agent.session().messages()[1].text,
             "Simulated response to: main.rs:1"
         );
-        let focus = model.current_focus;
         toggle_panel(&mut model);
         assert_eq!(model.tools.active_tool, Some(ToolKind::Agent));
-        assert_eq!(model.current_focus, focus);
+        assert_eq!(
+            model.current_focus,
+            crate::data_object::FocusTarget::ToolsPanel
+        );
+        assert_eq!(model.context_stack.last(), Some(&Context::AgentChat));
+        toggle_panel(&mut model);
+        assert_eq!(model.current_focus, crate::data_object::FocusTarget::Editor);
+        assert_ne!(model.context_stack.last(), Some(&Context::AgentChat));
 
         open(&mut model);
         assert_eq!(model.agent.prompt(), "main.rs:1");
