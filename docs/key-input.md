@@ -143,7 +143,7 @@ On an expanded directory, `h` folds that directory. On a file or collapsed direc
 | Focus the Agent panel input | `Ctrl-L` |
 | Return from the Agent panel to the editor | `Ctrl-H` |
 
-The prompt starts as `workspace/relative/path:line` and is editable/deletable. It is available only for file-backed buffers inside the workspace; no-buffer, standalone-file, and external read-only contexts are rejected. Dismissal preserves the run and conversation. Reopening restores the current session. The fake provider streams a simulated response for this first slice; no credentials are needed.
+The inline prompt starts as `workspace/relative/path:line` and is editable/deletable for quick file-focused use. It requires a file-backed workspace buffer; standalone-file and external read-only contexts are rejected. Dismissal preserves the run and conversation. The project panel is separate: it requires an open project but no active buffer, accepts freeform text and `@path` references, and focuses its bottom input when opened. The fake provider streams a simulated response for this first slice; no credentials are needed.
 
 ### Agent write approval
 

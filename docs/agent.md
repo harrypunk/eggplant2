@@ -70,7 +70,7 @@ Hiding the popup does not cancel the run. Reopening restores the current session
 
 The existing tools panel gains an Agent view. It is non-modal and shows:
 
-- Conversation messages and streaming assistant text above a bottom, auto-height input shared with the dialog prompt. `Ctrl-L` focuses panel input and `Ctrl-H` returns to the editor; Enter uses the same submit workflow.
+- Project-scoped conversation messages and streaming assistant text above a bottom, auto-height input. No file or buffer needs to be open; users can write freeform prompts and project-file references such as `@src/main.rs`. `Ctrl-L` focuses panel input and `Ctrl-H` returns to the editor; Enter uses the same submit workflow.
 - Current run state and elapsed activity where useful.
 - Tool call names, concise arguments/summaries, bounded output, and truncation.
 - Pending write approvals and their diffs.
@@ -90,9 +90,9 @@ The panel and popup read the same `AgentSession`; neither owns a separate provid
 | Focus Agent panel input | `Ctrl-L` |
 | Return from Agent panel to editor | `Ctrl-H` |
 
-The prompt starts as `workspace/relative/path:line` and remains editable. Empty, standalone-file, and external read-only contexts are rejected. The scripted provider used in this slice streams `Simulated response to: <prompt>`; `fail` simulates a provider failure.
+The inline prompt starts as `workspace/relative/path:line` and remains editable for quick file-focused questions. Empty, standalone-file, and external read-only contexts are rejected for this inline flow. The project panel instead starts with a freeform prompt and does not require an active buffer; `@path` references remain ordinary prompt text and do not implicitly attach file contents. The scripted provider used in this slice streams `Simulated response to: <prompt>`; `fail` simulates a provider failure.
 
-`AgentChatDialog` is the inline modal context. `AgentChat` is reserved for a future direct-chat workflow.
+`AgentChatDialog` is the inline modal context. `AgentChat` is the project-panel input context.
 
 ## Session and run state
 
@@ -111,7 +111,9 @@ Start with in-memory or linear append-only session storage. Persist finalized me
 
 ## Editor context
 
-A prompt may capture an owned, visible context snapshot:
+Only the inline file-focused flow captures an editor context. Project-panel runs have no implicit buffer context; their workspace root remains the project identity used by tools and persistence.
+
+The inline prompt may capture an owned, visible context snapshot:
 
 - Workspace root.
 - Active `BufferId`, canonical path, and expected document revision.

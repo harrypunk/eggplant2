@@ -104,6 +104,10 @@ impl AgentState {
         self.context = Some(context);
     }
 
+    pub fn prepare_panel_prompt(&mut self) {
+        self.context = None;
+    }
+
     pub fn open_dialog(&mut self, context: EditorContext, label: String) {
         self.prepare_prompt(context, label);
         self.dialog_open = true;

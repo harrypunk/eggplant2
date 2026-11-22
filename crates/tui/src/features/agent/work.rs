@@ -133,12 +133,10 @@ pub(crate) fn focus_panel_input(model: &mut Model) -> Option<Effect> {
     {
         return None;
     }
-    let context = match model.agent_context() {
-        Ok(context) => context,
-        Err(message) => return notify(model, message),
-    };
-    let label = prompt_label(model, &context);
-    model.agent.prepare_prompt(context, label);
+    if model.workspace.is_none() {
+        return notify(model, "Open a project to use the agent".to_string());
+    }
+    model.agent.prepare_panel_prompt();
     model.current_focus = crate::data_object::FocusTarget::ToolsPanel;
     if model.context_stack.last() != Some(&Context::AgentChat) {
         model.context_stack.push(Context::AgentChat);
@@ -199,7 +197,10 @@ fn submit(model: &mut Model) -> Option<Effect> {
     if model.agent.session().is_running() {
         return notify(model, "Agent is already running".to_string());
     }
-    if let Err(message) = model.agent_context() {
+    if panel_input && model.workspace.is_none() {
+        return notify(model, "Open a project to use the agent".to_string());
+    }
+    if !panel_input && let Err(message) = model.agent_context() {
         return notify(model, message);
     }
     let run_id = model.agent.begin_prompt()?;
@@ -891,9 +892,9 @@ mod tests {
             crate::data_object::FocusTarget::ToolsPanel
         );
         assert_eq!(model.context_stack.last(), Some(&Context::AgentChat));
-        assert_eq!(model.agent.prompt(), "main.rs:1");
+        assert_eq!(model.agent.prompt(), "");
         handle_input(&mut model, TextInputEvent::Character('?'));
-        assert_eq!(model.agent.prompt(), "main.rs:1?");
+        assert_eq!(model.agent.prompt(), "?");
 
         let effect = submit(&mut model).unwrap();
         let manager = MessageManager::default();
@@ -906,12 +907,47 @@ mod tests {
         assert!(
             model.agent.session().messages()[1]
                 .text
-                .contains("main.rs:1?")
+                .contains("Simulated response to: ?")
         );
 
         close_panel_input(&mut model);
         assert_eq!(model.current_focus, crate::data_object::FocusTarget::Editor);
         assert_ne!(model.context_stack.last(), Some(&Context::AgentChat));
+    }
+
+    #[test]
+    fn panel_chat_requires_a_project_but_not_an_open_buffer() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        assert!(model.editor.active_buffer().is_none());
+        model.tools.active_tool = Some(ToolKind::Agent);
+        model.tools.visibility = Visibility::Displayed;
+
+        focus_panel_input(&mut model);
+        assert_eq!(model.context_stack.last(), Some(&Context::AgentChat));
+        for character in "explain @main.rs".chars() {
+            handle_input(&mut model, TextInputEvent::Character(character));
+        }
+        let effect = submit(&mut model).unwrap();
+        let manager = MessageManager::default();
+        let storage = perform(&manager, &mut model, effect).unwrap();
+        perform(&manager, &mut model, storage);
+
+        assert_eq!(
+            model.agent.session().run().unwrap().status,
+            RunStatus::Complete
+        );
+        assert!(
+            model.agent.session().messages()[1]
+                .text
+                .contains("explain @main.rs")
+        );
+        assert!(
+            model
+                .agent
+                .run_context(model.agent.session().run().unwrap().id)
+                .is_none()
+        );
     }
 
     #[test]
