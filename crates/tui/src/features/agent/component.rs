@@ -64,6 +64,7 @@ impl AgentDialog {
 }
 
 const PROMPT_AUTO_HEIGHT: AutoHeight = AutoHeight::new(12, 24, 2, 9, 4);
+const PANEL_AUTO_HEIGHT: AutoHeight = AutoHeight::new(3, 8, 2, 2, 4);
 
 fn prompt_dialog_size(model: &Model) -> ratatui::layout::Size {
     PROMPT_AUTO_HEIGHT.dialog_size(model.agent.prompt_state(), 68, TextFlow::Wrapped)
@@ -75,10 +76,10 @@ fn prompt_input_height(state: &AgentState, area: Rect) -> u16 {
 
 fn prompt_area(state: &AgentState, area: Rect) -> Rect {
     let input_height = prompt_input_height(state, area);
-    let [_, input, _] = Layout::vertical([
+    let [_, _, input] = Layout::vertical([
         Constraint::Length(1),
-        Constraint::Length(input_height),
         Constraint::Fill(1),
+        Constraint::Length(input_height),
     ])
     .areas(area);
     input
@@ -97,10 +98,10 @@ impl<'a> AgentDialogContent<'a> {
 
 impl AgentDialogContent<'_> {
     fn render_prompt(self, area: Rect, buffer: &mut ratatui::buffer::Buffer) {
-        let [status, input, assistant] = Layout::vertical([
+        let [status, assistant, input] = Layout::vertical([
             Constraint::Length(1),
-            Constraint::Length(prompt_input_height(self.state, area)),
             Constraint::Fill(1),
+            Constraint::Length(prompt_input_height(self.state, area)),
         ])
         .areas(area);
         let status_text = self
@@ -218,8 +219,16 @@ impl AgentPanel {
         if inner.width == 0 || inner.height == 0 {
             return;
         }
-        let [status, messages] =
-            Layout::vertical([Constraint::Length(1), Constraint::Fill(1)]).areas(inner);
+        let input_height = match session.pending_approval() {
+            Some(_) => 0,
+            None => PANEL_AUTO_HEIGHT.input_height(state.prompt_state(), inner, TextFlow::Wrapped),
+        };
+        let [status, messages, input] = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Fill(1),
+            Constraint::Length(input_height),
+        ])
+        .areas(inner);
         let status_text = state
             .storage_error()
             .map(|error| format!("Storage warning: {error}"))
@@ -299,6 +308,20 @@ impl AgentPanel {
             .wrap(Wrap { trim: false })
             .style(styles.base)
             .render(messages, frame.buffer_mut());
+        if input_height > 0 {
+            state
+                .prompt_state()
+                .view_with_flow(styles, TextFlow::Wrapped)
+                .render(input, frame.buffer_mut());
+            if focus == FocusTarget::ToolsPanel
+                && let Some(cursor) =
+                    state
+                        .prompt_state()
+                        .cursor_position_with_flow(input, styles, TextFlow::Wrapped)
+            {
+                frame.set_cursor_position(cursor);
+            }
+        }
     }
 }
 
@@ -440,6 +463,85 @@ mod tests {
         assert!(panel_content.contains("Approval: Replace text in main.rs"));
         assert!(panel_content.contains("before"));
         assert!(panel_content.contains("after"));
+    }
+
+    #[test]
+    fn conversation_precedes_bottom_input_in_dialog_and_panel() {
+        let mut model = Model::default();
+        let buffer = create_buffer(&mut model, "fn main() {}\n");
+        model.agent.open_dialog(
+            crate::agent::EditorContext {
+                buffer,
+                path: std::path::PathBuf::from("/workspace/main.rs"),
+                revision: 1,
+                line: 1,
+            },
+            "main.rs:1".to_string(),
+        );
+        let run = model
+            .agent
+            .session_mut()
+            .begin("question".to_string())
+            .unwrap();
+        model.agent.session_mut().append_delta(run, "answer");
+
+        let mut dialog = Terminal::new(TestBackend::new(70, 12)).unwrap();
+        dialog
+            .draw(|frame| AgentDialog::render(&model, frame, frame.area()))
+            .unwrap();
+        let dialog_rows = dialog
+            .backend()
+            .buffer()
+            .content()
+            .chunks(70)
+            .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
+            .collect::<Vec<_>>();
+        let answer_row = dialog_rows
+            .iter()
+            .position(|row| row.contains("answer"))
+            .unwrap();
+        let prompt_row = dialog_rows
+            .iter()
+            .rposition(|row| row.contains("main.rs:1"))
+            .unwrap();
+        assert!(answer_row < prompt_row);
+
+        model.agent.prompt.set_value("x".repeat(100));
+        let area = Rect::new(0, 0, 50, 12);
+        let input_height = PANEL_AUTO_HEIGHT.input_height(
+            model.agent.prompt_state(),
+            content_area(area),
+            TextFlow::Wrapped,
+        );
+        assert!(input_height > 3);
+        let mut panel = Terminal::new(TestBackend::new(50, 12)).unwrap();
+        panel
+            .draw(|frame| {
+                AgentPanel::render(
+                    &model.agent,
+                    crate::data_object::FocusTarget::ToolsPanel,
+                    model.theme.ui(),
+                    frame,
+                    frame.area(),
+                );
+            })
+            .unwrap();
+        let panel_rows = panel
+            .backend()
+            .buffer()
+            .content()
+            .chunks(50)
+            .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
+            .collect::<Vec<_>>();
+        let answer_row = panel_rows
+            .iter()
+            .position(|row| row.contains("Agent: answer"))
+            .unwrap();
+        let prompt_row = panel_rows
+            .iter()
+            .rposition(|row| row.contains('x'))
+            .unwrap();
+        assert!(answer_row < prompt_row);
     }
 
     #[test]

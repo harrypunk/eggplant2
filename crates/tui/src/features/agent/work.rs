@@ -55,13 +55,19 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
             "toggle agent tool panel",
             handle_command,
         ),
+        Command::feature(
+            CommandId("agent_panel_close"),
+            "leave agent panel input",
+            handle_command,
+        ),
     ]
     .into_iter()
     .try_for_each(|command| commands.register(command))
 }
 
 pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
-    input.register_with_cursor(Context::AgentChatDialog, handle_input)
+    input.register_with_cursor(Context::AgentChatDialog, handle_input)?;
+    input.register_with_cursor(Context::AgentChat, handle_input)
 }
 
 fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
@@ -83,6 +89,10 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         "agent_approve" => approve_write(model),
         "agent_reject" => reject_write(model),
         "agent_toggle_panel" => toggle_panel(model),
+        "agent_panel_close" => {
+            close_panel_input(model);
+            None
+        }
         _ => None,
     }
 }
@@ -95,11 +105,6 @@ fn open(model: &mut Model) -> Option<Effect> {
         Ok(context) => context,
         Err(message) => return notify(model, message),
     };
-    let relative = model
-        .workspace
-        .as_ref()
-        .and_then(|workspace| context.path.strip_prefix(workspace.root()).ok())
-        .unwrap_or(&context.path);
     let input_context = match model.agent.session().pending_approval() {
         Some(_) => Context::AgentApproval,
         None => Context::AgentChatDialog,
@@ -107,10 +112,45 @@ fn open(model: &mut Model) -> Option<Effect> {
     if !model.modal.open(input_context) {
         return None;
     }
-    let label = format!("{}:{}", relative.display(), context.line);
+    let label = prompt_label(model, &context);
     model.agent.open_dialog(context, label);
     model.context_stack.push(input_context);
     None
+}
+
+fn prompt_label(model: &Model, context: &EditorContext) -> String {
+    let relative = model
+        .workspace
+        .as_ref()
+        .and_then(|workspace| context.path.strip_prefix(workspace.root()).ok())
+        .unwrap_or(&context.path);
+    format!("{}:{}", relative.display(), context.line)
+}
+
+pub(crate) fn focus_panel_input(model: &mut Model) -> Option<Effect> {
+    if model.tools.visibility != Visibility::Displayed
+        || model.tools.active_tool != Some(ToolKind::Agent)
+    {
+        return None;
+    }
+    let context = match model.agent_context() {
+        Ok(context) => context,
+        Err(message) => return notify(model, message),
+    };
+    let label = prompt_label(model, &context);
+    model.agent.prepare_prompt(context, label);
+    model.current_focus = crate::data_object::FocusTarget::ToolsPanel;
+    if model.context_stack.last() != Some(&Context::AgentChat) {
+        model.context_stack.push(Context::AgentChat);
+    }
+    None
+}
+
+pub(crate) fn close_panel_input(model: &mut Model) {
+    model
+        .context_stack
+        .pop_if(|context| context == &Context::AgentChat);
+    crate::focus::focus_editor(model);
 }
 
 fn close(model: &mut Model) -> Option<Effect> {
@@ -147,7 +187,9 @@ fn transition_modal(model: &mut Model, from: Context, to: Context) {
 }
 
 fn submit(model: &mut Model) -> Option<Effect> {
-    if !model.agent.dialog_open() {
+    let panel_input = model.context_stack.last() == Some(&Context::AgentChat)
+        && model.tools.active_tool == Some(ToolKind::Agent);
+    if !model.agent.dialog_open() && !panel_input {
         return None;
     }
     let prompt = model.agent.prompt().trim().to_string();
@@ -259,6 +301,9 @@ fn toggle_panel(model: &mut Model) -> Option<Effect> {
         && model.tools.active_tool == Some(ToolKind::Agent)
     {
         model.tools.visibility = Visibility::Hidden;
+        if model.current_focus == crate::data_object::FocusTarget::ToolsPanel {
+            close_panel_input(model);
+        }
     } else {
         model.tools.active_tool = Some(ToolKind::Agent);
         model.tools.visibility = Visibility::Displayed;
@@ -827,6 +872,45 @@ mod tests {
         let mut model = initial_model(Some(path)).unwrap();
         assert!(open(&mut model).is_some());
         assert!(!model.agent.dialog_open());
+    }
+
+    #[test]
+    fn panel_input_shares_prompt_and_submits_through_the_same_run_workflow() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("main.rs");
+        std::fs::write(&path, "fn main() {}\n").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        open_file(&mut model, &path);
+        model.tools.active_tool = Some(ToolKind::Agent);
+        model.tools.visibility = Visibility::Displayed;
+
+        focus_panel_input(&mut model);
+        assert_eq!(
+            model.current_focus,
+            crate::data_object::FocusTarget::ToolsPanel
+        );
+        assert_eq!(model.context_stack.last(), Some(&Context::AgentChat));
+        assert_eq!(model.agent.prompt(), "main.rs:1");
+        handle_input(&mut model, TextInputEvent::Character('?'));
+        assert_eq!(model.agent.prompt(), "main.rs:1?");
+
+        let effect = submit(&mut model).unwrap();
+        let manager = MessageManager::default();
+        let storage = perform(&manager, &mut model, effect).unwrap();
+        perform(&manager, &mut model, storage);
+        assert_eq!(
+            model.agent.session().run().unwrap().status,
+            RunStatus::Complete
+        );
+        assert!(
+            model.agent.session().messages()[1]
+                .text
+                .contains("main.rs:1?")
+        );
+
+        close_panel_input(&mut model);
+        assert_eq!(model.current_focus, crate::data_object::FocusTarget::Editor);
+        assert_ne!(model.context_stack.last(), Some(&Context::AgentChat));
     }
 
     #[test]

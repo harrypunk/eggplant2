@@ -60,7 +60,7 @@ The same files are available under the local checkout for deeper reading.
 The popup is a modal input workflow owned by the shell's existing context/modal policy. Its first version contains:
 
 - A compact conversation/run summary above the input.
-- A single-line Unicode-aware prompt using the existing text-input component.
+- A bottom, auto-height Unicode-aware prompt using the shared text-input component; assistant messages remain above it.
 - Streaming/queued/waiting-approval/error status.
 - Enter to submit, Escape to hide, and an explicit cancel command for the active run.
 
@@ -70,7 +70,7 @@ Hiding the popup does not cancel the run. Reopening restores the current session
 
 The existing tools panel gains an Agent view. It is non-modal and shows:
 
-- Conversation messages and streaming assistant text.
+- Conversation messages and streaming assistant text above a bottom, auto-height input shared with the dialog prompt. `Ctrl-Down` focuses panel input and `Ctrl-Up` returns to the editor; Enter uses the same submit workflow.
 - Current run state and elapsed activity where useful.
 - Tool call names, concise arguments/summaries, bounded output, and truncation.
 - Pending write approvals and their diffs.
@@ -87,6 +87,8 @@ The panel and popup read the same `AgentSession`; neither owns a separate provid
 | Submit prompt | `Enter` |
 | Interrupt active run | `Ctrl-F7` |
 | Toggle shared Agent tool panel | `Space a t` |
+| Focus Agent panel input | `Ctrl-Down` |
+| Return from Agent panel to editor | `Ctrl-Up` |
 
 The prompt starts as `workspace/relative/path:line` and remains editable. Empty, standalone-file, and external read-only contexts are rejected. The scripted provider used in this slice streams `Simulated response to: <prompt>`; `fail` simulates a provider failure.
 

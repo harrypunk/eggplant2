@@ -19,6 +19,8 @@ Available in Normal and Explorer contexts unless noted otherwise.
 | Open inline AI agent | `Ctrl-I` |
 | Toggle editor text wrapping | `Space u w` |
 | Toggle agent tool panel | `Space a t` |
+| Focus Agent panel input | `Ctrl-Down` |
+| Return from Agent panel to editor | `Ctrl-Up` |
 | Go to definition | `Space c d` |
 | Find references | `Space c r` |
 | Go to implementation | `Space c i` |
@@ -138,6 +140,8 @@ On an expanded directory, `h` folds that directory. On a file or collapsed direc
 | Edit prompt / delete previous character | Printable input / `Backspace` |
 | Interrupt the active run | `Ctrl-F7` |
 | Toggle the shared Agent tool panel | `Space a t` |
+| Focus the Agent panel input | `Ctrl-Down` |
+| Return from the Agent panel to the editor | `Ctrl-Up` |
 
 The prompt starts as `workspace/relative/path:line` and is editable/deletable. It is available only for file-backed buffers inside the workspace; no-buffer, standalone-file, and external read-only contexts are rejected. Dismissal preserves the run and conversation. Reopening restores the current session. The fake provider streams a simulated response for this first slice; no credentials are needed.
 

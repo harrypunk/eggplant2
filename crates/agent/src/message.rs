@@ -1,0 +1,59 @@
+use crate::{RunId, ToolCall};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderMessageRole {
+    System,
+    User,
+    Assistant,
+    Tool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ProviderMessage {
+    pub role: ProviderMessageRole,
+    pub content: String,
+    pub tool_calls: Vec<ToolCall>,
+    pub tool_call_id: Option<String>,
+}
+
+impl ProviderMessage {
+    pub fn user(content: String) -> Self {
+        Self {
+            role: ProviderMessageRole::User,
+            content,
+            tool_calls: Vec::new(),
+            tool_call_id: None,
+        }
+    }
+
+    pub fn assistant(content: String, tool_calls: Vec<ToolCall>) -> Self {
+        Self {
+            role: ProviderMessageRole::Assistant,
+            content,
+            tool_calls,
+            tool_call_id: None,
+        }
+    }
+
+    pub fn tool(call_id: String, content: String) -> Self {
+        Self {
+            role: ProviderMessageRole::Tool,
+            content,
+            tool_calls: Vec::new(),
+            tool_call_id: Some(call_id),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MessageRole {
+    User,
+    Assistant,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChatMessage {
+    pub role: MessageRole,
+    pub run_id: RunId,
+    pub text: String,
+}

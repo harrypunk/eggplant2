@@ -5,6 +5,7 @@ mod work;
 mod write;
 
 pub use component::{AgentDialog, AgentPanel};
+pub(crate) use work::{close_panel_input, focus_panel_input};
 pub use work::{handle_command, register_commands, register_text_input, register_ui};
 
 use crate::component::text_input::{TextInput, TextInputEvent};
@@ -95,12 +96,16 @@ impl AgentState {
         self.context.as_ref()
     }
 
-    pub fn open_dialog(&mut self, context: EditorContext, label: String) {
+    pub fn prepare_prompt(&mut self, context: EditorContext, label: String) {
         if !self.has_draft {
             self.prompt.set_value(label);
             self.has_draft = true;
         }
         self.context = Some(context);
+    }
+
+    pub fn open_dialog(&mut self, context: EditorContext, label: String) {
+        self.prepare_prompt(context, label);
         self.dialog_open = true;
     }
 

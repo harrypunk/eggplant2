@@ -142,6 +142,15 @@ fn common_bindings() -> KeymapConfig {
             ],
         ),
         keymap_context(
+            "agent_chat",
+            [
+                ("agent_panel_close", "esc"),
+                ("agent_submit", "enter"),
+                ("agent_backspace", "backspace"),
+                ("agent_interrupt", "ctrl-f7"),
+            ],
+        ),
+        keymap_context(
             "agent_approval",
             [
                 ("agent_close", "esc"),

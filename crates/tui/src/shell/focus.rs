@@ -58,6 +58,12 @@ fn move_focus(model: &mut Model, direction: FocusDirection) {
         (FocusTarget::FileExplorer, FocusDirection::Right, _) => {
             focus_editor(model);
         }
+        (FocusTarget::Editor, FocusDirection::Down, _) => {
+            crate::agent::focus_panel_input(model);
+        }
+        (FocusTarget::ToolsPanel, FocusDirection::Up, _) => {
+            crate::agent::close_panel_input(model);
+        }
         _ => {}
     }
 }

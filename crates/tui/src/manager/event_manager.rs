@@ -500,6 +500,33 @@ mod tests {
     }
 
     #[test]
+    fn routes_agent_panel_input_keys() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::AgentChat);
+
+        for (key, modifiers, command) in [
+            (KeyCode::Enter, KeyModifiers::NONE, "agent_submit"),
+            (KeyCode::Backspace, KeyModifiers::NONE, "agent_backspace"),
+            (KeyCode::Esc, KeyModifiers::NONE, "agent_panel_close"),
+            (KeyCode::F(7), KeyModifiers::CONTROL, "agent_interrupt"),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, modifiers));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+        for key in [KeyCode::Left, KeyCode::Right] {
+            let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::TextInputCursor(_))
+            ));
+        }
+    }
+
+    #[test]
     fn routes_vcs_reset_menu_and_popup_keys() {
         let manager = event_manager();
         let mut model = Model::default();
