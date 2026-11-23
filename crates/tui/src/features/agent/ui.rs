@@ -15,7 +15,9 @@ pub fn register_ui(ui: &mut UiRegistry) -> color_eyre::Result<()> {
 }
 
 fn dialog_overlay(model: &Model) -> Option<OverlayContribution> {
-    model.agent.dialog_visible().then(|| {
+    (model.modal.is_active(Context::AgentChatDialog)
+        || model.modal.is_active(Context::AgentApproval))
+    .then(|| {
         OverlayContribution::new(
             "agent",
             OverlayKind::Modal,
@@ -47,7 +49,7 @@ fn dialog_cursor(model: &Model, area: Rect) -> Option<ratatui::layout::Position>
 }
 
 fn help_overlay(model: &Model) -> Option<OverlayContribution> {
-    model.agent.help_visible().then(|| {
+    model.modal.is_active(Context::AgentChatHelp).then(|| {
         OverlayContribution::new(
             "agent_help",
             OverlayKind::Modal,
@@ -90,6 +92,33 @@ pub(crate) fn render_panel(model: &Model, frame: &mut Frame, area: Rect) {
 mod tests {
     use super::*;
     use crate::{data_object::Visibility, tools::ToolKind};
+
+    #[test]
+    fn overlays_follow_modal_ownership() {
+        let mut model = Model::default();
+        model.agent.open_dialog(
+            crate::agent::EditorContext {
+                buffer: editor::BufferId::from_raw(1),
+                path: std::path::PathBuf::from("/workspace/main.rs"),
+                revision: 1,
+                line: 1,
+            },
+            "main.rs:1".to_string(),
+        );
+        assert!(dialog_overlay(&model).is_none());
+
+        assert!(model.modal.open(Context::AgentChatDialog));
+        assert!(dialog_overlay(&model).is_some());
+        model.modal.close(Context::AgentChatDialog);
+        assert!(dialog_overlay(&model).is_none());
+
+        model.agent.toggle_help();
+        assert!(help_overlay(&model).is_none());
+        assert!(model.modal.open(Context::AgentChatHelp));
+        assert!(help_overlay(&model).is_some());
+        model.modal.close(Context::AgentChatHelp);
+        assert!(help_overlay(&model).is_none());
+    }
 
     #[test]
     fn commands_are_shared_by_panel_and_dialog() {

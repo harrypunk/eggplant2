@@ -124,12 +124,18 @@ mod tests {
         assert!(!model.modal.is_active(Context::AgentChatDialog));
         assert_eq!(model.context_stack.last(), Some(&Context::ProviderLogin));
         assert!(model.agent.dialog_open());
-        assert!(!model.agent.dialog_visible());
+        assert_eq!(
+            model.agent.dialog_state(),
+            crate::agent::AgentDialogState::Suspended
+        );
 
         close(&mut model);
         assert!(!model.provider_login.is_open());
         assert!(model.agent.dialog_open());
-        assert!(model.agent.dialog_visible());
+        assert_eq!(
+            model.agent.dialog_state(),
+            crate::agent::AgentDialogState::Open
+        );
         assert!(model.modal.is_active(Context::AgentChatDialog));
         assert_eq!(model.context_stack.last(), Some(&Context::AgentChatDialog));
     }

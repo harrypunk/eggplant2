@@ -148,11 +148,6 @@ impl AgentState {
         self.dialog != AgentDialogState::Closed
     }
 
-    /// Whether the inline overlay should currently be visible.
-    pub fn dialog_visible(&self) -> bool {
-        self.dialog == AgentDialogState::Open
-    }
-
     pub fn suspend_dialog(&mut self) {
         if self.dialog == AgentDialogState::Open {
             self.dialog = AgentDialogState::Suspended;

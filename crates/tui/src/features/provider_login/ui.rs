@@ -14,14 +14,17 @@ pub fn register_ui(ui: &mut UiRegistry) -> color_eyre::Result<()> {
 }
 
 fn overlay(model: &Model) -> Option<OverlayContribution> {
-    model.provider_login.is_open().then(|| {
-        OverlayContribution::new(
-            "provider_login",
-            OverlayKind::Modal,
-            OverlayPlacement::Centered(Size::new(58, 8)),
-            render,
-        )
-    })
+    model
+        .modal
+        .is_active(crate::data_object::Context::ProviderLogin)
+        .then(|| {
+            OverlayContribution::new(
+                "provider_login",
+                OverlayKind::Modal,
+                OverlayPlacement::Centered(Size::new(58, 8)),
+                render,
+            )
+        })
 }
 
 fn render(model: &Model, frame: &mut Frame, area: Rect) {

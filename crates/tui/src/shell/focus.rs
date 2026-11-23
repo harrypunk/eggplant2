@@ -172,7 +172,9 @@ impl FocusHost for Model {
                 None
             }
             FocusTarget::Editor => {
-                if self.current_focus == FocusTarget::ToolsPanel {
+                if self.current_focus == FocusTarget::ToolsPanel
+                    && self.tools.active_tool == Some(crate::tools::ToolKind::Agent)
+                {
                     crate::agent::close_panel_input(self);
                 } else {
                     focus_editor(self);
@@ -334,6 +336,28 @@ mod tests {
         );
         handle_command(&mut model, CommandId("focus_left"));
         assert_eq!(model.current_focus, FocusTarget::Editor);
+    }
+
+    #[test]
+    fn leaving_diagnostics_does_not_reset_agent_state() {
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+        model.current_focus = FocusTarget::ToolsPanel;
+        model.tools.active_tool = Some(crate::tools::ToolKind::Diagnostics);
+        model.tools.visibility = Visibility::Displayed;
+        model.agent.enter_insert_mode();
+        model
+            .agent
+            .handle_input_event(crate::component::text_input::TextInputEvent::Character('x'));
+
+        handle_command(&mut model, CommandId("focus_left"));
+
+        assert_eq!(model.current_focus, FocusTarget::Editor);
+        assert_eq!(model.agent.prompt(), "x");
+        assert_eq!(
+            model.agent.panel_mode(),
+            crate::agent::AgentInputMode::Insert
+        );
     }
 
     #[test]
