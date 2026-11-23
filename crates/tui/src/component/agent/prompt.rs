@@ -59,11 +59,8 @@ impl AgentPromptView {
     }
 
     pub fn layout(props: &AgentPromptProps<'_>, area: Rect, input: u16) -> [Rect; 2] {
-        Layout::vertical([
-            Constraint::Length(Self::command_height(props)),
-            Constraint::Length(input),
-        ])
-        .areas(area)
+        let commands = Self::command_height(props).min(area.height.saturating_sub(input));
+        Layout::vertical([Constraint::Length(commands), Constraint::Length(input)]).areas(area)
     }
 
     /// Render the shared prompt and return the exact text-input area for cursor policy.

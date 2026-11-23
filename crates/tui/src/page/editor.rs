@@ -335,6 +335,12 @@ mod tests {
             .iter()
             .position(|row| row.contains("/provider"))
             .unwrap();
+        for command in ["/model", "/thinking", "/logout"] {
+            assert!(
+                rows.iter().any(|row| row.contains(command)),
+                "missing command {command}"
+            );
+        }
         let prompt_row = rows.iter().rposition(|row| row.contains('/')).unwrap();
         assert!(command_row < prompt_row);
         assert!(terminal.backend().cursor_visible());

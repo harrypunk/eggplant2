@@ -5,13 +5,16 @@ use ratatui::{
     widgets::{Paragraph, Widget},
 };
 
-use crate::{agent::PromptCommand, theme::UiTheme};
+use crate::{agent::PromptCommand, component::picker, theme::UiTheme};
 
 pub struct AgentCommandMenu;
 
 impl AgentCommandMenu {
+    /// Intrinsic content height; parent layouts bound the actual viewport to available space.
     pub fn height(commands: Option<&[PromptCommand]>) -> u16 {
-        commands.map_or(0, |commands| commands.len().clamp(1, 6) as u16)
+        commands.map_or(0, |commands| {
+            u16::try_from(commands.len().max(1)).unwrap_or(u16::MAX)
+        })
     }
 
     pub fn render(
@@ -26,10 +29,12 @@ impl AgentCommandMenu {
         } else {
             commands
                 .iter()
-                .take(6)
                 .map(|command| command_line(*command, selected == Some(*command), styles))
                 .collect()
         };
+        let selected =
+            selected.and_then(|selected| commands.iter().position(|command| *command == selected));
+        let lines = picker::visible_lines(lines, selected, area.height);
         Paragraph::new(lines)
             .style(styles.popup_surface())
             .render(area, buffer);
@@ -146,6 +151,33 @@ mod tests {
     }
 
     #[test]
+    fn bounded_viewport_keeps_the_selected_command_visible() {
+        let theme = Theme::default();
+        let mut terminal = Terminal::new(TestBackend::new(32, 1)).unwrap();
+        terminal
+            .draw(|frame| {
+                AgentCommandMenu::render(
+                    &PromptCommand::ALL,
+                    Some(PromptCommand::Logout),
+                    theme.ui(),
+                    frame.area(),
+                    frame.buffer_mut(),
+                )
+            })
+            .unwrap();
+
+        let content = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(content.contains("/logout"));
+        assert!(!content.contains("/provider"));
+    }
+
+    #[test]
     fn height_is_derived_from_menu_visibility_and_rows() {
         assert_eq!(AgentCommandMenu::height(None), 0);
         assert_eq!(AgentCommandMenu::height(Some(&[])), 1);
@@ -153,5 +185,6 @@ mod tests {
             AgentCommandMenu::height(Some(&[PromptCommand::ProviderLogin])),
             1
         );
+        assert_eq!(AgentCommandMenu::height(Some(&PromptCommand::ALL)), 4);
     }
 }

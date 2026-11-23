@@ -51,8 +51,8 @@ struct AgentDialogContent<'a> {
 
 impl AgentDialogContent<'_> {
     fn render_prompt(&self, area: Rect, buffer: &mut Buffer) {
-        let input_height = prompt_input_height(self.props.prompt.input(), area);
-        let [status, assistant, prompt] = dialog_layout(area, input_height);
+        let (input_height, prompt_height) = prompt_heights(self.props, area);
+        let [status, assistant, prompt] = dialog_layout(area, prompt_height);
         Paragraph::new(self.status_text())
             .style(self.props.styles.muted)
             .render(status, buffer);
@@ -131,11 +131,11 @@ fn command_height(props: &AgentDialogProps<'_>) -> u16 {
     AgentPromptView::command_height(&props.prompt)
 }
 
-fn dialog_layout(area: Rect, input: u16) -> [Rect; 3] {
+fn dialog_layout(area: Rect, prompt: u16) -> [Rect; 3] {
     Layout::vertical([
         Constraint::Length(1),
         Constraint::Fill(1),
-        Constraint::Length(input),
+        Constraint::Length(prompt),
     ])
     .areas(area)
 }
@@ -144,12 +144,22 @@ fn prompt_input_height(prompt: &TextInput, area: Rect) -> u16 {
     AUTO_HEIGHT.input_height(prompt, area, TextFlow::Wrapped)
 }
 
+/// Measure the combined menu + input prompt and bound the menu to the actual dialog viewport.
+fn prompt_heights(props: &AgentDialogProps<'_>, area: Rect) -> (u16, u16) {
+    let input = prompt_input_height(props.prompt.input(), area);
+    let commands = command_height(props).min(area.height.saturating_sub(input.saturating_add(1)));
+    (input, commands.saturating_add(input))
+}
+
 fn prompt_area(props: &AgentDialogProps<'_>, area: Rect) -> Rect {
-    dialog_layout(area, prompt_input_height(props.prompt.input(), area))[2]
+    let (_, prompt) = prompt_heights(props, area);
+    dialog_layout(area, prompt)[2]
 }
 
 fn input_area(props: &AgentDialogProps<'_>, area: Rect) -> Rect {
-    prompt_area(props, content_area(area))
+    let content = content_area(area);
+    let (input, _) = prompt_heights(props, content);
+    AgentPromptView::layout(&props.prompt, prompt_area(props, content), input)[1]
 }
 
 #[cfg(test)]
@@ -157,7 +167,7 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend};
 
     use super::*;
-    use crate::{component::agent::AgentPromptProps, theme::Theme};
+    use crate::{agent::PromptCommand, component::agent::AgentPromptProps, theme::Theme};
     use eggplant_agent::AgentSession;
 
     fn render(props: &AgentDialogProps<'_>, width: u16, height: u16) -> String {
@@ -226,6 +236,37 @@ mod tests {
         assert!(content.contains("before"));
         assert!(content.contains("after"));
         assert!(AgentDialog::cursor(&props, area).is_none());
+    }
+
+    #[test]
+    fn command_menu_has_real_rows_and_cursor_stays_in_the_input() {
+        let theme = Theme::default();
+        let session = AgentSession::default();
+        let prompt = TextInput::new("/");
+        let props = AgentDialogProps {
+            session: &session,
+            prompt: AgentPromptProps::new(&prompt).with_commands(
+                Some(PromptCommand::ALL.to_vec()),
+                Some(PromptCommand::Logout),
+            ),
+            storage_error: None,
+            styles: theme.ui(),
+        };
+        let size = AgentDialog::size(&props);
+        let area = Rect::new(0, 0, size.width, size.height);
+        let input = input_area(&props, area);
+        let [commands, laid_out_input] = AgentPromptView::layout(
+            &props.prompt,
+            prompt_area(&props, content_area(area)),
+            input.height,
+        );
+
+        assert_eq!(commands.height, PromptCommand::ALL.len() as u16);
+        assert_eq!(commands.y + commands.height, laid_out_input.y);
+        assert_eq!(laid_out_input, input);
+        let cursor = AgentDialog::cursor(&props, area).unwrap();
+        assert!(cursor.y >= input.y && cursor.y < input.y + input.height);
+        render(&props, size.width, size.height);
     }
 
     #[test]
