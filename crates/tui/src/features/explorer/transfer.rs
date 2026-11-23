@@ -603,7 +603,7 @@ mod tests {
         assert!(source.exists());
         assert!(!directory.path().join("destination.txt").exists());
         assert!(!model.explorer.transfer.is_open());
-        assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
+        assert!(model.context_stack.is_empty());
     }
 
     #[test]

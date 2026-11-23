@@ -441,7 +441,7 @@ mod tests {
             workspace: Some(Workspace::new(root.clone())),
             ..Model::default()
         };
-        model.context_stack.push(Context::VCS);
+        model.active_page = AppPage::Vcs;
         model.vcs.changes.state = ChangesState::Ready(Vec::new());
         model
     }

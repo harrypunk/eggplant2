@@ -4,57 +4,58 @@ use crate::{
     tools::ToolKind,
 };
 
-/// Derive active input routing from source-of-truth UI and feature state.
+/// Resolve which context owns input, giving transient workflows precedence over the shell.
 ///
-/// The stored stack still owns modal/workflow contexts during migration. Shell
-/// variants are selectors, not state that focus and lifecycle code must maintain.
+/// The stack contains only transient workflows with an explicit lifetime: pickers, dialogs,
+/// pending operators, and similar states that are pushed on entry and popped on exit. It must
+/// not be used to synchronize shell state such as focus, the active page, or Agent panel mode.
+///
+/// When no transient workflow is active, the shell context is derived from source-of-truth UI
+/// state. This avoids stale stack entries when focus, buffers, pages, or panel modes change.
 pub fn input_context(model: &Model) -> Option<Context> {
-    model.context_stack.last().copied().map(|context| {
-        if model.active_page != AppPage::Editor {
-            return context;
-        }
-        match context {
-            Context::AppNormal
-            | Context::Explorer
-            | Context::AgentChat
-            | Context::AgentChatInsert
-                if model.current_focus == FocusTarget::ToolsPanel
-                    && model.tools.visibility == Visibility::Displayed
-                    && model.tools.active_tool == Some(ToolKind::Agent) =>
-            {
-                match model.agent.panel_mode() {
-                    AgentInputMode::Normal => Context::AgentChat,
-                    AgentInputMode::Insert => Context::AgentChatInsert,
-                }
+    model
+        .context_stack
+        .last()
+        .copied()
+        .or_else(|| shell_context(model))
+}
+
+/// Resolve the persistent shell surface underneath all transient workflows.
+fn shell_context(model: &Model) -> Option<Context> {
+    match model.active_page {
+        AppPage::Editor => {}
+        AppPage::Vcs => return Some(Context::VCS),
+        AppPage::VcsHistory => return Some(Context::VcsHistory),
+        AppPage::VcsCommit => return Some(Context::VcsCommit),
+    }
+
+    match model.current_focus {
+        FocusTarget::ToolsPanel
+            if model.tools.visibility == Visibility::Displayed
+                && model.tools.active_tool == Some(ToolKind::Agent) =>
+        {
+            match model.agent.panel_mode() {
+                AgentInputMode::Normal => Some(Context::AgentChat),
+                AgentInputMode::Insert => Some(Context::AgentChatInsert),
             }
-            Context::AppNormal
-                if model.current_focus == FocusTarget::Editor
-                    && model.editor.active_buffer().is_none() =>
-            {
-                Context::Welcome
-            }
-            context => context,
         }
-    })
+        FocusTarget::FileExplorer => Some(Context::Explorer),
+        FocusTarget::Editor if model.editor.active_buffer().is_none() => Some(Context::Welcome),
+        _ => Some(Context::AppNormal),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn normal_model() -> Model {
-        let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
-        model
-    }
-
     #[test]
     fn derives_welcome_only_for_the_focused_empty_editor() {
-        let mut model = normal_model();
+        let mut model = Model::default();
         assert_eq!(input_context(&model), Some(Context::Welcome));
 
         model.current_focus = FocusTarget::FileExplorer;
-        assert_eq!(input_context(&model), Some(Context::AppNormal));
+        assert_eq!(input_context(&model), Some(Context::Explorer));
 
         model.current_focus = FocusTarget::Editor;
         crate::test_utils::create_buffer(&mut model, "text");
@@ -62,9 +63,11 @@ mod tests {
     }
 
     #[test]
-    fn derives_agent_panel_modes_from_focus_and_local_state() {
-        let mut model = normal_model();
-        model.current_focus = FocusTarget::ToolsPanel;
+    fn derives_agent_panel_modes_without_storing_shell_contexts() {
+        let mut model = Model {
+            current_focus: FocusTarget::ToolsPanel,
+            ..Model::default()
+        };
         model.tools.active_tool = Some(ToolKind::Agent);
         model.tools.visibility = Visibility::Displayed;
         assert_eq!(input_context(&model), Some(Context::AgentChat));
@@ -76,13 +79,17 @@ mod tests {
 
         model.current_focus = FocusTarget::Editor;
         assert_eq!(input_context(&model), Some(Context::Welcome));
+        assert!(model.context_stack.is_empty());
     }
 
     #[test]
-    fn stored_workflow_and_modal_contexts_take_precedence() {
-        let mut model = normal_model();
-        model.context_stack.push(Context::Explorer);
+    fn transient_workflows_take_precedence_until_popped() {
+        let mut model = Model {
+            current_focus: FocusTarget::FileExplorer,
+            ..Model::default()
+        };
         assert_eq!(input_context(&model), Some(Context::Explorer));
+
         model.context_stack.push(Context::FilePicker);
         assert_eq!(input_context(&model), Some(Context::FilePicker));
 
@@ -90,17 +97,28 @@ mod tests {
         model.tools.active_tool = Some(ToolKind::Agent);
         model.tools.visibility = Visibility::Displayed;
         assert_eq!(input_context(&model), Some(Context::FilePicker));
+
+        model.context_stack.pop();
+        assert_eq!(input_context(&model), Some(Context::AgentChat));
     }
 
     #[test]
-    fn welcome_and_agent_are_not_derived_on_other_pages() {
-        let mut model = normal_model();
-        model.active_page = AppPage::Vcs;
-        assert_eq!(input_context(&model), Some(Context::AppNormal));
+    fn non_editor_pages_supply_their_shell_context() {
+        let mut model = Model {
+            active_page: AppPage::Vcs,
+            ..Model::default()
+        };
+        assert_eq!(input_context(&model), Some(Context::VCS));
+
+        model.active_page = AppPage::VcsHistory;
+        assert_eq!(input_context(&model), Some(Context::VcsHistory));
+        model.active_page = AppPage::VcsCommit;
+        assert_eq!(input_context(&model), Some(Context::VcsCommit));
 
         model.current_focus = FocusTarget::ToolsPanel;
         model.tools.active_tool = Some(ToolKind::Agent);
         model.tools.visibility = Visibility::Displayed;
-        assert_eq!(input_context(&model), Some(Context::AppNormal));
+        assert_eq!(input_context(&model), Some(Context::VcsCommit));
+        assert!(model.context_stack.is_empty());
     }
 }

@@ -2,7 +2,7 @@ use ::vcs::FileChange;
 use editor::DocumentFactory;
 
 use crate::{
-    data_object::{AppPage, CommandId, Context, Model, StatusMessage},
+    data_object::{AppPage, CommandId, Model, StatusMessage},
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::Effect,
@@ -312,7 +312,6 @@ fn open_page(model: &mut Model) -> Option<Effect> {
         return None;
     }
     model.active_page = AppPage::Vcs;
-    model.context_stack.push(Context::VCS);
     Effect::combine(
         Effect::combine(refresh(model), refresh_history(model)),
         refresh_changes(model),
@@ -322,9 +321,6 @@ fn open_page(model: &mut Model) -> Option<Effect> {
 fn close_page(model: &mut Model) -> Option<Effect> {
     model.vcs.help_visible = false;
     model.active_page = AppPage::Editor;
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::VCS);
     None
 }
 
@@ -413,11 +409,10 @@ mod tests {
     #[test]
     fn page_open_and_close_restores_the_editor_context() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
 
         assert!(handle_command(&mut model, CommandId("open_vcs_page")).is_none());
         assert_eq!(model.active_page, AppPage::Vcs);
-        assert_eq!(model.context_stack.last(), Some(&Context::VCS));
+        assert!(model.context_stack.is_empty());
         assert_eq!(
             model.vcs.history(),
             &HistoryState::Failed("not a Git repository".to_string())
@@ -425,7 +420,7 @@ mod tests {
 
         assert!(handle_command(&mut model, CommandId("close_vcs_page")).is_none());
         assert_eq!(model.active_page, AppPage::Editor);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
     }
 
     #[test]
@@ -655,10 +650,11 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("note.txt");
         std::fs::write(&path, "hello\n").unwrap();
-        let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
+        let mut model = Model {
+            active_page: AppPage::Vcs,
+            ..Model::default()
+        };
         model.active_page = AppPage::Vcs;
-        model.context_stack.push(Context::VCS);
         model.vcs.changes.state =
             ChangesState::Ready(vec![change(path.clone(), ChangeKind::Modified)]);
         model.vcs.changes.selected = Some(0);
@@ -997,17 +993,18 @@ mod tests {
 
     #[test]
     fn history_page_opens_closes_and_wraps_selection() {
-        let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
+        let mut model = Model {
+            active_page: AppPage::Vcs,
+            ..Model::default()
+        };
         model.active_page = AppPage::Vcs;
-        model.context_stack.push(Context::VCS);
 
         assert!(handle_command(&mut model, CommandId("open_vcs_history")).is_none());
         assert_eq!(model.active_page, AppPage::VcsHistory);
-        assert_eq!(model.context_stack.last(), Some(&Context::VcsHistory));
+        assert!(model.context_stack.is_empty());
         assert!(handle_command(&mut model, CommandId("close_vcs_history")).is_none());
         assert_eq!(model.active_page, AppPage::Vcs);
-        assert_eq!(model.context_stack.last(), Some(&Context::VCS));
+        assert!(model.context_stack.is_empty());
 
         let commit = |id: &str| CommitSummary {
             id: id.to_string(),
@@ -1284,7 +1281,7 @@ mod tests {
             active_page: AppPage::Vcs,
             ..Model::default()
         };
-        model.context_stack.push(Context::VCS);
+        model.active_page = AppPage::Vcs;
 
         assert!(handle_command(&mut model, CommandId("vcs_help_placeholder")).is_none());
         assert!(model.vcs.help_visible);

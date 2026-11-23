@@ -154,9 +154,7 @@ fn report_conflict(model: &mut Model, path: &Path) {
 mod tests {
     use super::*;
     use crate::{
-        data_object::{Context, StatusKind},
-        manager::message_manager::MessageManager,
-        test_utils::open_file,
+        data_object::StatusKind, manager::message_manager::MessageManager, test_utils::open_file,
     };
 
     fn change_file(model: &mut Model, path: &Path) {
@@ -295,7 +293,6 @@ mod tests {
         let path = directory.path().join("note.txt");
         std::fs::write(&path, "original").unwrap();
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         let id = open_file(&mut model, &path);
         model.editor.resize_active_view(80, 10);
         std::fs::write(&path, "external").unwrap();

@@ -144,7 +144,7 @@ impl MessageManager {
         completion: document::OpenFileCompletion,
     ) -> Option<Effect> {
         let opened = document::finish_open_file(model, completion)?;
-        let reconcile = model.context_stack.last() == opened.context.as_ref()
+        let reconcile = crate::manager::input_context::input_context(model) == opened.context
             && match opened.origin {
                 document::OpenOrigin::FilePicker { session } => {
                     model.file_picker.visibility == Visibility::Displayed
@@ -312,7 +312,6 @@ mod tests {
         let manager = MessageManager::default();
         let mut model = Model::default();
         create_buffer(&mut model, "scratch");
-        model.context_stack.push(Context::AppNormal);
         manager.update(
             &mut model,
             Message::InvokeCommand(CommandId("enter_insert_mode")),
@@ -334,7 +333,6 @@ mod tests {
         let path = directory.path().join("note.txt");
         std::fs::write(&path, "hello").unwrap();
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         open_file(&mut model, &path);
         let manager = MessageManager::default();
         manager.update(
@@ -370,7 +368,7 @@ mod tests {
 
         assert_eq!(model.editor.buffer_count(), 1);
         assert_eq!(model.current_focus, FocusTarget::Editor);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
         let snapshot = model.editor.active_snapshot().unwrap();
         assert_eq!(snapshot.text.lines[0].text, "b");
         assert_eq!(
@@ -391,7 +389,7 @@ mod tests {
         );
         assert_eq!(model.explorer.visibility, Visibility::Displayed);
         assert_eq!(model.current_focus, FocusTarget::FileExplorer);
-        assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
+        assert!(model.context_stack.is_empty());
         let effect = manager.update(&mut model, Message::OpenSelected);
         complete_open(&mut model, &manager, effect);
         assert_eq!(model.editor.buffer_count(), 1);

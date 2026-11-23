@@ -413,7 +413,7 @@ mod tests {
         let created = root.join("folder/new.txt");
         assert_eq!(fs::read_to_string(&created).unwrap(), "");
         assert!(!model.explorer.add.is_open());
-        assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
+        assert!(model.context_stack.is_empty());
 
         let Effect::OpenDocument(request) = open else {
             panic!("expected document-open effect");
@@ -453,7 +453,7 @@ mod tests {
         assert!(model.editor.is_empty());
         apply_features(&manager, &mut model, reveal);
         assert_eq!(model.explorer.selected_entry().unwrap().path, created);
-        assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
+        assert!(model.context_stack.is_empty());
     }
 
     #[test]

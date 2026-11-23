@@ -4,6 +4,7 @@ use crate::{
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::Effect,
+        input_context::input_context,
     },
 };
 
@@ -76,7 +77,7 @@ pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
 
 fn start(model: &mut Model, movement: BufferMovement) {
     // Only Normal mode starts these prefixes; the second key has its own context.
-    if model.context_stack.last() != Some(&Context::AppNormal) {
+    if input_context(model) != Some(Context::AppNormal) {
         return;
     }
     let pending = model.buffer_navigation.begin(movement);
@@ -136,7 +137,6 @@ mod tests {
     #[test]
     fn bracket_commands_switch_buffers_and_cancel_cleanly() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         let first = create_buffer(&mut model, "first");
         let second = create_buffer(&mut model, "second");
         let manager = MessageManager::default();
@@ -153,7 +153,7 @@ mod tests {
         manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('b')));
         assert_eq!(model.editor.active_buffer(), Some(first));
         assert_eq!(model.pending_input, None);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
 
         manager.update(
             &mut model,
@@ -184,7 +184,7 @@ mod tests {
         manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('x')));
         assert_eq!(model.editor.active_buffer(), Some(second));
         assert_eq!(model.pending_input, None);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
     }
 
     #[tokio::test]
@@ -195,7 +195,6 @@ mod tests {
         std::fs::write(&first_path, "first").unwrap();
         std::fs::write(&second_path, "second").unwrap();
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         let first = open_file(&mut model, &first_path);
         let second = open_file(&mut model, &second_path);
         model.editor.activate_buffer(first).unwrap();

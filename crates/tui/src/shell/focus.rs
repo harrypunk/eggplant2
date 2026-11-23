@@ -1,9 +1,7 @@
 use ratatui::layout::Rect;
 
 use crate::{
-    data_object::{
-        CommandId, Context, FocusDirection, FocusTarget, Model, StatusMessage, Visibility,
-    },
+    data_object::{CommandId, FocusDirection, FocusTarget, Model, StatusMessage, Visibility},
     manager::effect::Effect,
 };
 
@@ -205,23 +203,19 @@ impl FocusHost for Model {
 
 fn focus_explorer(model: &mut Model) {
     model.current_focus = FocusTarget::FileExplorer;
-    if model.context_stack.last() != Some(&Context::Explorer) {
-        model.context_stack.push(Context::Explorer);
-    }
 }
 
 pub(crate) fn focus_editor(model: &mut Model) {
     model.current_focus = FocusTarget::Editor;
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::Explorer);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
-        data_object::Message, manager::message_manager::MessageManager, startup::initial_model,
+        data_object::{Context, Message},
+        manager::message_manager::MessageManager,
+        startup::initial_model,
         test_utils::create_buffer,
     };
 
@@ -261,7 +255,7 @@ mod tests {
         assert_eq!(model.explorer.visibility, Visibility::Hidden);
         assert_eq!(model.explorer.entries, original_entries);
         assert_eq!(model.current_focus, FocusTarget::Editor);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
 
         manager.update(
             &mut model,
@@ -269,7 +263,7 @@ mod tests {
         );
         assert_eq!(model.explorer.visibility, Visibility::Displayed);
         assert_eq!(model.current_focus, FocusTarget::FileExplorer);
-        assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
+        assert!(model.context_stack.is_empty());
     }
 
     #[test]
@@ -281,16 +275,16 @@ mod tests {
 
         manager.update(&mut model, Message::InvokeCommand(CommandId("focus_right")));
         assert_eq!(model.current_focus, FocusTarget::Editor);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
 
         manager.update(&mut model, Message::InvokeCommand(CommandId("focus_left")));
         assert_eq!(model.current_focus, FocusTarget::FileExplorer);
-        assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
+        assert!(model.context_stack.is_empty());
 
         for command in ["focus_up", "focus_down"] {
             manager.update(&mut model, Message::InvokeCommand(CommandId(command)));
             assert_eq!(model.current_focus, FocusTarget::FileExplorer);
-            assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
+            assert!(model.context_stack.is_empty());
         }
     }
 
@@ -340,9 +334,10 @@ mod tests {
 
     #[test]
     fn leaving_diagnostics_does_not_reset_agent_state() {
-        let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
-        model.current_focus = FocusTarget::ToolsPanel;
+        let mut model = Model {
+            current_focus: FocusTarget::ToolsPanel,
+            ..Model::default()
+        };
         model.tools.active_tool = Some(crate::tools::ToolKind::Diagnostics);
         model.tools.visibility = Visibility::Displayed;
         model.agent.enter_insert_mode();
@@ -368,7 +363,7 @@ mod tests {
 
         manager.update(&mut model, Message::InvokeCommand(CommandId("focus_right")));
         assert_eq!(model.current_focus, FocusTarget::Editor);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
 
         create_buffer(&mut model, "buffer");
         manager.update(&mut model, Message::InvokeCommand(CommandId("focus_right")));
@@ -378,19 +373,15 @@ mod tests {
         );
         manager.update(&mut model, Message::InvokeCommand(CommandId("focus_left")));
         assert_eq!(model.current_focus, FocusTarget::Editor);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
 
         let mut without_workspace = Model::default();
-        without_workspace.context_stack.push(Context::AppNormal);
         create_buffer(&mut without_workspace, "buffer");
         manager.update(
             &mut without_workspace,
             Message::InvokeCommand(CommandId("focus_left")),
         );
         assert_eq!(without_workspace.current_focus, FocusTarget::Editor);
-        assert_eq!(
-            without_workspace.context_stack.last(),
-            Some(&Context::AppNormal)
-        );
+        assert!(without_workspace.context_stack.is_empty());
     }
 }

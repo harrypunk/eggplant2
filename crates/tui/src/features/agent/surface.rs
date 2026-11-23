@@ -44,7 +44,6 @@ mod tests {
         assert_eq!(active(&model), Some(AgentSurface::Dialog));
 
         model.context_stack.pop();
-        model.context_stack.push(Context::AppNormal);
         model.current_focus = FocusTarget::ToolsPanel;
         model.tools.active_tool = Some(ToolKind::Agent);
         model.tools.visibility = Visibility::Displayed;

@@ -7,6 +7,7 @@ use crate::{
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
+        input_context::input_context,
     },
 };
 
@@ -291,7 +292,7 @@ fn start(model: &mut Model) {
     let Some(normal_context) = target::with_active(model, |target| target.normal_context()) else {
         return;
     };
-    if model.context_stack.last() != Some(&normal_context) {
+    if input_context(model) != Some(normal_context) {
         return;
     }
     model.yank.begin_prefix();
@@ -327,9 +328,9 @@ mod tests {
         std::fs::write(&path, "outside").unwrap();
         let mut model =
             crate::startup::initial_model(Some(workspace.path().to_path_buf())).unwrap();
-        model.context_stack.push(Context::AppNormal);
         model.register.set_provider(ClipboardProvider::None);
         open_file(&mut model, &path);
+        model.current_focus = crate::data_object::FocusTarget::Editor;
         let revision = model.editor.active_revision();
 
         handle_command(&mut model, CommandId("yank_line_pending"));
@@ -349,7 +350,7 @@ mod tests {
             workspace: Some(Workspace::new(root.clone())),
             ..Model::default()
         };
-        model.context_stack.push(Context::VCS);
+        model.active_page = AppPage::Vcs;
         model.register.set_provider(ClipboardProvider::None);
         model.vcs.changes.state = ChangesState::Ready(vec![FileChange {
             kind: ChangeKind::Modified,
@@ -424,7 +425,6 @@ mod tests {
     #[test]
     fn paste_after_and_before_use_the_current_register() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "ab");
         model.register.set_provider(ClipboardProvider::None);
         model.register.record("X".to_string());
@@ -446,7 +446,6 @@ mod tests {
     #[test]
     fn clipboard_completion_updates_register_and_pastes_into_the_original_target() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "ab");
         let target = current_paste_target(&mut model).unwrap();
         model.yank.pending_paste = Some(PendingPaste {
@@ -470,7 +469,6 @@ mod tests {
     #[test]
     fn clipboard_completion_is_ignored_after_the_target_revision_changes() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "ab");
         let target = current_paste_target(&mut model).unwrap();
         model.yank.pending_paste = Some(PendingPaste {
@@ -530,7 +528,6 @@ mod tests {
     #[test]
     fn visual_yank_updates_register_without_changing_text() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "hello\nworld");
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(80, 10));
@@ -562,7 +559,6 @@ mod tests {
     #[test]
     fn yy_yanks_line_and_escape_cancels_pending_yank() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "hello\nworld");
         let manager = MessageManager::default();
 
@@ -590,7 +586,6 @@ mod tests {
     #[test]
     fn linewise_visual_yank_includes_selected_line_endings() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "first\nsecond\nthird");
         let manager = MessageManager::default();
         manager.update(

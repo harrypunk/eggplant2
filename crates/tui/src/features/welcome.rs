@@ -59,9 +59,7 @@ mod tests {
     };
 
     fn welcome_model() -> Model {
-        let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
-        model
+        Model::default()
     }
 
     #[test]
@@ -70,7 +68,6 @@ mod tests {
         std::fs::write(directory.path().join("main.rs"), "fn main() {}\n").unwrap();
         let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
         model.current_focus = FocusTarget::Editor;
-        model.context_stack.pop();
         let manager = MessageManager::default();
 
         manager.update(
@@ -109,10 +106,10 @@ mod tests {
     fn availability_is_derived_without_mutating_the_context_stack() {
         let mut model = welcome_model();
         assert_eq!(input_context(&model), Some(Context::Welcome));
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
 
         crate::test_utils::create_buffer(&mut model, "text");
         assert_eq!(input_context(&model), Some(Context::AppNormal));
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
     }
 }

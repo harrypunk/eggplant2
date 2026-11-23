@@ -106,7 +106,7 @@ fn close_help(model: &mut Model) -> Option<Effect> {
 mod tests {
     use super::*;
     use crate::{
-        data_object::{Message, StatusKind},
+        data_object::{FocusTarget, Message, StatusKind},
         manager::message_manager::MessageManager,
         startup::initial_model,
     };
@@ -240,8 +240,10 @@ mod tests {
 
     #[test]
     fn help_owns_a_modal_context_until_toggled_or_closed() {
-        let mut model = Model::default();
-        model.context_stack.push(Context::Explorer);
+        let mut model = Model {
+            current_focus: FocusTarget::FileExplorer,
+            ..Model::default()
+        };
         let manager = MessageManager::default();
 
         assert!(
@@ -261,7 +263,7 @@ mod tests {
             Message::InvokeCommand(CommandId("explorer_help")),
         );
         assert!(!model.explorer.help_visible());
-        assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
+        assert!(model.context_stack.is_empty());
         assert!(!model.modal.is_active(Context::ExplorerHelp));
 
         manager.update(
@@ -273,7 +275,7 @@ mod tests {
             Message::InvokeCommand(CommandId("close_explorer_help")),
         );
         assert!(!model.explorer.help_visible());
-        assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
+        assert!(model.context_stack.is_empty());
     }
 
     #[test]

@@ -8,7 +8,7 @@ use editor::DocumentFactory;
 use crate::config::ThemeConfig;
 
 use crate::{
-    data_object::{Context, FocusTarget, Model, Workspace},
+    data_object::{FocusTarget, Model, Workspace},
     explorer::{ExplorerEntryKind, ExplorerState},
     file_picker::FileEntry,
     manager::effect::Effect,
@@ -43,7 +43,6 @@ pub fn initial_model_with_languages(
     model
         .document_lifecycle
         .set_on_close(crate::code_navigation::close_document);
-    model.context_stack.push(Context::AppNormal);
 
     match path {
         Some(path) if path.is_dir() => {
@@ -64,7 +63,6 @@ pub fn initial_model_with_languages(
             model.file_picker.seed_top_level(picker_files);
             model.workspace = Some(Workspace::new(root));
             model.current_focus = FocusTarget::FileExplorer;
-            model.context_stack.push(Context::Explorer);
         }
         Some(path) => {
             let document = DocumentFactory::new()
@@ -97,7 +95,10 @@ mod tests {
     use app::language::LanguageServerSpec;
 
     use super::*;
-    use crate::file_picker::FileCollectionState;
+    use crate::{
+        data_object::Context, file_picker::FileCollectionState,
+        manager::input_context::input_context,
+    };
 
     #[test]
     fn no_path_starts_with_empty_editor() {
@@ -106,7 +107,8 @@ mod tests {
         assert!(model.editor.is_empty());
         assert!(model.workspace.is_none());
         assert_eq!(model.current_focus, FocusTarget::Editor);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert_eq!(input_context(&model), Some(Context::Welcome));
+        assert!(model.context_stack.is_empty());
     }
 
     #[test]
@@ -152,11 +154,12 @@ mod tests {
 
         assert!(model.editor.is_empty());
         assert_eq!(model.editor.active_buffer(), None);
-        assert_eq!(model.workspace.unwrap().root(), expected_root);
+        assert_eq!(model.workspace.as_ref().unwrap().root(), expected_root);
         assert_eq!(model.explorer.entries.len(), 1);
         assert_eq!(model.explorer.selected, Some(0));
         assert_eq!(model.current_focus, FocusTarget::FileExplorer);
-        assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
+        assert_eq!(input_context(&model), Some(Context::Explorer));
+        assert!(model.context_stack.is_empty());
         assert_eq!(model.file_picker.collection, FileCollectionState::Ready);
     }
 

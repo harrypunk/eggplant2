@@ -4,6 +4,7 @@ use crate::{
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::Effect,
+        input_context::input_context,
     },
 };
 
@@ -148,7 +149,7 @@ fn start(model: &mut Model, pending: PendingChange) {
     }) else {
         return;
     };
-    if !can_mutate || model.context_stack.last() != Some(&normal_context) {
+    if !can_mutate || input_context(model) != Some(normal_context) {
         return;
     }
     let pending = model.change.begin(pending);
@@ -328,7 +329,6 @@ mod tests {
         std::fs::write(&path, "outside").unwrap();
         let mut model =
             crate::startup::initial_model(Some(workspace.path().to_path_buf())).unwrap();
-        model.context_stack.push(Context::AppNormal);
         open_file(&mut model, &path);
         let revision = model.editor.active_revision();
 
@@ -352,7 +352,7 @@ mod tests {
             workspace: Some(Workspace::new(root.clone())),
             ..Model::default()
         };
-        model.context_stack.push(Context::VCS);
+        model.active_page = AppPage::Vcs;
         model.vcs.changes.state = ChangesState::Ready(vec![FileChange {
             kind: ChangeKind::Modified,
             staged: true,
@@ -422,7 +422,7 @@ mod tests {
         manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('w')));
         assert_eq!(commit_text(&model), "world");
         assert_eq!(model.pending_input, None);
-        assert_eq!(model.context_stack.last(), Some(&Context::VcsCommit));
+        assert!(model.context_stack.is_empty());
         assert_eq!(model.register.unnamed(), "");
 
         let mut model = commit_model("first");
@@ -475,7 +475,6 @@ mod tests {
     #[test]
     fn pending_dd_and_cc_use_status_and_cancel_cleanly() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "first\nsecond");
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(80, 10));
@@ -509,7 +508,7 @@ mod tests {
             Message::InvokeCommand(CommandId("change_cancel")),
         );
         assert_eq!(model.pending_input, None);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
 
         manager.update(
             &mut model,
@@ -529,7 +528,6 @@ mod tests {
     #[test]
     fn dw_and_cw_capture_the_word_and_preserve_undo_behavior() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "héllo world");
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(80, 10));
@@ -546,7 +544,7 @@ mod tests {
         assert_eq!(model.register.unnamed(), "héllo ");
         assert_eq!(model.editor.mode(), editor::EditMode::Normal);
         assert_eq!(model.pending_input, None);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
 
         manager.update(&mut model, Message::InvokeCommand(CommandId("undo")));
         manager.update(
@@ -576,7 +574,6 @@ mod tests {
     #[test]
     fn visual_delete_and_change_use_the_primary_selection() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "hello");
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(80, 10));
@@ -596,13 +593,12 @@ mod tests {
         );
         assert_eq!(model.editor.mode(), editor::EditMode::Normal);
         assert_eq!(model.register.unnamed(), "he");
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
     }
 
     #[test]
     fn visual_change_enters_insert_and_undoes_as_one_edit() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "hello");
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(80, 10));

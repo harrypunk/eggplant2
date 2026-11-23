@@ -356,7 +356,6 @@ mod tests {
     fn mode_commands_update_editor_session_and_context() {
         let manager = MessageManager::default();
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "");
 
         manager.update(
@@ -371,14 +370,13 @@ mod tests {
             Message::InvokeCommand(CommandId("exit_insert_mode")),
         );
         assert_eq!(model.editor.mode(), EditMode::Normal);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
     }
 
     #[test]
     fn insert_mode_requires_an_active_buffer() {
         let manager = MessageManager::default();
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
 
         manager.update(
             &mut model,
@@ -386,14 +384,13 @@ mod tests {
         );
 
         assert_eq!(model.editor.mode(), EditMode::Normal);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
     }
 
     #[test]
     fn editing_commands_update_text_history_and_viewport() {
         let manager = MessageManager::default();
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "a");
         manager.update(&mut model, Message::Resize(120, 20));
 
@@ -448,7 +445,6 @@ mod tests {
     #[test]
     fn word_motion_commands_move_the_normal_mode_cursor() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "hello world");
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(80, 10));
@@ -500,7 +496,6 @@ mod tests {
     #[test]
     fn visual_mode_extends_snapshot_selection_and_escape_collapses_it() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "hello");
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(80, 10));
@@ -526,14 +521,13 @@ mod tests {
             model.editor.active_snapshot().unwrap().text.lines[0].selection,
             None
         );
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
         assert!(!model.editor.active_is_modified());
     }
 
     #[test]
     fn visual_word_and_counted_line_motions_extend_the_same_selection() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "hello world\nthird");
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(80, 10));
@@ -567,7 +561,6 @@ mod tests {
     #[test]
     fn visual_line_mode_selects_whole_lines_and_escape_preserves_text() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "first\nsecond\nthird");
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(80, 10));
@@ -607,7 +600,6 @@ mod tests {
     #[test]
     fn line_boundary_commands_move_without_changing_text() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, " hello");
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(120, 4));
@@ -651,7 +643,6 @@ mod tests {
             ("insert_at_first_nonblank", "  hello", "  xhello"),
         ] {
             let mut model = Model::default();
-            model.context_stack.push(Context::AppNormal);
             create_buffer(&mut model, text);
             let manager = MessageManager::default();
             manager.update(&mut model, Message::Resize(40, 4));
@@ -672,7 +663,6 @@ mod tests {
     fn open_line_and_typing_share_one_undoable_insert_session() {
         for command in ["open_line_below", "open_line_above"] {
             let mut model = Model::default();
-            model.context_stack.push(Context::AppNormal);
             create_buffer(&mut model, "first");
             let manager = MessageManager::default();
             manager.update(&mut model, Message::Resize(40, 4));
@@ -700,7 +690,6 @@ mod tests {
         let path = directory.path().join("note.txt");
         std::fs::write(&path, "first\nsecond").unwrap();
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         open_file(&mut model, &path);
         let manager = MessageManager::default();
 
@@ -726,7 +715,6 @@ mod tests {
         let path = directory.path().join("note.txt");
         std::fs::write(&path, "hello").unwrap();
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         open_file(&mut model, &path);
         for _ in 0..5 {
             model

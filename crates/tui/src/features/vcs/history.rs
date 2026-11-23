@@ -5,7 +5,7 @@ use ::vcs::{CommitDetails, CommitSummary, Diff, HistoryPage};
 use crate::{
     clipboard::ClipboardWriter,
     copy_hash::{CopyHash, CopyHashOutcome, HashFormat},
-    data_object::{AppPage, Context, Message, Model, StatusMessage},
+    data_object::{AppPage, Message, Model, StatusMessage},
     document,
     manager::effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
 };
@@ -255,7 +255,6 @@ pub(super) fn open_history(model: &mut Model) -> Option<Effect> {
         return None;
     }
     model.active_page = AppPage::VcsHistory;
-    model.context_stack.push(Context::VcsHistory);
     refresh_history(model)
 }
 
@@ -271,9 +270,6 @@ pub(super) fn close_history(model: &mut Model) -> Option<Effect> {
         return None;
     }
     model.active_page = AppPage::Vcs;
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::VcsHistory);
     None
 }
 
@@ -800,7 +796,6 @@ mod tests {
             workspace: Some(crate::data_object::Workspace::new(root.to_path_buf())),
             ..Model::default()
         };
-        model.context_stack = vec![Context::AppNormal, Context::VcsHistory];
         model.vcs.history.pane = HistoryPane::Detail;
         model.vcs.history.detail = CommitDetailsState::Ready(CommitDetails {
             full_id: "abc1234".to_string(),
@@ -832,7 +827,7 @@ mod tests {
         };
         assert_eq!(model.active_page, AppPage::Editor);
         assert_eq!(model.vcs.history.pane, HistoryPane::List);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
 
         crate::manager::message_manager::MessageManager::default()
             .update(&mut model, Message::FileOpened(request.perform()));
@@ -855,7 +850,7 @@ mod tests {
 
         assert!(matches!(effect, Some(Effect::Feature(_))));
         assert_eq!(model.active_page, AppPage::VcsHistory);
-        assert_eq!(model.context_stack.last(), Some(&Context::VcsHistory));
+        assert!(model.context_stack.is_empty());
         assert!(model.editor.is_empty());
         assert_eq!(
             model.notifications.current().unwrap().title(),

@@ -144,7 +144,7 @@ pub(crate) fn open_file_at_with_origin(
             position,
         },
         origin,
-        model.context_stack.last().copied(),
+        crate::manager::input_context::input_context(model),
     );
     Some(Effect::OpenDocument(OpenFileRequest {
         id,

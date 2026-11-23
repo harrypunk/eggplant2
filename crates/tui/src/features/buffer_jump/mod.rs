@@ -11,6 +11,7 @@ use crate::{
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::Effect,
+        input_context::input_context,
     },
     ui::UiRegistry,
 };
@@ -107,9 +108,12 @@ fn refresh_matches(model: &mut Model) {
 }
 
 fn start(model: &mut Model) {
-    let Some(Context::AppNormal | Context::Explorer) = model.context_stack.last() else {
+    if !matches!(
+        input_context(model),
+        Some(Context::AppNormal | Context::Explorer)
+    ) {
         return;
-    };
+    }
     let Some(source) = model.editor.active_revision() else {
         model.status = Some(StatusMessage::info("No active buffer"));
         return;
@@ -158,7 +162,6 @@ mod tests {
     #[test]
     fn leader_pattern_and_label_jump_to_the_first_visible_match() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "hello\nyellow\nelse");
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(80, 10));
@@ -184,7 +187,7 @@ mod tests {
 
         manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('z')));
         assert!(!model.buffer_jump.is_active());
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
         assert_eq!(
             model
                 .editor
@@ -201,7 +204,6 @@ mod tests {
     #[test]
     fn revision_change_cancels_instead_of_accepting_stale_targets() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "hello\nyellow\nelse");
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(80, 10));
@@ -229,7 +231,7 @@ mod tests {
         manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('z')));
 
         assert!(!model.buffer_jump.is_active());
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
         assert_eq!(
             model.editor.active_snapshot().unwrap().cursor,
             cursor_before_label
@@ -243,7 +245,6 @@ mod tests {
     #[test]
     fn cancelling_does_not_move_the_cursor() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "hello");
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(80, 10));
@@ -256,7 +257,7 @@ mod tests {
         );
 
         assert!(!model.buffer_jump.is_active());
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
         assert_eq!(
             model
                 .editor
@@ -272,7 +273,6 @@ mod tests {
     #[test]
     fn no_visible_matches_closes_without_changing_the_document() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "hello");
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(80, 10));
@@ -286,7 +286,7 @@ mod tests {
         }
 
         assert!(!model.buffer_jump.is_active());
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
         assert_eq!(
             model
                 .editor
@@ -306,7 +306,6 @@ mod tests {
     #[test]
     fn one_character_input_highlights_following_characters_before_labels() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "hello\nyellow\nelse");
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(40, 8));
@@ -349,7 +348,6 @@ mod tests {
     #[test]
     fn renders_only_bright_labels_after_two_characters_and_hides_the_cursor() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "hello");
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(40, 6));

@@ -208,7 +208,6 @@ mod tests {
             current_focus: crate::data_object::FocusTarget::ToolsPanel,
             ..Model::default()
         };
-        model.context_stack.push(Context::AppNormal);
         model.tools.active_tool = Some(ToolKind::Agent);
         model.tools.visibility = Visibility::Displayed;
 

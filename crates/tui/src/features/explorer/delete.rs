@@ -325,7 +325,7 @@ mod tests {
         );
         assert_eq!(fs::read_to_string(path).unwrap(), "keep");
         assert!(!model.explorer.delete.is_open());
-        assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
+        assert!(model.context_stack.is_empty());
         assert!(overlay(&model).is_none());
     }
 
@@ -359,7 +359,7 @@ mod tests {
                 .all(|entry| entry.path != path)
         );
         assert_eq!(model.editor.buffer_path(buffer), None);
-        assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
+        assert!(model.context_stack.is_empty());
     }
 
     #[test]

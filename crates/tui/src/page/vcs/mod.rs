@@ -359,7 +359,7 @@ mod tests {
             workspace: Some(Workspace::new(std::path::PathBuf::from("/workspace"))),
             ..Model::default()
         };
-        model.context_stack.push(crate::data_object::Context::VCS);
+        model.active_page = crate::data_object::AppPage::Vcs;
         let manager = crate::manager::message_manager::MessageManager::default();
         manager.update(
             &mut model,

@@ -122,9 +122,10 @@ mod tests {
 
     #[test]
     fn commands_are_shared_by_panel_and_dialog() {
-        let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
-        model.current_focus = FocusTarget::ToolsPanel;
+        let mut model = Model {
+            current_focus: FocusTarget::ToolsPanel,
+            ..Model::default()
+        };
         model.tools.active_tool = Some(ToolKind::Agent);
         model.tools.visibility = Visibility::Displayed;
         model.agent.enter_insert_mode();

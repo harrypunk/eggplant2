@@ -23,6 +23,7 @@ use crate::{
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::Effect,
+        input_context::input_context,
     },
 };
 
@@ -89,9 +90,9 @@ pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
 
 fn start(model: &mut Model) {
     // The normal keymap owns the initial z; other contexts cannot start this prefix.
-    let Some(Context::AppNormal) = model.context_stack.last() else {
+    if input_context(model) != Some(Context::AppNormal) {
         return;
-    };
+    }
     model.pending_input = Some(PendingInput::new(Context::ViewAlign, "z"));
     model.view_align = Some(ViewAlignSession::new());
     model.context_stack.push(Context::ViewAlign);
@@ -142,7 +143,6 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, &text);
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(50, 10));
@@ -177,7 +177,6 @@ mod tests {
     #[test]
     fn escape_and_invalid_input_clear_pending_state_without_alignment() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "first\nsecond");
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(40, 4));
@@ -190,13 +189,13 @@ mod tests {
         );
         assert_eq!(model.pending_input, None);
         assert!(model.view_align.is_none());
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
 
         start_alignment(&mut model, &manager);
         manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('x')));
         assert_eq!(model.pending_input, None);
         assert!(model.view_align.is_none());
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
         assert_eq!(
             model.editor.active_snapshot().unwrap().text.first_line,
             offset

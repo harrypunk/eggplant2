@@ -89,7 +89,6 @@ mod tests {
     #[test]
     fn dialog_owns_modal_input_until_closed() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
 
         open(&mut model);
         assert!(model.provider_login.is_open());
@@ -99,7 +98,7 @@ mod tests {
         close(&mut model);
         assert!(!model.provider_login.is_open());
         assert!(!model.modal.is_active(Context::ProviderLogin));
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
     }
 
     #[test]

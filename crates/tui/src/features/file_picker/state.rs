@@ -7,7 +7,10 @@ use std::{
 use editor::{DocumentFactory, TextViewSnapshot};
 
 use super::FilePickerRequest;
-use crate::{component::text_input::TextInput, data_object::Visibility};
+use crate::{
+    component::text_input::TextInput,
+    data_object::{FocusTarget, Visibility},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FileEntry {
@@ -54,6 +57,8 @@ pub struct FilePickerState {
     filter_revision: u64,
     preview_revision: u64,
     session_revision: u64,
+    /// Focus restoration belongs to this transient workflow, not the shell context stack.
+    return_focus: FocusTarget,
 }
 
 impl Default for FilePickerState {
@@ -73,6 +78,7 @@ impl Default for FilePickerState {
             filter_revision: 0,
             preview_revision: 0,
             session_revision: 0,
+            return_focus: FocusTarget::Editor,
         }
     }
 }
@@ -95,8 +101,11 @@ impl FilePickerState {
     }
 
     /// Reuse ready entries on reopen; otherwise start with a top-level scan.
-    pub fn open(&mut self, root: &Path) -> Option<FilePickerRequest> {
+    pub fn open(&mut self, root: &Path, return_focus: FocusTarget) -> Option<FilePickerRequest> {
         self.session_revision = self.session_revision.wrapping_add(1);
+        if self.visibility == Visibility::Hidden {
+            self.return_focus = return_focus;
+        }
         self.visibility = Visibility::Displayed;
         self.query.clear();
         self.filter_revision = self.filter_revision.wrapping_add(1);
@@ -120,11 +129,12 @@ impl FilePickerState {
     }
 
     /// Hide the picker without discarding its ready file-entry cache.
-    pub fn close(&mut self) {
+    pub fn close(&mut self) -> FocusTarget {
         self.visibility = Visibility::Hidden;
         self.pending_preview_path = None;
         self.filter_revision = self.filter_revision.wrapping_add(1);
         self.preview_revision = self.preview_revision.wrapping_add(1);
+        self.return_focus
     }
 
     pub fn insert(&mut self, root: &Path, character: char) -> Option<FilePickerRequest> {
@@ -330,7 +340,7 @@ mod tests {
             depth: ScanDepth::TopLevel,
             revision,
             ..
-        }) = state.open(Path::new("/workspace"))
+        }) = state.open(Path::new("/workspace"), FocusTarget::Editor)
         else {
             panic!("opening should start with a top-level scan");
         };
@@ -402,7 +412,9 @@ mod tests {
             path: path.clone(),
             display: "note.txt".to_string(),
         }]);
-        let Some(FilePickerRequest::Preview { revision, .. }) = state.open(&root) else {
+        let Some(FilePickerRequest::Preview { revision, .. }) =
+            state.open(&root, FocusTarget::Editor)
+        else {
             panic!("a ready file should start a preview");
         };
         state.complete_preview(revision, PreviewState::Text(text_snapshot(&["old"])));
@@ -428,7 +440,8 @@ mod tests {
     #[test]
     fn reopen_reuses_ready_cache_without_scanning() {
         let mut state = FilePickerState::default();
-        let Some(FilePickerRequest::Scan { revision, .. }) = state.open(Path::new("/workspace"))
+        let Some(FilePickerRequest::Scan { revision, .. }) =
+            state.open(Path::new("/workspace"), FocusTarget::Editor)
         else {
             panic!("opening should scan files");
         };
@@ -450,7 +463,7 @@ mod tests {
         );
         state.close();
 
-        let request = state.open(Path::new("/workspace"));
+        let request = state.open(Path::new("/workspace"), FocusTarget::Editor);
         assert!(matches!(request, Some(FilePickerRequest::Preview { .. })));
         assert_eq!(state.results, vec![entry("main.rs")]);
         assert_eq!(state.collection, FileCollectionState::Ready);
@@ -511,7 +524,8 @@ mod tests {
     #[test]
     fn closing_invalidates_pending_completions() {
         let mut state = FilePickerState::default();
-        let Some(FilePickerRequest::Scan { revision, .. }) = state.open(Path::new("/workspace"))
+        let Some(FilePickerRequest::Scan { revision, .. }) =
+            state.open(Path::new("/workspace"), FocusTarget::Editor)
         else {
             panic!("opening should scan files");
         };

@@ -750,7 +750,7 @@ mod tests {
             workspace: Some(Workspace::new(directory.path().to_path_buf())),
             ..Model::default()
         };
-        model.context_stack.push(Context::VCS);
+        model.active_page = AppPage::Vcs;
         open_menu(&mut model);
         assert!(model.vcs.branch.is_menu());
         assert_eq!(model.context_stack.last(), Some(&Context::VcsBranchMenu));
@@ -769,6 +769,6 @@ mod tests {
 
         cancel(&mut model);
         assert!(!model.modal.is_active(Context::VcsBranch));
-        assert_eq!(model.context_stack.last(), Some(&Context::VCS));
+        assert!(model.context_stack.is_empty());
     }
 }

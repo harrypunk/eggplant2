@@ -101,7 +101,10 @@ impl EventManager {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::manager::command_registry::{CommandId, CommandRegistry};
+    use crate::{
+        data_object::{AppPage, FocusTarget},
+        manager::command_registry::{CommandId, CommandRegistry},
+    };
 
     fn event_manager() -> EventManager {
         let config = Config::default();
@@ -112,7 +115,14 @@ mod tests {
     fn model_with_buffer(context: Context) -> Model {
         let mut model = Model::default();
         crate::test_utils::create_buffer(&mut model, "text");
-        model.context_stack.push(context);
+        match context {
+            Context::AppNormal => {}
+            Context::Explorer => model.current_focus = FocusTarget::FileExplorer,
+            Context::VCS => model.active_page = AppPage::Vcs,
+            Context::VcsHistory => model.active_page = AppPage::VcsHistory,
+            Context::VcsCommit => model.active_page = AppPage::VcsCommit,
+            transient => model.context_stack.push(transient),
+        }
         model
     }
 
@@ -350,8 +360,10 @@ mod tests {
     #[test]
     fn routes_vcs_page_keys() {
         let manager = event_manager();
-        let mut model = Model::default();
-        model.context_stack.push(Context::VCS);
+        let model = Model {
+            active_page: AppPage::Vcs,
+            ..Model::default()
+        };
 
         for (key, command) in [
             (KeyCode::Esc, "close_vcs_page"),
@@ -391,8 +403,10 @@ mod tests {
     #[test]
     fn routes_vcs_history_page_keys() {
         let manager = event_manager();
-        let mut model = Model::default();
-        model.context_stack.push(Context::VcsHistory);
+        let model = Model {
+            active_page: AppPage::VcsHistory,
+            ..Model::default()
+        };
 
         for (key, command) in [
             (KeyCode::Esc, "close_vcs_history"),
@@ -525,7 +539,7 @@ mod tests {
     fn routes_welcome_buttons_and_preserves_leader_commands() {
         let manager = event_manager();
         let model = crate::startup::initial_model(None).unwrap();
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
 
         for (key, command) in [
             (KeyCode::Up, "welcome_previous"),
@@ -555,9 +569,10 @@ mod tests {
     #[test]
     fn routes_agent_panel_input_keys() {
         let manager = event_manager();
-        let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
-        model.current_focus = crate::data_object::FocusTarget::ToolsPanel;
+        let mut model = Model {
+            current_focus: crate::data_object::FocusTarget::ToolsPanel,
+            ..Model::default()
+        };
         model.tools.active_tool = Some(crate::tools::ToolKind::Agent);
         model.tools.visibility = crate::data_object::Visibility::Displayed;
 
@@ -747,8 +762,10 @@ mod tests {
     #[test]
     fn routes_vcs_commit_page_keys() {
         let manager = event_manager();
-        let mut model = Model::default();
-        model.context_stack.push(Context::VcsCommit);
+        let mut model = Model {
+            active_page: AppPage::VcsCommit,
+            ..Model::default()
+        };
         for (key, modifiers, command) in [
             (KeyCode::Char('q'), KeyModifiers::NONE, "vcs_commit_close"),
             (KeyCode::Char('i'), KeyModifiers::NONE, "enter_insert_mode"),
@@ -1121,8 +1138,10 @@ mod tests {
     #[test]
     fn routes_explorer_keys_in_explorer_context() {
         let manager = event_manager();
-        let mut model = Model::default();
-        model.context_stack.push(Context::Explorer);
+        let model = Model {
+            current_focus: FocusTarget::FileExplorer,
+            ..Model::default()
+        };
 
         let event = Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         assert!(matches!(
@@ -1139,8 +1158,10 @@ mod tests {
     #[test]
     fn routes_explorer_help_and_file_operation_keys() {
         let manager = event_manager();
-        let mut model = Model::default();
-        model.context_stack.push(Context::Explorer);
+        let mut model = Model {
+            current_focus: FocusTarget::FileExplorer,
+            ..Model::default()
+        };
 
         for (key, command) in [
             (KeyCode::Char('?'), "explorer_help"),
@@ -1233,16 +1254,17 @@ mod tests {
     fn shift_i_toggles_ignored_files_only_in_explorer_context() {
         let manager = event_manager();
         let event = || Event::Key(KeyEvent::new(KeyCode::Char('I'), KeyModifiers::SHIFT));
-        let mut model = Model::default();
-        model.context_stack.push(Context::Explorer);
+        let mut model = Model {
+            current_focus: FocusTarget::FileExplorer,
+            ..Model::default()
+        };
         assert!(matches!(
             manager.translate(event(), &model),
             Some(Message::InvokeCommand(CommandId("toggle_ignored_files")))
         ));
 
-        model.context_stack.pop();
+        model.current_focus = FocusTarget::Editor;
         crate::test_utils::create_buffer(&mut model, "text");
-        model.context_stack.push(Context::AppNormal);
         assert!(matches!(
             manager.translate(event(), &model),
             Some(Message::InvokeCommand(CommandId(

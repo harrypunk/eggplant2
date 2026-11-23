@@ -270,7 +270,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        data_object::{Context, Message, StatusKind},
+        data_object::{Message, StatusKind},
         manager::message_manager::MessageManager,
         test_utils::{create_buffer, open_file},
     };
@@ -481,7 +481,6 @@ mod tests {
         std::fs::write(&path, "original").unwrap();
         let mut model = Model::default();
         let id = open_file(&mut model, &path);
-        model.context_stack.push(Context::AppNormal);
         model.editor.enter_insert_mode();
         model
             .editor
@@ -523,7 +522,6 @@ mod tests {
         std::fs::write(&path, "hello").unwrap();
         let mut model = Model::default();
         open_file(&mut model, &path);
-        model.context_stack.push(Context::AppNormal);
         let manager = MessageManager::default();
         manager.update(
             &mut model,

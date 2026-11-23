@@ -51,15 +51,12 @@ pub(crate) fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<E
 }
 
 pub(crate) fn close(model: &mut Model) {
-    model.file_picker.close();
+    let return_focus = model.file_picker.close();
     model.modal.close(Context::FilePicker);
     model
         .context_stack
         .pop_if(|context| context == &Context::FilePicker);
-    model.current_focus = match model.context_stack.last() {
-        Some(Context::Explorer) => FocusTarget::FileExplorer,
-        _ => FocusTarget::Editor,
-    };
+    model.current_focus = return_focus;
 }
 
 fn open(model: &mut Model) -> Option<Effect> {
@@ -74,8 +71,12 @@ fn open(model: &mut Model) -> Option<Effect> {
     if model.context_stack.last() != Some(&Context::FilePicker) {
         model.context_stack.push(Context::FilePicker);
     }
+    let return_focus = model.current_focus;
     model.current_focus = FocusTarget::FilePicker;
-    model.file_picker.open(&root).map(Effect::feature)
+    model
+        .file_picker
+        .open(&root, return_focus)
+        .map(Effect::feature)
 }
 
 #[cfg(test)]
@@ -165,6 +166,30 @@ mod tests {
     }
 
     #[test]
+    fn close_restores_focus_without_storing_shell_contexts() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(directory.path().join("note.txt"), "hello").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let manager = MessageManager::default();
+
+        for focus in [FocusTarget::FileExplorer, FocusTarget::Editor] {
+            model.current_focus = focus;
+            manager.update(
+                &mut model,
+                Message::InvokeCommand(CommandId("open_file_picker")),
+            );
+            assert_eq!(model.current_focus, FocusTarget::FilePicker);
+
+            manager.update(
+                &mut model,
+                Message::InvokeCommand(CommandId("close_file_picker")),
+            );
+            assert_eq!(model.current_focus, focus);
+            assert!(model.context_stack.is_empty());
+        }
+    }
+
+    #[test]
     fn picker_scans_previews_and_opens_the_selected_file() {
         let directory = tempfile::tempdir().unwrap();
         let nested = directory.path().join("nested");
@@ -217,7 +242,7 @@ mod tests {
         complete_open(&mut model, &manager, effect);
         assert_eq!(model.file_picker.visibility, Visibility::Hidden);
         assert_eq!(model.current_focus, FocusTarget::Editor);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
         assert_eq!(
             model.explorer.selected_entry().unwrap().path,
             std::fs::canonicalize(file).unwrap()

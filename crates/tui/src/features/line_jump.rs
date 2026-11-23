@@ -1,7 +1,7 @@
 use editor::EditorSession;
 
 use crate::{
-    data_object::{AppPage, CommandId, Context, Model, PendingInput, StatusMessage},
+    data_object::{AppPage, CommandId, Context, FocusTarget, Model, PendingInput, StatusMessage},
     explorer::ExplorerState,
     manager::{
         command_registry::{Command, CommandRegistry},
@@ -195,10 +195,10 @@ impl VerticalNavigation for NavigationTarget<'_> {
 }
 
 fn navigation_target(model: &mut Model) -> NavigationTarget<'_> {
-    match (model.active_page, model.context_stack.last()) {
-        (_, Some(Context::Explorer)) => NavigationTarget::Explorer(&mut model.explorer),
-        (AppPage::VcsHistory, _) => {
-            NavigationTarget::History(HistoryNavigation::new(&mut model.vcs))
+    match model.active_page {
+        AppPage::VcsHistory => NavigationTarget::History(HistoryNavigation::new(&mut model.vcs)),
+        AppPage::Editor if model.current_focus == FocusTarget::FileExplorer => {
+            NavigationTarget::Explorer(&mut model.explorer)
         }
         _ => NavigationTarget::Editor(&mut model.editor),
     }
@@ -275,7 +275,6 @@ mod tests {
     #[test]
     fn counted_and_uncounted_jumps_show_pending_input() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "  éirst\nsecond\nthird\n\n\tfourth");
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(40, 4));
@@ -334,7 +333,6 @@ mod tests {
     #[test]
     fn empty_buffer_clamps_large_counts_without_changes() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "");
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(40, 4));
@@ -349,7 +347,6 @@ mod tests {
     #[test]
     fn escape_invalid_input_and_zero_do_not_move() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "first\nsecond");
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(40, 4));
@@ -362,20 +359,22 @@ mod tests {
             Message::InvokeCommand(CommandId("line_jump_cancel")),
         );
         assert_eq!(model.pending_input, None);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
         assert_eq!(cursor_line(&model), 0);
 
         input(&mut model, &manager, "2g");
         input(&mut model, &manager, "x");
         assert_eq!(model.pending_input, None);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
         assert_eq!(cursor_line(&model), 0);
     }
 
     #[test]
     fn explorer_supports_gg_and_g_but_ignores_counts() {
-        let mut model = Model::default();
-        model.context_stack.push(Context::Explorer);
+        let mut model = Model {
+            current_focus: FocusTarget::FileExplorer,
+            ..Model::default()
+        };
         model.explorer.entries = (0..3)
             .map(|index| crate::explorer::ExplorerEntry {
                 name: format!("file-{index}").into(),
@@ -410,7 +409,7 @@ mod tests {
             active_page: AppPage::VcsHistory,
             ..Model::default()
         };
-        model.context_stack.push(Context::VcsHistory);
+        model.active_page = AppPage::VcsHistory;
         model.vcs.history.state = crate::vcs::HistoryState::Ready(vec![
             commit("first"),
             commit("second"),

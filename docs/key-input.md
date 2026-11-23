@@ -315,6 +315,14 @@ Direct bindings and leader targets share `CommandRegistry`: each stable command 
 
 The configured leader (`Space` by default) opens a small data-driven sequence state machine. `EventManager` validates the configured chord once, converts terminal events to `KeyChord`, and delegates start/pending decisions to `manager::context::leader_input`. `CommandMenuStart` opens the root without the menu knowing the physical leader chord; `CommandMenuKey(KeyChord)` continues an active sequence. Each `CommandMenuContext` owns its semantic title and items, and each item targets either a submenu or a semantic `CommandId`. `KeyHints` renders the current context's candidates and composes its title by joining active context titles, such as `Leader > buffer`.
 
+## Context ownership
+
+`input_context` resolves input in two layers. The top of `context_stack` wins when a transient workflow is active; otherwise, a shell context is derived from source-of-truth page, focus, buffer, and tool state.
+
+The stack contains only workflows with explicit entry and exit transitions, such as pickers, dialogs, approval prompts, and pending operators. Push the workflow's context on entry and pop that same context on exit. Features should query `input_context` when they need to know which surface currently owns input rather than inspecting raw stack entries.
+
+Shell contexts are derived, not pushed: `AppNormal`, `Welcome`, `Explorer`, `AgentChat`, `AgentChatInsert`, `VCS`, `VcsHistory`, and `VcsCommit`. Changing focus, opening or closing the last buffer, switching pages, or changing Agent panel mode must not synchronize these variants into the stack. Workflow-specific restoration data, such as the file picker's opening focus, belongs to that workflow rather than being encoded as a shell stack entry.
+
 ## Design rules
 
 1. **Normalize once.** Convert terminal-specific events into application key chords at the input boundary. Sequence matching should use complete chords, not only `KeyCode`, so `Ctrl-X` and `x` remain distinct. Text inputs use semantic `Insert`, `DeleteBackward`, and `Cursor` events carried by `Message::TextInput`. `EventManager` translates unbound physical keys into these events; direct custom bindings take precedence. `TextInputRegistry::builtin` is the single checked registration table: character-only prefix parsers accept `Insert`, while editable components accept every event and react to the actual content-change result. Features do not register per-feature editing commands or character-message dispatcher arms.

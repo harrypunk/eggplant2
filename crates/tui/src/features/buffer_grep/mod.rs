@@ -14,6 +14,7 @@ use crate::{
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::Effect,
+        input_context::input_context,
     },
     ui::UiRegistry,
 };
@@ -102,9 +103,12 @@ pub fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> 
 
 fn open(model: &mut Model) {
     // Only Normal or Explorer may open grep; another modal keeps its input context.
-    let Some(Context::AppNormal | Context::Explorer) = model.context_stack.last() else {
+    if !matches!(
+        input_context(model),
+        Some(Context::AppNormal | Context::Explorer)
+    ) {
         return;
-    };
+    }
     let Some(source) = model.editor.active_text_snapshot() else {
         model.status = Some(StatusMessage::info("No active buffer"));
         return;
@@ -166,7 +170,6 @@ mod tests {
     #[test]
     fn leader_live_search_selection_and_acceptance_jump_to_the_match_line() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "hello\nworld\nyellow\nelse");
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(100, 20));
@@ -211,14 +214,13 @@ mod tests {
             model.buffer_grep.visibility,
             crate::data_object::Visibility::Hidden
         );
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
         assert!(!model.editor.active_is_modified());
     }
 
     #[test]
     fn cancelling_search_preserves_the_cursor() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
         create_buffer(&mut model, "hello");
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(80, 10));
@@ -246,6 +248,6 @@ mod tests {
                 .column,
             0
         );
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
     }
 }

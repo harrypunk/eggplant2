@@ -16,6 +16,7 @@ use crate::{
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::Effect,
+        input_context::input_context,
     },
     ui::UiRegistry,
 };
@@ -94,9 +95,12 @@ pub fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> 
 
 fn open(model: &mut Model) {
     // Only Normal or Explorer may open grep; another modal keeps its input context.
-    let Some(Context::AppNormal | Context::Explorer) = model.context_stack.last() else {
+    if !matches!(
+        input_context(model),
+        Some(Context::AppNormal | Context::Explorer)
+    ) {
         return;
-    };
+    }
     let Some(root) = model
         .workspace
         .as_ref()
@@ -201,13 +205,13 @@ mod tests {
             model.project_grep.visibility,
             crate::data_object::Visibility::Hidden
         );
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
     }
 
     #[test]
     fn project_search_requires_a_workspace() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
+        crate::test_utils::create_buffer(&mut model, "text");
         let manager = MessageManager::default();
 
         manager.update(

@@ -119,7 +119,6 @@ pub(crate) fn open(model: &mut Model) -> Option<Effect> {
     model.vcs.commit.editor.resize_active_view(width, height);
     model.vcs.notice = None;
     model.active_page = AppPage::VcsCommit;
-    model.context_stack.push(Context::VcsCommit);
     crate::editing::enter_insert(model);
     None
 }
@@ -153,9 +152,6 @@ fn return_to_status(model: &mut Model) {
     model
         .context_stack
         .pop_if(|context| context == &Context::VcsCommitInput);
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::VcsCommit);
 }
 
 fn submit(model: &mut Model) -> Option<Effect> {
@@ -315,7 +311,7 @@ mod tests {
             workspace: Some(Workspace::new(root.clone())),
             ..Model::default()
         };
-        model.context_stack.push(Context::VCS);
+        model.active_page = AppPage::Vcs;
         model.vcs.changes.state = ChangesState::Ready(vec![FileChange {
             kind: ChangeKind::Modified,
             staged: true,

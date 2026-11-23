@@ -181,15 +181,16 @@ mod tests {
     #[test]
     fn dispatches_to_a_derived_agent_insert_context() {
         let registry = TextInputRegistry::builtin();
-        let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
-        model.current_focus = crate::data_object::FocusTarget::ToolsPanel;
+        let mut model = Model {
+            current_focus: crate::data_object::FocusTarget::ToolsPanel,
+            ..Model::default()
+        };
         model.tools.active_tool = Some(crate::tools::ToolKind::Agent);
         model.tools.visibility = crate::data_object::Visibility::Displayed;
         model.agent.enter_insert_mode();
 
         registry.handle(&mut model, TextInputEvent::Insert('x'));
         assert_eq!(model.agent.prompt(), "x");
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert!(model.context_stack.is_empty());
     }
 }
