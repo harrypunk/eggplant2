@@ -186,7 +186,7 @@ Normal-mode bindings resolve to semantic commands. In Insert mode, unbound print
 
 Directional focus commands use `FocusManager` over the narrow `FocusHost` interface. A `FocusLayout` built from the page's actual window rectangles selects the nearest region in the requested direction, with a logical fallback before the first resize. Empty editor regions remain focusable, and unavailable windows such as a workspace-less explorer are excluded. Feature adapters own input-context transitions; the controller does not depend on document contents or global feature state. Current bindings are centralized in [Key input, sequences, and hints](key-input.md).
 
-Built-in common commands use a Space leader and bottom-right key-hints popup, not the configurable direct-key map. Leader actions feed back into the normal message/update path; they do not have separate command implementations.
+Built-in common commands use a configurable leader chord (`Space` by default) and bottom-right key-hints popup. Leader submenu definitions remain separate from the configurable direct-key map, while their actions feed back into the normal message/update path rather than separate command implementations.
 
 All mutations go through the editor command API so undo, dirty tracking, viewport updates, and future AI-generated transactions share the same path.
 

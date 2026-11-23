@@ -179,10 +179,11 @@ mod tests {
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(120, 20));
         let mut effect = None;
-        for key in [' ', 'f', 'f'] {
+        manager.update(&mut model, Message::CommandMenuStart);
+        for key in ['f', 'f'] {
             effect = manager.update(
                 &mut model,
-                Message::CommandMenuKey(crossterm::event::KeyCode::Char(key)),
+                Message::CommandMenuKey(crossterm::event::KeyCode::Char(key).into()),
             );
         }
         assert!(effect.is_none());

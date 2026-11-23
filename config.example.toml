@@ -4,6 +4,8 @@ theme = "default"
 # External sources use an explicit provider and fallback instead:
 # theme = { provider = "ghostty", path = "/absolute/path/to/ghostty-theme", fallback = "default" }
 event_poll_timeout = 250
+# Chord that opens the common command menu in Normal, Welcome, and Explorer.
+leader = "space"
 
 [features.page_scroll]
 step = "75%"
@@ -14,7 +16,7 @@ step = "75%"
 # Supported modifiers: ctrl, alt, and shift (for example, "ctrl-q").
 # Custom bindings merge with built-in defaults by context and action. Override only
 # what you want to change; unspecified bindings remain enabled.
-# Built-in Space leader sequences are not configured here.
+# Leader submenu sequences remain built-in; the opening chord is configured above.
 [keymap.normal]
 enter_insert_mode = "i"
 enter_visual_mode = "v"

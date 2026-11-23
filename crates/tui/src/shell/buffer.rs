@@ -175,8 +175,12 @@ mod tests {
         let second = open_file(&mut model, &second_path);
         let manager = MessageManager::default();
 
-        for key in [' ', 'b', 'n'] {
-            let effect = manager.update(&mut model, Message::CommandMenuKey(KeyCode::Char(key)));
+        manager.update(&mut model, Message::CommandMenuStart);
+        for key in ['b', 'n'] {
+            let effect = manager.update(
+                &mut model,
+                Message::CommandMenuKey(KeyCode::Char(key).into()),
+            );
             if let Some(effect) = effect {
                 apply(&mut model, effect);
             }
@@ -190,8 +194,12 @@ mod tests {
             Some(std::fs::canonicalize(&first_path).unwrap().as_path())
         );
 
-        for key in [' ', 'b', 'p'] {
-            let effect = manager.update(&mut model, Message::CommandMenuKey(KeyCode::Char(key)));
+        manager.update(&mut model, Message::CommandMenuStart);
+        for key in ['b', 'p'] {
+            let effect = manager.update(
+                &mut model,
+                Message::CommandMenuKey(KeyCode::Char(key).into()),
+            );
             if let Some(effect) = effect {
                 apply(&mut model, effect);
             }
@@ -213,8 +221,12 @@ mod tests {
         let first = create_buffer(&mut model, "first");
         create_buffer(&mut model, "second");
 
-        for key in [' ', 'b', 'n'] {
-            manager.update(&mut model, Message::CommandMenuKey(KeyCode::Char(key)));
+        manager.update(&mut model, Message::CommandMenuStart);
+        for key in ['b', 'n'] {
+            manager.update(
+                &mut model,
+                Message::CommandMenuKey(KeyCode::Char(key).into()),
+            );
         }
 
         assert_eq!(model.editor.active_buffer(), Some(first));

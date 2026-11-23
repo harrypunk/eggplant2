@@ -377,7 +377,8 @@ pub mod data_object {
 
     #[derive(Debug)]
     pub enum Message {
-        CommandMenuKey(crossterm::event::KeyCode),
+        CommandMenuStart,
+        CommandMenuKey(crate::manager::context::KeyChord),
         InvokeCommand(CommandId),
         FeatureCompletion(FeatureCompletion),
         TextInput(char),

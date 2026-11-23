@@ -129,6 +129,8 @@ fn default_theme_name() -> String {
 pub struct Config {
     /// crossterm event poll timeout in milliseconds
     pub event_poll_timeout: u64,
+    /// Key chord that opens the common command menu.
+    pub leader: String,
     /// Built-in theme name or a provider table with an explicit fallback.
     pub theme: ThemeConfig,
     pub features: FeaturesConfig,
@@ -139,6 +141,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             event_poll_timeout: 250,
+            leader: "space".to_string(),
             theme: ThemeConfig::default(),
             features: FeaturesConfig::default(),
             keymap: HashMap::from([

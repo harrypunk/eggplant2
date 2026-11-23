@@ -78,7 +78,7 @@ mod tests {
     #[test]
     fn sizes_a_vertical_list_to_its_content_and_borders() {
         let mut menu = CommandMenuState::default();
-        menu.handle_key(KeyCode::Char(' '));
+        menu.start();
         let theme = Theme::default();
         let hints = KeyHints::new(&menu, theme.ui());
 
@@ -91,7 +91,7 @@ mod tests {
     #[test]
     fn title_and_size_follow_the_active_context_stack() {
         let mut menu = CommandMenuState::default();
-        menu.handle_key(KeyCode::Char(' '));
+        menu.start();
         menu.handle_key(KeyCode::Char('b'));
         let theme = Theme::default();
         let hints = KeyHints::new(&menu, theme.ui());
@@ -100,7 +100,7 @@ mod tests {
         assert_eq!(hints.size().width, 17);
 
         let mut menu = CommandMenuState::default();
-        menu.handle_key(KeyCode::Char(' '));
+        menu.start();
         menu.handle_key(KeyCode::Char('q'));
         let hints = KeyHints::new(&menu, theme.ui());
 

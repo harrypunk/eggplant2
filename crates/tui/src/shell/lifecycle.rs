@@ -546,10 +546,11 @@ mod tests {
     fn leader_q_q_quits() {
         let manager = MessageManager::default();
         let mut model = Model::default();
-        for key in [' ', 'q', 'q'] {
+        manager.update(&mut model, Message::CommandMenuStart);
+        for key in ['q', 'q'] {
             manager.update(
                 &mut model,
-                Message::CommandMenuKey(crossterm::event::KeyCode::Char(key)),
+                Message::CommandMenuKey(crossterm::event::KeyCode::Char(key).into()),
             );
         }
 

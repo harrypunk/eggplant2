@@ -157,8 +157,9 @@ mod tests {
     };
 
     fn start_jump(model: &mut Model, manager: &MessageManager) {
-        for key in [' ', 's', 'j'] {
-            manager.update(model, Message::CommandMenuKey(KeyCode::Char(key)));
+        manager.update(model, Message::CommandMenuStart);
+        for key in ['s', 'j'] {
+            manager.update(model, Message::CommandMenuKey(KeyCode::Char(key).into()));
         }
         assert!(model.buffer_jump.is_active());
         assert_eq!(model.context_stack.last(), Some(&Context::BufferJump));

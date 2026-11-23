@@ -28,7 +28,7 @@ pub fn run(
     ui: UiRegistry,
     mut model: Model,
 ) -> color_eyre::Result<()> {
-    let event_manager = EventManager::new(config, keymap, text_input.clone());
+    let event_manager = EventManager::new(config, keymap, text_input.clone())?;
     let message_manager = MessageManager::new(commands, text_input);
     let editor_page = Editor::new(ui);
     let vcs_page = Vcs;

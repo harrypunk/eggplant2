@@ -1,6 +1,9 @@
 use crossterm::event::KeyCode;
 
-use crate::{manager::command_registry::CommandId, theme_picker::ThemePickerCommand};
+use crate::{
+    manager::{command_registry::CommandId, context::KeyChord},
+    theme_picker::ThemePickerCommand,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CommandMenuOutcome {
@@ -203,7 +206,7 @@ const ROOT_CONTEXT: CommandMenuContext = CommandMenuContext {
     ],
 };
 
-/// Active context stack for built-in Space-prefixed common commands.
+/// Active context stack for common commands opened by the configured leader.
 #[derive(Debug, Default)]
 pub struct CommandMenuState {
     contexts: Vec<&'static CommandMenuContext>,
@@ -226,23 +229,25 @@ impl CommandMenuState {
         self.current().map_or(&[], |context| context.items)
     }
 
-    pub fn handle_key(&mut self, key: KeyCode) -> CommandMenuOutcome {
-        if key == KeyCode::Esc {
+    pub fn start(&mut self) {
+        self.contexts.clear();
+        self.contexts.push(&ROOT_CONTEXT);
+    }
+
+    pub fn handle_key(&mut self, key: impl Into<KeyChord>) -> CommandMenuOutcome {
+        let key = key.into();
+        if key.code == KeyCode::Esc {
             self.contexts.clear();
             return CommandMenuOutcome::Cancelled;
         }
 
         let Some(context) = self.current() else {
-            if key == KeyCode::Char(' ') {
-                self.contexts.push(&ROOT_CONTEXT);
-                return CommandMenuOutcome::Pending;
-            }
             return CommandMenuOutcome::Cancelled;
         };
         let Some(item) = context
             .items
             .iter()
-            .find(|item| key == KeyCode::Char(item.key))
+            .find(|item| key.modifiers.is_empty() && key.code == KeyCode::Char(item.key))
         else {
             return self.cancel();
         };
@@ -297,10 +302,7 @@ mod tests {
     #[test]
     fn menu_sequences_emit_expected_actions() {
         let mut menu = CommandMenuState::default();
-        assert_eq!(
-            menu.handle_key(KeyCode::Char(' ')),
-            CommandMenuOutcome::Pending
-        );
+        menu.start();
         assert!(menu.is_active());
         assert_eq!(menu.context_title(), "Leader");
         assert_eq!(
@@ -314,7 +316,7 @@ mod tests {
         );
         assert!(!menu.is_active());
 
-        menu.handle_key(KeyCode::Char(' '));
+        menu.start();
         menu.handle_key(KeyCode::Char('b'));
         assert_eq!(
             menu.handle_key(KeyCode::Char('c')),
@@ -326,7 +328,7 @@ mod tests {
             ('r', "close_buffers_right"),
             ('a', "close_all_buffers"),
         ] {
-            menu.handle_key(KeyCode::Char(' '));
+            menu.start();
             menu.handle_key(KeyCode::Char('b'));
             assert_eq!(
                 menu.handle_key(KeyCode::Char(key)),
@@ -334,7 +336,7 @@ mod tests {
             );
         }
 
-        menu.handle_key(KeyCode::Char(' '));
+        menu.start();
         menu.handle_key(KeyCode::Char('c'));
         assert_eq!(menu.context_title(), "Leader > code");
         assert_eq!(
@@ -346,7 +348,7 @@ mod tests {
             ('i', "code_implementation"),
             ('l', "code_diagnostics"),
         ] {
-            menu.handle_key(KeyCode::Char(' '));
+            menu.start();
             menu.handle_key(KeyCode::Char('c'));
             assert_eq!(
                 menu.handle_key(KeyCode::Char(key)),
@@ -354,7 +356,7 @@ mod tests {
             );
         }
 
-        menu.handle_key(KeyCode::Char(' '));
+        menu.start();
         menu.handle_key(KeyCode::Char('s'));
         assert_eq!(menu.context_title(), "Leader > search");
         assert_eq!(
@@ -362,7 +364,7 @@ mod tests {
             CommandMenuOutcome::Action(CommandId("buffer_jump_start"))
         );
 
-        menu.handle_key(KeyCode::Char(' '));
+        menu.start();
         menu.handle_key(KeyCode::Char('s'));
         assert_eq!(menu.context_title(), "Leader > search");
         assert_eq!(
@@ -370,14 +372,14 @@ mod tests {
             CommandMenuOutcome::Action(CommandId("buffer_grep_open"))
         );
 
-        menu.handle_key(KeyCode::Char(' '));
+        menu.start();
         menu.handle_key(KeyCode::Char('s'));
         assert_eq!(
             menu.handle_key(KeyCode::Char('p')),
             CommandMenuOutcome::Action(CommandId("project_grep_open"))
         );
 
-        menu.handle_key(KeyCode::Char(' '));
+        menu.start();
         menu.handle_key(KeyCode::Char('a'));
         assert_eq!(menu.context_title(), "Leader > ai");
         assert_eq!(
@@ -385,7 +387,7 @@ mod tests {
             CommandMenuOutcome::Action(CommandId("agent_toggle_panel"))
         );
 
-        menu.handle_key(KeyCode::Char(' '));
+        menu.start();
         menu.handle_key(KeyCode::Char('q'));
         assert_eq!(menu.context_title(), "Leader > quit");
         assert_eq!(
@@ -393,13 +395,13 @@ mod tests {
             CommandMenuOutcome::Action(CommandId("quit"))
         );
 
-        menu.handle_key(KeyCode::Char(' '));
+        menu.start();
         assert_eq!(
             menu.handle_key(KeyCode::Char('e')),
             CommandMenuOutcome::Action(CommandId("toggle_file_explorer"))
         );
 
-        menu.handle_key(KeyCode::Char(' '));
+        menu.start();
         menu.handle_key(KeyCode::Char('f'));
         assert_eq!(menu.context_title(), "Leader > files");
         assert_eq!(
@@ -407,7 +409,7 @@ mod tests {
             CommandMenuOutcome::Action(CommandId("open_file_picker"))
         );
 
-        menu.handle_key(KeyCode::Char(' '));
+        menu.start();
         menu.handle_key(KeyCode::Char('g'));
         assert_eq!(menu.context_title(), "Leader > git");
         assert_eq!(
@@ -415,13 +417,13 @@ mod tests {
             CommandMenuOutcome::Action(CommandId("open_vcs_page"))
         );
 
-        menu.handle_key(KeyCode::Char(' '));
+        menu.start();
         assert_eq!(
             menu.handle_key(KeyCode::Char(' ')),
             CommandMenuOutcome::Action(CommandId("open_file_picker"))
         );
 
-        menu.handle_key(KeyCode::Char(' '));
+        menu.start();
         menu.handle_key(KeyCode::Char('u'));
         assert_eq!(menu.context_title(), "Leader > ui");
         assert_eq!(
@@ -429,7 +431,7 @@ mod tests {
             CommandMenuOutcome::Action(ThemePickerCommand::Open.id())
         );
 
-        menu.handle_key(KeyCode::Char(' '));
+        menu.start();
         menu.handle_key(KeyCode::Char('u'));
         assert_eq!(
             menu.handle_key(KeyCode::Char('w')),
@@ -440,7 +442,7 @@ mod tests {
     #[test]
     fn escape_cancels_pending_sequence() {
         let mut menu = CommandMenuState::default();
-        menu.handle_key(KeyCode::Char(' '));
+        menu.start();
         assert_eq!(menu.handle_key(KeyCode::Esc), CommandMenuOutcome::Cancelled);
         assert!(!menu.is_active());
     }

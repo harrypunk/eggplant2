@@ -30,7 +30,7 @@ The command registry owns:
 - Keybinding conflict diagnostics at startup.
 - Built-in leader menu contributions without a separate hardcoded action-to-message match.
 
-The built-in Space leader remains fixed product behavior; arbitrary leader sequences are not user-configurable. Menu entries and direct bindings share command resolution instead of maintaining two command tables.
+The root `leader` setting configures the opening chord (`Space` by default); arbitrary submenu sequences are not user-configurable. Menu entries and direct bindings share command resolution instead of maintaining two command tables.
 
 Exact handler signatures should remain narrow. Do not use a generic command bus carrying arbitrary strings and untyped payloads throughout the application.
 

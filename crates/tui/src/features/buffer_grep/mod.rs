@@ -184,8 +184,12 @@ mod tests {
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(100, 20));
 
-        for key in [' ', 's', 'c'] {
-            manager.update(&mut model, Message::CommandMenuKey(KeyCode::Char(key)));
+        manager.update(&mut model, Message::CommandMenuStart);
+        for key in ['s', 'c'] {
+            manager.update(
+                &mut model,
+                Message::CommandMenuKey(KeyCode::Char(key).into()),
+            );
         }
         assert_eq!(model.context_stack.last(), Some(&Context::BufferGrep));
 
@@ -229,8 +233,12 @@ mod tests {
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(80, 10));
 
-        for key in [' ', 's', 'c'] {
-            manager.update(&mut model, Message::CommandMenuKey(KeyCode::Char(key)));
+        manager.update(&mut model, Message::CommandMenuStart);
+        for key in ['s', 'c'] {
+            manager.update(
+                &mut model,
+                Message::CommandMenuKey(KeyCode::Char(key).into()),
+            );
         }
         manager.update(&mut model, Message::TextInput('e'));
         manager.update(

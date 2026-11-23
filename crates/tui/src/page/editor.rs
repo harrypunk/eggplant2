@@ -242,9 +242,7 @@ mod tests {
             }
         }
 
-        model
-            .command_menu
-            .handle_key(crossterm::event::KeyCode::Char(' '));
+        model.command_menu.start();
         model.file_picker.visibility = Visibility::Displayed;
         model
             .theme_picker
@@ -355,9 +353,7 @@ mod tests {
         let mut terminal = Terminal::new(backend).unwrap();
         let mut model = Model::default();
         create_buffer(&mut model, "hello");
-        model
-            .command_menu
-            .handle_key(crossterm::event::KeyCode::Char(' '));
+        model.command_menu.start();
         let page = Editor::default();
 
         terminal.draw(|frame| page.view(&model, frame)).unwrap();

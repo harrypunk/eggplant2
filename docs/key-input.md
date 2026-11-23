@@ -262,7 +262,7 @@ Every single-line popup `TextInput` supports `Left`/`Right` movement at Unicode-
 
 ## Configuration
 
-Custom `[keymap]` entries merge with defaults for application-specific actions, so only overrides need to be specified. Common keys and confirmation/cancellation are not configurable. Built-in Space leader sequences are not configured in TOML. Explicit unbinding is not implemented.
+Custom `[keymap]` entries merge with defaults for application-specific actions, so only overrides need to be specified. Common keys and confirmation/cancellation are not configurable. The root `leader` setting configures the opening chord (`leader = "space"` by default); leader submenu entries remain built-in. Explicit unbinding is not implemented.
 
 See [`config.example.toml`](../config.example.toml) for every configurable action name and its default binding.
 
@@ -311,7 +311,7 @@ Input translation is pure. It does not change the model, execute commands, sleep
 
 Direct bindings and leader targets share `CommandRegistry`: each stable command ID has metadata and a handler. Resolved input emits `InvokeCommand(CommandId)`; unmigrated commands use compatibility messages, while the theme picker, file picker, buffer switching, editing commands, explorer state commands, lifecycle commands, and focus commands already use feature-owned handlers. Duplicate command registrations and duplicate chords in one input context are startup errors. Later feature migrations replace compatibility handlers without changing keybindings.
 
-The built-in Space leader is already a small data-driven sequence state machine. Each `CommandMenuContext` owns its semantic title and items, and each item targets either a submenu or a semantic `CommandId`. `CommandMenuState` stores the active context stack and returns `Pending`, `Cancelled`, or a command action. `KeyHints` renders the current context's candidates and composes its title by joining active context titles, such as `Leader > buffer`. Titles therefore grow with the menu definitions rather than requiring a separate menu-specific title match.
+The configured leader (`Space` by default) opens a small data-driven sequence state machine. `EventManager` validates the configured chord once, converts terminal events to `KeyChord`, and delegates start/pending decisions to `manager::context::leader_input`. `CommandMenuStart` opens the root without the menu knowing the physical leader chord; `CommandMenuKey(KeyChord)` continues an active sequence. Each `CommandMenuContext` owns its semantic title and items, and each item targets either a submenu or a semantic `CommandId`. `KeyHints` renders the current context's candidates and composes its title by joining active context titles, such as `Leader > buffer`.
 
 ## Design rules
 
@@ -325,7 +325,7 @@ The built-in Space leader is already a small data-driven sequence state machine.
 
 ## Migrating to general key sequences
 
-The direct-key registry can coexist with the hard-coded leader while the command set is small. When more multi-key bindings are needed, replace the special-case routing with one sequence-capable matcher rather than adding more independent state machines.
+The direct-key registry coexists with the configured leader state machine while the command set is small. When more multi-key bindings are needed, replace the special-case routing with one sequence-capable matcher rather than adding more independent state machines.
 
 A conceptual resolver API is:
 

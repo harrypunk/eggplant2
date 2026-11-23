@@ -5,26 +5,38 @@ use ratatui::crossterm::event::{self, Event};
 
 use crate::component::text_input::TextCursorMovement;
 use crate::config::Config;
-use crate::data_object::{CommandId, Context, Message, Model};
+use crate::data_object::{Context, Message, Model};
 use crate::manager::{
-    context::KeyChord, input_context::input_context, keyboard_input_registry::Registry,
+    context::{KeyChord, LeaderInput, leader_input},
+    input_context::input_context,
+    keyboard_input_registry::Registry,
     text_input_registry::TextInputRegistry,
 };
 
 #[derive(Debug)]
 pub struct EventManager {
     poll_timeout: Duration,
+    leader: KeyChord,
     keymap: Registry,
     text_input: TextInputRegistry,
 }
 
 impl EventManager {
-    pub fn new(config: &Config, keymap: Registry, text_input: TextInputRegistry) -> Self {
-        Self {
+    pub fn new(
+        config: &Config,
+        keymap: Registry,
+        text_input: TextInputRegistry,
+    ) -> color_eyre::Result<Self> {
+        let leader = config
+            .leader
+            .parse::<KeyChord>()
+            .map_err(|error| color_eyre::eyre::eyre!(error))?;
+        Ok(Self {
             poll_timeout: Duration::from_millis(config.event_poll_timeout),
+            leader,
             keymap,
             text_input,
-        }
+        })
     }
 
     /// Wait for the next terminal event and translate it into a [`Message`].
@@ -55,33 +67,20 @@ impl EventManager {
 
     fn translate_key(&self, key: KeyEvent, model: &Model) -> Option<Message> {
         let context = input_context(model)?;
-        if model.command_menu.is_active() || Self::is_leader_start(&context, key) {
-            return Some(Message::CommandMenuKey(key.code));
+        let chord = KeyChord::from(key);
+        match leader_input(context, chord, self.leader, model.command_menu.is_active()) {
+            Some(LeaderInput::Start) => return Some(Message::CommandMenuStart),
+            Some(LeaderInput::Pending) => return Some(Message::CommandMenuKey(chord)),
+            None => {}
         }
-        self.resolve_command(&context, key)
+        self.keymap
+            .get_binding(&context)
+            .and_then(|bindings| bindings.resolve_chord(chord))
             .map(Message::InvokeCommand)
-            .or_else(|| self.unbound_key_message(&context, key))
+            .or_else(|| self.unbound_key_message(&context, chord))
     }
 
-    /// Resolve a command by direct binding, menu alias, then shifted-symbol fallback.
-    fn resolve_command(&self, context: &Context, key: KeyEvent) -> Option<CommandId> {
-        let bindings = self.keymap.get_binding(context)?;
-        let direct = bindings.resolve(KeyChord::new(key.code, key.modifiers));
-        let navigation =
-            menu_navigation_alias(context, key).and_then(|alias| bindings.resolve(alias));
-        let shifted = shifted_symbol_chord(key).and_then(|chord| bindings.resolve(chord));
-        direct.or(navigation).or(shifted)
-    }
-
-    fn is_leader_start(context: &Context, key: KeyEvent) -> bool {
-        (matches!(
-            context,
-            Context::AppNormal | Context::Welcome | Context::Explorer
-        )) && key.code == KeyCode::Char(' ')
-            && key.modifiers.is_empty()
-    }
-
-    fn unbound_key_message(&self, context: &Context, key: KeyEvent) -> Option<Message> {
+    fn unbound_key_message(&self, context: &Context, key: KeyChord) -> Option<Message> {
         match key.code {
             KeyCode::Left if self.text_input.accepts_cursor(context) => {
                 Some(Message::TextInputCursor(TextCursorMovement::Left))
@@ -100,43 +99,6 @@ impl EventManager {
     }
 }
 
-fn shifted_symbol_chord(key: KeyEvent) -> Option<KeyChord> {
-    // Terminals disagree about SHIFT metadata for symbols such as `$`.
-    let KeyCode::Char(character) = key.code else {
-        return None;
-    };
-    if character.is_alphabetic() || !key.modifiers.contains(KeyModifiers::SHIFT) {
-        return None;
-    }
-    Some(KeyChord::new(
-        key.code,
-        key.modifiers & !KeyModifiers::SHIFT,
-    ))
-}
-
-fn menu_navigation_alias(context: &Context, key: KeyEvent) -> Option<KeyChord> {
-    if key.modifiers != KeyModifiers::CONTROL
-        || ![
-            Context::FilePicker,
-            Context::ThemePicker,
-            Context::BufferGrep,
-            Context::ProjectGrep,
-            Context::VcsBranch,
-            Context::VcsMerge,
-            Context::VcsReset,
-        ]
-        .contains(context)
-    {
-        return None;
-    }
-    let code = match key.code {
-        KeyCode::Char('n') => KeyCode::Down,
-        KeyCode::Char('p') => KeyCode::Up,
-        _ => return None,
-    };
-    Some(KeyChord::new(code, KeyModifiers::NONE))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -145,7 +107,7 @@ mod tests {
     fn event_manager() -> EventManager {
         let config = Config::default();
         let keymap = Registry::from_config(&config.keymap, &CommandRegistry::default()).unwrap();
-        EventManager::new(&config, keymap, TextInputRegistry::builtin())
+        EventManager::new(&config, keymap, TextInputRegistry::builtin()).unwrap()
     }
 
     fn model_with_buffer(context: Context) -> Model {
@@ -219,7 +181,7 @@ mod tests {
             .or_default()
             .insert("toggle_file_explorer".to_string(), "ctrl-n".to_string());
         let keymap = Registry::from_config(&config.keymap, &CommandRegistry::default()).unwrap();
-        let manager = EventManager::new(&config, keymap, TextInputRegistry::builtin());
+        let manager = EventManager::new(&config, keymap, TextInputRegistry::builtin()).unwrap();
         let mut model = Model::default();
         model.context_stack.push(Context::FilePicker);
 
@@ -228,6 +190,40 @@ mod tests {
             manager.translate(event, &model),
             Some(Message::InvokeCommand(CommandId("toggle_file_explorer")))
         ));
+    }
+
+    #[test]
+    fn configured_leader_starts_and_continues_the_command_menu() {
+        let config = Config::parse("leader = \",\"").unwrap();
+        let keymap = Registry::from_config(&config.keymap, &CommandRegistry::default()).unwrap();
+        let manager = EventManager::new(&config, keymap, TextInputRegistry::builtin()).unwrap();
+        let mut model = model_with_buffer(Context::AppNormal);
+
+        let comma = KeyEvent::new(KeyCode::Char(','), KeyModifiers::NONE);
+        assert!(matches!(
+            manager.translate(Event::Key(comma), &model),
+            Some(Message::CommandMenuStart)
+        ));
+        let space = Event::Key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
+        let translated = manager.translate(space, &model);
+        assert!(!matches!(translated, Some(Message::CommandMenuStart)));
+
+        model.command_menu.start();
+        let next = KeyChord::from(KeyCode::Char('b'));
+        assert!(matches!(
+            manager.translate(Event::Key(KeyEvent::new(KeyCode::Char('b'), KeyModifiers::NONE)), &model),
+            Some(Message::CommandMenuKey(actual)) if actual == next
+        ));
+    }
+
+    #[test]
+    fn invalid_leader_configuration_is_rejected_at_startup() {
+        let config = Config {
+            leader: "not-a-key".to_string(),
+            ..Config::default()
+        };
+        let keymap = Registry::from_config(&config.keymap, &CommandRegistry::default()).unwrap();
+        assert!(EventManager::new(&config, keymap, TextInputRegistry::builtin()).is_err());
     }
 
     #[test]
@@ -534,7 +530,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::CommandMenuKey(KeyCode::Char(' ')))
+            Some(Message::CommandMenuStart)
         ));
     }
 
@@ -1098,7 +1094,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::CommandMenuKey(KeyCode::Char(' ')))
+            Some(Message::CommandMenuStart)
         ));
     }
 

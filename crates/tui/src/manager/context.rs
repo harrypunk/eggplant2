@@ -1,6 +1,6 @@
 use std::{collections::HashMap, str::FromStr};
 
-use crossterm::event::{KeyCode, KeyModifiers};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::data_object::{CommandId, Context};
 
@@ -15,6 +15,52 @@ impl KeyChord {
     pub const fn new(code: KeyCode, modifiers: KeyModifiers) -> Self {
         Self { code, modifiers }
     }
+
+    /// Normalize terminal-specific SHIFT metadata for symbolic characters.
+    pub fn shifted_symbol(self) -> Option<Self> {
+        let KeyCode::Char(character) = self.code else {
+            return None;
+        };
+        if character.is_alphabetic() || !self.modifiers.contains(KeyModifiers::SHIFT) {
+            return None;
+        }
+        Some(Self::new(self.code, self.modifiers & !KeyModifiers::SHIFT))
+    }
+}
+
+impl From<KeyEvent> for KeyChord {
+    fn from(key: KeyEvent) -> Self {
+        Self::new(key.code, key.modifiers)
+    }
+}
+
+impl From<KeyCode> for KeyChord {
+    fn from(code: KeyCode) -> Self {
+        Self::new(code, KeyModifiers::NONE)
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LeaderInput {
+    Start,
+    Pending,
+}
+
+/// Decide whether a chord starts or continues the configured leader workflow.
+pub fn leader_input(
+    context: Context,
+    key: KeyChord,
+    leader: KeyChord,
+    active: bool,
+) -> Option<LeaderInput> {
+    if active {
+        return Some(LeaderInput::Pending);
+    }
+    const LEADER_CONTEXTS: [Context; 3] = [Context::AppNormal, Context::Welcome, Context::Explorer];
+    if key == leader && LEADER_CONTEXTS.contains(&context) {
+        return Some(LeaderInput::Start);
+    }
+    None
 }
 
 impl FromStr for KeyChord {
@@ -123,6 +169,41 @@ impl ContextBindings {
     pub fn resolve(&self, key: KeyChord) -> Option<CommandId> {
         self.key_command_map.get(&key).copied()
     }
+
+    /// Resolve a direct binding before terminal compatibility fallbacks.
+    pub fn resolve_chord(&self, key: KeyChord) -> Option<CommandId> {
+        self.resolve(key)
+            .or_else(|| {
+                menu_navigation_alias(self.context, key).and_then(|alias| self.resolve(alias))
+            })
+            .or_else(|| {
+                key.shifted_symbol()
+                    .and_then(|shifted| self.resolve(shifted))
+            })
+    }
+}
+
+fn menu_navigation_alias(context: Context, key: KeyChord) -> Option<KeyChord> {
+    if key.modifiers != KeyModifiers::CONTROL
+        || ![
+            Context::FilePicker,
+            Context::ThemePicker,
+            Context::BufferGrep,
+            Context::ProjectGrep,
+            Context::VcsBranch,
+            Context::VcsMerge,
+            Context::VcsReset,
+        ]
+        .contains(&context)
+    {
+        return None;
+    }
+    let code = match key.code {
+        KeyCode::Char('n') => KeyCode::Down,
+        KeyCode::Char('p') => KeyCode::Up,
+        _ => return None,
+    };
+    Some(KeyChord::from(code))
 }
 
 #[cfg(test)]
@@ -161,6 +242,41 @@ mod tests {
         assert_eq!(
             "shift-i".parse::<KeyChord>().unwrap(),
             KeyChord::new(KeyCode::Char('I'), KeyModifiers::SHIFT)
+        );
+    }
+
+    #[test]
+    fn leader_routing_uses_the_configured_chord_and_pending_state() {
+        let leader = KeyChord::from(KeyCode::Char(','));
+        assert_eq!(
+            leader_input(Context::AppNormal, leader, leader, false),
+            Some(LeaderInput::Start)
+        );
+        assert_eq!(
+            leader_input(Context::Welcome, leader, leader, false),
+            Some(LeaderInput::Start)
+        );
+        assert_eq!(
+            leader_input(Context::FilePicker, leader, leader, false),
+            None
+        );
+        assert_eq!(
+            leader_input(
+                Context::FilePicker,
+                KeyChord::from(KeyCode::Esc),
+                leader,
+                true
+            ),
+            Some(LeaderInput::Pending)
+        );
+        assert_eq!(
+            leader_input(
+                Context::AppNormal,
+                KeyChord::from(KeyCode::Char(' ')),
+                leader,
+                false
+            ),
+            None
         );
     }
 

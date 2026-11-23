@@ -228,16 +228,21 @@ mod tests {
         let manager = MessageManager::default();
         let mut model = Model::default();
 
-        for key in [' ', 'u'] {
-            assert!(
-                manager
-                    .update(&mut model, Message::CommandMenuKey(KeyCode::Char(key)))
-                    .is_none()
-            );
-        }
+        manager.update(&mut model, Message::CommandMenuStart);
         assert!(
             manager
-                .update(&mut model, Message::CommandMenuKey(KeyCode::Char('t')))
+                .update(
+                    &mut model,
+                    Message::CommandMenuKey(KeyCode::Char('u').into())
+                )
+                .is_none()
+        );
+        assert!(
+            manager
+                .update(
+                    &mut model,
+                    Message::CommandMenuKey(KeyCode::Char('t').into())
+                )
                 .is_some()
         );
         assert!(model.theme_picker.is_open());

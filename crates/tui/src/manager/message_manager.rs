@@ -38,6 +38,10 @@ impl MessageManager {
 
     pub fn update(&self, model: &mut Model, msg: Message) -> Option<Effect> {
         match msg {
+            Message::CommandMenuStart => {
+                model.command_menu.start();
+                return None;
+            }
             Message::CommandMenuKey(key) => {
                 return match model.command_menu.handle_key(key) {
                     CommandMenuOutcome::Pending | CommandMenuOutcome::Cancelled => None,
