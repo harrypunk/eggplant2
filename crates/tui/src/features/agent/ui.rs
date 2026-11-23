@@ -1,8 +1,9 @@
 use ratatui::{Frame, layout::Rect};
 
 use crate::{
-    component::agent::{AgentDialog, AgentDialogProps, AgentHelp, AgentPanel, AgentPanelProps},
-    data_object::{FocusState, FocusTarget, Model},
+    component::agent::{AgentDialog, AgentHelp, AgentPanel, AgentPanelProps, AgentViewProps},
+    data_object::{Context, FocusState, FocusTarget, Model},
+    manager::input_context::input_context,
     ui::{OverlayContribution, OverlayKind, OverlayPlacement, UiRegistry},
 };
 
@@ -16,28 +17,30 @@ fn dialog_overlay(model: &Model) -> Option<OverlayContribution> {
         OverlayContribution::new(
             "agent",
             OverlayKind::Modal,
-            OverlayPlacement::Centered(AgentDialog::size(dialog_props(model))),
+            OverlayPlacement::Centered(AgentDialog::size(&view_props(model))),
             render_dialog,
         )
         .with_cursor(dialog_cursor)
     })
 }
 
-fn dialog_props(model: &Model) -> AgentDialogProps<'_> {
-    AgentDialogProps {
+fn view_props(model: &Model) -> AgentViewProps<'_> {
+    AgentViewProps {
         session: model.agent.session(),
         prompt: model.agent.prompt_state(),
+        commands: prompt_commands(model),
+        selected_command: model.agent.command_state().selected(),
         storage_error: model.agent.storage_error(),
         styles: model.theme.ui(),
     }
 }
 
 fn render_dialog(model: &Model, frame: &mut Frame, area: Rect) {
-    AgentDialog::render(dialog_props(model), frame, area);
+    AgentDialog::render(&view_props(model), frame, area);
 }
 
 fn dialog_cursor(model: &Model, area: Rect) -> Option<ratatui::layout::Position> {
-    AgentDialog::cursor(dialog_props(model), area)
+    AgentDialog::cursor(&view_props(model), area)
 }
 
 fn help_overlay(model: &Model) -> Option<OverlayContribution> {
@@ -55,6 +58,14 @@ fn render_help(model: &Model, frame: &mut Frame, area: Rect) {
     AgentHelp::render(model.theme.ui(), frame, area);
 }
 
+fn prompt_commands(model: &Model) -> Option<Vec<super::PromptCommand>> {
+    let context = input_context(model)?;
+    if ![Context::AgentChatDialog, Context::AgentChatInsert].contains(&context) {
+        return None;
+    }
+    model.agent.command_state().commands(model.agent.prompt())
+}
+
 pub(crate) fn render_panel(model: &Model, frame: &mut Frame, area: Rect) {
     let focus = if model.current_focus == FocusTarget::ToolsPanel {
         FocusState::Focused
@@ -62,15 +73,42 @@ pub(crate) fn render_panel(model: &Model, frame: &mut Frame, area: Rect) {
         FocusState::Unfocused
     };
     AgentPanel::render(
-        AgentPanelProps {
-            session: model.agent.session(),
-            prompt: model.agent.prompt_state(),
+        &AgentPanelProps {
+            shared: view_props(model),
             mode: model.agent.panel_mode(),
-            storage_error: model.agent.storage_error(),
             focus,
-            styles: model.theme.ui(),
         },
         frame,
         area,
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{data_object::Visibility, tools::ToolKind};
+
+    #[test]
+    fn commands_are_shared_by_panel_and_dialog() {
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+        model.current_focus = FocusTarget::ToolsPanel;
+        model.tools.active_tool = Some(ToolKind::Agent);
+        model.tools.visibility = Visibility::Displayed;
+        model.agent.enter_insert_mode();
+        model.agent.prompt.set_value("/p");
+        assert_eq!(
+            prompt_commands(&model),
+            Some(vec![crate::agent::PromptCommand::ProviderLogin])
+        );
+
+        model.context_stack.push(Context::AgentChatDialog);
+        assert_eq!(
+            prompt_commands(&model),
+            Some(vec![crate::agent::PromptCommand::ProviderLogin])
+        );
+
+        model.agent.prompt.set_value("plain prompt");
+        assert!(prompt_commands(&model).is_none());
+    }
 }

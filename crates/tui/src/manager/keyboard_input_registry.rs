@@ -149,6 +149,9 @@ fn common_bindings() -> KeymapConfig {
                 ("agent_submit", "enter"),
                 ("agent_backspace", "backspace"),
                 ("agent_interrupt", "ctrl-f7"),
+                ("agent_command_next", "ctrl-n"),
+                ("agent_command_previous", "ctrl-p"),
+                ("agent_command_quick_fill", "tab"),
             ],
         ),
         keymap_context(
@@ -169,6 +172,9 @@ fn common_bindings() -> KeymapConfig {
                 ("agent_submit", "enter"),
                 ("agent_backspace", "backspace"),
                 ("agent_interrupt", "ctrl-f7"),
+                ("agent_command_next", "ctrl-n"),
+                ("agent_command_previous", "ctrl-p"),
+                ("agent_command_quick_fill", "tab"),
             ],
         ),
         keymap_context(
@@ -184,6 +190,7 @@ fn common_bindings() -> KeymapConfig {
                 ("agent_interrupt", "ctrl-f7"),
             ],
         ),
+        keymap_context("provider_login", [("provider_login_close", "esc")]),
         keymap_context(
             "buffer_grep",
             [
@@ -323,6 +330,7 @@ fn parse_context(value: &str) -> Option<Context> {
         "agent_chat_help" => Some(Context::AgentChatHelp),
         "agent_chat_dialog" => Some(Context::AgentChatDialog),
         "agent_approval" => Some(Context::AgentApproval),
+        "provider_login" => Some(Context::ProviderLogin),
         "vcs" => Some(Context::VCS),
         "vcs_history" => Some(Context::VcsHistory),
         "vcs_commit" => Some(Context::VcsCommit),

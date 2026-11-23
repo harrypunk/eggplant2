@@ -74,7 +74,7 @@ impl Editor {
             (overlay.render)(model, frame, area);
         });
 
-        let overlay_cursor = overlays.last().and_then(|overlay| {
+        let overlay_cursor = overlays.iter().rev().find_map(|overlay| {
             overlay
                 .cursor
                 .and_then(|cursor| cursor(model, overlay.area(areas.main, frame.area())))
@@ -295,6 +295,48 @@ mod tests {
         );
         assert!(hidden.explorer.is_none());
         assert_eq!(hidden.editor.width, 100);
+    }
+
+    #[test]
+    fn inline_agent_command_menu_preserves_the_dialog_cursor() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("main.rs");
+        std::fs::write(&path, "fn main() {}\n").unwrap();
+        let mut model =
+            crate::startup::initial_model(Some(directory.path().to_path_buf())).unwrap();
+        crate::test_utils::open_file(&mut model, &path);
+        let manager = MessageManager::default();
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(crate::data_object::CommandId("agent_open")),
+        );
+        for _ in 0.."main.rs:1".len() {
+            manager.update(
+                &mut model,
+                Message::InvokeCommand(crate::data_object::CommandId("agent_backspace")),
+            );
+        }
+        manager.update(&mut model, Message::TextInput('/'));
+        assert_eq!(model.agent.prompt(), "/");
+        let page = Editor::default();
+        let mut terminal = Terminal::new(TestBackend::new(100, 24)).unwrap();
+
+        terminal.draw(|frame| page.view(&model, frame)).unwrap();
+
+        let rows = terminal
+            .backend()
+            .buffer()
+            .content()
+            .chunks(100)
+            .map(|row| row.iter().map(|cell| cell.symbol()).collect::<String>())
+            .collect::<Vec<_>>();
+        let command_row = rows
+            .iter()
+            .position(|row| row.contains("/provider"))
+            .unwrap();
+        let prompt_row = rows.iter().rposition(|row| row.contains('/')).unwrap();
+        assert!(command_row < prompt_row);
+        assert!(terminal.backend().cursor_visible());
     }
 
     #[test]

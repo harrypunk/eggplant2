@@ -1,8 +1,14 @@
+mod command_menu;
 mod dialog;
 mod help;
 mod panel;
+mod props;
+mod provider_login;
 mod transcript;
 
+pub use command_menu::AgentCommandMenu;
 pub use dialog::{AgentDialog, AgentDialogProps};
 pub use help::AgentHelp;
 pub use panel::{AgentPanel, AgentPanelProps};
+pub use props::AgentViewProps;
+pub use provider_login::ProviderLogin;

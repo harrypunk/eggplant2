@@ -1,4 +1,4 @@
-use eggplant_agent::{AgentSession, MessageRole, ToolApproval};
+use eggplant_agent::{MessageRole, ToolApproval};
 use ratatui::{
     Frame,
     buffer::Buffer,
@@ -6,51 +6,43 @@ use ratatui::{
     widgets::{Paragraph, Widget, Wrap},
 };
 
-use super::transcript::diff_lines;
-use crate::{
-    component::{
-        auto_height::AutoHeight,
-        popup::{Popup, content_area},
-        text_input::TextInput,
-        text_layout::TextFlow,
-    },
-    theme::UiTheme,
+use super::{command_menu::AgentCommandMenu, props::AgentViewProps, transcript::diff_lines};
+use crate::component::{
+    auto_height::AutoHeight,
+    popup::{Popup, content_area},
+    text_input::TextInput,
+    text_layout::TextFlow,
 };
 
 const AUTO_HEIGHT: AutoHeight = AutoHeight::new(12, 24, 2, 9, 4);
 
-#[derive(Clone, Copy)]
-pub struct AgentDialogProps<'a> {
-    pub session: &'a AgentSession,
-    pub prompt: &'a TextInput,
-    pub storage_error: Option<&'a str>,
-    pub styles: &'a UiTheme,
-}
+pub type AgentDialogProps<'a> = AgentViewProps<'a>;
 
 pub struct AgentDialog;
 
 impl AgentDialog {
-    pub fn size(props: AgentDialogProps<'_>) -> Size {
+    pub fn size(props: &AgentDialogProps<'_>) -> Size {
         if props.session.pending_approval().is_some() {
-            Size::new(90, 24)
-        } else {
-            AUTO_HEIGHT.dialog_size(props.prompt, 68, TextFlow::Wrapped)
+            return Size::new(90, 24);
         }
+        let mut size = AUTO_HEIGHT.dialog_size(props.prompt, 68, TextFlow::Wrapped);
+        size.height = size.height.saturating_add(command_height(props)).min(24);
+        size
     }
 
-    pub fn render(props: AgentDialogProps<'_>, frame: &mut Frame, area: Rect) {
+    pub fn render(props: &AgentDialogProps<'_>, frame: &mut Frame, area: Rect) {
         frame.render_widget(
             Popup::new("AI agent", AgentDialogContent { props }, props.styles),
             area,
         );
     }
 
-    pub fn cursor(props: AgentDialogProps<'_>, area: Rect) -> Option<Position> {
+    pub fn cursor(props: &AgentDialogProps<'_>, area: Rect) -> Option<Position> {
         if props.session.pending_approval().is_some() {
             return None;
         }
         props.prompt.cursor_position_with_flow(
-            input_area(props.prompt, area),
+            input_area(props, area),
             props.styles,
             TextFlow::Wrapped,
         )
@@ -58,13 +50,16 @@ impl AgentDialog {
 }
 
 struct AgentDialogContent<'a> {
-    props: AgentDialogProps<'a>,
+    props: &'a AgentDialogProps<'a>,
 }
 
 impl AgentDialogContent<'_> {
     fn render_prompt(&self, area: Rect, buffer: &mut Buffer) {
-        let [status, assistant, input] =
-            dialog_layout(area, prompt_input_height(self.props.prompt, area));
+        let [status, assistant, commands, input] = dialog_layout(
+            area,
+            command_height(self.props),
+            prompt_input_height(self.props.prompt, area),
+        );
         Paragraph::new(self.status_text())
             .style(self.props.styles.muted)
             .render(status, buffer);
@@ -72,6 +67,15 @@ impl AgentDialogContent<'_> {
             .wrap(Wrap { trim: false })
             .style(self.props.styles.base)
             .render(assistant, buffer);
+        if let Some(command_items) = self.props.commands.as_deref() {
+            AgentCommandMenu::render(
+                command_items,
+                self.props.selected_command,
+                self.props.styles,
+                commands,
+                buffer,
+            );
+        }
         self.props
             .prompt
             .view_with_flow(self.props.styles, TextFlow::Wrapped)
@@ -99,7 +103,7 @@ impl AgentDialogContent<'_> {
             .rev()
             .find(|message| message.role == MessageRole::Assistant)
             .map(|message| message.text.as_str())
-            .unwrap_or("Ask about this buffer.")
+            .unwrap_or("")
     }
 
     fn render_approval(&self, approval: &ToolApproval, area: Rect, buffer: &mut Buffer) {
@@ -136,11 +140,16 @@ impl Widget for AgentDialogContent<'_> {
     }
 }
 
-fn dialog_layout(area: Rect, input_height: u16) -> [Rect; 3] {
+fn command_height(props: &AgentDialogProps<'_>) -> u16 {
+    AgentCommandMenu::height(props.commands.as_deref())
+}
+
+fn dialog_layout(area: Rect, commands: u16, input: u16) -> [Rect; 4] {
     Layout::vertical([
         Constraint::Length(1),
         Constraint::Fill(1),
-        Constraint::Length(input_height),
+        Constraint::Length(commands),
+        Constraint::Length(input),
     ])
     .areas(area)
 }
@@ -149,12 +158,16 @@ fn prompt_input_height(prompt: &TextInput, area: Rect) -> u16 {
     AUTO_HEIGHT.input_height(prompt, area, TextFlow::Wrapped)
 }
 
-fn prompt_area(prompt: &TextInput, area: Rect) -> Rect {
-    dialog_layout(area, prompt_input_height(prompt, area))[2]
+fn prompt_area(props: &AgentDialogProps<'_>, area: Rect) -> Rect {
+    dialog_layout(
+        area,
+        command_height(props),
+        prompt_input_height(props.prompt, area),
+    )[3]
 }
 
-fn input_area(prompt: &TextInput, area: Rect) -> Rect {
-    prompt_area(prompt, content_area(area))
+fn input_area(props: &AgentDialogProps<'_>, area: Rect) -> Rect {
+    prompt_area(props, content_area(area))
 }
 
 #[cfg(test)]
@@ -163,8 +176,9 @@ mod tests {
 
     use super::*;
     use crate::theme::Theme;
+    use eggplant_agent::AgentSession;
 
-    fn render(props: AgentDialogProps<'_>, width: u16, height: u16) -> String {
+    fn render(props: &AgentDialogProps<'_>, width: u16, height: u16) -> String {
         let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
         terminal
             .draw(|frame| AgentDialog::render(props, frame, frame.area()))
@@ -188,10 +202,12 @@ mod tests {
         let props = AgentDialogProps {
             session: &session,
             prompt: &prompt,
+            commands: None,
+            selected_command: None,
             storage_error: None,
             styles: theme.ui(),
         };
-        let content = render(props, 70, 12);
+        let content = render(&props, 70, 12);
         assert!(content.contains("main.rs:1"));
         assert!(content.contains("Streaming"));
         assert!(content.contains("answer"));
@@ -221,15 +237,17 @@ mod tests {
         let props = AgentDialogProps {
             session: &session,
             prompt: &prompt,
+            commands: None,
+            selected_command: None,
             storage_error: None,
             styles: theme.ui(),
         };
         let area = Rect::new(0, 0, 90, 24);
-        let content = render(props, area.width, area.height);
+        let content = render(&props, area.width, area.height);
         assert!(content.contains("Waiting for write approval"));
         assert!(content.contains("before"));
         assert!(content.contains("after"));
-        assert!(AgentDialog::cursor(props, area).is_none());
+        assert!(AgentDialog::cursor(&props, area).is_none());
     }
 
     #[test]
@@ -240,15 +258,17 @@ mod tests {
         let props = AgentDialogProps {
             session: &session,
             prompt: &prompt,
+            commands: None,
+            selected_command: None,
             storage_error: None,
             styles: theme.ui(),
         };
-        let size = AgentDialog::size(props);
+        let size = AgentDialog::size(&props);
         assert_eq!(size, Size::new(70, 15));
         let area = Rect::new(0, 0, size.width, size.height);
-        let cursor = AgentDialog::cursor(props, area).unwrap();
+        let cursor = AgentDialog::cursor(&props, area).unwrap();
         assert!(cursor.x < area.width && cursor.y < area.height);
         assert!(prompt_input_height(&prompt, content_area(area)) <= content_area(area).height - 4);
-        render(props, size.width, size.height);
+        render(&props, size.width, size.height);
     }
 }

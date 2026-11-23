@@ -1,9 +1,12 @@
+mod prompt_command;
 mod storage;
+mod surface;
 mod tools;
 mod ui;
 mod work;
 mod write;
 
+pub(crate) use prompt_command::{PromptCommand, PromptCommandMovement, PromptCommandState};
 pub use ui::register_ui;
 pub(crate) use ui::render_panel;
 pub(crate) use work::{close_panel_input, focus_panel_input};
@@ -51,7 +54,9 @@ struct SuspendedRun {
 pub struct AgentState {
     session: AgentSession,
     prompt: TextInput,
+    command_state: PromptCommandState,
     has_draft: bool,
+    dialog_prefill: bool,
     dialog_open: bool,
     panel_mode: AgentInputMode,
     help_visible: bool,
@@ -73,7 +78,9 @@ impl Default for AgentState {
         Self {
             session: AgentSession::default(),
             prompt: TextInput::default(),
+            command_state: PromptCommandState::default(),
             has_draft: false,
+            dialog_prefill: false,
             dialog_open: false,
             panel_mode: AgentInputMode::Normal,
             help_visible: false,
@@ -99,6 +106,20 @@ impl AgentState {
 
     pub fn prompt_state(&self) -> &TextInput {
         &self.prompt
+    }
+
+    pub fn command_state(&self) -> &PromptCommandState {
+        &self.command_state
+    }
+
+    pub fn quick_fill_prompt_command(&mut self, movement: PromptCommandMovement) -> bool {
+        let Some(name) = self.command_state.quick_fill(self.prompt.value(), movement) else {
+            return false;
+        };
+        self.prompt.set_value(name);
+        self.dialog_prefill = false;
+        self.has_draft = true;
+        true
     }
 
     pub fn panel_mode(&self) -> AgentInputMode {
@@ -145,12 +166,20 @@ impl AgentState {
     pub fn prepare_prompt(&mut self, context: EditorContext, label: String) {
         if !self.has_draft {
             self.prompt.set_value(label);
+            self.command_state.clear();
+            self.dialog_prefill = true;
             self.has_draft = true;
         }
         self.context = Some(context);
     }
 
     pub fn prepare_panel_prompt(&mut self) {
+        if self.dialog_prefill {
+            self.prompt.clear();
+            self.command_state.clear();
+            self.dialog_prefill = false;
+            self.has_draft = false;
+        }
         self.context = None;
         self.panel_mode = AgentInputMode::Normal;
         self.help_visible = false;
@@ -167,11 +196,15 @@ impl AgentState {
 
     pub fn handle_input_event(&mut self, event: TextInputEvent) {
         self.prompt.handle_event(event);
+        self.command_state.clear();
+        self.dialog_prefill = false;
         self.has_draft = true;
     }
 
     pub fn backspace(&mut self) {
         self.prompt.backspace();
+        self.command_state.clear();
+        self.dialog_prefill = false;
         self.has_draft = true;
     }
 
@@ -184,6 +217,8 @@ impl AgentState {
         self.run_started_at = Some((run_id, chrono::Utc::now().timestamp_millis()));
         self.run_context = self.context.clone().map(|context| (run_id, context));
         self.prompt.clear();
+        self.command_state.clear();
+        self.dialog_prefill = false;
         self.has_draft = false;
         Some(run_id)
     }

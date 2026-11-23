@@ -19,7 +19,8 @@ pub use shell::{buffer, command_menu, focus, lifecycle};
 pub use features::{
     agent, buffer_grep, buffer_jump, buffer_navigation, change, code_navigation, cursor_line,
     diagnostics, editing, explorer, external_sync, file_picker, line_jump, navigation,
-    notifications, page_scroll, project_grep, theme_picker, vcs, view_align, welcome, yank,
+    notifications, page_scroll, project_grep, provider_login, theme_picker, vcs, view_align,
+    welcome, yank,
 };
 
 #[cfg(test)]
@@ -56,6 +57,7 @@ pub mod data_object {
         file_picker::FilePickerState,
         line_jump::LineJumpState,
         project_grep::ProjectGrepState,
+        provider_login::ProviderLoginState,
         register::RegisterState,
         theme::{Theme, ThemeLoadState, ThemePersistenceState},
         theme_picker::ThemePickerState,
@@ -158,6 +160,7 @@ pub mod data_object {
         pub document_open: DocumentOpening,
         pub document_lifecycle: DocumentLifecycle,
         pub agent: AgentState,
+        pub provider_login: ProviderLoginState,
         pub deferred_action: Option<DeferredAction>,
         pub command_menu: CommandMenuState,
         pub code_navigation: CodeNavigationState,
@@ -205,6 +208,7 @@ pub mod data_object {
                 document_open: DocumentOpening::default(),
                 document_lifecycle: DocumentLifecycle::default(),
                 agent: AgentState::default(),
+                provider_login: ProviderLoginState::default(),
                 deferred_action: None,
                 command_menu: CommandMenuState::default(),
                 code_navigation: CodeNavigationState::default(),
@@ -409,6 +413,7 @@ pub mod data_object {
         AgentChatHelp,
         AgentChatDialog,
         AgentApproval,
+        ProviderLogin,
         VCS,
         VcsHistory,
         VcsCommit,

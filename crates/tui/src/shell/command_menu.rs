@@ -141,11 +141,10 @@ const GIT_CONTEXT: CommandMenuContext = CommandMenuContext {
 
 static AI_CONTEXT: CommandMenuContext = CommandMenuContext::new(
     "ai",
-    &[CommandMenuItem::action(
-        't',
-        "toggle agent panel",
-        CommandId("agent_toggle_panel"),
-    )],
+    &[
+        CommandMenuItem::action('p', "provider login", CommandId("provider_login_open")),
+        CommandMenuItem::action('t', "toggle agent panel", CommandId("agent_toggle_panel")),
+    ],
 );
 
 static CODE_CONTEXT: CommandMenuContext = CommandMenuContext::new(
@@ -383,6 +382,13 @@ mod tests {
         menu.start();
         menu.handle_key(KeyCode::Char('a'));
         assert_eq!(menu.context_title(), "Leader > ai");
+        assert_eq!(
+            menu.handle_key(KeyCode::Char('p')),
+            CommandMenuOutcome::Action(CommandId("provider_login_open"))
+        );
+
+        menu.start();
+        menu.handle_key(KeyCode::Char('a'));
         assert_eq!(
             menu.handle_key(KeyCode::Char('t')),
             CommandMenuOutcome::Action(CommandId("agent_toggle_panel"))

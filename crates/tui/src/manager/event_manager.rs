@@ -460,6 +460,17 @@ mod tests {
             (KeyCode::Backspace, KeyModifiers::NONE, "agent_backspace"),
             (KeyCode::Esc, KeyModifiers::NONE, "agent_close"),
             (KeyCode::F(7), KeyModifiers::CONTROL, "agent_interrupt"),
+            (
+                KeyCode::Char('n'),
+                KeyModifiers::CONTROL,
+                "agent_command_next",
+            ),
+            (
+                KeyCode::Char('p'),
+                KeyModifiers::CONTROL,
+                "agent_command_previous",
+            ),
+            (KeyCode::Tab, KeyModifiers::NONE, "agent_command_quick_fill"),
         ] {
             let event = Event::Key(KeyEvent::new(key, modifiers));
             assert!(matches!(
@@ -571,6 +582,17 @@ mod tests {
             (KeyCode::Backspace, KeyModifiers::NONE, "agent_backspace"),
             (KeyCode::Esc, KeyModifiers::NONE, "agent_panel_normal"),
             (KeyCode::F(7), KeyModifiers::CONTROL, "agent_interrupt"),
+            (
+                KeyCode::Char('n'),
+                KeyModifiers::CONTROL,
+                "agent_command_next",
+            ),
+            (
+                KeyCode::Char('p'),
+                KeyModifiers::CONTROL,
+                "agent_command_previous",
+            ),
+            (KeyCode::Tab, KeyModifiers::NONE, "agent_command_quick_fill"),
         ] {
             let event = Event::Key(KeyEvent::new(key, modifiers));
             assert!(matches!(

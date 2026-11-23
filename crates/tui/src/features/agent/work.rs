@@ -71,6 +71,21 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
             handle_command,
         ),
         Command::feature(CommandId("agent_help"), "toggle agent help", handle_command),
+        Command::feature(
+            CommandId("agent_command_next"),
+            "select next agent command",
+            handle_command,
+        ),
+        Command::feature(
+            CommandId("agent_command_previous"),
+            "select previous agent command",
+            handle_command,
+        ),
+        Command::feature(
+            CommandId("agent_command_quick_fill"),
+            "quick fill agent command",
+            handle_command,
+        ),
     ]
     .into_iter()
     .try_for_each(|command| commands.register(command))
@@ -115,6 +130,24 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
             }
         }
         "agent_help" => toggle_help(model),
+        "agent_command_next" => {
+            model
+                .agent
+                .quick_fill_prompt_command(super::PromptCommandMovement::Next);
+            None
+        }
+        "agent_command_previous" => {
+            model
+                .agent
+                .quick_fill_prompt_command(super::PromptCommandMovement::Previous);
+            None
+        }
+        "agent_command_quick_fill" => {
+            model
+                .agent
+                .quick_fill_prompt_command(super::PromptCommandMovement::Current);
+            None
+        }
         _ => None,
     }
 }
@@ -238,12 +271,10 @@ fn transition_modal(model: &mut Model, from: Context, to: Context) {
 }
 
 fn submit(model: &mut Model) -> Option<Effect> {
-    let panel_input = matches!(
-        input_context(model),
-        Some(Context::AgentChat | Context::AgentChatInsert)
-    ) && model.tools.active_tool == Some(ToolKind::Agent);
-    if !model.agent.dialog_open() && !panel_input {
-        return None;
+    let surface = super::surface::active(model)?;
+    if model.agent.prompt().starts_with('/') {
+        let command = model.agent.command_state().selected()?;
+        return execute_prompt_command(model, command);
     }
     let prompt = model.agent.prompt().trim().to_string();
     if prompt.is_empty() {
@@ -252,11 +283,16 @@ fn submit(model: &mut Model) -> Option<Effect> {
     if model.agent.session().is_running() {
         return notify(model, "Agent is already running".to_string());
     }
-    if panel_input && model.workspace.is_none() {
-        return notify(model, "Open a project to use the agent".to_string());
-    }
-    if !panel_input && let Err(message) = model.agent_context() {
-        return notify(model, message);
+    match surface {
+        super::surface::AgentSurface::Panel if model.workspace.is_none() => {
+            return notify(model, "Open a project to use the agent".to_string());
+        }
+        super::surface::AgentSurface::Dialog => {
+            if let Err(message) = model.agent_context() {
+                return notify(model, message);
+            }
+        }
+        super::surface::AgentSurface::Panel => {}
     }
     let run_id = model.agent.begin_prompt()?;
     if let Some(provider) = model.agent.provider() {
@@ -271,6 +307,18 @@ fn submit(model: &mut Model) -> Option<Effect> {
         }));
     }
     Some(Effect::feature(FakeAgentRun { run_id, prompt }))
+}
+
+fn execute_prompt_command(model: &mut Model, command: super::PromptCommand) -> Option<Effect> {
+    match command {
+        super::PromptCommand::ProviderLogin => crate::provider_login::open(model),
+        super::PromptCommand::Model
+        | super::PromptCommand::Thinking
+        | super::PromptCommand::Logout => notify(
+            model,
+            format!("{} is not implemented yet", command.description()),
+        ),
+    }
 }
 
 fn approve_write(model: &mut Model) -> Option<Effect> {
@@ -1049,6 +1097,115 @@ mod tests {
                 .run_context(model.agent.session().run().unwrap().id)
                 .is_none()
         );
+    }
+
+    #[test]
+    fn slash_prompt_commands_do_not_start_an_agent_run() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        model.tools.active_tool = Some(ToolKind::Agent);
+        model.tools.visibility = Visibility::Displayed;
+        focus_panel_input(&mut model);
+        enter_insert_mode(&mut model);
+        model.agent.prompt.set_value("/provider");
+
+        submit(&mut model);
+        assert!(!model.provider_login.is_open());
+        assert!(model.agent.session().run().is_none());
+
+        handle_command(&mut model, CommandId("agent_command_quick_fill"));
+        assert_eq!(model.agent.prompt(), "/provider");
+        submit(&mut model);
+        assert!(model.provider_login.is_open());
+        assert_eq!(model.context_stack.last(), Some(&Context::ProviderLogin));
+        assert!(model.agent.session().run().is_none());
+
+        crate::provider_login::handle_command(&mut model, CommandId("provider_login_close"));
+        assert_eq!(input_context(&model), Some(Context::AgentChatInsert));
+
+        model.agent.prompt.set_value("/unknown");
+        model.agent.backspace();
+        submit(&mut model);
+        assert!(model.agent.session().run().is_none());
+        assert!(model.notifications.current().is_none());
+    }
+
+    #[test]
+    fn navigation_selects_and_placeholder_commands_notify_without_a_run() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        model.tools.active_tool = Some(ToolKind::Agent);
+        model.tools.visibility = Visibility::Displayed;
+        focus_panel_input(&mut model);
+        enter_insert_mode(&mut model);
+        model.agent.prompt.set_value("/");
+
+        handle_command(&mut model, CommandId("agent_command_next"));
+        handle_command(&mut model, CommandId("agent_command_next"));
+        assert_eq!(model.agent.prompt(), "/model");
+        assert_eq!(
+            model.agent.command_state().selected(),
+            Some(crate::agent::PromptCommand::Model)
+        );
+        submit(&mut model);
+        assert!(model.agent.session().run().is_none());
+        assert_eq!(
+            model
+                .notifications
+                .current()
+                .map(|notification| notification.message()),
+            Some("Select model is not implemented yet")
+        );
+
+        handle_command(&mut model, CommandId("agent_command_previous"));
+        assert_eq!(model.agent.prompt(), "/provider");
+        handle_command(&mut model, CommandId("agent_command_previous"));
+        assert_eq!(model.agent.prompt(), "/logout");
+    }
+
+    #[test]
+    fn inline_slash_command_resumes_the_agent_dialog() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("main.rs");
+        std::fs::write(&path, "fn main() {}\n").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        open_file(&mut model, &path);
+        open(&mut model);
+        model.agent.prompt.set_value("/provider");
+        handle_command(&mut model, CommandId("agent_command_quick_fill"));
+
+        submit(&mut model);
+        assert!(model.provider_login.is_open());
+        assert_eq!(model.context_stack.last(), Some(&Context::ProviderLogin));
+        assert!(model.agent.session().run().is_none());
+
+        crate::provider_login::handle_command(&mut model, CommandId("provider_login_close"));
+        assert!(model.agent.dialog_open());
+        assert_eq!(input_context(&model), Some(Context::AgentChatDialog));
+    }
+
+    #[test]
+    fn panel_discards_only_untouched_dialog_prefill() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("main.rs");
+        std::fs::write(&path, "fn main() {}\n").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        open_file(&mut model, &path);
+        let context = model.agent_context().unwrap();
+
+        model
+            .agent
+            .prepare_prompt(context.clone(), "main.rs:1".to_string());
+        assert_eq!(model.agent.prompt(), "main.rs:1");
+        model.agent.prepare_panel_prompt();
+        assert_eq!(model.agent.prompt(), "");
+
+        model.agent.prepare_prompt(context, "main.rs:1".to_string());
+        model
+            .agent
+            .handle_input_event(TextInputEvent::Character('?'));
+        model.agent.prepare_panel_prompt();
+        assert_eq!(model.agent.prompt(), "main.rs:1?");
     }
 
     #[test]

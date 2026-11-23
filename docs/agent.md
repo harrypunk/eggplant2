@@ -76,7 +76,7 @@ The existing tools panel gains an Agent view. It is non-modal and shows:
 - Pending write approvals and their diffs.
 - Errors and cancellation without losing the previous transcript.
 
-The panel and popup read the same `AgentSession`; neither owns a separate provider connection or agent loop. Opening the Agent panel focuses its input. Panel input has local Normal/Insert modes: Normal supports `i`, `?` help, and `Ctrl-H`/`Ctrl-L` navigation; Insert accepts text, submits with Enter, and returns to Normal with `Esc` without losing panel focus. Help is a separate modal popup, closed with `?` or `Esc`, rather than content in the conversation layout. A focused panel uses a double border and an explicit mode title. Mouse or other future input sources can still request focus directly through the geometry-only focus controller.
+The panel and popup are two presentations of one Agent workflow. Both receive the same `AgentViewProps` from one adapter: session, prompt, command candidates, storage warning, and theme. `AgentSurface` selects the active workflow for shared submission and commands. The dialog uses shared props directly; the panel adds only focus and `AgentInputMode`. Neither presentation owns a separate provider connection, session, command catalog, or agent loop. Only dialog `path:line` prefill, panel Normal/Insert modes, focus presentation, and layout differ. Opening the Agent panel focuses its input. Panel Normal supports `i`, `?` help, and `Ctrl-H`/`Ctrl-L` navigation; Insert accepts text, submits with Enter, and returns to Normal with `Esc` without losing panel focus. Help is a separate modal popup, closed with `?` or `Esc`, rather than content in the conversation layout. A focused panel uses a double border and an explicit mode title. Mouse or other future input sources can still request focus directly through the geometry-only focus controller.
 
 ### Current keybindings
 
@@ -87,12 +87,17 @@ The panel and popup read the same `AgentSession`; neither owns a separate provid
 | Submit prompt | `Enter` |
 | Interrupt active run | `Ctrl-F7` |
 | Toggle shared Agent tool panel | `Space a t` |
+| Open provider-login placeholder | `Space a p` |
 | Focus Agent panel input | `Ctrl-L` |
 | Return from Agent panel to editor | `Ctrl-H` |
 
 The inline prompt starts as `workspace/relative/path:line` and remains editable for quick file-focused questions. Empty, standalone-file, and external read-only contexts are rejected for this inline flow. The project panel instead starts with a freeform prompt and does not require an active buffer; `@path` references remain ordinary prompt text and do not implicitly attach file contents. The scripted provider used in this slice streams `Simulated response to: <prompt>`; `fail` simulates a provider failure.
 
 `AgentChatDialog` is the inline modal context. `AgentChat` and `AgentChatInsert` are derived from panel focus and `AgentInputMode`; they are not stored in the context stack. `AgentChatHelp` owns the stored modal help context.
+
+### Provider-login UX shell
+
+`Space a p` opens a provider-login placeholder popup. In either the inline Agent dialog or the panel's Insert input, a leading `/` opens a minimal command menu immediately above the text input whose candidates are derived directly from the same prompt state and catalog. It shows command names with short descriptions, with no title or key-hint rows. Empty conversations leave the assistant area blank rather than showing placeholder text. `/`, `/p`, and `/PRO` filter the shared catalog containing `/provider`, `/model`, `/thinking`, and `/logout`. Opening or typing a filter selects nothing, so Enter does nothing. Tab quick-fills the first match; Ctrl-N/Ctrl-P quick-fill and move the selection with wrapping while retaining the original query's candidates. Only then does Enter execute the selected command, never submitting slash text as a provider message. Model, thinking, and logout commands currently publish placeholder notifications. The separate `provider_login` feature owns dialog state, commands, and modal registration; `component/agent/provider_login.rs` is a pure placeholder view. Opening it from the inline dialog suspends and later restores `AgentChatDialog`, while panel Insert state is derived and resumes automatically. Authentication, credential storage, and provider mutation are deferred.
 
 ## Session and run state
 

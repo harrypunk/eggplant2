@@ -114,6 +114,8 @@ impl CommandRegistry {
         crate::diagnostics::register_commands(&mut registry)
             .expect("diagnostics commands must be unique");
         crate::agent::register_commands(&mut registry).expect("agent commands must be unique");
+        crate::provider_login::register_commands(&mut registry)
+            .expect("provider-login commands must be unique");
         crate::welcome::register_commands(&mut registry).expect("welcome commands must be unique");
         registry
     }
