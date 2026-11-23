@@ -14,13 +14,13 @@ use crate::{
     diagnostics::{DiagnosticFailureCompletion, DiagnosticsCompletion},
     document,
     manager::{
-        command_registry::{Command, CommandRegistry},
+        command_registry::Command,
         effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
     },
     notifications::NotificationCompletion,
 };
 
-pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<()> {
+pub fn commands() -> Vec<Command> {
     [
         Command::feature(
             CommandId("code_definition"),
@@ -59,7 +59,7 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
         ),
     ]
     .into_iter()
-    .try_for_each(|command| commands.register(command))
+    .collect()
 }
 
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {

@@ -38,12 +38,16 @@ The test-only `ExampleFeatureState` in `test_utils/example_feature.rs` demonstra
 Give each action a stable `CommandId`, description, and handler:
 
 ```rust
-commands.register(Command::feature(
-    CommandId("example.increment"),
-    "increment example",
-    handle_command,
-))?;
+pub fn commands() -> Vec<Command> {
+    vec![Command::feature(
+        CommandId("example.increment"),
+        "increment example",
+        handle_command,
+    )]
+}
 ```
+
+Add the function to the provider list in `CommandRegistry::builtin`. The registry iterates every provider, inserts the returned commands, and validates duplicate IDs once; feature modules do not need to mutate the registry or return `Result`. Use direct `CommandRegistry` registration only for custom composition and tests.
 
 The handler receives the model and command ID and returns an optional effect. Keep physical keys out of the handler: configured direct chords and built-in leader sequences resolve to the same command ID. A command that opens documents can use `Command::document` instead; normal invocation then injects the shared `DocumentFactory`, as with Explorer's `open_selected`, without a feature-specific message or manager arm.
 

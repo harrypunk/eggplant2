@@ -5,7 +5,7 @@ use crate::{
     data_object::{CommandId, Context, Message, Model, PendingInput, StatusMessage},
     editing::{EditingTarget, target},
     manager::{
-        command_registry::{Command, CommandRegistry},
+        command_registry::Command,
         effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
         input_context::input_context,
     },
@@ -59,7 +59,7 @@ struct PendingPaste {
     generation: u64,
 }
 
-pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<()> {
+pub fn commands() -> Vec<Command> {
     [
         Command::feature(
             CommandId("yank_selection"),
@@ -88,7 +88,7 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
         ),
     ]
     .into_iter()
-    .try_for_each(|command| commands.register(command))
+    .collect()
 }
 
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {

@@ -1,13 +1,9 @@
 use crate::{
     data_object::{CommandId, Context, Model},
-    manager::{
-        command_registry::{Command, CommandRegistry},
-        effect::Effect,
-        input_context::input_context,
-    },
+    manager::{command_registry::Command, effect::Effect, input_context::input_context},
 };
 
-pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<()> {
+pub fn commands() -> Vec<Command> {
     [
         Command::feature(
             CommandId("welcome_next"),
@@ -26,7 +22,7 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
         ),
     ]
     .into_iter()
-    .try_for_each(|command| commands.register(command))
+    .collect()
 }
 
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {

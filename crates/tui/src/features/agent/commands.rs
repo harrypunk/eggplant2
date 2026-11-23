@@ -1,11 +1,7 @@
 use crate::{
     component::text_input::TextInputEvent,
     data_object::{CommandId, Context, Model},
-    manager::{
-        command_registry::{Command, CommandRegistry},
-        effect::Effect,
-        input_context::input_context,
-    },
+    manager::{command_registry::Command, effect::Effect, input_context::input_context},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -87,11 +83,11 @@ impl AgentCommand {
     }
 }
 
-pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<()> {
+pub fn commands() -> Vec<Command> {
     AgentCommand::ALL
         .into_iter()
         .map(|command| Command::feature(command.id(), command.description(), handle_command))
-        .try_for_each(|command| commands.register(command))
+        .collect()
 }
 
 pub(crate) fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {

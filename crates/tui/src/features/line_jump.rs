@@ -3,10 +3,7 @@ use editor::EditorSession;
 use crate::{
     data_object::{AppPage, CommandId, Context, FocusTarget, Model, PendingInput, StatusMessage},
     explorer::ExplorerState,
-    manager::{
-        command_registry::{Command, CommandRegistry},
-        effect::Effect,
-    },
+    manager::{command_registry::Command, effect::Effect},
     navigation::VerticalNavigation,
     vcs::navigation::HistoryNavigation,
 };
@@ -113,12 +110,12 @@ impl LineJumpState {
     }
 }
 
-pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<()> {
-    commands.register(Command::feature(
+pub fn commands() -> Vec<Command> {
+    vec![Command::feature(
         CommandId("line_jump_cancel"),
         "cancel pending line jump",
         handle_command,
-    ))
+    )]
 }
 
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {

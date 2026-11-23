@@ -11,11 +11,7 @@ use crate::{
     component::text_input::TextInputEvent,
     data_object::{CommandId, Context, Model, StatusMessage},
     focus,
-    manager::{
-        command_registry::{Command, CommandRegistry},
-        effect::Effect,
-        input_context::input_context,
-    },
+    manager::{command_registry::Command, effect::Effect, input_context::input_context},
     ui::UiRegistry,
 };
 use editor::DocumentPosition;
@@ -23,7 +19,7 @@ use editor::DocumentPosition;
 pub static CURRENT_FILE_MENU_ITEM: CommandMenuItem =
     CommandMenuItem::action('c', "current file", CommandId("buffer_grep_open"));
 
-pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<()> {
+pub fn commands() -> Vec<Command> {
     [
         Command::feature(
             CommandId("buffer_grep_open"),
@@ -52,7 +48,7 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
         ),
     ]
     .into_iter()
-    .try_for_each(|command| commands.register(command))
+    .collect()
 }
 
 pub fn register_ui(ui: &mut UiRegistry) -> color_eyre::Result<()> {

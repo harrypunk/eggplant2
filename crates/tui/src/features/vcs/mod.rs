@@ -3,10 +3,7 @@ use editor::DocumentFactory;
 
 use crate::{
     data_object::{AppPage, CommandId, Model, StatusMessage},
-    manager::{
-        command_registry::{Command, CommandRegistry},
-        effect::Effect,
-    },
+    manager::{command_registry::Command, effect::Effect},
 };
 
 pub(crate) mod branch;
@@ -129,8 +126,8 @@ pub(crate) fn repository_mutation_completed(model: &mut Model) -> Option<Effect>
     )
 }
 
-pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<()> {
-    [
+pub fn commands() -> Vec<Command> {
+    let mut commands = [
         Command::feature(
             CommandId("open_vcs_page"),
             "open Git history",
@@ -249,11 +246,12 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
         ),
     ]
     .into_iter()
-    .try_for_each(|command| commands.register(command))?;
-    commit::register_commands(commands)?;
-    branch::register_commands(commands)?;
-    merge::register_commands(commands)?;
-    reset::register_commands(commands)
+    .collect::<Vec<_>>();
+    commands.extend(commit::commands());
+    commands.extend(branch::commands());
+    commands.extend(merge::commands());
+    commands.extend(reset::commands());
+    commands
 }
 
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {

@@ -2,10 +2,7 @@ use ratatui::{buffer::Buffer, layout::Rect, style::Style};
 
 use crate::{
     data_object::{CommandId, Model, StatusMessage},
-    manager::{
-        command_registry::{Command, CommandRegistry},
-        effect::Effect,
-    },
+    manager::{command_registry::Command, effect::Effect},
     ui::{
         EditorDecorationContext, EditorDecorationContribution, EditorDecorationPhase, UiRegistry,
     },
@@ -33,12 +30,12 @@ impl CursorLineState {
     }
 }
 
-pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<()> {
-    commands.register(Command::feature(
+pub fn commands() -> Vec<Command> {
+    vec![Command::feature(
         CommandId("cursor_line_toggle"),
         "toggle cursor-line background",
         handle_command,
-    ))
+    )]
 }
 
 pub fn register_ui(ui: &mut UiRegistry) -> color_eyre::Result<()> {

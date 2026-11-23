@@ -5,7 +5,7 @@ use editor::EditorSession;
 use crate::{
     data_object::{AppPage, CommandId, Context, Message, Model, StatusMessage},
     manager::{
-        command_registry::{Command, CommandRegistry},
+        command_registry::Command,
         effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
     },
 };
@@ -67,7 +67,7 @@ impl CommitState {
     }
 }
 
-pub(super) fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<()> {
+pub(super) fn commands() -> Vec<Command> {
     [
         Command::feature(
             CommandId("vcs_commit_submit"),
@@ -86,7 +86,7 @@ pub(super) fn register_commands(commands: &mut CommandRegistry) -> color_eyre::R
         ),
     ]
     .into_iter()
-    .try_for_each(|command| commands.register(command))
+    .collect()
 }
 
 pub(super) fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {

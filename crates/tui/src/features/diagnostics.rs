@@ -8,7 +8,7 @@ use app::language::{Diagnostic, DiagnosticBatch};
 use crate::{
     data_object::{CommandId, Model, StatusMessage, Visibility},
     manager::{
-        command_registry::{Command, CommandRegistry},
+        command_registry::Command,
         effect::{Completion, Effect},
     },
     tools::ToolKind,
@@ -142,12 +142,12 @@ impl Completion for DiagnosticFailureCompletion {
     }
 }
 
-pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<()> {
-    commands.register(Command::feature(
+pub fn commands() -> Vec<Command> {
+    vec![Command::feature(
         CommandId("code_diagnostics"),
         "show diagnostics",
         handle_command,
-    ))
+    )]
 }
 
 fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {

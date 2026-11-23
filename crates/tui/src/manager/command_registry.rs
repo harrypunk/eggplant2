@@ -13,6 +13,8 @@ use crate::{
 pub type FeatureHandler = fn(&mut Model, CommandId) -> Option<Effect>;
 pub type DocumentHandler = fn(&DocumentFactory, &mut Model) -> Option<Effect>;
 pub type CommandSelector = fn(&Model) -> Option<CommandId>;
+/// A feature's command metadata; the registry owns insertion and duplicate validation.
+type CommandProvider = fn() -> Vec<Command>;
 
 #[derive(Debug, Clone)]
 pub enum CommandHandler {
@@ -102,34 +104,27 @@ impl CommandRegistry {
     }
 
     pub fn builtin() -> Self {
-        let mut registry =
-            Self::from_commands(builtin_commands()).expect("built-in command IDs must be unique");
-        crate::buffer_jump::register_commands(&mut registry)
-            .expect("buffer-jump commands must be unique");
-        crate::buffer_grep::register_commands(&mut registry)
-            .expect("buffer-grep commands must be unique");
-        crate::buffer_navigation::register_commands(&mut registry)
-            .expect("buffer-navigation commands must be unique");
-        crate::project_grep::register_commands(&mut registry)
-            .expect("project-grep commands must be unique");
-        crate::line_jump::register_commands(&mut registry)
-            .expect("line-jump commands must be unique");
-        crate::view_align::register_commands(&mut registry)
-            .expect("view-alignment commands must be unique");
-        crate::cursor_line::register_commands(&mut registry)
-            .expect("cursor-line commands must be unique");
-        crate::change::register_commands(&mut registry).expect("change commands must be unique");
-        crate::yank::register_commands(&mut registry).expect("yank commands must be unique");
-        crate::vcs::register_commands(&mut registry).expect("VCS commands must be unique");
-        crate::code_navigation::register_commands(&mut registry)
-            .expect("code-navigation commands must be unique");
-        crate::diagnostics::register_commands(&mut registry)
-            .expect("diagnostics commands must be unique");
-        crate::agent::register_commands(&mut registry).expect("agent commands must be unique");
-        crate::provider_login::register_commands(&mut registry)
-            .expect("provider-login commands must be unique");
-        crate::welcome::register_commands(&mut registry).expect("welcome commands must be unique");
-        registry
+        const PROVIDERS: &[CommandProvider] = &[
+            crate::buffer_jump::commands,
+            crate::buffer_grep::commands,
+            crate::buffer_navigation::commands,
+            crate::project_grep::commands,
+            crate::line_jump::commands,
+            crate::view_align::commands,
+            crate::cursor_line::commands,
+            crate::change::commands,
+            crate::yank::commands,
+            crate::vcs::commands,
+            crate::code_navigation::commands,
+            crate::diagnostics::commands,
+            crate::agent::commands,
+            crate::provider_login::commands,
+            crate::welcome::commands,
+        ];
+
+        let feature_commands = PROVIDERS.iter().flat_map(|provider| provider());
+        Self::from_commands(builtin_commands().into_iter().chain(feature_commands))
+            .expect("built-in command IDs must be unique")
     }
 }
 
