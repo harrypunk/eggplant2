@@ -295,6 +295,9 @@ fn parse_context_bindings(
     let parsed = bindings.iter().try_fold(
         HashMap::<KeyChord, (&str, CommandId)>::new(),
         |mut parsed, (action_name, key_name)| -> color_eyre::Result<_> {
+            if action_name.ends_with("_backspace") && commands.get(action_name).is_none() {
+                return Ok(parsed);
+            }
             let (key, command) = parse_binding(context_name, action_name, key_name, commands)?;
             match parsed.entry(key) {
                 Entry::Occupied(entry) => Err(eyre!(
@@ -379,6 +382,24 @@ mod tests {
 
     use super::*;
     use crate::config::Config;
+
+    #[test]
+    fn removed_backspace_actions_do_not_break_existing_config() {
+        use crossterm::event::KeyCode;
+
+        let config = HashMap::from([keymap_context(
+            "file_picker",
+            [("file_picker_backspace", "backspace")],
+        )]);
+        let registry = Registry::from_config(&config, &CommandRegistry::default()).unwrap();
+        assert!(
+            registry
+                .get_binding(&Context::FilePicker)
+                .unwrap()
+                .resolve(KeyChord::from(KeyCode::Backspace))
+                .is_none()
+        );
+    }
 
     #[test]
     fn loads_default_bindings() {
