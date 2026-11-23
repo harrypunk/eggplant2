@@ -15,7 +15,7 @@ pub fn register_ui(ui: &mut UiRegistry) -> color_eyre::Result<()> {
 }
 
 fn dialog_overlay(model: &Model) -> Option<OverlayContribution> {
-    model.agent.dialog_open().then(|| {
+    model.agent.dialog_visible().then(|| {
         OverlayContribution::new(
             "agent",
             OverlayKind::Modal,

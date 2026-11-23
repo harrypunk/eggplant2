@@ -53,6 +53,7 @@ fn suspend_inline_agent(model: &mut Model) -> Option<Context> {
     {
         return None;
     }
+    model.agent.suspend_dialog();
     model.modal.close(Context::AgentChatDialog);
     model
         .context_stack
@@ -77,6 +78,7 @@ fn resume_inline_agent(model: &mut Model, context: Option<Context>) {
     {
         return;
     }
+    model.agent.resume_dialog();
     model.context_stack.push(Context::AgentChatDialog);
 }
 
@@ -121,10 +123,13 @@ mod tests {
         assert!(model.modal.is_active(Context::ProviderLogin));
         assert!(!model.modal.is_active(Context::AgentChatDialog));
         assert_eq!(model.context_stack.last(), Some(&Context::ProviderLogin));
+        assert!(model.agent.dialog_open());
+        assert!(!model.agent.dialog_visible());
 
         close(&mut model);
         assert!(!model.provider_login.is_open());
         assert!(model.agent.dialog_open());
+        assert!(model.agent.dialog_visible());
         assert!(model.modal.is_active(Context::AgentChatDialog));
         assert_eq!(model.context_stack.last(), Some(&Context::AgentChatDialog));
     }

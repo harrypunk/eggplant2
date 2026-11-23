@@ -51,6 +51,14 @@ impl AgentInputMode {
     }
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum AgentDialogState {
+    #[default]
+    Closed,
+    Open,
+    Suspended,
+}
+
 #[derive(Debug, Clone)]
 struct SuspendedRun {
     run_id: RunId,
@@ -61,7 +69,7 @@ struct SuspendedRun {
 pub struct AgentState {
     session: AgentSession,
     prompt: prompt::AgentPrompt,
-    dialog_open: bool,
+    dialog: AgentDialogState,
     panel_mode: AgentInputMode,
     help_visible: bool,
     context: Option<EditorContext>,
@@ -82,7 +90,7 @@ impl Default for AgentState {
         Self {
             session: AgentSession::default(),
             prompt: prompt::AgentPrompt::default(),
-            dialog_open: false,
+            dialog: AgentDialogState::Closed,
             panel_mode: AgentInputMode::Normal,
             help_visible: false,
             context: None,
@@ -142,8 +150,30 @@ impl AgentState {
         self.help_visible = false;
     }
 
+    pub fn dialog_state(&self) -> AgentDialogState {
+        self.dialog
+    }
+
+    /// Whether an inline workflow exists, including while temporarily suspended.
     pub fn dialog_open(&self) -> bool {
-        self.dialog_open
+        self.dialog != AgentDialogState::Closed
+    }
+
+    /// Whether the inline overlay should currently be visible.
+    pub fn dialog_visible(&self) -> bool {
+        self.dialog == AgentDialogState::Open
+    }
+
+    pub fn suspend_dialog(&mut self) {
+        if self.dialog == AgentDialogState::Open {
+            self.dialog = AgentDialogState::Suspended;
+        }
+    }
+
+    pub fn resume_dialog(&mut self) {
+        if self.dialog == AgentDialogState::Suspended {
+            self.dialog = AgentDialogState::Open;
+        }
     }
 
     pub fn session(&self) -> &AgentSession {
@@ -172,11 +202,11 @@ impl AgentState {
 
     pub fn open_dialog(&mut self, context: EditorContext, label: String) {
         self.prepare_prompt(context, label);
-        self.dialog_open = true;
+        self.dialog = AgentDialogState::Open;
     }
 
     pub fn close_dialog(&mut self) {
-        self.dialog_open = false;
+        self.dialog = AgentDialogState::Closed;
     }
 
     pub fn handle_input_event(&mut self, event: TextInputEvent) {
