@@ -7,12 +7,36 @@ use crate::{
     manager::effect::{Completion, Effect},
 };
 
+/// A derived reason lifecycle commands cannot proceed.
+///
+/// Feature workflows retain their own state; this is only a read-only policy selector.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LifecycleBlock {
+    CommitInProgress,
+}
+
+impl LifecycleBlock {
+    fn message(self) -> &'static str {
+        match self {
+            Self::CommitInProgress => "Commit in progress; try again after it finishes",
+        }
+    }
+}
+
+fn lifecycle_block(model: &Model) -> Option<LifecycleBlock> {
+    model
+        .vcs
+        .commit
+        .is_in_progress()
+        .then_some(LifecycleBlock::CommitInProgress)
+}
+
 /// Application lifecycle commands and save-completion coordination.
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    if model.vcs.commit.is_in_progress() {
+    if let Some(block) = lifecycle_block(model) {
         return Some(crate::notifications::report_rejection(
             model,
-            "Commit in progress; try again after it finishes",
+            block.message(),
         ));
     }
     match id.as_str() {
