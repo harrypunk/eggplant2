@@ -24,6 +24,7 @@ error = { fg = "red" }
 "ui.vcs.branch" = { fg = "light-magenta", modifiers = ["bold"] }
 "ui.linenr" = {}
 "ui.menu.selected" = { modifiers = ["reversed"] }
+"ui.cursorline.primary" = { bg = "dark-gray" }
 "ui.popup" = {}
 "ui.statusline.normal" = {}
 "ui.statusline.insert" = {}

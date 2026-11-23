@@ -17,9 +17,9 @@ pub use capabilities::{clipboard, copy_hash, document, file_watcher, register, s
 pub use shell::{buffer, command_menu, focus, lifecycle};
 
 pub use features::{
-    agent, buffer_grep, buffer_jump, buffer_navigation, change, code_navigation, diagnostics,
-    editing, explorer, external_sync, file_picker, line_jump, navigation, notifications,
-    page_scroll, project_grep, theme_picker, vcs, view_align, welcome, yank,
+    agent, buffer_grep, buffer_jump, buffer_navigation, change, code_navigation, cursor_line,
+    diagnostics, editing, explorer, external_sync, file_picker, line_jump, navigation,
+    notifications, page_scroll, project_grep, theme_picker, vcs, view_align, welcome, yank,
 };
 
 #[cfg(test)]
@@ -50,6 +50,7 @@ pub mod data_object {
         code_navigation::CodeNavigationState,
         command_menu::CommandMenuState,
         component::{editor::EditorViewOptions, welcome::WelcomeState},
+        cursor_line::CursorLineState,
         diagnostics::DiagnosticsState,
         explorer::ExplorerState,
         file_picker::FilePickerState,
@@ -131,6 +132,7 @@ pub mod data_object {
         // Editor-owned document and editing state.
         pub editor: EditorSession,
         pub editor_view: EditorViewOptions,
+        pub cursor_line: CursorLineState,
         pub welcome: WelcomeState,
         pub language_servers: Arc<dyn LanguageServerRegistry>,
 
@@ -185,6 +187,7 @@ pub mod data_object {
                 active_page: AppPage::Editor,
                 editor: EditorSession::default(),
                 editor_view: EditorViewOptions::default(),
+                cursor_line: CursorLineState::default(),
                 welcome: WelcomeState::default(),
                 language_servers: Arc::new(LanguageServers::default()),
                 workspace: None,

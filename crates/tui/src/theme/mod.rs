@@ -100,6 +100,7 @@ pub struct UiTheme {
     pub(crate) base: Style,
     pub(crate) muted: Style,
     pub(crate) selection: Style,
+    pub(crate) cursor_line: Style,
     pub(crate) unfocused_selection: Style,
     pub(crate) border: Style,
     pub(crate) focused_border: Style,

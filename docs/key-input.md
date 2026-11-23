@@ -18,6 +18,7 @@ Available in Normal and Explorer contexts unless noted otherwise.
 | Select a UI theme | `Space u t` |
 | Open inline AI agent | `Ctrl-I` |
 | Toggle editor text wrapping | `Space u w` |
+| Toggle cursor-line background | `Space u c` |
 | Toggle agent tool panel | `Space a t` |
 | Focus Agent panel input | `Ctrl-L` |
 | Return from Agent panel to editor | `Ctrl-H` |

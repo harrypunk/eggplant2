@@ -2,6 +2,7 @@ use editor::EditorSnapshot;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Flex, Layout, Position, Rect},
+    style::Style,
     widgets::Widget,
 };
 
@@ -38,6 +39,7 @@ pub struct Editor<'a> {
     theme: &'a Theme,
     flow: TextFlow,
     welcome: Option<WelcomeState>,
+    cursor_line: Option<Style>,
 }
 
 impl<'a> Editor<'a> {
@@ -48,7 +50,13 @@ impl<'a> Editor<'a> {
             theme,
             flow: TextFlow::SingleLine,
             welcome: None,
+            cursor_line: None,
         }
+    }
+
+    pub fn with_cursor_line(mut self, style: Option<Style>) -> Self {
+        self.cursor_line = style;
+        self
     }
 
     pub fn with_welcome(mut self, state: WelcomeState) -> Self {
@@ -97,7 +105,9 @@ impl Widget for Editor<'_> {
         match self.snapshot {
             Some(snapshot) => {
                 BufferTabs::new(snapshot, self.theme.ui()).render(tabs_area, buf);
-                EditorBuffer::with_flow(snapshot, self.theme, self.flow).render(content_area, buf);
+                EditorBuffer::with_flow(snapshot, self.theme, self.flow)
+                    .with_cursor_line(self.cursor_line)
+                    .render(content_area, buf);
             }
             None => Welcome::new(
                 self.theme.ui(),
@@ -115,6 +125,7 @@ pub struct EditorBuffer<'a> {
     snapshot: &'a EditorSnapshot,
     theme: &'a Theme,
     flow: TextFlow,
+    cursor_line: Option<Style>,
 }
 
 impl<'a> EditorBuffer<'a> {
@@ -127,7 +138,13 @@ impl<'a> EditorBuffer<'a> {
             snapshot,
             theme,
             flow,
+            cursor_line: None,
         }
+    }
+
+    pub fn with_cursor_line(mut self, style: Option<Style>) -> Self {
+        self.cursor_line = style;
+        self
     }
 
     /// Text region shared by rendering, viewport sizing, and cursor placement.
@@ -140,6 +157,7 @@ impl Widget for EditorBuffer<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         TextView::with_flow(&self.snapshot.text, self.theme, self.flow)
             .with_cursor(self.snapshot.cursor)
+            .with_cursor_line(self.cursor_line)
             .render(area, buf);
     }
 }

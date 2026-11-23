@@ -39,6 +39,8 @@ A buffer can conceptually be displayed by more than one view. The first edition 
 
 `DocumentFactory` owns Helix configuration/loaders and document construction outside `EditorSession`. The session accepts constructed documents through `insert_document` and manages their buffer/view state. This keeps runtime resources and direct file opening out of the central state object.
 
+Cursor-line highlighting is an independent `cursor_line` feature with local enablement and a toggle command. The page resolves only an optional themed background prop; `TextView` owns the actual single-line/wrapped geometry and applies that background before Visual selection, preserving syntax foregrounds and selection precedence.
+
 ## 3. Logical state and ownership
 
 A useful logical model is:

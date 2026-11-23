@@ -121,6 +121,9 @@ impl ThemeAdapter for GhosttyThemeAdapter {
                 base: Some(base),
                 muted: palette(BRIGHT_BLACK),
                 selection,
+                cursor_line: selection
+                    .and_then(|style| style.bg)
+                    .map(|bg| Style::new().bg(bg)),
                 unfocused_selection,
                 border: palette(BRIGHT_BLACK),
                 focused_border: palette(BRIGHT_BLUE),

@@ -121,6 +121,7 @@ const UI_CONTEXT: CommandMenuContext = CommandMenuContext {
             description: "theme",
             target: CommandMenuTarget::Action(ThemePickerCommand::Open.id()),
         },
+        CommandMenuItem::action('c', "toggle cursor line", CommandId("cursor_line_toggle")),
         CommandMenuItem {
             key: 'w',
             description: "toggle editor wrap",
@@ -429,6 +430,13 @@ mod tests {
         assert_eq!(
             menu.handle_key(KeyCode::Char('t')),
             CommandMenuOutcome::Action(ThemePickerCommand::Open.id())
+        );
+
+        menu.start();
+        menu.handle_key(KeyCode::Char('u'));
+        assert_eq!(
+            menu.handle_key(KeyCode::Char('c')),
+            CommandMenuOutcome::Action(CommandId("cursor_line_toggle"))
         );
 
         menu.start();

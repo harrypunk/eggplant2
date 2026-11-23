@@ -29,6 +29,10 @@ pub(crate) fn ui_theme(source: &HelixTheme) -> UiTheme {
             .or_else(|| source_style(source, "ui.text.inactive"))
             .unwrap_or_default(),
         selection,
+        cursor_line: source_style(source, "ui.cursorline.primary")
+            .or_else(|| source_style(source, "ui.cursorline"))
+            .or_else(|| source_style(source, "ui.selection"))
+            .unwrap_or(selection),
         unfocused_selection,
         focused_border: border,
         border,

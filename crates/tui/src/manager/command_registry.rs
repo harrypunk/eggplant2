@@ -104,6 +104,8 @@ impl CommandRegistry {
             .expect("line-jump commands must be unique");
         crate::view_align::register_commands(&mut registry)
             .expect("view-alignment commands must be unique");
+        crate::cursor_line::register_commands(&mut registry)
+            .expect("cursor-line commands must be unique");
         crate::change::register_commands(&mut registry).expect("change commands must be unique");
         crate::yank::register_commands(&mut registry).expect("yank commands must be unique");
         crate::vcs::register_commands(&mut registry).expect("VCS commands must be unique");

@@ -163,6 +163,7 @@ Mappings belong in adapter tests and documentation, not in shared rendering code
 | --- | --- | --- | --- |
 | Base text/background | `foreground`, `background` | `Normal` | `editor.foreground`, `editor.background` |
 | Selection | `selection-foreground`, `selection-background` | `Visual` | `editor.selectionBackground` |
+| Cursor-line background | Derived from the selection background or fallback | `CursorLine` | `editor.lineHighlightBackground` |
 | Muted text | A deliberately chosen palette entry | `LineNr`, `Comment` | `editorLineNumber.foreground`, `descriptionForeground` |
 | File path | A deliberately subdued palette entry | `Directory` | A subdued workbench or TextMate role |
 | VCS branch | A deliberately distinct palette entry | A deliberate highlight-group mapping | A workbench/Git-decoration or accent role |

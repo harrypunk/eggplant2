@@ -6,6 +6,7 @@ pub mod buffer_jump;
 pub mod buffer_navigation;
 pub mod change;
 pub mod code_navigation;
+pub mod cursor_line;
 pub mod diagnostics;
 pub mod editing;
 pub mod explorer;

@@ -2,6 +2,7 @@ use editor::{LineChange, LineSnapshot, TextViewSnapshot};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Flex, Layout, Position, Rect},
+    style::Style,
     text::{Line, Span},
     widgets::{Paragraph, Widget},
 };
@@ -17,6 +18,7 @@ pub struct TextView<'a> {
     theme: &'a Theme,
     flow: TextFlow,
     cursor: Option<editor::CursorPosition>,
+    cursor_line: Option<Style>,
 }
 
 impl<'a> TextView<'a> {
@@ -30,11 +32,17 @@ impl<'a> TextView<'a> {
             theme,
             flow,
             cursor: None,
+            cursor_line: None,
         }
     }
 
     pub fn with_cursor(mut self, cursor: Option<editor::CursorPosition>) -> Self {
         self.cursor = cursor;
+        self
+    }
+
+    pub fn with_cursor_line(mut self, style: Option<Style>) -> Self {
+        self.cursor_line = style;
         self
     }
 
@@ -290,6 +298,9 @@ impl TextView<'_> {
             .style(self.theme.ui().base)
             .scroll((0, horizontal_offset))
             .render(text_area, buf);
+        if let Some(cursor) = self.cursor {
+            self.paint_cursor_line(area, buf, cursor.row);
+        }
         self.apply_selection_single_line(text_area, buf);
     }
 
@@ -328,8 +339,30 @@ impl TextView<'_> {
             .take(text_area.height as usize)
             .enumerate()
             .for_each(|(row_index, row)| {
+                if self
+                    .cursor
+                    .is_some_and(|cursor| cursor.row == row.logical_line)
+                {
+                    self.paint_cursor_line(area, buf, row_index);
+                }
                 self.apply_selection_wrapped(text_area, buf, row_index, row);
             });
+    }
+
+    fn paint_cursor_line(&self, area: Rect, buf: &mut Buffer, row: usize) {
+        let Some(background) = self.cursor_line.and_then(|style| style.bg) else {
+            return;
+        };
+        let Ok(row) = u16::try_from(row) else {
+            return;
+        };
+        if row >= area.height {
+            return;
+        }
+        buf.set_style(
+            Rect::new(area.x, area.y + row, area.width, 1),
+            Style::new().bg(background),
+        );
     }
 
     fn apply_selection_single_line(&self, text_area: Rect, buf: &mut Buffer) {
@@ -532,6 +565,65 @@ mod tests {
                 .iter()
                 .any(|cell| cell.symbol() == "b" && !cell.modifier.contains(Modifier::REVERSED))
         );
+    }
+
+    #[test]
+    fn cursor_line_paints_only_the_active_row_including_the_gutter() {
+        let snapshot = TextViewSnapshot::plain(vec!["zero".to_string(), "one".to_string()]);
+        let theme = Theme::default();
+        let view = TextView::new(&snapshot, &theme)
+            .with_cursor(Some(editor::CursorPosition { row: 1, column: 0 }))
+            .with_cursor_line(Some(Style::new().bg(Color::Blue)));
+        let mut terminal = Terminal::new(TestBackend::new(12, 2)).unwrap();
+        terminal
+            .draw(|frame| view.render(frame.area(), frame.buffer_mut()))
+            .unwrap();
+
+        let rows = terminal
+            .backend()
+            .buffer()
+            .content()
+            .chunks(12)
+            .collect::<Vec<_>>();
+        assert!(rows[0].iter().all(|cell| cell.bg != Color::Blue));
+        assert!(rows[1].iter().all(|cell| cell.bg == Color::Blue));
+    }
+
+    #[test]
+    fn cursor_line_covers_wrapped_rows_and_yields_to_selection() {
+        let snapshot = TextViewSnapshot::plain(vec!["abcdef".to_string(), "next".to_string()]);
+        let theme = Theme::default();
+        let view = TextView::with_flow(&snapshot, &theme, TextFlow::Wrapped)
+            .with_cursor(Some(editor::CursorPosition { row: 0, column: 4 }))
+            .with_cursor_line(Some(Style::new().bg(Color::Blue)));
+        let mut wrapped = Terminal::new(TestBackend::new(7, 2)).unwrap();
+        wrapped
+            .draw(|frame| view.render(frame.area(), frame.buffer_mut()))
+            .unwrap();
+        assert!(
+            wrapped
+                .backend()
+                .buffer()
+                .content()
+                .iter()
+                .all(|cell| cell.bg == Color::Blue)
+        );
+
+        let mut selected_snapshot = TextViewSnapshot::plain(vec!["abc".to_string()]);
+        selected_snapshot.lines[0].selection = Some(0..1);
+        let theme = Theme::from_name("tokyonight").unwrap();
+        let selected = TextView::new(&selected_snapshot, &theme)
+            .with_cursor(Some(editor::CursorPosition { row: 0, column: 0 }))
+            .with_cursor_line(Some(Style::new().bg(Color::Blue)));
+        let mut terminal = Terminal::new(TestBackend::new(6, 1)).unwrap();
+        terminal
+            .draw(|frame| selected.render(frame.area(), frame.buffer_mut()))
+            .unwrap();
+        assert_eq!(
+            terminal.backend().buffer()[(2, 0)].bg,
+            theme.ui().selection.bg.unwrap()
+        );
+        assert_eq!(terminal.backend().buffer()[(3, 0)].bg, Color::Blue);
     }
 
     #[test]
