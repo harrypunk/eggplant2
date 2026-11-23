@@ -840,10 +840,7 @@ mod tests {
             Some(Message::TextInput('z'))
         ));
         let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
-        assert!(matches!(
-            manager.translate(event, &model),
-            Some(Message::InvokeCommand(CommandId("buffer_jump_backspace")))
-        ));
+        assert!(manager.translate(event, &model).is_none());
         let event = Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),

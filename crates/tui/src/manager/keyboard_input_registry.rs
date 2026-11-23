@@ -152,13 +152,7 @@ fn common_bindings() -> KeymapConfig {
                 ("close_theme_picker", "esc"),
             ],
         ),
-        keymap_context(
-            "buffer_jump",
-            [
-                ("buffer_jump_cancel", "esc"),
-                ("buffer_jump_backspace", "backspace"),
-            ],
-        ),
+        keymap_context("buffer_jump", [("buffer_jump_cancel", "esc")]),
         keymap_context("buffer_navigation", [("buffer_navigation_cancel", "esc")]),
         keymap_context(
             "agent_chat_dialog",

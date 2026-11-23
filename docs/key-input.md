@@ -317,7 +317,7 @@ The configured leader (`Space` by default) opens a small data-driven sequence st
 
 ## Design rules
 
-1. **Normalize once.** Convert terminal-specific events into application key chords at the input boundary. Sequence matching should use complete chords, not only `KeyCode`, so `Ctrl-X` and `x` remain distinct. Cursor-aware text inputs also share `TextInputBackspace`: direct custom bindings take precedence, while the text-input registry delivers `TextInputEvent::Backspace` and its actual content-change result instead of requiring per-feature commands.
+1. **Normalize once.** Convert terminal-specific events into application key chords at the input boundary. Sequence matching should use complete chords, not only `KeyCode`, so `Ctrl-X` and `x` remain distinct. Cursor-aware text inputs use semantic `Insert`, `DeleteBackward`, and `Cursor` events. Printable input maps to `TextInputEvent::Insert`; Backspace maps to `TextInputEvent::DeleteBackward` through `TextInputBackspace`. Direct custom bindings take precedence, and features react to the actual content-change result instead of registering per-feature editing commands.
 2. **Keep pending input in `Model`.** A sequence in progress is application state. It must participate in update, cancellation, focus changes, and rendering like any other state.
 3. **Resolve to semantic messages.** Editing, explorer, and application updates should not know which physical keys triggered a command.
 4. **Compile bindings at startup.** Parse configured chords or sequences once and report invalid definitions before entering the terminal loop. Do not parse binding strings for every key event.

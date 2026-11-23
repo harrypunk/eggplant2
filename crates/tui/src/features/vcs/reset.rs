@@ -522,7 +522,7 @@ mod tests {
         let revision = start(&mut model);
         targets(&mut model, revision);
         for character in "abcd".chars() {
-            handle_input(&mut model, TextInputEvent::Character(character));
+            handle_input(&mut model, TextInputEvent::Insert(character));
         }
         assert_eq!(model.vcs.reset.revision_query(), Some("abcd"));
         assert!(handle_command(&mut model, CommandId("vcs_reset_submit")).is_some());

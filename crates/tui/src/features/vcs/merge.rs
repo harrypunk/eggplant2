@@ -516,7 +516,7 @@ mod tests {
             None,
             Ok(vec!["main".to_string(), "other".to_string()]),
         );
-        state.handle_event(TextInputEvent::Character('o'));
+        state.handle_event(TextInputEvent::Insert('o'));
         assert_eq!(state.filtered_targets(), ["other"]);
 
         let (target, revision) = state.submit(root.clone()).unwrap();
@@ -594,7 +594,7 @@ mod tests {
 
     fn type_query(model: &mut Model, query: &str) {
         for character in query.chars() {
-            handle_input(model, TextInputEvent::Character(character));
+            handle_input(model, TextInputEvent::Insert(character));
         }
     }
 

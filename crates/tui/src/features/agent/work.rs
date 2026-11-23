@@ -174,7 +174,7 @@ mod tests {
         assert_eq!(model.agent.prompt(), "");
         enter_insert_mode(&mut model);
         assert_eq!(input_context(&model), Some(Context::AgentChatInsert));
-        handle_input(&mut model, TextInputEvent::Character('?'));
+        handle_input(&mut model, TextInputEvent::Insert('?'));
         assert_eq!(model.agent.prompt(), "?");
 
         let effect = submit(&mut model).unwrap();
@@ -247,11 +247,11 @@ mod tests {
 
         focus_panel_input(&mut model);
         assert_eq!(input_context(&model), Some(Context::AgentChat));
-        handle_input(&mut model, TextInputEvent::Character('x'));
+        handle_input(&mut model, TextInputEvent::Insert('x'));
         assert_eq!(model.agent.prompt(), "");
         enter_insert_mode(&mut model);
         for character in "explain @main.rs".chars() {
-            handle_input(&mut model, TextInputEvent::Character(character));
+            handle_input(&mut model, TextInputEvent::Insert(character));
         }
         let effect = submit(&mut model).unwrap();
         let manager = MessageManager::default();
@@ -300,7 +300,7 @@ mod tests {
         assert_eq!(input_context(&model), Some(Context::AgentChatInsert));
 
         model.agent.prompt.set_value("/unknown");
-        handle_input(&mut model, TextInputEvent::Backspace);
+        handle_input(&mut model, TextInputEvent::DeleteBackward);
         submit(&mut model);
         assert!(model.agent.session().run().is_none());
         assert!(model.notifications.current().is_none());
@@ -377,9 +377,7 @@ mod tests {
         assert_eq!(model.agent.prompt(), "");
 
         model.agent.prepare_prompt(context, "main.rs:1".to_string());
-        model
-            .agent
-            .handle_input_event(TextInputEvent::Character('?'));
+        model.agent.handle_input_event(TextInputEvent::Insert('?'));
         model.agent.prepare_panel_prompt();
         assert_eq!(model.agent.prompt(), "main.rs:1?");
     }
@@ -417,16 +415,16 @@ mod tests {
 
         open(&mut model);
         assert_eq!(model.agent.prompt(), "main.rs:2");
-        handle_input(&mut model, TextInputEvent::Character('?'));
+        handle_input(&mut model, TextInputEvent::Insert('?'));
         assert_eq!(model.agent.prompt(), "main.rs:2?");
-        handle_input(&mut model, TextInputEvent::Backspace);
+        handle_input(&mut model, TextInputEvent::DeleteBackward);
         assert_eq!(model.agent.prompt(), "main.rs:2");
         close(&mut model);
         open(&mut model);
         assert_eq!(model.agent.prompt(), "main.rs:2");
 
         for _ in "main.rs:2".chars() {
-            handle_input(&mut model, TextInputEvent::Backspace);
+            handle_input(&mut model, TextInputEvent::DeleteBackward);
         }
         close(&mut model);
         open(&mut model);
@@ -450,17 +448,17 @@ mod tests {
             &mut model,
             TextInputEvent::Cursor(crate::component::text_input::TextCursorMovement::Left),
         );
-        handle_input(&mut model, TextInputEvent::Character('界'));
+        handle_input(&mut model, TextInputEvent::Insert('界'));
         assert_eq!(model.agent.prompt(), "main.rs界:1");
-        handle_input(&mut model, TextInputEvent::Backspace);
+        handle_input(&mut model, TextInputEvent::DeleteBackward);
         assert_eq!(model.agent.prompt(), "main.rs:1");
-        handle_input(&mut model, TextInputEvent::Character('X'));
+        handle_input(&mut model, TextInputEvent::Insert('X'));
         assert_eq!(model.agent.prompt(), "main.rsX:1");
         handle_input(
             &mut model,
             TextInputEvent::Cursor(crate::component::text_input::TextCursorMovement::Right),
         );
-        handle_input(&mut model, TextInputEvent::Character('Y'));
+        handle_input(&mut model, TextInputEvent::Insert('Y'));
         assert_eq!(model.agent.prompt(), "main.rsX:Y1");
     }
 
@@ -513,12 +511,12 @@ mod tests {
         let manager = MessageManager::default();
         open(&mut model);
         for _ in 0..model.agent.prompt().chars().count() {
-            handle_input(&mut model, TextInputEvent::Backspace);
+            handle_input(&mut model, TextInputEvent::DeleteBackward);
         }
         for character in "fail".chars() {
             model
                 .agent
-                .handle_input_event(TextInputEvent::Character(character));
+                .handle_input_event(TextInputEvent::Insert(character));
         }
         let effect = submit(&mut model).unwrap();
         perform(&manager, &mut model, effect);

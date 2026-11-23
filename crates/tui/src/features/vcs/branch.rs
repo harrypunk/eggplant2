@@ -626,7 +626,7 @@ mod tests {
         assert_eq!(state.selected, Some(0));
 
         for character in "abc123".chars() {
-            state.handle_event(TextInputEvent::Character(character));
+            state.handle_event(TextInputEvent::Insert(character));
         }
         assert_eq!(state.revision_query(), Some("abc123"));
         assert!(matches!(
@@ -639,7 +639,7 @@ mod tests {
             Some(BranchStartPoint::Revision("abc123".to_string()))
         );
         for character in "topic/test".chars() {
-            state.handle_event(TextInputEvent::Character(character));
+            state.handle_event(TextInputEvent::Insert(character));
         }
 
         let Some(BranchSubmission::Switch {

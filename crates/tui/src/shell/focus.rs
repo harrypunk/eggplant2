@@ -348,7 +348,7 @@ mod tests {
         model.agent.enter_insert_mode();
         model
             .agent
-            .handle_input_event(crate::component::text_input::TextInputEvent::Character('x'));
+            .handle_input_event(crate::component::text_input::TextInputEvent::Insert('x'));
 
         handle_command(&mut model, CommandId("focus_left"));
 

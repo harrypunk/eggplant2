@@ -13,11 +13,12 @@ pub enum TextCursorMovement {
     Right,
 }
 
+/// Semantic text-editing operations, independent of physical key bindings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TextInputEvent {
-    Character(char),
+    Insert(char),
+    DeleteBackward,
     Cursor(TextCursorMovement),
-    Backspace,
 }
 
 /// Result of local component input. Feature effects depend only on this stable interface.
@@ -139,7 +140,7 @@ impl TextInput {
 
     pub fn handle_event(&mut self, event: TextInputEvent) -> TextInputChange {
         match event {
-            TextInputEvent::Character(character) => {
+            TextInputEvent::Insert(character) => {
                 self.insert(character);
                 TextInputChange::text_changed()
             }
@@ -147,7 +148,7 @@ impl TextInput {
                 self.cursor = self.cursor.apply(&self.value, movement);
                 TextInputChange::cursor_moved()
             }
-            TextInputEvent::Backspace => match self.backspace() {
+            TextInputEvent::DeleteBackward => match self.backspace() {
                 true => TextInputChange::text_changed(),
                 false => TextInputChange::cursor_moved(),
             },
@@ -270,7 +271,7 @@ mod tests {
         );
         assert!(
             input
-                .handle_event(TextInputEvent::Character('x'))
+                .handle_event(TextInputEvent::Insert('x'))
                 .content_changed()
         );
         assert_eq!(input.value(), "a界x🙂b");
@@ -312,17 +313,17 @@ mod tests {
     }
 
     #[test]
-    fn backspace_event_reports_actual_content_changes() {
+    fn delete_backward_event_reports_actual_content_changes() {
         let mut input = TextInput::new("界");
         assert!(
             input
-                .handle_event(TextInputEvent::Backspace)
+                .handle_event(TextInputEvent::DeleteBackward)
                 .content_changed()
         );
         assert_eq!(input.value(), "");
         assert!(
             !input
-                .handle_event(TextInputEvent::Backspace)
+                .handle_event(TextInputEvent::DeleteBackward)
                 .content_changed()
         );
     }

@@ -114,17 +114,6 @@ impl BufferJumpState {
     pub(crate) fn clear_label(&mut self) {
         self.label.clear();
     }
-
-    pub(crate) fn backspace(&mut self) {
-        if self.label.pop().is_some() {
-            return;
-        }
-        if self.is_label_phase() {
-            self.targets.clear();
-        }
-        self.pattern.pop();
-        self.matches.clear();
-    }
 }
 
 fn label_targets(
@@ -280,20 +269,5 @@ mod tests {
         assert_eq!(visible_cell(&text, 3, target, 2), Some((0, 0)));
         text.horizontal_offset = 5;
         assert_eq!(visible_cell(&text, 20, target, 2), None);
-    }
-
-    #[test]
-    fn backspace_can_edit_either_pattern_or_label() {
-        let mut state = BufferJumpState::default();
-        state.push_pattern('e');
-        state.push_pattern('l');
-        state.push_label('z');
-        state.backspace();
-        assert_eq!(state.label(), "");
-        assert_eq!(state.pattern(), "el");
-
-        state.backspace();
-        assert_eq!(state.pattern(), "e");
-        assert!(!state.is_label_phase());
     }
 }

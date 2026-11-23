@@ -197,7 +197,7 @@ impl ThemePickerState {
     }
 
     pub fn push_query(&mut self, character: char) {
-        self.handle_query_event(crate::component::text_input::TextInputEvent::Character(
+        self.handle_query_event(crate::component::text_input::TextInputEvent::Insert(
             character,
         ));
     }

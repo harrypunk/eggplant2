@@ -34,11 +34,6 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
             "cancel buffer jump",
             handle_command,
         ),
-        Command::feature(
-            CommandId("buffer_jump_backspace"),
-            "edit buffer jump input",
-            handle_command,
-        ),
     ]
     .into_iter()
     .try_for_each(|command| commands.register(command))
@@ -57,7 +52,6 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     match id.as_str() {
         "buffer_jump_start" => start(model),
         "buffer_jump_cancel" => close(model),
-        "buffer_jump_backspace" => model.buffer_jump.backspace(),
         _ => {
             model.status = Some(StatusMessage::error(format!(
                 "unknown buffer-jump command `{}`",

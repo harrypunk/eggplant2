@@ -104,7 +104,7 @@ mod tests {
         assert_eq!(prompt.value(), "");
 
         prompt.prepare_dialog_prefill("main.rs:1".to_string());
-        prompt.edit(TextInputEvent::Character('?'));
+        prompt.edit(TextInputEvent::Insert('?'));
         prompt.prepare_panel();
         assert_eq!(prompt.value(), "main.rs:1?");
     }

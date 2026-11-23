@@ -106,24 +106,24 @@ impl TextInputRegistry {
         let context = input_context(model)?;
         match self.handlers.get(&context)? {
             TextInputHandler::Insert(handler) => handler(model, character),
-            TextInputHandler::Edit(handler) => handler(model, TextInputEvent::Character(character)),
+            TextInputHandler::Edit(handler) => handler(model, TextInputEvent::Insert(character)),
         }
     }
 
     pub fn handle_backspace(&self, model: &mut Model) -> Option<Effect> {
-        let context = input_context(model)?;
-        let TextInputHandler::Edit(handler) = self.handlers.get(&context)? else {
-            return None;
-        };
-        handler(model, TextInputEvent::Backspace)
+        self.handle_event(model, TextInputEvent::DeleteBackward)
     }
 
     pub fn handle_cursor(&self, model: &mut Model, movement: TextCursorMovement) -> Option<Effect> {
+        self.handle_event(model, TextInputEvent::Cursor(movement))
+    }
+
+    fn handle_event(&self, model: &mut Model, event: TextInputEvent) -> Option<Effect> {
         let context = input_context(model)?;
         let TextInputHandler::Edit(handler) = self.handlers.get(&context)? else {
             return None;
         };
-        handler(model, TextInputEvent::Cursor(movement))
+        handler(model, event)
     }
 }
 
