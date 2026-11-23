@@ -182,8 +182,9 @@ impl AgentState {
     }
 
     pub fn begin_prompt(&mut self) -> Option<RunId> {
-        let prompt = self.prompt.take_for_submission()?;
+        let prompt = self.prompt.submission_text()?;
         let run_id = self.session.begin(prompt)?;
+        self.prompt.complete_submission();
         self.run_started_at = Some((run_id, chrono::Utc::now().timestamp_millis()));
         self.run_context = self.context.clone().map(|context| (run_id, context));
         Some(run_id)

@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Block, BorderType, Paragraph, Widget, Wrap},
 };
 
-use super::{command_menu::AgentCommandMenu, props::AgentViewProps, transcript::transcript_lines};
+use super::{prompt::AgentPromptView, props::AgentViewProps, transcript::transcript_lines};
 use crate::{
     agent::AgentInputMode,
     component::{auto_height::AutoHeight, text_layout::TextFlow},
@@ -31,23 +31,11 @@ impl AgentPanel {
             return;
         }
         let input_height = input_height(props, inner);
-        let [status, transcript, commands, input] = panel_layout(
-            inner,
-            AgentCommandMenu::height(props.shared.commands.as_deref()),
-            input_height,
-        );
+        let prompt_height = AgentPromptView::command_height(&props.shared.prompt) + input_height;
+        let [status, transcript, prompt] = panel_layout(inner, prompt_height);
         render_status(props, status, frame);
         render_transcript(props, transcript, frame);
-        if let Some(command_items) = props.shared.commands.as_deref() {
-            AgentCommandMenu::render(
-                command_items,
-                props.shared.selected_command,
-                props.shared.styles,
-                commands,
-                frame.buffer_mut(),
-            );
-        }
-        render_prompt(props, input, frame);
+        render_prompt(props, prompt, input_height, frame);
     }
 }
 
@@ -87,16 +75,15 @@ fn render_chrome(props: &AgentPanelProps<'_>, frame: &mut Frame, area: Rect) -> 
 fn input_height(props: &AgentPanelProps<'_>, area: Rect) -> u16 {
     match props.shared.session.pending_approval() {
         Some(_) => 0,
-        None => AUTO_HEIGHT.input_height(props.shared.prompt, area, TextFlow::Wrapped),
+        None => AUTO_HEIGHT.input_height(props.shared.prompt.input(), area, TextFlow::Wrapped),
     }
 }
 
-fn panel_layout(area: Rect, commands: u16, input: u16) -> [Rect; 4] {
+fn panel_layout(area: Rect, prompt: u16) -> [Rect; 3] {
     Layout::vertical([
         Constraint::Length(1),
         Constraint::Fill(1),
-        Constraint::Length(commands),
-        Constraint::Length(input),
+        Constraint::Length(prompt),
     ])
     .areas(area)
 }
@@ -133,16 +120,18 @@ fn render_transcript(props: &AgentPanelProps<'_>, area: Rect, frame: &mut Frame)
     .render(area, frame.buffer_mut());
 }
 
-fn render_prompt(props: &AgentPanelProps<'_>, area: Rect, frame: &mut Frame) {
+fn render_prompt(props: &AgentPanelProps<'_>, area: Rect, input_height: u16, frame: &mut Frame) {
     if area.height == 0 {
         return;
     }
-    props
-        .shared
-        .prompt
-        .view_with_flow(props.shared.styles, TextFlow::Wrapped)
-        .render(area, frame.buffer_mut());
-    if let Some(cursor) = prompt_cursor(props, area) {
+    let input = AgentPromptView::render(
+        &props.shared.prompt,
+        props.shared.styles,
+        area,
+        input_height,
+        frame.buffer_mut(),
+    );
+    if let Some(cursor) = prompt_cursor(props, input) {
         frame.set_cursor_position(cursor);
     }
 }
@@ -151,10 +140,7 @@ fn prompt_cursor(props: &AgentPanelProps<'_>, area: Rect) -> Option<Position> {
     if props.focus != FocusState::Focused || props.mode != AgentInputMode::Insert {
         return None;
     }
-    props
-        .shared
-        .prompt
-        .cursor_position_with_flow(area, props.shared.styles, TextFlow::Wrapped)
+    AgentPromptView::cursor(&props.shared.prompt, props.shared.styles, area)
 }
 
 #[cfg(test)]
@@ -163,7 +149,7 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend};
 
     use super::*;
-    use crate::component::text_input::TextInput;
+    use crate::component::{agent::AgentPromptProps, text_input::TextInput};
     use crate::{
         agent::PromptCommand,
         theme::{Theme, UiTheme},
@@ -181,9 +167,7 @@ mod tests {
         AgentPanelProps {
             shared: AgentViewProps {
                 session,
-                prompt,
-                commands,
-                selected_command: None,
+                prompt: AgentPromptProps::new(prompt).with_commands(commands, None),
                 storage_error: None,
                 styles,
             },
@@ -253,7 +237,8 @@ mod tests {
             .unwrap();
         let prompt_row = rows.iter().rposition(|row| row.contains("/p")).unwrap();
         assert!(command_row < prompt_row);
-        let [_, _, command_area, input_area] = panel_layout(Rect::new(0, 0, 50, 12), 1, 3);
+        let [command_area, input_area] =
+            AgentPromptView::layout(&props.shared.prompt, Rect::new(0, 0, 50, 12), 3);
         assert_eq!(command_area.y + command_area.height, input_area.y);
     }
 

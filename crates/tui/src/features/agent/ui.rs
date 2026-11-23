@@ -1,7 +1,9 @@
 use ratatui::{Frame, layout::Rect};
 
 use crate::{
-    component::agent::{AgentDialog, AgentHelp, AgentPanel, AgentPanelProps, AgentViewProps},
+    component::agent::{
+        AgentDialog, AgentHelp, AgentPanel, AgentPanelProps, AgentPromptProps, AgentViewProps,
+    },
     data_object::{Context, FocusState, FocusTarget, Model},
     manager::input_context::input_context,
     ui::{OverlayContribution, OverlayKind, OverlayPlacement, UiRegistry},
@@ -27,9 +29,10 @@ fn dialog_overlay(model: &Model) -> Option<OverlayContribution> {
 fn view_props(model: &Model) -> AgentViewProps<'_> {
     AgentViewProps {
         session: model.agent.session(),
-        prompt: model.agent.prompt_state(),
-        commands: prompt_commands(model),
-        selected_command: model.agent.command_state().selected(),
+        prompt: AgentPromptProps::new(model.agent.prompt_state()).with_commands(
+            prompt_commands(model),
+            model.agent.command_state().selected(),
+        ),
         storage_error: model.agent.storage_error(),
         styles: model.theme.ui(),
     }

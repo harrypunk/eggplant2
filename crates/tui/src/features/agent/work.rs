@@ -1209,6 +1209,20 @@ mod tests {
     }
 
     #[test]
+    fn failed_begin_preserves_the_prompt() {
+        let mut model = Model::default();
+        model
+            .agent
+            .session_mut()
+            .begin("active".to_string())
+            .unwrap();
+        model.agent.prompt.set_value("next");
+
+        assert!(model.agent.begin_prompt().is_none());
+        assert_eq!(model.agent.prompt(), "next");
+    }
+
+    #[test]
     fn prefill_is_editable_and_draft_state_survives_close_and_reopen() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("main.rs");

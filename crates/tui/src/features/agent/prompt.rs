@@ -67,26 +67,28 @@ impl AgentPrompt {
     }
 
     pub fn edit(&mut self, event: TextInputEvent) {
-        self.input.handle_event(event);
-        self.commands.clear();
-        self.draft = DraftOrigin::User;
+        if self.input.handle_event(event).content_changed() {
+            self.commands.clear();
+            self.draft = DraftOrigin::User;
+        }
     }
 
     pub fn backspace(&mut self) {
-        self.input.backspace();
-        self.commands.clear();
-        self.draft = DraftOrigin::User;
+        if self.input.backspace() {
+            self.commands.clear();
+            self.draft = DraftOrigin::User;
+        }
     }
 
-    pub fn take_for_submission(&mut self) -> Option<String> {
+    pub fn submission_text(&self) -> Option<String> {
         let prompt = self.input.trim().to_string();
-        if prompt.is_empty() {
-            return None;
-        }
+        (!prompt.is_empty()).then_some(prompt)
+    }
+
+    pub fn complete_submission(&mut self) {
         self.input.clear();
         self.commands.clear();
         self.draft = DraftOrigin::Empty;
-        Some(prompt)
     }
 }
 
@@ -108,11 +110,35 @@ mod tests {
     }
 
     #[test]
-    fn submission_clears_input_and_selection() {
+    fn cursor_movement_and_noop_backspace_preserve_prompt_policy() {
         let mut prompt = AgentPrompt::default();
         prompt.prepare_dialog_prefill("main.rs:1".to_string());
-        assert_eq!(prompt.take_for_submission().as_deref(), Some("main.rs:1"));
+        prompt.edit(TextInputEvent::Cursor(
+            crate::component::text_input::TextCursorMovement::Left,
+        ));
+        prompt.prepare_panel();
         assert_eq!(prompt.value(), "");
-        assert!(prompt.take_for_submission().is_none());
+
+        prompt.backspace();
+        prompt.prepare_dialog_prefill("main.rs:1".to_string());
+        assert_eq!(prompt.value(), "main.rs:1");
+
+        prompt.set_value("/");
+        assert!(prompt.quick_fill(PromptCommandMovement::Next));
+        prompt.edit(TextInputEvent::Cursor(
+            crate::component::text_input::TextCursorMovement::Left,
+        ));
+        assert!(prompt.command_state().selected().is_some());
+    }
+
+    #[test]
+    fn submission_clears_only_when_completed() {
+        let mut prompt = AgentPrompt::default();
+        prompt.prepare_dialog_prefill("main.rs:1".to_string());
+        assert_eq!(prompt.submission_text().as_deref(), Some("main.rs:1"));
+        assert_eq!(prompt.value(), "main.rs:1");
+        prompt.complete_submission();
+        assert_eq!(prompt.value(), "");
+        assert!(prompt.submission_text().is_none());
     }
 }

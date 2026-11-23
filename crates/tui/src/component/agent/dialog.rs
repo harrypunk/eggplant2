@@ -6,7 +6,7 @@ use ratatui::{
     widgets::{Paragraph, Widget, Wrap},
 };
 
-use super::{command_menu::AgentCommandMenu, props::AgentViewProps, transcript::diff_lines};
+use super::{prompt::AgentPromptView, props::AgentViewProps, transcript::diff_lines};
 use crate::component::{
     auto_height::AutoHeight,
     popup::{Popup, content_area},
@@ -25,7 +25,7 @@ impl AgentDialog {
         if props.session.pending_approval().is_some() {
             return Size::new(90, 24);
         }
-        let mut size = AUTO_HEIGHT.dialog_size(props.prompt, 68, TextFlow::Wrapped);
+        let mut size = AUTO_HEIGHT.dialog_size(props.prompt.input(), 68, TextFlow::Wrapped);
         size.height = size.height.saturating_add(command_height(props)).min(24);
         size
     }
@@ -41,11 +41,7 @@ impl AgentDialog {
         if props.session.pending_approval().is_some() {
             return None;
         }
-        props.prompt.cursor_position_with_flow(
-            input_area(props, area),
-            props.styles,
-            TextFlow::Wrapped,
-        )
+        AgentPromptView::cursor(&props.prompt, props.styles, input_area(props, area))
     }
 }
 
@@ -55,11 +51,8 @@ struct AgentDialogContent<'a> {
 
 impl AgentDialogContent<'_> {
     fn render_prompt(&self, area: Rect, buffer: &mut Buffer) {
-        let [status, assistant, commands, input] = dialog_layout(
-            area,
-            command_height(self.props),
-            prompt_input_height(self.props.prompt, area),
-        );
+        let input_height = prompt_input_height(self.props.prompt.input(), area);
+        let [status, assistant, prompt] = dialog_layout(area, input_height);
         Paragraph::new(self.status_text())
             .style(self.props.styles.muted)
             .render(status, buffer);
@@ -67,19 +60,13 @@ impl AgentDialogContent<'_> {
             .wrap(Wrap { trim: false })
             .style(self.props.styles.base)
             .render(assistant, buffer);
-        if let Some(command_items) = self.props.commands.as_deref() {
-            AgentCommandMenu::render(
-                command_items,
-                self.props.selected_command,
-                self.props.styles,
-                commands,
-                buffer,
-            );
-        }
-        self.props
-            .prompt
-            .view_with_flow(self.props.styles, TextFlow::Wrapped)
-            .render(input, buffer);
+        AgentPromptView::render(
+            &self.props.prompt,
+            self.props.styles,
+            prompt,
+            input_height,
+            buffer,
+        );
     }
 
     fn status_text(&self) -> String {
@@ -141,14 +128,13 @@ impl Widget for AgentDialogContent<'_> {
 }
 
 fn command_height(props: &AgentDialogProps<'_>) -> u16 {
-    AgentCommandMenu::height(props.commands.as_deref())
+    AgentPromptView::command_height(&props.prompt)
 }
 
-fn dialog_layout(area: Rect, commands: u16, input: u16) -> [Rect; 4] {
+fn dialog_layout(area: Rect, input: u16) -> [Rect; 3] {
     Layout::vertical([
         Constraint::Length(1),
         Constraint::Fill(1),
-        Constraint::Length(commands),
         Constraint::Length(input),
     ])
     .areas(area)
@@ -159,11 +145,7 @@ fn prompt_input_height(prompt: &TextInput, area: Rect) -> u16 {
 }
 
 fn prompt_area(props: &AgentDialogProps<'_>, area: Rect) -> Rect {
-    dialog_layout(
-        area,
-        command_height(props),
-        prompt_input_height(props.prompt, area),
-    )[3]
+    dialog_layout(area, prompt_input_height(props.prompt.input(), area))[2]
 }
 
 fn input_area(props: &AgentDialogProps<'_>, area: Rect) -> Rect {
@@ -175,7 +157,7 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend};
 
     use super::*;
-    use crate::theme::Theme;
+    use crate::{component::agent::AgentPromptProps, theme::Theme};
     use eggplant_agent::AgentSession;
 
     fn render(props: &AgentDialogProps<'_>, width: u16, height: u16) -> String {
@@ -201,9 +183,7 @@ mod tests {
         let prompt = TextInput::new("main.rs:1");
         let props = AgentDialogProps {
             session: &session,
-            prompt: &prompt,
-            commands: None,
-            selected_command: None,
+            prompt: AgentPromptProps::new(&prompt),
             storage_error: None,
             styles: theme.ui(),
         };
@@ -236,9 +216,7 @@ mod tests {
         let prompt = TextInput::default();
         let props = AgentDialogProps {
             session: &session,
-            prompt: &prompt,
-            commands: None,
-            selected_command: None,
+            prompt: AgentPromptProps::new(&prompt),
             storage_error: None,
             styles: theme.ui(),
         };
@@ -257,9 +235,7 @@ mod tests {
         let prompt = TextInput::new("ab".repeat(100));
         let props = AgentDialogProps {
             session: &session,
-            prompt: &prompt,
-            commands: None,
-            selected_command: None,
+            prompt: AgentPromptProps::new(&prompt),
             storage_error: None,
             styles: theme.ui(),
         };
