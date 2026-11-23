@@ -2,7 +2,6 @@ use editor::EditorSnapshot;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Flex, Layout, Position, Rect},
-    style::Style,
     widgets::Widget,
 };
 
@@ -12,7 +11,7 @@ use super::{
     text_view::TextView,
     welcome::{Welcome, WelcomeState},
 };
-use crate::{data_object::FocusState, theme::Theme};
+use crate::{data_object::FocusState, theme::Theme, ui::EditorDecorationContribution};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct EditorViewOptions {
@@ -39,7 +38,7 @@ pub struct Editor<'a> {
     theme: &'a Theme,
     flow: TextFlow,
     welcome: Option<WelcomeState>,
-    cursor_line: Option<Style>,
+    decorations: &'a [EditorDecorationContribution],
 }
 
 impl<'a> Editor<'a> {
@@ -50,12 +49,12 @@ impl<'a> Editor<'a> {
             theme,
             flow: TextFlow::SingleLine,
             welcome: None,
-            cursor_line: None,
+            decorations: &[],
         }
     }
 
-    pub fn with_cursor_line(mut self, style: Option<Style>) -> Self {
-        self.cursor_line = style;
+    pub fn with_decorations(mut self, decorations: &'a [EditorDecorationContribution]) -> Self {
+        self.decorations = decorations;
         self
     }
 
@@ -106,7 +105,7 @@ impl Widget for Editor<'_> {
             Some(snapshot) => {
                 BufferTabs::new(snapshot, self.theme.ui()).render(tabs_area, buf);
                 EditorBuffer::with_flow(snapshot, self.theme, self.flow)
-                    .with_cursor_line(self.cursor_line)
+                    .with_decorations(self.decorations)
                     .render(content_area, buf);
             }
             None => Welcome::new(
@@ -125,7 +124,7 @@ pub struct EditorBuffer<'a> {
     snapshot: &'a EditorSnapshot,
     theme: &'a Theme,
     flow: TextFlow,
-    cursor_line: Option<Style>,
+    decorations: &'a [EditorDecorationContribution],
 }
 
 impl<'a> EditorBuffer<'a> {
@@ -138,12 +137,12 @@ impl<'a> EditorBuffer<'a> {
             snapshot,
             theme,
             flow,
-            cursor_line: None,
+            decorations: &[],
         }
     }
 
-    pub fn with_cursor_line(mut self, style: Option<Style>) -> Self {
-        self.cursor_line = style;
+    pub fn with_decorations(mut self, decorations: &'a [EditorDecorationContribution]) -> Self {
+        self.decorations = decorations;
         self
     }
 
@@ -157,7 +156,7 @@ impl Widget for EditorBuffer<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         TextView::with_flow(&self.snapshot.text, self.theme, self.flow)
             .with_cursor(self.snapshot.cursor)
-            .with_cursor_line(self.cursor_line)
+            .with_decorations(self.decorations)
             .render(area, buf);
     }
 }

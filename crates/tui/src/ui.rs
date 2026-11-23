@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use color_eyre::eyre::eyre;
-use editor::EditorSnapshot;
+use editor::{CursorPosition, EditorSnapshot, TextViewSnapshot};
 use ratatui::{
     Frame,
     buffer::Buffer,
@@ -21,6 +21,45 @@ pub type OverlayCursor = fn(&Model, Rect) -> Option<Position>;
 pub type OverlayProvider = fn(&Model) -> Option<OverlayContribution>;
 pub type EditorOverlayRender = fn(&Model, &EditorSnapshot, Rect, &mut Buffer);
 pub type EditorOverlayProvider = fn(&Model) -> Option<EditorOverlayContribution>;
+pub type EditorDecorationProvider = fn(&Model) -> Option<EditorDecorationContribution>;
+pub type EditorDecorationRender = fn(EditorDecorationContext<'_>, Rect, &mut Buffer);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EditorDecorationPhase {
+    BeforeSelection,
+    AfterSelection,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EditorVisualRow {
+    pub logical_line: usize,
+    pub screen_row: usize,
+}
+
+#[derive(Clone, Copy)]
+pub struct EditorDecorationContext<'a> {
+    pub snapshot: &'a TextViewSnapshot,
+    pub cursor: Option<CursorPosition>,
+    pub rows: &'a [EditorVisualRow],
+    pub styles: &'a crate::theme::UiTheme,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct EditorDecorationContribution {
+    pub id: &'static str,
+    pub phase: EditorDecorationPhase,
+    pub render: EditorDecorationRender,
+}
+
+impl EditorDecorationContribution {
+    pub fn new(
+        id: &'static str,
+        phase: EditorDecorationPhase,
+        render: EditorDecorationRender,
+    ) -> Self {
+        Self { id, phase, render }
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct EditorOverlayContribution {
@@ -111,6 +150,7 @@ pub struct UiRegistry {
     status: HashMap<StatusSlot, RenderContribution>,
     overlays: Vec<(&'static str, OverlayProvider)>,
     editor_overlays: Vec<(&'static str, EditorOverlayProvider)>,
+    editor_decorations: Vec<(&'static str, EditorDecorationProvider)>,
 }
 
 impl UiRegistry {
@@ -146,6 +186,7 @@ impl UiRegistry {
         crate::buffer_grep::register_ui(&mut ui).expect("buffer-grep UI must be unique");
         crate::project_grep::register_ui(&mut ui).expect("project-grep UI must be unique");
         crate::agent::register_ui(&mut ui).expect("agent UI must be unique");
+        crate::cursor_line::register_ui(&mut ui).expect("cursor-line UI must be unique");
         ui
     }
 
@@ -201,6 +242,22 @@ impl UiRegistry {
         Ok(())
     }
 
+    pub fn register_editor_decoration(
+        &mut self,
+        id: &'static str,
+        provider: EditorDecorationProvider,
+    ) -> color_eyre::Result<()> {
+        if self
+            .editor_decorations
+            .iter()
+            .any(|(candidate, _)| *candidate == id)
+        {
+            return Err(eyre!("duplicate editor decoration contribution `{id}`"));
+        }
+        self.editor_decorations.push((id, provider));
+        Ok(())
+    }
+
     pub fn render_panel(&self, slot: PanelSlot, model: &Model, frame: &mut Frame, area: Rect) {
         if let Some(render) = self.panels.get(&slot) {
             render(model, frame, area);
@@ -215,6 +272,13 @@ impl UiRegistry {
 
     pub fn editor_overlays(&self, model: &Model) -> Vec<EditorOverlayContribution> {
         self.editor_overlays
+            .iter()
+            .filter_map(|(_, provider)| provider(model))
+            .collect()
+    }
+
+    pub fn editor_decorations(&self, model: &Model) -> Vec<EditorDecorationContribution> {
+        self.editor_decorations
             .iter()
             .filter_map(|(_, provider)| provider(model))
             .collect()
@@ -471,6 +535,16 @@ mod tests {
             .unwrap();
         assert!(
             ui.register_editor_overlay("example", no_editor_overlay)
+                .is_err()
+        );
+
+        fn no_editor_decoration(_: &Model) -> Option<EditorDecorationContribution> {
+            None
+        }
+        ui.register_editor_decoration("example", no_editor_decoration)
+            .unwrap();
+        assert!(
+            ui.register_editor_decoration("example", no_editor_decoration)
                 .is_err()
         );
     }

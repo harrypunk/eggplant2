@@ -2,14 +2,19 @@ use editor::{LineChange, LineSnapshot, TextViewSnapshot};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Flex, Layout, Position, Rect},
-    style::Style,
     text::{Line, Span},
     widgets::{Paragraph, Widget},
 };
 use unicode_width::UnicodeWidthStr;
 
 use super::text_layout::{DisplayLine, TextFlow, TextLayout, TextPoint, byte_at_display_width};
-use crate::theme::Theme;
+use crate::{
+    theme::Theme,
+    ui::{
+        EditorDecorationContext, EditorDecorationContribution, EditorDecorationPhase,
+        EditorVisualRow,
+    },
+};
 
 /// Shared read-only document viewport for editor buffers and text previews.
 #[derive(Debug, Clone, Copy)]
@@ -18,7 +23,7 @@ pub struct TextView<'a> {
     theme: &'a Theme,
     flow: TextFlow,
     cursor: Option<editor::CursorPosition>,
-    cursor_line: Option<Style>,
+    decorations: &'a [EditorDecorationContribution],
 }
 
 impl<'a> TextView<'a> {
@@ -32,7 +37,7 @@ impl<'a> TextView<'a> {
             theme,
             flow,
             cursor: None,
-            cursor_line: None,
+            decorations: &[],
         }
     }
 
@@ -41,8 +46,8 @@ impl<'a> TextView<'a> {
         self
     }
 
-    pub fn with_cursor_line(mut self, style: Option<Style>) -> Self {
-        self.cursor_line = style;
+    pub fn with_decorations(mut self, decorations: &'a [EditorDecorationContribution]) -> Self {
+        self.decorations = decorations;
         self
     }
 
@@ -298,10 +303,19 @@ impl TextView<'_> {
             .style(self.theme.ui().base)
             .scroll((0, horizontal_offset))
             .render(text_area, buf);
-        if let Some(cursor) = self.cursor {
-            self.paint_cursor_line(area, buf, cursor.row);
-        }
+        let rows = self
+            .snapshot
+            .lines
+            .iter()
+            .enumerate()
+            .map(|(screen_row, _)| EditorVisualRow {
+                logical_line: screen_row,
+                screen_row,
+            })
+            .collect::<Vec<_>>();
+        self.render_decorations(area, buf, &rows, EditorDecorationPhase::BeforeSelection);
         self.apply_selection_single_line(text_area, buf);
+        self.render_decorations(area, buf, &rows, EditorDecorationPhase::AfterSelection);
     }
 
     fn render_wrapped(self, area: Rect, buf: &mut Buffer) {
@@ -333,36 +347,46 @@ impl TextView<'_> {
         Paragraph::new(lines)
             .style(self.theme.ui().base)
             .render(text_area, buf);
+        let rows = view
+            .rows
+            .iter()
+            .skip(offset)
+            .take(text_area.height as usize)
+            .enumerate()
+            .map(|(screen_row, row)| EditorVisualRow {
+                logical_line: row.logical_line,
+                screen_row,
+            })
+            .collect::<Vec<_>>();
+        self.render_decorations(area, buf, &rows, EditorDecorationPhase::BeforeSelection);
         view.rows
             .iter()
             .skip(offset)
             .take(text_area.height as usize)
             .enumerate()
             .for_each(|(row_index, row)| {
-                if self
-                    .cursor
-                    .is_some_and(|cursor| cursor.row == row.logical_line)
-                {
-                    self.paint_cursor_line(area, buf, row_index);
-                }
                 self.apply_selection_wrapped(text_area, buf, row_index, row);
             });
+        self.render_decorations(area, buf, &rows, EditorDecorationPhase::AfterSelection);
     }
 
-    fn paint_cursor_line(&self, area: Rect, buf: &mut Buffer, row: usize) {
-        let Some(background) = self.cursor_line.and_then(|style| style.bg) else {
-            return;
+    fn render_decorations(
+        &self,
+        area: Rect,
+        buf: &mut Buffer,
+        rows: &[EditorVisualRow],
+        phase: EditorDecorationPhase,
+    ) {
+        let context = EditorDecorationContext {
+            snapshot: self.snapshot,
+            cursor: self.cursor,
+            rows,
+            styles: self.theme.ui(),
         };
-        let Ok(row) = u16::try_from(row) else {
-            return;
-        };
-        if row >= area.height {
-            return;
-        }
-        buf.set_style(
-            Rect::new(area.x, area.y + row, area.width, 1),
-            Style::new().bg(background),
-        );
+        self.decorations
+            .iter()
+            .filter(|decoration| decoration.phase == phase)
+            .for_each(|decoration| (decoration.render)(context, area, buf));
     }
 
     fn apply_selection_single_line(&self, text_area: Rect, buf: &mut Buffer) {
@@ -465,10 +489,37 @@ mod tests {
     use ratatui::{
         Terminal,
         backend::TestBackend,
-        style::{Color, Modifier},
+        style::{Color, Modifier, Style},
     };
 
     use super::*;
+
+    fn test_cursor_line_decoration() -> EditorDecorationContribution {
+        fn render(context: EditorDecorationContext<'_>, area: Rect, buffer: &mut Buffer) {
+            let Some(cursor) = context.cursor else {
+                return;
+            };
+            context
+                .rows
+                .iter()
+                .filter(|row| row.logical_line == cursor.row)
+                .for_each(|row| {
+                    if let Ok(screen_row) = u16::try_from(row.screen_row)
+                        && screen_row < area.height
+                    {
+                        buffer.set_style(
+                            Rect::new(area.x, area.y + screen_row, area.width, 1),
+                            Style::new().bg(Color::Blue),
+                        );
+                    }
+                });
+        }
+        EditorDecorationContribution::new(
+            "test_cursor_line",
+            EditorDecorationPhase::BeforeSelection,
+            render,
+        )
+    }
 
     #[test]
     fn applies_the_shared_theme_to_exact_syntax_spans() {
@@ -571,9 +622,10 @@ mod tests {
     fn cursor_line_paints_only_the_active_row_including_the_gutter() {
         let snapshot = TextViewSnapshot::plain(vec!["zero".to_string(), "one".to_string()]);
         let theme = Theme::default();
+        let decorations = [test_cursor_line_decoration()];
         let view = TextView::new(&snapshot, &theme)
             .with_cursor(Some(editor::CursorPosition { row: 1, column: 0 }))
-            .with_cursor_line(Some(Style::new().bg(Color::Blue)));
+            .with_decorations(&decorations);
         let mut terminal = Terminal::new(TestBackend::new(12, 2)).unwrap();
         terminal
             .draw(|frame| view.render(frame.area(), frame.buffer_mut()))
@@ -593,9 +645,10 @@ mod tests {
     fn cursor_line_covers_wrapped_rows_and_yields_to_selection() {
         let snapshot = TextViewSnapshot::plain(vec!["abcdef".to_string(), "next".to_string()]);
         let theme = Theme::default();
+        let decorations = [test_cursor_line_decoration()];
         let view = TextView::with_flow(&snapshot, &theme, TextFlow::Wrapped)
             .with_cursor(Some(editor::CursorPosition { row: 0, column: 4 }))
-            .with_cursor_line(Some(Style::new().bg(Color::Blue)));
+            .with_decorations(&decorations);
         let mut wrapped = Terminal::new(TestBackend::new(7, 2)).unwrap();
         wrapped
             .draw(|frame| view.render(frame.area(), frame.buffer_mut()))
@@ -614,7 +667,7 @@ mod tests {
         let theme = Theme::from_name("tokyonight").unwrap();
         let selected = TextView::new(&selected_snapshot, &theme)
             .with_cursor(Some(editor::CursorPosition { row: 0, column: 0 }))
-            .with_cursor_line(Some(Style::new().bg(Color::Blue)));
+            .with_decorations(&decorations);
         let mut terminal = Terminal::new(TestBackend::new(6, 1)).unwrap();
         terminal
             .draw(|frame| selected.render(frame.area(), frame.buffer_mut()))

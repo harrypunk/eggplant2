@@ -14,6 +14,7 @@ Features own concrete components and receive resolved props. They register contr
 ```text
 PanelSlot.Explorer / PanelSlot.Tools
 OverlaySlot.Modal
+EditorDecorationPhase.BeforeSelection / AfterSelection
 StatusSlot.Message
 ```
 
@@ -21,7 +22,7 @@ For example, `HistoryListProps` supplies only history state, selection, expanded
 
 Agent presentation follows the same boundary. `features/agent/ui.rs` is only a registration and props adapter; `component/agent/` contains pure dialog, panel, transcript, and help views. Their props expose only session, prompt, input mode, focus, storage warning, and theme inputs as needed. Panel layout, chrome, transcript, prompt, and cursor rendering are separate functions, and component tests construct props directly rather than building a global `Model`.
 
-The shell resolves overlay ordering by semantic priority, not accidental registration order. Feature components never query terminal size, perform filesystem work, or install global key handlers.
+The shell resolves overlay ordering by semantic priority, not accidental registration order. Editor decorations are non-modal and do not suppress the cursor or wrapping. Their render functions receive resolved visual rows, cursor, snapshot, and theme rather than `Model`; duplicate decoration IDs are registration errors. Feature components never query terminal size, perform filesystem work, or install global key handlers.
 
 ## Rendering and cursor policy
 

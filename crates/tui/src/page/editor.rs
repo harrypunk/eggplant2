@@ -34,12 +34,8 @@ impl Editor {
         );
         let overlays = self.ui.overlays(model);
         let editor_overlays = self.ui.editor_overlays(model);
+        let decorations = self.ui.editor_decorations(model);
         let snapshot = model.editor.active_snapshot();
-        let cursor_line = snapshot.as_ref().and_then(|snapshot| {
-            model
-                .cursor_line
-                .decoration(snapshot.cursor.is_some(), model.theme.ui())
-        });
         let flow = if editor_overlays.is_empty() {
             model.editor_view.flow()
         } else {
@@ -52,7 +48,7 @@ impl Editor {
         )
         .with_flow(flow)
         .with_welcome(model.welcome)
-        .with_cursor_line(cursor_line);
+        .with_decorations(&decorations);
         let cursor = editor.cursor_position(areas.editor);
 
         areas.explorer.into_iter().for_each(|area| {
