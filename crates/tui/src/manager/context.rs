@@ -148,11 +148,19 @@ fn parse_key_code(value: &str) -> Result<KeyCode, String> {
 
 type KeyCommandMap = HashMap<KeyChord, CommandId>;
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum NavigationPolicy {
+    #[default]
+    Plain,
+    List,
+}
+
 /// Keybindings associated with one input context.
 #[derive(Debug, Clone)]
 pub struct ContextBindings {
     key_command_map: KeyCommandMap,
     pub context: Context,
+    navigation: NavigationPolicy,
 }
 
 impl ContextBindings {
@@ -163,7 +171,13 @@ impl ContextBindings {
         Self {
             key_command_map: bindings.into_iter().collect(),
             context,
+            navigation: NavigationPolicy::Plain,
         }
+    }
+
+    pub fn with_list_navigation(mut self) -> Self {
+        self.navigation = NavigationPolicy::List;
+        self
     }
 
     pub fn resolve(&self, key: KeyChord) -> Option<CommandId> {
@@ -173,7 +187,12 @@ impl ContextBindings {
     /// Resolve a direct binding before terminal compatibility fallbacks.
     pub fn resolve_chord(&self, key: KeyChord) -> Option<CommandId> {
         self.resolve(key)
-            .or_else(|| navigation_alias(key).and_then(|alias| self.resolve(alias)))
+            .or_else(|| {
+                (self.navigation == NavigationPolicy::List)
+                    .then_some(key)
+                    .and_then(navigation_alias)
+                    .and_then(|alias| self.resolve(alias))
+            })
             .or_else(|| {
                 key.shifted_symbol()
                     .and_then(|shifted| self.resolve(shifted))
@@ -266,6 +285,20 @@ mod tests {
             ),
             None
         );
+    }
+
+    #[test]
+    fn list_alias_requires_an_opt_in_context() {
+        let next = CommandId("next");
+        let ctrl_n = KeyChord::new(KeyCode::Char('n'), KeyModifiers::CONTROL);
+        let plain = ContextBindings::from_bindings(
+            Context::AppNormal,
+            [(KeyChord::from(KeyCode::Down), next)],
+        );
+        assert_eq!(plain.resolve_chord(ctrl_n), None);
+
+        let list = plain.with_list_navigation();
+        assert_eq!(list.resolve_chord(ctrl_n), Some(next));
     }
 
     #[test]

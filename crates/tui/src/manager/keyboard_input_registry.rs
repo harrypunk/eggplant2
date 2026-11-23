@@ -41,6 +41,13 @@ impl Registry {
             .iter()
             .map(|(context_name, bindings)| {
                 parse_context_bindings(context_name, bindings, commands)
+                    .map(|bindings| {
+                        if list_navigation_contexts().contains(&context_name.as_str()) {
+                            bindings.with_list_navigation()
+                        } else {
+                            bindings
+                        }
+                    })
                     .map(|bindings| (bindings.context, bindings))
             })
             .collect::<color_eyre::Result<ContextBindingMap>>()
@@ -50,6 +57,21 @@ impl Registry {
     pub fn get_binding(&self, context: &Context) -> Option<&ContextBindings> {
         self.bindings.get(context)
     }
+}
+
+/// Contexts that compose the shared Ctrl-N/P aliases through Down/Up.
+fn list_navigation_contexts() -> &'static [&'static str] {
+    &[
+        "file_picker",
+        "theme_picker",
+        "buffer_grep",
+        "project_grep",
+        "vcs_branch",
+        "vcs_merge",
+        "vcs_reset",
+        "agent_chat_dialog",
+        "agent_chat_insert",
+    ]
 }
 
 fn common_bindings() -> KeymapConfig {

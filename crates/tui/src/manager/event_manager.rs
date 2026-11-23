@@ -1262,7 +1262,7 @@ mod tests {
         let mut model = Model::default();
         model.context_stack.push(Context::EditorInput);
 
-        for key in ['h', 'j', 'k', 'l'] {
+        for key in ['h', 'j', 'k', 'l', 'n', 'p'] {
             let event = Event::Key(KeyEvent::new(KeyCode::Char(key), KeyModifiers::CONTROL));
             assert!(manager.translate(event, &model).is_none());
         }

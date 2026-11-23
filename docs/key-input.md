@@ -180,7 +180,7 @@ Approval mode has no printable prompt input and no cursor. Reopening with `Ctrl-
 
 File/theme pickers and both live-grep lists wrap from first to last and last to first. Their rendered list window follows the selection so the selected row remains visible, including after wraparound and in small terminals.
 
-`Ctrl-N`/`Ctrl-P` are built-in aliases for Down/Up navigation in those pickers and in the VCS branch, merge, and reset selectors. An explicit `Ctrl-N`/`Ctrl-P` binding for a custom action in the same context takes priority.
+`Ctrl-N`/`Ctrl-P` are built-in aliases for Down/Up navigation in those pickers and in the VCS branch, merge, and reset selectors. Only contexts explicitly registered for list navigation compose these aliases, including both Agent inputs; ordinary editor input does not inherit them. An explicit `Ctrl-N`/`Ctrl-P` binding for a custom action in the same context takes priority.
 
 ### VCS status page
 
