@@ -82,7 +82,7 @@ The panel and popup are two presentations of one Agent workflow. Both receive th
 
 | Action | Binding |
 | --- | --- |
-| Open inline dialog for a workspace file | `Ctrl-I` |
+| Open inline Agent dialog | `Ctrl-I` |
 | Dismiss dialog while preserving the run | `Esc` |
 | Submit prompt | `Enter` |
 | Interrupt active run | `Ctrl-F7` |
@@ -91,7 +91,7 @@ The panel and popup are two presentations of one Agent workflow. Both receive th
 | Focus Agent panel input | `Ctrl-L` |
 | Return from Agent panel to editor | `Ctrl-H` |
 
-The inline prompt starts as `workspace/relative/path:line` and remains editable for quick file-focused questions. Empty, standalone-file, and external read-only contexts are rejected for this inline flow. The project panel instead starts with a freeform prompt and does not require an active buffer; `@path` references remain ordinary prompt text and do not implicitly attach file contents. The scripted provider used in this slice streams `Simulated response to: <prompt>`; `fail` simulates a provider failure.
+The inline dialog requires an open project, not an active buffer. With an active workspace file, its prompt starts as editable `workspace/relative/path:line`; without an eligible buffer, it starts empty. External buffers do not supply prefill and do not prevent chatting. The project panel likewise starts with a freeform prompt and does not require an active buffer; `@path` references remain ordinary prompt text and do not implicitly attach file contents. The scripted provider used in this slice streams `Simulated response to: <prompt>`; `fail` simulates a provider failure.
 
 `AgentChatDialog` is the inline modal context. `AgentChat` and `AgentChatInsert` are derived from panel focus and `AgentInputMode`; they are not stored in the context stack. `AgentChatHelp` owns the stored modal help context. `ModalController` is authoritative for Agent, help, and provider-login overlay visibility as well as modal input ownership. `AgentDialogState` records only workflow lifecycle (`Closed`, `Open`, or `Suspended`) and is not a second visibility source.
 

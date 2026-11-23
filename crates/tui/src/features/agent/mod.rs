@@ -173,9 +173,9 @@ impl AgentState {
         self.context.as_ref()
     }
 
-    pub fn prepare_prompt(&mut self, context: EditorContext, label: String) {
+    pub fn prepare_prompt(&mut self, context: Option<EditorContext>, label: String) {
         self.prompt.prepare_dialog_prefill(label);
-        self.context = Some(context);
+        self.context = context;
     }
 
     pub fn prepare_panel_prompt(&mut self) {
@@ -185,7 +185,7 @@ impl AgentState {
         self.help_visible = false;
     }
 
-    pub fn open_dialog(&mut self, context: EditorContext, label: String) {
+    pub fn open_dialog(&mut self, context: Option<EditorContext>, label: String) {
         self.prepare_prompt(context, label);
         self.dialog = AgentDialogState::Open;
     }
@@ -295,9 +295,4 @@ impl AgentState {
             run.clear_suspension();
         }
     }
-}
-
-/// Minimal editor boundary required by the agent workflow.
-pub trait AgentContextProvider {
-    fn agent_context(&self) -> Result<EditorContext, String>;
 }

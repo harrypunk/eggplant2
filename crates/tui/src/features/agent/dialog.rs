@@ -1,4 +1,4 @@
-use super::{AgentContextProvider, EditorContext};
+use super::EditorContext;
 use crate::{
     data_object::{Context, Model},
     manager::effect::Effect,
@@ -9,10 +9,10 @@ pub(crate) fn open(model: &mut Model) -> Option<Effect> {
     if model.agent.dialog_open() {
         return None;
     }
-    let context = match model.agent_context() {
-        Ok(context) => context,
-        Err(message) => return super::work::notify(model, message),
-    };
+    if model.workspace.is_none() {
+        return super::work::notify(model, "Open a project to use the agent".to_string());
+    }
+    let context = super::context::editor_context(model);
     let input_context = match model.agent.session().pending_approval() {
         Some(_) => Context::AgentApproval,
         None => Context::AgentChatDialog,
@@ -20,7 +20,10 @@ pub(crate) fn open(model: &mut Model) -> Option<Effect> {
     if !model.modal.open(input_context) {
         return None;
     }
-    let label = prompt_label(model, &context);
+    let label = context
+        .as_ref()
+        .map(|context| prompt_label(model, context))
+        .unwrap_or_default();
     model.agent.open_dialog(context, label);
     model.context_stack.push(input_context);
     None

@@ -1,13 +1,12 @@
 use eggplant_agent::{ToolResult, ToolResultStatus};
 
-use super::AgentContextProvider;
 use crate::{
     data_object::{Model, StatusMessage},
     manager::effect::Effect,
 };
 
 pub(crate) fn submit(model: &mut Model) -> Option<Effect> {
-    let surface = super::surface::active(model)?;
+    super::surface::active(model)?;
     if model.agent.prompt().starts_with('/') {
         let command = model.agent.command_state().selected()?;
         return execute_prompt_command(model, command);
@@ -19,16 +18,8 @@ pub(crate) fn submit(model: &mut Model) -> Option<Effect> {
     if model.agent.session().is_running() {
         return notify(model, "Agent is already running".to_string());
     }
-    match surface {
-        super::surface::AgentSurface::Panel if model.workspace.is_none() => {
-            return notify(model, "Open a project to use the agent".to_string());
-        }
-        super::surface::AgentSurface::Dialog => {
-            if let Err(message) = model.agent_context() {
-                return notify(model, message);
-            }
-        }
-        super::surface::AgentSurface::Panel => {}
+    if model.workspace.is_none() {
+        return notify(model, "Open a project to use the agent".to_string());
     }
     let run_id = model.agent.begin_prompt()?;
     if let Some(provider) = model.agent.provider() {
@@ -133,19 +124,28 @@ mod tests {
     }
 
     #[test]
-    fn open_requires_a_workspace_file() {
+    fn dialog_requires_a_project_but_not_an_open_workspace_file() {
         let mut empty = Model::default();
         assert!(open(&mut empty).is_some());
         assert!(!empty.agent.dialog_open());
 
         let workspace = tempfile::tempdir().unwrap();
+        let mut model = initial_model(Some(workspace.path().to_path_buf())).unwrap();
+        assert!(open(&mut model).is_none());
+        assert!(model.agent.dialog_open());
+        assert_eq!(model.agent.prompt(), "");
+        assert!(model.agent.context().is_none());
+        close(&mut model);
+
         let external = tempfile::tempdir().unwrap();
         let path = external.path().join("dependency.rs");
         std::fs::write(&path, "fn dependency() {}\n").unwrap();
-        let mut model = initial_model(Some(workspace.path().to_path_buf())).unwrap();
         open_file(&mut model, &path);
-        assert!(open(&mut model).is_some());
-        assert!(!model.agent.dialog_open());
+        assert!(open(&mut model).is_none());
+        assert!(model.agent.dialog_open());
+        assert_eq!(model.agent.prompt(), "");
+        assert!(model.agent.context().is_none());
+        close(&mut model);
 
         let standalone = tempfile::tempdir().unwrap();
         let path = standalone.path().join("main.rs");
@@ -153,6 +153,31 @@ mod tests {
         let mut model = initial_model(Some(path)).unwrap();
         assert!(open(&mut model).is_some());
         assert!(!model.agent.dialog_open());
+    }
+
+    #[test]
+    fn dialog_submits_without_an_active_buffer() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        open(&mut model);
+        for character in "hello".chars() {
+            handle_input(&mut model, TextInputEvent::Insert(character));
+        }
+
+        let effect = submit(&mut model).unwrap();
+        let manager = MessageManager::default();
+        let storage = perform(&manager, &mut model, effect).unwrap();
+        perform(&manager, &mut model, storage);
+
+        assert_eq!(
+            model.agent.session().run().unwrap().status,
+            RunStatus::Complete
+        );
+        assert!(
+            model.agent.session().messages()[1]
+                .text
+                .contains("Simulated response to: hello")
+        );
     }
 
     #[test]
@@ -366,7 +391,7 @@ mod tests {
         std::fs::write(&path, "fn main() {}\n").unwrap();
         let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
         open_file(&mut model, &path);
-        let context = model.agent_context().unwrap();
+        let context = Some(crate::agent::context::editor_context(&model).unwrap());
 
         model
             .agent

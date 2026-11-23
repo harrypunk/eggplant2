@@ -33,12 +33,12 @@ mod tests {
         let mut model = Model::default();
         model.context_stack.push(Context::AgentChatDialog);
         model.agent.open_dialog(
-            crate::agent::EditorContext {
+            Some(crate::agent::EditorContext {
                 buffer: editor::BufferId::from_raw(1),
                 path: std::path::PathBuf::from("/workspace/main.rs"),
                 revision: 1,
                 line: 1,
-            },
+            }),
             "main.rs:1".to_string(),
         );
         assert_eq!(active(&model), Some(AgentSurface::Dialog));

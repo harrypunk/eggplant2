@@ -140,7 +140,7 @@ On an expanded directory, `h` folds that directory. On a file or collapsed direc
 
 | Action | Default binding |
 | --- | --- |
-| Open inline agent for a workspace file | `Ctrl-I` |
+| Open inline Agent dialog | `Ctrl-I` |
 | Submit prompt | `Enter` |
 | Dismiss dialog without cancelling the run | `Esc` |
 | Edit prompt / delete previous character | Printable input / `Backspace` |
@@ -149,7 +149,7 @@ On an expanded directory, `h` folds that directory. On a file or collapsed direc
 | Focus the Agent panel input | `Ctrl-L` |
 | Return from the Agent panel to the editor | `Ctrl-H` |
 
-The inline prompt starts as `workspace/relative/path:line` and is editable/deletable for quick file-focused use. It requires a file-backed workspace buffer; standalone-file and external read-only contexts are rejected. Dismissal preserves the run and conversation. The project panel is separate: it requires an open project but no active buffer, accepts freeform text and `@path` references, and focuses its bottom input when opened. The fake provider streams a simulated response for this first slice; no credentials are needed.
+The inline dialog requires an open project but no active buffer. An active workspace file supplies an editable/deletable `workspace/relative/path:line` prefill; otherwise the prompt starts empty. External buffers do not supply prefill and do not prevent chatting. Dismissal preserves the run and conversation. The project panel uses the same project requirement and no-buffer availability, accepts freeform text and `@path` references, and focuses its bottom input when opened. The fake provider streams a simulated response for this first slice; no credentials are needed.
 
 Panel input starts in Normal mode: `i` enters Insert, `?` opens a modal help popup, and `Ctrl-H`/`Ctrl-L` move focus. The help popup closes with `?` or `Esc` without activating the panel underneath. Insert accepts text, Backspace edits, Enter submits, and `Esc` returns to Normal without leaving the panel. A leading `/` in either Agent input opens the same minimal live-filtered command list immediately above the input instead of normal prompt submission. No command is selected initially, so Enter does nothing. Tab quick-fills the first match; Ctrl-N/Ctrl-P move selection with wrapping and quick-fill each command. Enter runs only an explicitly selected command. `/provider` opens the provider-login placeholder and restores the originating Agent input when closed; `/model`, `/thinking`, and `/logout` are placeholders. The focus controller itself remains geometry-only; keyboard maps decide which mode emits focus commands.
 

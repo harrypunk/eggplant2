@@ -97,12 +97,12 @@ mod tests {
     fn overlays_follow_modal_ownership() {
         let mut model = Model::default();
         model.agent.open_dialog(
-            crate::agent::EditorContext {
+            Some(crate::agent::EditorContext {
                 buffer: editor::BufferId::from_raw(1),
                 path: std::path::PathBuf::from("/workspace/main.rs"),
                 revision: 1,
                 line: 1,
-            },
+            }),
             "main.rs:1".to_string(),
         );
         assert!(dialog_overlay(&model).is_none());
