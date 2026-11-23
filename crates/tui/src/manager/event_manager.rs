@@ -544,11 +544,13 @@ mod tests {
         for (key, command) in [
             (KeyCode::Up, "welcome_previous"),
             (KeyCode::Down, "welcome_next"),
+            (KeyCode::Char('p'), "welcome_previous"),
+            (KeyCode::Char('n'), "welcome_next"),
             (KeyCode::Enter, "welcome_activate"),
             (KeyCode::Char('h'), "focus_left"),
             (KeyCode::Char('l'), "focus_right"),
         ] {
-            let modifiers = if matches!(key, KeyCode::Char('h' | 'l')) {
+            let modifiers = if matches!(key, KeyCode::Char('h' | 'l' | 'n' | 'p')) {
                 KeyModifiers::CONTROL
             } else {
                 KeyModifiers::NONE

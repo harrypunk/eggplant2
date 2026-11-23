@@ -62,6 +62,7 @@ impl Registry {
 /// Contexts that compose the shared Ctrl-N/P aliases through Down/Up.
 fn list_navigation_contexts() -> &'static [&'static str] {
     &[
+        "welcome",
         "file_picker",
         "theme_picker",
         "buffer_grep",

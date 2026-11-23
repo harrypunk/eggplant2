@@ -8,7 +8,7 @@ use editor::DocumentFactory;
 use crate::config::ThemeConfig;
 
 use crate::{
-    data_object::{FocusTarget, Model, Workspace},
+    data_object::{Model, Workspace},
     explorer::{ExplorerEntryKind, ExplorerState},
     file_picker::FileEntry,
     manager::effect::Effect,
@@ -62,7 +62,6 @@ pub fn initial_model_with_languages(
                 .collect();
             model.file_picker.seed_top_level(picker_files);
             model.workspace = Some(Workspace::new(root));
-            model.current_focus = FocusTarget::FileExplorer;
         }
         Some(path) => {
             let document = DocumentFactory::new()
@@ -96,7 +95,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        data_object::Context, file_picker::FileCollectionState,
+        data_object::{Context, FocusTarget},
+        file_picker::FileCollectionState,
         manager::input_context::input_context,
     };
 
@@ -123,6 +123,7 @@ mod tests {
         assert!(model.editor.active_buffer().is_some());
         assert!(model.workspace.is_none());
         assert_eq!(model.current_focus, FocusTarget::Editor);
+        assert_eq!(input_context(&model), Some(Context::AppNormal));
     }
 
     #[test]
@@ -145,7 +146,7 @@ mod tests {
     }
 
     #[test]
-    fn folder_path_opens_workspace_without_buffer() {
+    fn folder_path_opens_workspace_and_focuses_welcome_without_buffer() {
         let directory = tempfile::tempdir().unwrap();
         let expected_root = std::fs::canonicalize(directory.path()).unwrap();
         std::fs::write(directory.path().join("note.txt"), "hello").unwrap();
@@ -157,8 +158,8 @@ mod tests {
         assert_eq!(model.workspace.as_ref().unwrap().root(), expected_root);
         assert_eq!(model.explorer.entries.len(), 1);
         assert_eq!(model.explorer.selected, Some(0));
-        assert_eq!(model.current_focus, FocusTarget::FileExplorer);
-        assert_eq!(input_context(&model), Some(Context::Explorer));
+        assert_eq!(model.current_focus, FocusTarget::Editor);
+        assert_eq!(input_context(&model), Some(Context::Welcome));
         assert!(model.context_stack.is_empty());
         assert_eq!(model.file_picker.collection, FileCollectionState::Ready);
     }
