@@ -12,7 +12,7 @@ use crate::{
 };
 
 pub fn persist_finalized(model: &mut Model) -> Option<Effect> {
-    let run = finalized_run(model)?;
+    let run = finalized_run(model, chrono::Utc::now().timestamp_millis())?;
     Some(Effect::feature(StorageEffect {
         store: model.agent.session_store(),
         session_id: run.session.id.clone(),
@@ -21,7 +21,7 @@ pub fn persist_finalized(model: &mut Model) -> Option<Effect> {
     }))
 }
 
-fn finalized_run(model: &mut Model) -> Option<FinalizedRun> {
+fn finalized_run(model: &Model, now: i64) -> Option<FinalizedRun> {
     let (run_id, status) = model
         .agent
         .session()
@@ -30,9 +30,8 @@ fn finalized_run(model: &mut Model) -> Option<FinalizedRun> {
     if status.is_running() {
         return None;
     }
-    let now = chrono::Utc::now().timestamp_millis();
     let started = model.agent.run_started_at(run_id)?;
-    let created = model.agent.session_created_at(started);
+    let created = model.agent.session_created_at()?;
     let session_id = model.agent.session().id().clone();
     let editor_context = model.agent.run_context(run_id).map(|context| {
         serde_json::json!({
@@ -187,6 +186,24 @@ impl Completion for StorageCompletion {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn finalized_record_uses_recorded_timestamps_without_mutating_model() {
+        let mut model = Model::default();
+        model.agent.prompt.set_value("question");
+        let run = model.agent.begin_prompt().unwrap();
+        model.agent.session_mut().complete(run);
+        let created = model.agent.session_created_at;
+        let started = model.agent.run_started_at;
+
+        let record = finalized_run(&model, 123).unwrap();
+
+        assert_eq!(record.session.created_at, created.unwrap());
+        assert_eq!(record.run.created_at, started.unwrap().1);
+        assert_eq!(record.run.completed_at, Some(123));
+        assert_eq!(model.agent.session_created_at, created);
+        assert_eq!(model.agent.run_started_at, started);
+    }
 
     #[test]
     fn stale_storage_completion_does_not_change_the_newer_run() {

@@ -188,7 +188,9 @@ impl AgentState {
         let prompt = self.prompt.submission_text()?;
         let run_id = self.session.begin(prompt)?;
         self.prompt.complete_submission();
-        self.run_started_at = Some((run_id, chrono::Utc::now().timestamp_millis()));
+        let now = chrono::Utc::now().timestamp_millis();
+        self.session_created_at.get_or_insert(now);
+        self.run_started_at = Some((run_id, now));
         self.run_context = self.context.clone().map(|context| (run_id, context));
         Some(run_id)
     }
@@ -219,8 +221,8 @@ impl AgentState {
         self.storage_error.as_deref()
     }
 
-    fn session_created_at(&mut self, now: i64) -> i64 {
-        *self.session_created_at.get_or_insert(now)
+    fn session_created_at(&self) -> Option<i64> {
+        self.session_created_at
     }
 
     fn run_started_at(&self, run_id: RunId) -> Option<i64> {
