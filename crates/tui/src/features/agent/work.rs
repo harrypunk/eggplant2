@@ -93,7 +93,8 @@ fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
 }
 
 pub fn register_ui(ui: &mut UiRegistry) -> color_eyre::Result<()> {
-    ui.register_overlay("agent", super::AgentDialog::overlay)
+    ui.register_overlay("agent", super::AgentDialog::overlay)?;
+    ui.register_overlay("agent_help", super::help::overlay)
 }
 
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
@@ -111,13 +112,14 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
             None
         }
         "agent_insert" => enter_insert_mode(model),
-        "agent_panel_normal" => enter_normal_mode(model),
-        "agent_help" => {
-            if model.agent.panel_mode() == super::AgentInputMode::Normal {
-                model.agent.toggle_help();
+        "agent_panel_normal" => {
+            if model.agent.help_visible() {
+                close_help(model)
+            } else {
+                enter_normal_mode(model)
             }
-            None
         }
+        "agent_help" => toggle_help(model),
         _ => None,
     }
 }
@@ -161,6 +163,7 @@ pub(crate) fn focus_panel_input(model: &mut Model) -> Option<Effect> {
     if model.workspace.is_none() {
         return notify(model, "Open a project to use the agent".to_string());
     }
+    close_help(model);
     model.agent.prepare_panel_prompt();
     model.current_focus = crate::data_object::FocusTarget::ToolsPanel;
     model
@@ -185,13 +188,35 @@ fn enter_normal_mode(model: &mut Model) -> Option<Effect> {
     model
         .context_stack
         .pop_if(|context| context == &Context::AgentChatInsert);
-    if model.context_stack.last() == Some(&Context::AgentChat) {
-        model.agent.close_help();
+    None
+}
+
+fn toggle_help(model: &mut Model) -> Option<Effect> {
+    if model.agent.help_visible() {
+        return close_help(model);
     }
+    if model.context_stack.last() != Some(&Context::AgentChat)
+        || model.agent.panel_mode() != super::AgentInputMode::Normal
+        || !model.modal.open(Context::AgentChatHelp)
+    {
+        return None;
+    }
+    model.agent.toggle_help();
+    model.context_stack.push(Context::AgentChatHelp);
+    None
+}
+
+fn close_help(model: &mut Model) -> Option<Effect> {
+    model.agent.close_help();
+    model.modal.close(Context::AgentChatHelp);
+    model
+        .context_stack
+        .pop_if(|context| context == &Context::AgentChatHelp);
     None
 }
 
 pub(crate) fn close_panel_input(model: &mut Model) {
+    close_help(model);
     model
         .context_stack
         .pop_if(|context| context == &Context::AgentChatInsert);
@@ -974,6 +999,39 @@ mod tests {
         close_panel_input(&mut model);
         assert_eq!(model.current_focus, crate::data_object::FocusTarget::Editor);
         assert_ne!(model.context_stack.last(), Some(&Context::AgentChat));
+    }
+
+    #[test]
+    fn panel_help_owns_input_and_closes_without_moving_focus() {
+        let mut model = Model {
+            current_focus: crate::data_object::FocusTarget::ToolsPanel,
+            ..Model::default()
+        };
+        model.context_stack.push(Context::AgentChat);
+
+        toggle_help(&mut model);
+        assert!(model.agent.help_visible());
+        assert!(model.modal.is_active(Context::AgentChatHelp));
+        assert_eq!(model.context_stack.last(), Some(&Context::AgentChatHelp));
+        assert_eq!(
+            model.current_focus,
+            crate::data_object::FocusTarget::ToolsPanel
+        );
+
+        toggle_help(&mut model);
+        assert!(!model.agent.help_visible());
+        assert!(!model.modal.is_active(Context::AgentChatHelp));
+        assert_eq!(model.context_stack.last(), Some(&Context::AgentChat));
+        assert_eq!(
+            model.current_focus,
+            crate::data_object::FocusTarget::ToolsPanel
+        );
+
+        toggle_help(&mut model);
+        close_panel_input(&mut model);
+        assert!(!model.agent.help_visible());
+        assert!(!model.modal.is_active(Context::AgentChatHelp));
+        assert_ne!(model.context_stack.last(), Some(&Context::AgentChatHelp));
     }
 
     #[test]

@@ -2,10 +2,15 @@ use editor::EditorSnapshot;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Flex, Layout, Position, Rect},
-    widgets::{Paragraph, Widget},
+    widgets::Widget,
 };
 
-use super::{buffer_tabs::BufferTabs, text_layout::TextFlow, text_view::TextView};
+use super::{
+    buffer_tabs::BufferTabs,
+    text_layout::TextFlow,
+    text_view::TextView,
+    welcome::{Welcome, WelcomeState},
+};
 use crate::{data_object::FocusState, theme::Theme};
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -32,6 +37,7 @@ pub struct Editor<'a> {
     focus: FocusState,
     theme: &'a Theme,
     flow: TextFlow,
+    welcome: Option<WelcomeState>,
 }
 
 impl<'a> Editor<'a> {
@@ -41,7 +47,13 @@ impl<'a> Editor<'a> {
             focus,
             theme,
             flow: TextFlow::SingleLine,
+            welcome: None,
         }
+    }
+
+    pub fn with_welcome(mut self, state: WelcomeState) -> Self {
+        self.welcome = Some(state);
+        self
     }
 
     pub fn with_flow(mut self, flow: TextFlow) -> Self {
@@ -87,9 +99,12 @@ impl Widget for Editor<'_> {
                 BufferTabs::new(snapshot, self.theme.ui()).render(tabs_area, buf);
                 EditorBuffer::with_flow(snapshot, self.theme, self.flow).render(content_area, buf);
             }
-            None => Paragraph::new("No file open")
-                .style(self.theme.ui().base)
-                .render(area, buf),
+            None => Welcome::new(
+                self.theme.ui(),
+                self.welcome.unwrap_or_default(),
+                self.focus,
+            )
+            .render(area, buf),
         }
     }
 }
@@ -312,7 +327,7 @@ mod tests {
             .iter()
             .map(|cell| cell.symbol())
             .collect::<String>();
-        assert!(content.contains("No file open"));
+        assert!(content.contains("eggplant"));
     }
 
     #[test]

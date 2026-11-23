@@ -45,7 +45,8 @@ impl Editor {
             focus_for(model.current_focus, FocusTarget::Editor),
             &model.theme,
         )
-        .with_flow(flow);
+        .with_flow(flow)
+        .with_welcome(model.welcome);
         let cursor = editor.cursor_position(areas.editor);
 
         areas.explorer.into_iter().for_each(|area| {

@@ -1,0 +1,147 @@
+use crate::{
+    data_object::{CommandId, Context, FocusTarget, Model},
+    manager::{
+        command_registry::{Command, CommandRegistry},
+        effect::Effect,
+    },
+};
+
+pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<()> {
+    [
+        Command::feature(
+            CommandId("welcome_next"),
+            "select next welcome command",
+            handle_command,
+        ),
+        Command::feature(
+            CommandId("welcome_previous"),
+            "select previous welcome command",
+            handle_command,
+        ),
+        Command::feature(
+            CommandId("welcome_activate"),
+            "run selected welcome command",
+            handle_command,
+        ),
+    ]
+    .into_iter()
+    .try_for_each(|command| commands.register(command))
+}
+
+pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
+    if !available(model) {
+        return None;
+    }
+    match id.as_str() {
+        "welcome_next" => {
+            model.welcome.select_next();
+            None
+        }
+        "welcome_previous" => {
+            model.welcome.select_previous();
+            None
+        }
+        "welcome_activate" => activate(model, model.welcome.selected_command()),
+        _ => None,
+    }
+}
+
+fn available(model: &Model) -> bool {
+    model.editor.active_buffer().is_none()
+        && model.current_focus == FocusTarget::Editor
+        && model.context_stack.last() == Some(&Context::Welcome)
+}
+
+fn activate(model: &mut Model, command: CommandId) -> Option<Effect> {
+    match command.as_str() {
+        "open_file_picker" | "close_file_picker" => {
+            crate::file_picker::handle_command(model, command)
+        }
+        "toggle_file_explorer" => crate::focus::handle_command(model, command),
+        "agent_toggle_panel" => crate::agent::handle_command(model, command),
+        "open_theme_picker" => crate::theme_picker::handle_command(model, command),
+        "quit" => crate::lifecycle::handle_command(model, command),
+        _ => None,
+    }
+}
+
+/// Reconcile the base editor input context without disturbing modal/panel contexts.
+pub(crate) fn sync_context(model: &mut Model) {
+    let target = if model.editor.active_buffer().is_none() {
+        Context::Welcome
+    } else {
+        Context::AppNormal
+    };
+    if let Some(context @ (Context::AppNormal | Context::Welcome)) = model.context_stack.last_mut()
+    {
+        *context = target;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        data_object::{Message, Visibility},
+        manager::message_manager::MessageManager,
+        startup::initial_model,
+    };
+
+    fn welcome_model() -> Model {
+        let mut model = Model::default();
+        model.context_stack.push(Context::Welcome);
+        model
+    }
+
+    #[test]
+    fn navigation_and_activation_use_existing_commands() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(directory.path().join("main.rs"), "fn main() {}\n").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        model.current_focus = FocusTarget::Editor;
+        model.context_stack.pop();
+        sync_context(&mut model);
+        let manager = MessageManager::default();
+
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("welcome_next")),
+        );
+        assert_eq!(model.welcome.selected(), 1);
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("welcome_activate")),
+        );
+        assert_eq!(model.explorer.visibility, Visibility::Hidden);
+
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("welcome_previous")),
+        );
+        manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("welcome_activate")),
+        );
+        assert_eq!(model.file_picker.visibility, Visibility::Displayed);
+        assert_eq!(model.context_stack.last(), Some(&Context::FilePicker));
+    }
+
+    #[test]
+    fn commands_do_nothing_when_a_buffer_is_active() {
+        let mut model = welcome_model();
+        crate::test_utils::create_buffer(&mut model, "text");
+        let selected = model.welcome.selected();
+        handle_command(&mut model, CommandId("welcome_next"));
+        assert_eq!(model.welcome.selected(), selected);
+    }
+
+    #[test]
+    fn base_context_follows_buffer_availability() {
+        let mut model = welcome_model();
+        sync_context(&mut model);
+        assert_eq!(model.context_stack.last(), Some(&Context::Welcome));
+        crate::test_utils::create_buffer(&mut model, "text");
+        sync_context(&mut model);
+        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+    }
+}

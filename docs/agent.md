@@ -76,7 +76,7 @@ The existing tools panel gains an Agent view. It is non-modal and shows:
 - Pending write approvals and their diffs.
 - Errors and cancellation without losing the previous transcript.
 
-The panel and popup read the same `AgentSession`; neither owns a separate provider connection or agent loop. Opening the Agent panel focuses its input. Panel input has local Normal/Insert modes: Normal supports `i`, `?` help, and `Ctrl-H`/`Ctrl-L` navigation; Insert accepts text, submits with Enter, and returns to Normal with `Esc` without losing panel focus. Mouse or other future input sources can still request focus directly through the geometry-only focus controller.
+The panel and popup read the same `AgentSession`; neither owns a separate provider connection or agent loop. Opening the Agent panel focuses its input. Panel input has local Normal/Insert modes: Normal supports `i`, `?` help, and `Ctrl-H`/`Ctrl-L` navigation; Insert accepts text, submits with Enter, and returns to Normal with `Esc` without losing panel focus. Help is a separate modal popup, closed with `?` or `Esc`, rather than content in the conversation layout. A focused panel uses a double border and an explicit mode title. Mouse or other future input sources can still request focus directly through the geometry-only focus controller.
 
 ### Current keybindings
 
@@ -92,7 +92,7 @@ The panel and popup read the same `AgentSession`; neither owns a separate provid
 
 The inline prompt starts as `workspace/relative/path:line` and remains editable for quick file-focused questions. Empty, standalone-file, and external read-only contexts are rejected for this inline flow. The project panel instead starts with a freeform prompt and does not require an active buffer; `@path` references remain ordinary prompt text and do not implicitly attach file contents. The scripted provider used in this slice streams `Simulated response to: <prompt>`; `fail` simulates a provider failure.
 
-`AgentChatDialog` is the inline modal context. `AgentChat` is the project-panel input context.
+`AgentChatDialog` is the inline modal context. `AgentChat` is the project-panel Normal context, `AgentChatInsert` owns prompt editing, and `AgentChatHelp` owns the modal help popup.
 
 ## Session and run state
 

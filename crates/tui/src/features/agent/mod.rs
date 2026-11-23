@@ -1,4 +1,5 @@
 mod component;
+mod help;
 mod storage;
 mod tools;
 mod work;

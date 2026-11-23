@@ -3,7 +3,7 @@ use ratatui::{
     Frame,
     layout::{Constraint, Layout, Position, Rect},
     text::{Line, Span},
-    widgets::{Block, Paragraph, Widget, Wrap},
+    widgets::{Block, BorderType, Paragraph, Widget, Wrap},
 };
 
 use super::AgentState;
@@ -205,13 +205,24 @@ impl AgentPanel {
         area: Rect,
     ) {
         let session = state.session();
-        let border_style = if focus == FocusTarget::ToolsPanel {
-            styles.focused_border
+        let focused = focus == FocusTarget::ToolsPanel;
+        let (border_style, border_type, title_style) = if focused {
+            (
+                styles.focused_border,
+                BorderType::Double,
+                styles.action_hint,
+            )
         } else {
-            styles.border
+            (styles.border, BorderType::Plain, styles.muted)
+        };
+        let title = if focused {
+            format!(" Agent ● {} ", state.panel_mode().label())
+        } else {
+            " Agent ".to_string()
         };
         let block = Block::bordered()
-            .title("Agent")
+            .title(Line::styled(title, styles.base.patch(title_style)))
+            .border_type(border_type)
             .border_style(styles.base.patch(border_style))
             .style(styles.base);
         let inner = block.inner(area);
@@ -248,22 +259,7 @@ impl AgentPanel {
         let start = entries
             .len()
             .saturating_sub(messages.height.max(1) as usize);
-        let mut lines = if state.help_visible() {
-            vec![
-                Line::styled(
-                    "Normal: i insert · ? help · Ctrl-H/L move focus",
-                    styles.action_hint,
-                ),
-                Line::styled(
-                    "Insert: Esc normal · Enter submit · Backspace edit",
-                    styles.muted,
-                ),
-                Line::styled(
-                    "Provider/model/login settings use the application configuration",
-                    styles.muted,
-                ),
-            ]
-        } else if entries.is_empty() {
+        let mut lines = if entries.is_empty() {
             vec![Line::styled("No conversation yet", styles.muted)]
         } else {
             entries[start..]
@@ -562,31 +558,43 @@ mod tests {
     }
 
     #[test]
-    fn panel_normal_mode_shows_help_without_moving_focus() {
-        let mut model = Model::default();
-        model.agent.toggle_help();
-        let mut panel = Terminal::new(TestBackend::new(70, 12)).unwrap();
-        panel
+    fn panel_focus_changes_the_border_and_title() {
+        let model = Model::default();
+        let mut focused = Terminal::new(TestBackend::new(50, 10)).unwrap();
+        focused
             .draw(|frame| {
                 AgentPanel::render(
                     &model.agent,
-                    crate::data_object::FocusTarget::ToolsPanel,
+                    FocusTarget::ToolsPanel,
                     model.theme.ui(),
                     frame,
                     frame.area(),
                 );
             })
             .unwrap();
-        let content = panel
+        assert_eq!(focused.backend().buffer()[(0, 0)].symbol(), "╔");
+        let focused_content = focused
             .backend()
             .buffer()
             .content()
             .iter()
             .map(|cell| cell.symbol())
             .collect::<String>();
-        assert!(content.contains("Normal: i insert"));
-        assert!(content.contains("Provider/model/login settings"));
-        assert!(content.contains("Normal"));
+        assert!(focused_content.contains("Agent ● Normal"));
+
+        let mut unfocused = Terminal::new(TestBackend::new(50, 10)).unwrap();
+        unfocused
+            .draw(|frame| {
+                AgentPanel::render(
+                    &model.agent,
+                    FocusTarget::Editor,
+                    model.theme.ui(),
+                    frame,
+                    frame.area(),
+                );
+            })
+            .unwrap();
+        assert_eq!(unfocused.backend().buffer()[(0, 0)].symbol(), "┌");
     }
 
     #[test]

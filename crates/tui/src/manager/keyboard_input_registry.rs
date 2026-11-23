@@ -55,6 +55,16 @@ impl Registry {
 fn common_bindings() -> KeymapConfig {
     HashMap::from([
         keymap_context(
+            "welcome",
+            [
+                ("welcome_previous", "up"),
+                ("welcome_next", "down"),
+                ("welcome_activate", "enter"),
+                ("focus_left", "ctrl-h"),
+                ("focus_right", "ctrl-l"),
+            ],
+        ),
+        keymap_context(
             "editor_input",
             [
                 ("exit_insert_mode", "esc"),
@@ -160,6 +170,10 @@ fn common_bindings() -> KeymapConfig {
                 ("agent_backspace", "backspace"),
                 ("agent_interrupt", "ctrl-f7"),
             ],
+        ),
+        keymap_context(
+            "agent_chat_help",
+            [("agent_help", "?"), ("agent_panel_normal", "esc")],
         ),
         keymap_context(
             "agent_approval",
@@ -303,8 +317,10 @@ fn parse_binding(
 fn parse_context(value: &str) -> Option<Context> {
     match value {
         "normal" => Some(Context::AppNormal),
+        "welcome" => Some(Context::Welcome),
         "agent_chat" => Some(Context::AgentChat),
         "agent_chat_insert" => Some(Context::AgentChatInsert),
+        "agent_chat_help" => Some(Context::AgentChatHelp),
         "agent_chat_dialog" => Some(Context::AgentChatDialog),
         "agent_approval" => Some(Context::AgentApproval),
         "vcs" => Some(Context::VCS),

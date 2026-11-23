@@ -75,6 +75,7 @@ pub fn initial_model_with_languages(
         None => {}
     }
 
+    crate::welcome::sync_context(&mut model);
     Ok(model)
 }
 
@@ -106,7 +107,7 @@ mod tests {
         assert!(model.editor.is_empty());
         assert!(model.workspace.is_none());
         assert_eq!(model.current_focus, FocusTarget::Editor);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert_eq!(model.context_stack.last(), Some(&Context::Welcome));
     }
 
     #[test]

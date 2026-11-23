@@ -182,6 +182,7 @@ fn finish_close_group(
     match model.editor.close_buffers(&targets) {
         Ok(()) => {
             model.status = None;
+            crate::welcome::sync_context(model);
             close_documents(model, paths)
         }
         Err(error) => {
@@ -255,7 +256,10 @@ fn request_close(model: &mut Model) -> Option<Effect> {
 
     model.deferred_action = None;
     match model.editor.close_buffer(id) {
-        Ok(()) => model.status = None,
+        Ok(()) => {
+            model.status = None;
+            crate::welcome::sync_context(model);
+        }
         Err(error) => model.status = Some(StatusMessage::error(error.to_string())),
     }
     None

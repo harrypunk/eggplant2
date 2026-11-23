@@ -213,6 +213,7 @@ pub(crate) fn focus_editor(model: &mut Model) {
     model
         .context_stack
         .pop_if(|context| context == &Context::Explorer);
+    crate::welcome::sync_context(model);
 }
 
 #[cfg(test)]
@@ -259,7 +260,7 @@ mod tests {
         assert_eq!(model.explorer.visibility, Visibility::Hidden);
         assert_eq!(model.explorer.entries, original_entries);
         assert_eq!(model.current_focus, FocusTarget::Editor);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert_eq!(model.context_stack.last(), Some(&Context::Welcome));
 
         manager.update(
             &mut model,
@@ -335,9 +336,10 @@ mod tests {
 
         manager.update(&mut model, Message::InvokeCommand(CommandId("focus_right")));
         assert_eq!(model.current_focus, FocusTarget::Editor);
-        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+        assert_eq!(model.context_stack.last(), Some(&Context::Welcome));
 
         create_buffer(&mut model, "buffer");
+        crate::welcome::sync_context(&mut model);
         manager.update(&mut model, Message::InvokeCommand(CommandId("focus_right")));
         manager.update(
             &mut model,

@@ -17,3 +17,4 @@ pub mod text_input;
 pub mod text_layout;
 pub mod text_view;
 pub mod tools_panel;
+pub mod welcome;

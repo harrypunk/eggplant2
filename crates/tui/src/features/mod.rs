@@ -19,4 +19,5 @@ pub mod project_grep;
 pub mod theme_picker;
 pub mod vcs;
 pub mod view_align;
+pub mod welcome;
 pub mod yank;

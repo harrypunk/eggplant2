@@ -73,8 +73,10 @@ impl EventManager {
     }
 
     fn is_leader_start(context: &Context, key: KeyEvent) -> bool {
-        (context == &Context::AppNormal || context == &Context::Explorer)
-            && key.code == KeyCode::Char(' ')
+        (matches!(
+            context,
+            Context::AppNormal | Context::Welcome | Context::Explorer
+        )) && key.code == KeyCode::Char(' ')
             && key.modifiers.is_empty()
     }
 
@@ -500,6 +502,37 @@ mod tests {
     }
 
     #[test]
+    fn routes_welcome_buttons_and_preserves_leader_commands() {
+        let manager = event_manager();
+        let model = crate::startup::initial_model(None).unwrap();
+        assert_eq!(model.context_stack.last(), Some(&Context::Welcome));
+
+        for (key, command) in [
+            (KeyCode::Up, "welcome_previous"),
+            (KeyCode::Down, "welcome_next"),
+            (KeyCode::Enter, "welcome_activate"),
+            (KeyCode::Char('h'), "focus_left"),
+            (KeyCode::Char('l'), "focus_right"),
+        ] {
+            let modifiers = if matches!(key, KeyCode::Char('h' | 'l')) {
+                KeyModifiers::CONTROL
+            } else {
+                KeyModifiers::NONE
+            };
+            let event = Event::Key(KeyEvent::new(key, modifiers));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+        let event = Event::Key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::CommandMenuKey(KeyCode::Char(' ')))
+        ));
+    }
+
+    #[test]
     fn routes_agent_panel_input_keys() {
         let manager = event_manager();
         let mut model = Model::default();
@@ -551,6 +584,20 @@ mod tests {
             let event = Event::Key(KeyEvent::new(key, KeyModifiers::CONTROL));
             assert!(manager.translate(event, &model).is_none());
         }
+
+        model.context_stack.push(Context::AgentChatHelp);
+        for (key, command) in [
+            (KeyCode::Char('?'), "agent_help"),
+            (KeyCode::Esc, "agent_panel_normal"),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE));
+        assert!(manager.translate(event, &model).is_none());
     }
 
     #[test]
