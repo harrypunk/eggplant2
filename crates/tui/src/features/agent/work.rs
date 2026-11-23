@@ -1,9 +1,9 @@
-use eggplant_agent::{AgentEvent, ToolResult, ToolResultStatus};
+use eggplant_agent::{ToolResult, ToolResultStatus};
 
 use super::AgentContextProvider;
 use crate::{
     data_object::{Model, StatusMessage},
-    manager::effect::{Completion, Effect},
+    manager::effect::Effect,
 };
 
 pub(crate) fn submit(model: &mut Model) -> Option<Effect> {
@@ -97,58 +97,17 @@ pub(crate) fn notify(model: &mut Model, message: String) -> Option<Effect> {
     ))
 }
 
-pub(crate) use super::run::{AgentCompletion, FakeAgentRun, ProviderAgentRun, RunProgress};
+pub(crate) use super::run::{FakeAgentRun, ProviderAgentRun, RunProgress};
 #[cfg(test)]
 pub(crate) use super::run::{MAX_TOOL_OUTPUT, ProviderRound, RoundAction};
-
-impl Completion for AgentCompletion {
-    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        self.events.into_iter().for_each(|event| match event {
-            AgentEvent::TextDelta(delta) => {
-                model.agent.session_mut().append_delta(self.run_id, &delta);
-            }
-            AgentEvent::Complete => {
-                model.agent.session_mut().complete(self.run_id);
-            }
-            AgentEvent::ToolCalls(calls) => calls.into_iter().for_each(|call| {
-                model
-                    .agent
-                    .session_mut()
-                    .record_tool_call(self.run_id, &call);
-            }),
-            AgentEvent::ToolResults(results) => results.into_iter().for_each(|result| {
-                model
-                    .agent
-                    .session_mut()
-                    .complete_tool_call(self.run_id, result);
-            }),
-            AgentEvent::ApprovalRequired {
-                approval,
-                continuation,
-            } => {
-                if model
-                    .agent
-                    .session_mut()
-                    .request_approval(self.run_id, approval)
-                {
-                    model.agent.suspend(self.run_id, continuation);
-                    super::approval::transition_to_approval(model);
-                }
-            }
-            AgentEvent::Failed(error) => {
-                model.agent.session_mut().fail(self.run_id, error);
-            }
-        });
-        super::storage::persist_finalized(model)
-    }
-}
 
 #[cfg(test)]
 mod tests {
     use std::{future::Future, sync::Arc};
 
     use eggplant_agent::{
-        AgentProvider, AgentRequest, CancellationToken, MessageRole, ProviderMessage, RunStatus,
+        AgentEvent, AgentProvider, AgentRequest, CancellationToken, MessageRole, ProviderMessage,
+        RunStatus,
     };
     use eggplant_agent_storage::SessionStore as _;
 

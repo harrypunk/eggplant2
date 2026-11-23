@@ -1,5 +1,6 @@
 mod approval;
 mod commands;
+mod completion;
 mod context;
 mod dialog;
 mod panel;
