@@ -14,7 +14,6 @@ enum AgentCommand {
     Open,
     Close,
     Submit,
-    Backspace,
     Interrupt,
     Approve,
     Reject,
@@ -29,11 +28,10 @@ enum AgentCommand {
 }
 
 impl AgentCommand {
-    const ALL: [Self; 15] = [
+    const ALL: [Self; 14] = [
         Self::Open,
         Self::Close,
         Self::Submit,
-        Self::Backspace,
         Self::Interrupt,
         Self::Approve,
         Self::Reject,
@@ -52,7 +50,6 @@ impl AgentCommand {
             Self::Open => CommandId("agent_open"),
             Self::Close => CommandId("agent_close"),
             Self::Submit => CommandId("agent_submit"),
-            Self::Backspace => CommandId("agent_backspace"),
             Self::Interrupt => CommandId("agent_interrupt"),
             Self::Approve => CommandId("agent_approve"),
             Self::Reject => CommandId("agent_reject"),
@@ -72,7 +69,6 @@ impl AgentCommand {
             Self::Open => "open AI agent",
             Self::Close => "hide AI agent",
             Self::Submit => "submit agent prompt",
-            Self::Backspace => "delete agent prompt character",
             Self::Interrupt => "interrupt agent run",
             Self::Approve => "approve agent write",
             Self::Reject => "reject agent write",
@@ -118,7 +114,6 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         AgentCommand::Open => super::dialog::open(model),
         AgentCommand::Close => super::dialog::close(model),
         AgentCommand::Submit => super::work::submit(model),
-        AgentCommand::Backspace => super::work::backspace(model),
         AgentCommand::Interrupt => super::work::interrupt(model),
         AgentCommand::Approve => super::approval::approve_write(model),
         AgentCommand::Reject => super::approval::reject_write(model),

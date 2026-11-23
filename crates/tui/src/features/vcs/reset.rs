@@ -141,14 +141,6 @@ impl ResetState {
         active
     }
 
-    fn backspace(&mut self) {
-        if self.is_selecting() {
-            self.query.backspace();
-            self.error = None;
-            self.select_first();
-        }
-    }
-
     fn handle_event(&mut self, event: TextInputEvent) -> Option<TextInputChange> {
         self.is_selecting().then(|| {
             let change = self.query.handle_event(event);
@@ -288,11 +280,6 @@ pub(super) fn register_commands(commands: &mut CommandRegistry) -> color_eyre::R
             handle_command,
         ),
         Command::feature(
-            CommandId("vcs_reset_backspace"),
-            "delete reset filter character",
-            handle_command,
-        ),
-        Command::feature(
             CommandId("vcs_reset_next"),
             "select next reset target",
             handle_command,
@@ -318,7 +305,6 @@ pub(super) fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect>
         "vcs_reset_soft" => start(model),
         "vcs_reset_cancel" => cancel(model),
         "vcs_reset_submit" => submit(model),
-        "vcs_reset_backspace" => backspace(model),
         "vcs_reset_next" => select(model, true),
         "vcs_reset_previous" => select(model, false),
         _ => None,
@@ -387,11 +373,6 @@ fn close_reset_context(model: &mut Model) {
 
 fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
     model.vcs.reset.handle_event(event);
-    None
-}
-
-fn backspace(model: &mut Model) -> Option<Effect> {
-    model.vcs.reset.backspace();
     None
 }
 

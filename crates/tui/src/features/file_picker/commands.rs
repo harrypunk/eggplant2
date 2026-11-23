@@ -13,10 +13,6 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
             close(model);
             None
         }
-        "file_picker_backspace" => {
-            let root = model.workspace.as_ref()?.root().to_path_buf();
-            model.file_picker.backspace(&root).map(Effect::feature)
-        }
         "open_picker_file" => {
             let path = model.file_picker.selected_entry()?.path.clone();
             let documents = model.file_picker.documents().clone();

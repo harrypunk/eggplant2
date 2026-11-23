@@ -57,11 +57,6 @@ fn execute_prompt_command(model: &mut Model, command: super::PromptCommand) -> O
     }
 }
 
-pub(crate) fn backspace(model: &mut Model) -> Option<Effect> {
-    model.agent.backspace();
-    None
-}
-
 pub(crate) fn interrupt(model: &mut Model) -> Option<Effect> {
     let pending = model.agent.session().pending_approval().cloned();
     let run_id = model.agent.session().run().map(|run| run.id);
@@ -305,7 +300,7 @@ mod tests {
         assert_eq!(input_context(&model), Some(Context::AgentChatInsert));
 
         model.agent.prompt.set_value("/unknown");
-        model.agent.backspace();
+        handle_input(&mut model, TextInputEvent::Backspace);
         submit(&mut model);
         assert!(model.agent.session().run().is_none());
         assert!(model.notifications.current().is_none());
@@ -424,14 +419,14 @@ mod tests {
         assert_eq!(model.agent.prompt(), "main.rs:2");
         handle_input(&mut model, TextInputEvent::Character('?'));
         assert_eq!(model.agent.prompt(), "main.rs:2?");
-        backspace(&mut model);
+        handle_input(&mut model, TextInputEvent::Backspace);
         assert_eq!(model.agent.prompt(), "main.rs:2");
         close(&mut model);
         open(&mut model);
         assert_eq!(model.agent.prompt(), "main.rs:2");
 
         for _ in "main.rs:2".chars() {
-            backspace(&mut model);
+            handle_input(&mut model, TextInputEvent::Backspace);
         }
         close(&mut model);
         open(&mut model);
@@ -457,7 +452,7 @@ mod tests {
         );
         handle_input(&mut model, TextInputEvent::Character('界'));
         assert_eq!(model.agent.prompt(), "main.rs界:1");
-        backspace(&mut model);
+        handle_input(&mut model, TextInputEvent::Backspace);
         assert_eq!(model.agent.prompt(), "main.rs:1");
         handle_input(&mut model, TextInputEvent::Character('X'));
         assert_eq!(model.agent.prompt(), "main.rsX:1");
@@ -518,7 +513,7 @@ mod tests {
         let manager = MessageManager::default();
         open(&mut model);
         for _ in 0..model.agent.prompt().chars().count() {
-            model.agent.backspace();
+            handle_input(&mut model, TextInputEvent::Backspace);
         }
         for character in "fail".chars() {
             model

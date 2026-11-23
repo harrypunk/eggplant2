@@ -88,6 +88,9 @@ impl EventManager {
             KeyCode::Right if self.text_input.accepts_cursor(context) => {
                 Some(Message::TextInputCursor(TextCursorMovement::Right))
             }
+            KeyCode::Backspace if self.text_input.accepts_cursor(context) => {
+                Some(Message::TextInputBackspace)
+            }
             KeyCode::Char(character)
                 if (key.modifiers.is_empty() || key.modifiers == KeyModifiers::SHIFT)
                     && self.text_input.accepts(context) =>
@@ -243,7 +246,7 @@ mod tests {
                 Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE)),
                 &model,
             ),
-            Some(Message::InvokeCommand(CommandId("theme_picker_backspace")))
+            Some(Message::TextInputBackspace)
         ));
 
         model.context_stack.pop();
@@ -313,7 +316,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::InvokeCommand(CommandId("theme_picker_backspace")))
+            Some(Message::TextInputBackspace)
         ));
     }
 
@@ -430,7 +433,6 @@ mod tests {
             Some(Message::TextInput('x'))
         ));
         for (key, command) in [
-            (KeyCode::Backspace, "vcs_merge_backspace"),
             (KeyCode::Down, "vcs_merge_next"),
             (KeyCode::Up, "vcs_merge_previous"),
             (KeyCode::Enter, "vcs_merge_submit"),
@@ -442,6 +444,11 @@ mod tests {
                 Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
             ));
         }
+        let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::TextInputBackspace)
+        ));
     }
 
     #[test]
@@ -457,7 +464,6 @@ mod tests {
         model.context_stack.push(Context::AgentChatDialog);
         for (key, modifiers, command) in [
             (KeyCode::Enter, KeyModifiers::NONE, "agent_submit"),
-            (KeyCode::Backspace, KeyModifiers::NONE, "agent_backspace"),
             (KeyCode::Esc, KeyModifiers::NONE, "agent_close"),
             (KeyCode::F(7), KeyModifiers::CONTROL, "agent_interrupt"),
             (
@@ -478,6 +484,11 @@ mod tests {
                 Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
             ));
         }
+        let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::TextInputBackspace)
+        ));
         for (key, movement) in [
             (KeyCode::Left, TextCursorMovement::Left),
             (KeyCode::Right, TextCursorMovement::Right),
@@ -579,7 +590,6 @@ mod tests {
         model.agent.enter_insert_mode();
         for (key, modifiers, command) in [
             (KeyCode::Enter, KeyModifiers::NONE, "agent_submit"),
-            (KeyCode::Backspace, KeyModifiers::NONE, "agent_backspace"),
             (KeyCode::Esc, KeyModifiers::NONE, "agent_panel_normal"),
             (KeyCode::F(7), KeyModifiers::CONTROL, "agent_interrupt"),
             (
@@ -600,6 +610,11 @@ mod tests {
                 Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
             ));
         }
+        let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::TextInputBackspace)
+        ));
         for key in [KeyCode::Left, KeyCode::Right] {
             let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
             assert!(matches!(
@@ -647,7 +662,6 @@ mod tests {
         model.context_stack.pop();
         model.context_stack.push(Context::VcsReset);
         for (key, command) in [
-            (KeyCode::Backspace, "vcs_reset_backspace"),
             (KeyCode::Down, "vcs_reset_next"),
             (KeyCode::Up, "vcs_reset_previous"),
             (KeyCode::Enter, "vcs_reset_submit"),
@@ -659,6 +673,11 @@ mod tests {
                 Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
             ));
         }
+        let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::TextInputBackspace)
+        ));
         let event = Event::Key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
@@ -711,7 +730,6 @@ mod tests {
             Some(Message::TextInput('x'))
         ));
         for (key, command) in [
-            (KeyCode::Backspace, "vcs_branch_backspace"),
             (KeyCode::Down, "vcs_branch_next"),
             (KeyCode::Up, "vcs_branch_previous"),
             (KeyCode::Enter, "vcs_branch_submit"),
@@ -723,6 +741,11 @@ mod tests {
                 Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
             ));
         }
+        let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::TextInputBackspace)
+        ));
     }
 
     #[test]
@@ -1158,7 +1181,6 @@ mod tests {
         for (key, command) in [
             (KeyCode::Enter, "explorer_add_submit"),
             (KeyCode::Esc, "close_explorer_add"),
-            (KeyCode::Backspace, "explorer_add_backspace"),
         ] {
             let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
             assert!(matches!(
@@ -1166,6 +1188,11 @@ mod tests {
                 Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
             ));
         }
+        let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::TextInputBackspace)
+        ));
         let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
@@ -1190,7 +1217,6 @@ mod tests {
         for (key, command) in [
             (KeyCode::Enter, "explorer_transfer_submit"),
             (KeyCode::Esc, "close_explorer_transfer"),
-            (KeyCode::Backspace, "explorer_transfer_backspace"),
         ] {
             let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
             assert!(matches!(
@@ -1198,6 +1224,11 @@ mod tests {
                 Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
             ));
         }
+        let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::TextInputBackspace)
+        ));
         let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),

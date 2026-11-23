@@ -100,12 +100,6 @@ impl TransferState {
         self.revision = self.revision.wrapping_add(1);
     }
 
-    fn backspace(&mut self) {
-        if self.is_editing() {
-            self.destination.backspace();
-        }
-    }
-
     fn handle_event(&mut self, event: TextInputEvent) -> Option<TextInputChange> {
         self.is_editing()
             .then(|| self.destination.handle_event(event))
@@ -203,11 +197,6 @@ pub(super) fn cancel(model: &mut Model) -> Option<Effect> {
         return None;
     }
     close_prompt(model);
-    None
-}
-
-pub(super) fn backspace(model: &mut Model) -> Option<Effect> {
-    model.explorer.transfer.backspace();
     None
 }
 
@@ -480,10 +469,7 @@ mod tests {
 
     fn replace_destination(manager: &MessageManager, model: &mut Model, destination: &str) {
         while !model.explorer.transfer.destination.is_empty() {
-            manager.update(
-                model,
-                Message::InvokeCommand(CommandId("explorer_transfer_backspace")),
-            );
+            manager.update(model, Message::TextInputBackspace);
         }
         type_destination(manager, model, destination);
     }

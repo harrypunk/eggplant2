@@ -110,6 +110,14 @@ impl TextInputRegistry {
         }
     }
 
+    pub fn handle_backspace(&self, model: &mut Model) -> Option<Effect> {
+        let context = input_context(model)?;
+        let TextInputHandler::Edit(handler) = self.handlers.get(&context)? else {
+            return None;
+        };
+        handler(model, TextInputEvent::Backspace)
+    }
+
     pub fn handle_cursor(&self, model: &mut Model, movement: TextCursorMovement) -> Option<Effect> {
         let context = input_context(model)?;
         let TextInputHandler::Edit(handler) = self.handlers.get(&context)? else {

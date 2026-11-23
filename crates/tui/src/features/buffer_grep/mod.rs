@@ -36,11 +36,6 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
             handle_command,
         ),
         Command::feature(
-            CommandId("buffer_grep_backspace"),
-            "delete search character",
-            handle_command,
-        ),
-        Command::feature(
             CommandId("buffer_grep_next"),
             "next search match",
             handle_command,
@@ -72,9 +67,6 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     match id.as_str() {
         "buffer_grep_open" => open(model),
         "buffer_grep_close" => close(model),
-        "buffer_grep_backspace" => {
-            return model.buffer_grep.backspace().map(Effect::feature);
-        }
         "buffer_grep_next" => {
             model.buffer_grep.select_next();
             model.buffer_grep.refresh_preview(&model.editor);

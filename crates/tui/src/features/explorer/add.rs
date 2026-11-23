@@ -65,12 +65,6 @@ impl AddState {
         self.revision = self.revision.wrapping_add(1);
     }
 
-    fn backspace(&mut self) {
-        if self.is_editing() {
-            self.path.backspace();
-        }
-    }
-
     fn handle_event(&mut self, event: TextInputEvent) -> Option<TextInputChange> {
         self.is_editing().then(|| self.path.handle_event(event))
     }
@@ -124,11 +118,6 @@ pub(super) fn cancel(model: &mut Model) -> Option<Effect> {
         return None;
     }
     close_prompt(model);
-    None
-}
-
-pub(super) fn backspace(model: &mut Model) -> Option<Effect> {
-    model.explorer.add.backspace();
     None
 }
 
@@ -499,10 +488,7 @@ mod tests {
         assert_eq!(model.explorer.add.path.value(), "../outside");
 
         while !model.explorer.add.path.is_empty() {
-            manager.update(
-                &mut model,
-                Message::InvokeCommand(CommandId("explorer_add_backspace")),
-            );
+            manager.update(&mut model, Message::TextInputBackspace);
         }
         type_path(&manager, &mut model, "note.txt");
         let effect = manager

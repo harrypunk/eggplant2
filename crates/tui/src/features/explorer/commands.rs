@@ -25,14 +25,12 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         "explorer_add" => return add::open(model),
         "explorer_add_submit" => return add::submit(model),
         "close_explorer_add" => return add::cancel(model),
-        "explorer_add_backspace" => return add::backspace(model),
         "explorer_delete" => return delete::open(model),
         "explorer_delete_confirm" => return delete::confirm(model),
         "close_explorer_delete" => return delete::cancel(model),
         "explorer_move" => return transfer::open(model, TransferOperation::Move),
         "explorer_transfer_submit" => return transfer::submit(model),
         "close_explorer_transfer" => return transfer::cancel(model),
-        "explorer_transfer_backspace" => return transfer::backspace(model),
         "explorer_copy" => return transfer::open(model, TransferOperation::Copy),
         _ => {
             model.status = Some(StatusMessage::error(format!(

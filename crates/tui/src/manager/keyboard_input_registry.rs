@@ -114,7 +114,6 @@ fn common_bindings() -> KeymapConfig {
             [
                 ("explorer_add_submit", "enter"),
                 ("close_explorer_add", "esc"),
-                ("explorer_add_backspace", "backspace"),
             ],
         ),
         keymap_context(
@@ -129,7 +128,6 @@ fn common_bindings() -> KeymapConfig {
             [
                 ("explorer_transfer_submit", "enter"),
                 ("close_explorer_transfer", "esc"),
-                ("explorer_transfer_backspace", "backspace"),
             ],
         ),
         keymap_context(
@@ -143,7 +141,6 @@ fn common_bindings() -> KeymapConfig {
                 ("file_picker_next", "down"),
                 ("file_picker_previous", "up"),
                 ("close_file_picker", "esc"),
-                ("file_picker_backspace", "backspace"),
             ],
         ),
         keymap_context(
@@ -153,7 +150,6 @@ fn common_bindings() -> KeymapConfig {
                 ("theme_picker_next", "down"),
                 ("theme_picker_previous", "up"),
                 ("close_theme_picker", "esc"),
-                ("theme_picker_backspace", "backspace"),
             ],
         ),
         keymap_context(
@@ -169,7 +165,6 @@ fn common_bindings() -> KeymapConfig {
             [
                 ("agent_close", "esc"),
                 ("agent_submit", "enter"),
-                ("agent_backspace", "backspace"),
                 ("agent_interrupt", "ctrl-f7"),
                 ("agent_command_next", "down"),
                 ("agent_command_previous", "up"),
@@ -192,7 +187,6 @@ fn common_bindings() -> KeymapConfig {
             [
                 ("agent_panel_normal", "esc"),
                 ("agent_submit", "enter"),
-                ("agent_backspace", "backspace"),
                 ("agent_interrupt", "ctrl-f7"),
                 ("agent_command_next", "down"),
                 ("agent_command_previous", "up"),
@@ -220,7 +214,6 @@ fn common_bindings() -> KeymapConfig {
                 ("buffer_grep_previous", "up"),
                 ("buffer_grep_accept", "enter"),
                 ("buffer_grep_close", "esc"),
-                ("buffer_grep_backspace", "backspace"),
             ],
         ),
         keymap_context(
@@ -230,7 +223,6 @@ fn common_bindings() -> KeymapConfig {
                 ("project_grep_previous", "up"),
                 ("project_grep_accept", "enter"),
                 ("project_grep_close", "esc"),
-                ("project_grep_backspace", "backspace"),
             ],
         ),
         keymap_context("line_jump", [("line_jump_cancel", "esc")]),
@@ -263,7 +255,6 @@ fn common_bindings() -> KeymapConfig {
                 ("vcs_merge_next", "down"),
                 ("vcs_merge_previous", "up"),
                 ("vcs_merge_cancel", "esc"),
-                ("vcs_merge_backspace", "backspace"),
             ],
         ),
         keymap_context(
@@ -273,7 +264,6 @@ fn common_bindings() -> KeymapConfig {
                 ("vcs_reset_next", "down"),
                 ("vcs_reset_previous", "up"),
                 ("vcs_reset_cancel", "esc"),
-                ("vcs_reset_backspace", "backspace"),
             ],
         ),
         keymap_context("vcs_reset_menu", [("vcs_reset_menu_close", "esc")]),
@@ -285,7 +275,6 @@ fn common_bindings() -> KeymapConfig {
                 ("vcs_branch_next", "down"),
                 ("vcs_branch_previous", "up"),
                 ("vcs_branch_cancel", "esc"),
-                ("vcs_branch_backspace", "backspace"),
             ],
         ),
         keymap_context(

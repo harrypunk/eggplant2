@@ -37,11 +37,6 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
             handle_command,
         ),
         Command::feature(
-            CommandId("project_grep_backspace"),
-            "delete project search character",
-            handle_command,
-        ),
-        Command::feature(
             CommandId("project_grep_next"),
             "next project search match",
             handle_command,
@@ -73,9 +68,6 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     match id.as_str() {
         "project_grep_open" => open(model),
         "project_grep_close" => close(model),
-        "project_grep_backspace" => {
-            return model.project_grep.backspace().map(Effect::feature);
-        }
         "project_grep_next" => {
             return model.project_grep.select_next().map(Effect::feature);
         }

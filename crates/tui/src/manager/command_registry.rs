@@ -356,11 +356,6 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
             crate::explorer::handle_command,
         ),
         Command::feature(
-            CommandId("explorer_add_backspace"),
-            "edit new file or directory path",
-            crate::explorer::handle_command,
-        ),
-        Command::feature(
             CommandId("explorer_delete"),
             "delete file or directory",
             crate::explorer::handle_command,
@@ -391,11 +386,6 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
             crate::explorer::handle_command,
         ),
         Command::feature(
-            CommandId("explorer_transfer_backspace"),
-            "edit transfer destination",
-            crate::explorer::handle_command,
-        ),
-        Command::feature(
             CommandId("explorer_copy"),
             "copy file or directory",
             crate::explorer::handle_command,
@@ -413,11 +403,6 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
         Command::feature(
             CommandId("close_file_picker"),
             "close file picker",
-            crate::file_picker::handle_command,
-        ),
-        Command::feature(
-            CommandId("file_picker_backspace"),
-            "delete query character",
             crate::file_picker::handle_command,
         ),
         Command::feature(
@@ -453,11 +438,6 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
         Command::feature(
             ThemePickerCommand::Previous.id(),
             "previous theme",
-            crate::theme_picker::handle_command,
-        ),
-        Command::feature(
-            ThemePickerCommand::Backspace.id(),
-            "edit theme filter",
             crate::theme_picker::handle_command,
         ),
         Command::feature(

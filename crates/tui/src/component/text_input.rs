@@ -17,6 +17,7 @@ pub enum TextCursorMovement {
 pub enum TextInputEvent {
     Character(char),
     Cursor(TextCursorMovement),
+    Backspace,
 }
 
 /// Result of local component input. Feature effects depend only on this stable interface.
@@ -146,6 +147,10 @@ impl TextInput {
                 self.cursor = self.cursor.apply(&self.value, movement);
                 TextInputChange::cursor_moved()
             }
+            TextInputEvent::Backspace => match self.backspace() {
+                true => TextInputChange::text_changed(),
+                false => TextInputChange::cursor_moved(),
+            },
         }
     }
 
@@ -304,6 +309,22 @@ mod tests {
 
         let input = TextInput::new("12345678901234567890");
         assert_eq!(input.measure(10, TextFlow::Wrapped), Size::new(10, 5));
+    }
+
+    #[test]
+    fn backspace_event_reports_actual_content_changes() {
+        let mut input = TextInput::new("界");
+        assert!(
+            input
+                .handle_event(TextInputEvent::Backspace)
+                .content_changed()
+        );
+        assert_eq!(input.value(), "");
+        assert!(
+            !input
+                .handle_event(TextInputEvent::Backspace)
+                .content_changed()
+        );
     }
 
     #[test]

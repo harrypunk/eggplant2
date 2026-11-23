@@ -20,17 +20,15 @@ pub(crate) enum ThemePickerCommand {
     Next,
     Previous,
     Apply,
-    Backspace,
 }
 
 impl ThemePickerCommand {
-    const ALL: [Self; 6] = [
+    const ALL: [Self; 5] = [
         Self::Open,
         Self::Close,
         Self::Next,
         Self::Previous,
         Self::Apply,
-        Self::Backspace,
     ];
 
     pub(crate) const fn id(self) -> CommandId {
@@ -40,7 +38,6 @@ impl ThemePickerCommand {
             Self::Next => CommandId("theme_picker_next"),
             Self::Previous => CommandId("theme_picker_previous"),
             Self::Apply => CommandId("apply_theme"),
-            Self::Backspace => CommandId("theme_picker_backspace"),
         }
     }
 
@@ -76,10 +73,6 @@ impl ThemePickerAdapter<'_> {
                 None
             }
             ThemePickerCommand::Apply => self.apply(),
-            ThemePickerCommand::Backspace => {
-                self.state.backspace_query();
-                None
-            }
         }
     }
 
@@ -319,10 +312,7 @@ mod tests {
         );
 
         for _ in 0..3 {
-            manager.update(
-                &mut model,
-                Message::InvokeCommand(ThemePickerCommand::Backspace.id()),
-            );
+            manager.update(&mut model, Message::TextInputBackspace);
         }
         for character in "tokyo".chars() {
             manager.update(&mut model, Message::TextInput(character));

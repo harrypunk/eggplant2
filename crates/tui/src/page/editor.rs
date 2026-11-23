@@ -311,10 +311,7 @@ mod tests {
             Message::InvokeCommand(crate::data_object::CommandId("agent_open")),
         );
         for _ in 0.."main.rs:1".len() {
-            manager.update(
-                &mut model,
-                Message::InvokeCommand(crate::data_object::CommandId("agent_backspace")),
-            );
+            manager.update(&mut model, Message::TextInputBackspace);
         }
         manager.update(&mut model, Message::TextInput('/'));
         assert_eq!(model.agent.prompt(), "/");

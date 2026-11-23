@@ -95,13 +95,6 @@ impl MergeState {
         true
     }
 
-    fn backspace(&mut self) {
-        if self.is_selecting() {
-            self.query.backspace();
-            self.select_first();
-        }
-    }
-
     fn handle_event(&mut self, event: TextInputEvent) -> Option<TextInputChange> {
         self.is_selecting().then(|| {
             let change = self.query.handle_event(event);
@@ -230,11 +223,6 @@ pub(super) fn register_commands(commands: &mut CommandRegistry) -> color_eyre::R
             handle_command,
         ),
         Command::feature(
-            CommandId("vcs_merge_backspace"),
-            "delete merge filter character",
-            handle_command,
-        ),
-        Command::feature(
             CommandId("vcs_merge_next"),
             "select next merge target",
             handle_command,
@@ -258,7 +246,6 @@ pub(super) fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect>
         "vcs_merge_start" => start(model),
         "vcs_merge_cancel" => cancel(model),
         "vcs_merge_submit" => submit(model),
-        "vcs_merge_backspace" => backspace(model),
         "vcs_merge_next" => select(model, true),
         "vcs_merge_previous" => select(model, false),
         _ => None,
@@ -305,11 +292,6 @@ fn close_merge_context(model: &mut Model) {
 
 fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
     model.vcs.merge.handle_event(event);
-    None
-}
-
-fn backspace(model: &mut Model) -> Option<Effect> {
-    model.vcs.merge.backspace();
     None
 }
 

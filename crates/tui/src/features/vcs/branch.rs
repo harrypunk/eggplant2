@@ -163,17 +163,6 @@ impl BranchState {
         active
     }
 
-    fn backspace(&mut self) {
-        if self.phase != BranchPhase::Selecting && self.phase != BranchPhase::Naming {
-            return;
-        }
-        self.query.backspace();
-        self.error = None;
-        if self.phase == BranchPhase::Selecting {
-            self.select_first();
-        }
-    }
-
     fn handle_event(&mut self, event: TextInputEvent) -> Option<TextInputChange> {
         [BranchPhase::Selecting, BranchPhase::Naming]
             .contains(&self.phase)
@@ -390,11 +379,6 @@ pub(super) fn register_commands(commands: &mut CommandRegistry) -> color_eyre::R
             handle_command,
         ),
         Command::feature(
-            CommandId("vcs_branch_backspace"),
-            "delete branch input character",
-            handle_command,
-        ),
-        Command::feature(
             CommandId("vcs_branch_next"),
             "select next branch",
             handle_command,
@@ -421,7 +405,6 @@ pub(super) fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect>
         "vcs_branch_switch" => start(model, BranchMode::Switch),
         "vcs_branch_cancel" => cancel(model),
         "vcs_branch_submit" => submit(model),
-        "vcs_branch_backspace" => backspace(model),
         "vcs_branch_next" => select(model, true),
         "vcs_branch_previous" => select(model, false),
         _ => None,
@@ -484,11 +467,6 @@ fn close_branch_context(model: &mut Model) {
 
 fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
     model.vcs.branch.handle_event(event);
-    None
-}
-
-fn backspace(model: &mut Model) -> Option<Effect> {
-    model.vcs.branch.backspace();
     None
 }
 
