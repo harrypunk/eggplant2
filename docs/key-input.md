@@ -145,6 +145,8 @@ On an expanded directory, `h` folds that directory. On a file or collapsed direc
 
 The inline prompt starts as `workspace/relative/path:line` and is editable/deletable for quick file-focused use. It requires a file-backed workspace buffer; standalone-file and external read-only contexts are rejected. Dismissal preserves the run and conversation. The project panel is separate: it requires an open project but no active buffer, accepts freeform text and `@path` references, and focuses its bottom input when opened. The fake provider streams a simulated response for this first slice; no credentials are needed.
 
+Panel input starts in Normal mode: `i` enters Insert, `?` toggles help, and `Ctrl-H`/`Ctrl-L` move focus. Insert accepts text, Backspace edits, Enter submits, and `Esc` returns to Normal without leaving the panel. The focus controller itself remains geometry-only; keyboard maps decide which mode emits focus commands.
+
 ### Agent write approval
 
 | Action | Default binding |

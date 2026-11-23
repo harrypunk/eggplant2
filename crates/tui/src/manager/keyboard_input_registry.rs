@@ -144,7 +144,18 @@ fn common_bindings() -> KeymapConfig {
         keymap_context(
             "agent_chat",
             [
-                ("agent_panel_close", "esc"),
+                ("agent_panel_normal", "esc"),
+                ("agent_insert", "i"),
+                ("agent_help", "?"),
+                ("focus_left", "ctrl-h"),
+                ("focus_right", "ctrl-l"),
+                ("agent_interrupt", "ctrl-f7"),
+            ],
+        ),
+        keymap_context(
+            "agent_chat_insert",
+            [
+                ("agent_panel_normal", "esc"),
                 ("agent_submit", "enter"),
                 ("agent_backspace", "backspace"),
                 ("agent_interrupt", "ctrl-f7"),
@@ -293,6 +304,7 @@ fn parse_context(value: &str) -> Option<Context> {
     match value {
         "normal" => Some(Context::AppNormal),
         "agent_chat" => Some(Context::AgentChat),
+        "agent_chat_insert" => Some(Context::AgentChatInsert),
         "agent_chat_dialog" => Some(Context::AgentChatDialog),
         "agent_approval" => Some(Context::AgentApproval),
         "vcs" => Some(Context::VCS),

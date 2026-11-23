@@ -1,3 +1,5 @@
+use ratatui::layout::Rect;
+
 use crate::{
     data_object::{
         CommandId, Context, FocusDirection, FocusTarget, Model, StatusMessage, Visibility,
@@ -5,74 +7,201 @@ use crate::{
     manager::effect::Effect,
 };
 
-/// Visibility and logical focus commands, independent of terminal rectangles.
+/// A window participating in directional focus navigation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct FocusRegion {
+    target: FocusTarget,
+    area: Rect,
+}
+
+/// Window geometry used by the focus controller, independent of feature state.
+#[derive(Debug, Clone, Default)]
+pub struct FocusLayout {
+    regions: Vec<FocusRegion>,
+}
+
+impl FocusLayout {
+    pub fn from_regions(regions: impl IntoIterator<Item = (FocusTarget, Rect)>) -> Self {
+        Self {
+            regions: regions
+                .into_iter()
+                .filter(|(_, area)| area.width > 0 && area.height > 0)
+                .map(|(target, area)| FocusRegion { target, area })
+                .collect(),
+        }
+    }
+
+    fn target_in_direction(
+        &self,
+        current: FocusTarget,
+        direction: FocusDirection,
+    ) -> Option<FocusTarget> {
+        let current = self
+            .regions
+            .iter()
+            .find(|region| region.target == current)?;
+        self.regions
+            .iter()
+            .filter(|candidate| candidate.target != current.target)
+            .filter(|candidate| direction.matches(current.area, candidate.area))
+            .min_by_key(|candidate| direction.distance(current.area, candidate.area))
+            .map(|candidate| candidate.target)
+    }
+}
+
+trait FocusGeometry {
+    fn matches(self, current: Rect, candidate: Rect) -> bool;
+    fn distance(self, current: Rect, candidate: Rect) -> u64;
+}
+
+impl FocusGeometry for FocusDirection {
+    fn matches(self, current: Rect, candidate: Rect) -> bool {
+        let (current_x, current_y) = center(current);
+        let (candidate_x, candidate_y) = center(candidate);
+        match self {
+            FocusDirection::Left => candidate_x < current_x,
+            FocusDirection::Right => candidate_x > current_x,
+            FocusDirection::Up => candidate_y < current_y,
+            FocusDirection::Down => candidate_y > current_y,
+        }
+    }
+
+    fn distance(self, current: Rect, candidate: Rect) -> u64 {
+        let (current_x, current_y) = center(current);
+        let (candidate_x, candidate_y) = center(candidate);
+        let horizontal = current_x.abs_diff(candidate_x);
+        let vertical = current_y.abs_diff(candidate_y);
+        match self {
+            FocusDirection::Left | FocusDirection::Right => horizontal + vertical * 10,
+            FocusDirection::Up | FocusDirection::Down => vertical + horizontal * 10,
+        }
+    }
+}
+
+fn center(area: Rect) -> (u64, u64) {
+    (
+        u64::from(area.x) + u64::from(area.width) / 2,
+        u64::from(area.y) + u64::from(area.height) / 2,
+    )
+}
+
+/// Narrow host interface used by the focus controller.
+///
+/// Implementations own feature state and side effects; navigation itself depends
+/// only on current focus and window geometry.
+pub(crate) trait FocusHost {
+    fn current_focus(&self) -> FocusTarget;
+    fn focus_layout(&self) -> FocusLayout;
+    fn focus_to(&mut self, target: FocusTarget) -> Option<Effect>;
+    fn explorer_visibility(&self) -> Visibility;
+    fn set_explorer_visibility(&mut self, visibility: Visibility);
+    fn has_workspace(&self) -> bool;
+    fn set_status(&mut self, message: StatusMessage);
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct FocusManager;
+
+impl FocusManager {
+    pub(crate) fn move_focus(
+        host: &mut impl FocusHost,
+        direction: FocusDirection,
+    ) -> Option<Effect> {
+        let target = host
+            .focus_layout()
+            .target_in_direction(host.current_focus(), direction)?;
+        host.focus_to(target)
+    }
+
+    pub(crate) fn toggle_explorer(host: &mut impl FocusHost) -> Option<Effect> {
+        match host.explorer_visibility() {
+            Visibility::Hidden if !host.has_workspace() => {
+                host.set_status(StatusMessage::info("No folder open"));
+            }
+            Visibility::Hidden => {
+                host.set_explorer_visibility(Visibility::Displayed);
+                host.focus_to(FocusTarget::FileExplorer);
+            }
+            Visibility::Displayed => {
+                host.set_explorer_visibility(Visibility::Hidden);
+                if host.current_focus() == FocusTarget::FileExplorer {
+                    host.focus_to(FocusTarget::Editor);
+                }
+            }
+        }
+        None
+    }
+}
+
+/// Root adapter for focus commands. The controller never reads `Model` directly.
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     match id.as_str() {
-        "toggle_file_explorer" => toggle_file_explorer(model),
-        "focus_left" => move_focus(model, FocusDirection::Left),
-        "focus_down" => move_focus(model, FocusDirection::Down),
-        "focus_up" => move_focus(model, FocusDirection::Up),
-        "focus_right" => move_focus(model, FocusDirection::Right),
+        "toggle_file_explorer" => FocusManager::toggle_explorer(model),
+        "focus_left" => FocusManager::move_focus(model, FocusDirection::Left),
+        "focus_down" => FocusManager::move_focus(model, FocusDirection::Down),
+        "focus_up" => FocusManager::move_focus(model, FocusDirection::Up),
+        "focus_right" => FocusManager::move_focus(model, FocusDirection::Right),
         _ => {
             model.status = Some(StatusMessage::error(format!(
                 "unknown focus command `{}`",
                 id.as_str()
             )));
+            None
         }
     }
-    None
 }
 
-#[allow(clippy::single_match)]
-fn toggle_file_explorer(model: &mut Model) {
-    match model.explorer.visibility {
-        Visibility::Hidden => match model.workspace {
-            None => model.status = Some(StatusMessage::info("No folder open")),
-            Some(_) => {
-                model.explorer.visibility = Visibility::Displayed;
-                focus_explorer(model);
+impl FocusHost for Model {
+    fn current_focus(&self) -> FocusTarget {
+        self.current_focus
+    }
+
+    fn focus_layout(&self) -> FocusLayout {
+        let explorer = if self.workspace.is_some() {
+            self.explorer.visibility
+        } else {
+            Visibility::Hidden
+        };
+        crate::page::editor::focus_layout(self.window_area, explorer, self.tools.visibility)
+    }
+
+    fn focus_to(&mut self, target: FocusTarget) -> Option<Effect> {
+        match target {
+            FocusTarget::FileExplorer => {
+                focus_explorer(self);
+                None
             }
-        },
-        Visibility::Displayed => {
-            model.explorer.visibility = Visibility::Hidden;
-            match model.current_focus {
-                FocusTarget::FileExplorer => {
-                    model
-                        .context_stack
-                        .pop_if(|context| context == &Context::Explorer);
-                    model.current_focus = FocusTarget::Editor;
+            FocusTarget::Editor => {
+                if self.current_focus == FocusTarget::ToolsPanel {
+                    crate::agent::close_panel_input(self);
+                } else {
+                    focus_editor(self);
                 }
-                _ => {}
+                None
             }
+            FocusTarget::ToolsPanel => crate::agent::focus_panel_input(self),
+            FocusTarget::FilePicker | FocusTarget::AgentChatDialog => None,
         }
     }
-}
 
-// The single-view layout only needs this explicit horizontal relationship.
-// Future splits should navigate a logical layout tree, never Ratatui rectangles.
-fn move_focus(model: &mut Model, direction: FocusDirection) {
-    match (model.current_focus, direction, model.explorer.visibility) {
-        (FocusTarget::Editor, FocusDirection::Left, Visibility::Displayed) => {
-            focus_explorer(model);
-        }
-        (FocusTarget::FileExplorer, FocusDirection::Right, _) => {
-            focus_editor(model);
-        }
-        (FocusTarget::Editor, FocusDirection::Right, _) => {
-            crate::agent::focus_panel_input(model);
-        }
-        (FocusTarget::ToolsPanel, FocusDirection::Left, _) => {
-            crate::agent::close_panel_input(model);
-        }
-        _ => {}
+    fn explorer_visibility(&self) -> Visibility {
+        self.explorer.visibility
+    }
+
+    fn set_explorer_visibility(&mut self, visibility: Visibility) {
+        self.explorer.visibility = visibility;
+    }
+
+    fn has_workspace(&self) -> bool {
+        self.workspace.is_some()
+    }
+
+    fn set_status(&mut self, message: StatusMessage) {
+        self.status = Some(message);
     }
 }
 
 fn focus_explorer(model: &mut Model) {
-    if model.workspace.is_none() {
-        return;
-    }
-
     model.current_focus = FocusTarget::FileExplorer;
     if model.context_stack.last() != Some(&Context::Explorer) {
         model.context_stack.push(Context::Explorer);
@@ -80,10 +209,6 @@ fn focus_explorer(model: &mut Model) {
 }
 
 pub(crate) fn focus_editor(model: &mut Model) {
-    if model.editor.active_buffer().is_none() {
-        return;
-    }
-
     model.current_focus = FocusTarget::Editor;
     model
         .context_stack
@@ -97,6 +222,27 @@ mod tests {
         data_object::Message, manager::message_manager::MessageManager, startup::initial_model,
         test_utils::create_buffer,
     };
+
+    #[test]
+    fn directional_layout_uses_window_centers_and_nearest_target() {
+        let layout = FocusLayout::from_regions([
+            (FocusTarget::FileExplorer, Rect::new(0, 0, 10, 10)),
+            (FocusTarget::Editor, Rect::new(12, 0, 30, 10)),
+            (FocusTarget::ToolsPanel, Rect::new(44, 0, 10, 10)),
+        ]);
+        assert_eq!(
+            layout.target_in_direction(FocusTarget::Editor, FocusDirection::Left),
+            Some(FocusTarget::FileExplorer)
+        );
+        assert_eq!(
+            layout.target_in_direction(FocusTarget::Editor, FocusDirection::Right),
+            Some(FocusTarget::ToolsPanel)
+        );
+        assert_eq!(
+            layout.target_in_direction(FocusTarget::ToolsPanel, FocusDirection::Left),
+            Some(FocusTarget::Editor)
+        );
+    }
 
     #[test]
     fn hiding_and_showing_explorer_updates_focus() {
@@ -167,14 +313,29 @@ mod tests {
     }
 
     #[test]
+    fn agent_panel_focus_does_not_require_an_open_buffer() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        model.tools.active_tool = Some(crate::tools::ToolKind::Agent);
+        model.tools.visibility = Visibility::Displayed;
+        model.current_focus = FocusTarget::Editor;
+
+        handle_command(&mut model, CommandId("focus_right"));
+        assert_eq!(model.current_focus, FocusTarget::ToolsPanel);
+        assert_eq!(model.context_stack.last(), Some(&Context::AgentChat));
+        handle_command(&mut model, CommandId("focus_left"));
+        assert_eq!(model.current_focus, FocusTarget::Editor);
+    }
+
+    #[test]
     fn directional_focus_ignores_unavailable_targets() {
         let directory = tempfile::tempdir().unwrap();
         let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
         let manager = MessageManager::default();
 
         manager.update(&mut model, Message::InvokeCommand(CommandId("focus_right")));
-        assert_eq!(model.current_focus, FocusTarget::FileExplorer);
-        assert_eq!(model.context_stack.last(), Some(&Context::Explorer));
+        assert_eq!(model.current_focus, FocusTarget::Editor);
+        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
 
         create_buffer(&mut model, "buffer");
         manager.update(&mut model, Message::InvokeCommand(CommandId("focus_right")));

@@ -161,6 +161,7 @@ mod tests {
             Context::ExplorerTransfer,
             Context::AgentChatDialog,
             Context::AgentChat,
+            Context::AgentChatInsert,
             Context::VcsMerge,
             Context::VcsReset,
             Context::VcsBranch,

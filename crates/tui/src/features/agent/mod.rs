@@ -24,6 +24,22 @@ pub struct EditorContext {
     pub line: usize,
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum AgentInputMode {
+    #[default]
+    Normal,
+    Insert,
+}
+
+impl AgentInputMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Normal => "Normal",
+            Self::Insert => "Insert",
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 struct SuspendedRun {
     run_id: RunId,
@@ -36,6 +52,8 @@ pub struct AgentState {
     prompt: TextInput,
     has_draft: bool,
     dialog_open: bool,
+    panel_mode: AgentInputMode,
+    help_visible: bool,
     context: Option<EditorContext>,
     provider: Option<Arc<dyn AgentProvider>>,
     active_cancellation: Option<CancellationToken>,
@@ -56,6 +74,8 @@ impl Default for AgentState {
             prompt: TextInput::default(),
             has_draft: false,
             dialog_open: false,
+            panel_mode: AgentInputMode::Normal,
+            help_visible: false,
             context: None,
             provider: None,
             active_cancellation: None,
@@ -78,6 +98,31 @@ impl AgentState {
 
     pub fn prompt_state(&self) -> &TextInput {
         &self.prompt
+    }
+
+    pub fn panel_mode(&self) -> AgentInputMode {
+        self.panel_mode
+    }
+
+    pub fn help_visible(&self) -> bool {
+        self.help_visible
+    }
+
+    pub fn enter_insert_mode(&mut self) {
+        self.panel_mode = AgentInputMode::Insert;
+        self.help_visible = false;
+    }
+
+    pub fn enter_normal_mode(&mut self) {
+        self.panel_mode = AgentInputMode::Normal;
+    }
+
+    pub fn toggle_help(&mut self) {
+        self.help_visible = !self.help_visible;
+    }
+
+    pub fn close_help(&mut self) {
+        self.help_visible = false;
     }
 
     pub fn dialog_open(&self) -> bool {
@@ -106,6 +151,8 @@ impl AgentState {
 
     pub fn prepare_panel_prompt(&mut self) {
         self.context = None;
+        self.panel_mode = AgentInputMode::Normal;
+        self.help_visible = false;
     }
 
     pub fn open_dialog(&mut self, context: EditorContext, label: String) {

@@ -505,10 +505,33 @@ mod tests {
         let mut model = Model::default();
         model.context_stack.push(Context::AgentChat);
 
+        for (key, command) in [
+            (KeyCode::Char('i'), "agent_insert"),
+            (KeyCode::Char('?'), "agent_help"),
+            (KeyCode::Esc, "agent_panel_normal"),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+        for (key, command) in [
+            (KeyCode::Char('h'), "focus_left"),
+            (KeyCode::Char('l'), "focus_right"),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, KeyModifiers::CONTROL));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+
+        model.context_stack.push(Context::AgentChatInsert);
         for (key, modifiers, command) in [
             (KeyCode::Enter, KeyModifiers::NONE, "agent_submit"),
             (KeyCode::Backspace, KeyModifiers::NONE, "agent_backspace"),
-            (KeyCode::Esc, KeyModifiers::NONE, "agent_panel_close"),
+            (KeyCode::Esc, KeyModifiers::NONE, "agent_panel_normal"),
             (KeyCode::F(7), KeyModifiers::CONTROL, "agent_interrupt"),
         ] {
             let event = Event::Key(KeyEvent::new(key, modifiers));
@@ -523,6 +546,10 @@ mod tests {
                 manager.translate(event, &model),
                 Some(Message::TextInputCursor(_))
             ));
+        }
+        for key in [KeyCode::Char('h'), KeyCode::Char('l')] {
+            let event = Event::Key(KeyEvent::new(key, KeyModifiers::CONTROL));
+            assert!(manager.translate(event, &model).is_none());
         }
     }
 

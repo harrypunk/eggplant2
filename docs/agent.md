@@ -76,7 +76,7 @@ The existing tools panel gains an Agent view. It is non-modal and shows:
 - Pending write approvals and their diffs.
 - Errors and cancellation without losing the previous transcript.
 
-The panel and popup read the same `AgentSession`; neither owns a separate provider connection or agent loop. Opening the Agent panel focuses its input, while `Ctrl-L` and `Ctrl-H` move horizontally between the editor and panel.
+The panel and popup read the same `AgentSession`; neither owns a separate provider connection or agent loop. Opening the Agent panel focuses its input. Panel input has local Normal/Insert modes: Normal supports `i`, `?` help, and `Ctrl-H`/`Ctrl-L` navigation; Insert accepts text, submits with Enter, and returns to Normal with `Esc` without losing panel focus. Mouse or other future input sources can still request focus directly through the geometry-only focus controller.
 
 ### Current keybindings
 

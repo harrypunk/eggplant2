@@ -112,6 +112,36 @@ fn layout_areas(area: Rect, explorer: Visibility, tools: Visibility) -> PageLayo
     }
 }
 
+pub(crate) fn focus_layout(
+    area: Rect,
+    explorer: Visibility,
+    tools: Visibility,
+) -> crate::focus::FocusLayout {
+    if area.width == 0 || area.height == 0 {
+        return crate::focus::FocusLayout::from_regions(
+            [
+                (explorer == Visibility::Displayed)
+                    .then_some((FocusTarget::FileExplorer, Rect::new(0, 0, 1, 1))),
+                Some((FocusTarget::Editor, Rect::new(1, 0, 1, 1))),
+                (tools == Visibility::Displayed)
+                    .then_some((FocusTarget::ToolsPanel, Rect::new(2, 0, 1, 1))),
+            ]
+            .into_iter()
+            .flatten(),
+        );
+    }
+    let areas = layout_areas(area, explorer, tools);
+    crate::focus::FocusLayout::from_regions(
+        [
+            areas.explorer.map(|area| (FocusTarget::FileExplorer, area)),
+            Some((FocusTarget::Editor, areas.editor)),
+            areas.tools.map(|area| (FocusTarget::ToolsPanel, area)),
+        ]
+        .into_iter()
+        .flatten(),
+    )
+}
+
 fn panel_constraint(visibility: Visibility, width: u16) -> Constraint {
     match visibility {
         Visibility::Displayed => Constraint::Length(width),

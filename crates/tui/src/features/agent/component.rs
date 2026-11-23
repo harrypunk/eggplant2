@@ -239,6 +239,7 @@ impl AgentPanel {
                 })
             })
             .unwrap_or_else(|| "No active run".to_string());
+        let status_text = format!("{status_text} · {}", state.panel_mode().label());
         Paragraph::new(status_text)
             .style(styles.muted)
             .render(status, frame.buffer_mut());
@@ -247,7 +248,22 @@ impl AgentPanel {
         let start = entries
             .len()
             .saturating_sub(messages.height.max(1) as usize);
-        let mut lines = if entries.is_empty() {
+        let mut lines = if state.help_visible() {
+            vec![
+                Line::styled(
+                    "Normal: i insert · ? help · Ctrl-H/L move focus",
+                    styles.action_hint,
+                ),
+                Line::styled(
+                    "Insert: Esc normal · Enter submit · Backspace edit",
+                    styles.muted,
+                ),
+                Line::styled(
+                    "Provider/model/login settings use the application configuration",
+                    styles.muted,
+                ),
+            ]
+        } else if entries.is_empty() {
             vec![Line::styled("No conversation yet", styles.muted)]
         } else {
             entries[start..]
@@ -314,6 +330,7 @@ impl AgentPanel {
                 .view_with_flow(styles, TextFlow::Wrapped)
                 .render(input, frame.buffer_mut());
             if focus == FocusTarget::ToolsPanel
+                && state.panel_mode() == crate::agent::AgentInputMode::Insert
                 && let Some(cursor) =
                     state
                         .prompt_state()
@@ -542,6 +559,34 @@ mod tests {
             .rposition(|row| row.contains('x'))
             .unwrap();
         assert!(answer_row < prompt_row);
+    }
+
+    #[test]
+    fn panel_normal_mode_shows_help_without_moving_focus() {
+        let mut model = Model::default();
+        model.agent.toggle_help();
+        let mut panel = Terminal::new(TestBackend::new(70, 12)).unwrap();
+        panel
+            .draw(|frame| {
+                AgentPanel::render(
+                    &model.agent,
+                    crate::data_object::FocusTarget::ToolsPanel,
+                    model.theme.ui(),
+                    frame,
+                    frame.area(),
+                );
+            })
+            .unwrap();
+        let content = panel
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(content.contains("Normal: i insert"));
+        assert!(content.contains("Provider/model/login settings"));
+        assert!(content.contains("Normal"));
     }
 
     #[test]

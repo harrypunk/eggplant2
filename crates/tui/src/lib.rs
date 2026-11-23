@@ -142,6 +142,7 @@ pub mod data_object {
 
         // Focus/input routing. Panel visibility lives in each feature's state.
         pub current_focus: FocusTarget,
+        pub window_area: ratatui::layout::Rect,
         pub context_stack: Vec<Context>,
         pub theme: Theme,
         pub theme_loading: ThemeLoadState,
@@ -188,6 +189,7 @@ pub mod data_object {
                 explorer: ExplorerState::default(),
                 tools: ToolsPanelState::default(),
                 current_focus: FocusTarget::Editor,
+                window_area: ratatui::layout::Rect::default(),
                 context_stack: Vec::new(),
                 theme: Theme::default(),
                 theme_loading: ThemeLoadState::default(),
@@ -396,6 +398,7 @@ pub mod data_object {
         #[default]
         AppNormal,
         AgentChat,
+        AgentChatInsert,
         AgentChatDialog,
         AgentApproval,
         VCS,

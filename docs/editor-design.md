@@ -184,7 +184,7 @@ The exact return type can remain small: a single `Option<Effect>` is sufficient 
 
 Normal-mode bindings resolve to semantic commands. In Insert mode, unbound printable input becomes an editor insert command; individual characters should not be configured as keymap actions.
 
-Directional focus commands use logical component relationships and panel visibility, not document cursor coordinates or rendered rectangles. The single-view layout only moves between the editor and explorer horizontally; vertical directions remain no-ops until vertical panes exist. Focus helpers own target availability and input-context transitions. Current bindings are centralized in [Key input, sequences, and hints](key-input.md).
+Directional focus commands use `FocusManager` over the narrow `FocusHost` interface. A `FocusLayout` built from the page's actual window rectangles selects the nearest region in the requested direction, with a logical fallback before the first resize. Empty editor regions remain focusable, and unavailable windows such as a workspace-less explorer are excluded. Feature adapters own input-context transitions; the controller does not depend on document contents or global feature state. Current bindings are centralized in [Key input, sequences, and hints](key-input.md).
 
 Built-in common commands use a Space leader and bottom-right key-hints popup, not the configurable direct-key map. Leader actions feed back into the normal message/update path; they do not have separate command implementations.
 

@@ -10,6 +10,7 @@ use crate::data_object::{AppPage, Model};
 
 /// Apply the active pages' viewport geometry without feature policy in the message coordinator.
 pub fn resize(model: &mut Model, width: u16, height: u16) {
+    model.window_area = Rect::new(0, 0, width, height);
     let area = editor::editor_content_area(
         Rect::new(0, 0, width, height),
         model.explorer.visibility,
