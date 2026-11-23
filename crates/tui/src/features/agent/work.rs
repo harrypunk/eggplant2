@@ -1,9 +1,6 @@
 use eggplant_agent::{AgentEvent, ToolResult, ToolResultStatus};
 
-use super::{
-    AgentContextProvider, EditorContext,
-    tools::{BufferContext, ToolContext},
-};
+use super::{AgentContextProvider, EditorContext};
 use crate::{
     component::text_input::TextInputEvent,
     data_object::{CommandId, Context, Model, StatusMessage, Visibility},
@@ -109,8 +106,8 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         "agent_submit" => submit(model),
         "agent_backspace" => backspace(model),
         "agent_interrupt" => interrupt(model),
-        "agent_approve" => approve_write(model),
-        "agent_reject" => reject_write(model),
+        "agent_approve" => super::approval::approve_write(model),
+        "agent_reject" => super::approval::reject_write(model),
         "agent_toggle_panel" => toggle_panel(model),
         "agent_panel_close" => {
             close_panel_input(model);
@@ -246,25 +243,6 @@ fn close(model: &mut Model) -> Option<Effect> {
     None
 }
 
-fn transition_to_approval(model: &mut Model) {
-    transition_modal(model, Context::AgentChatDialog, Context::AgentApproval);
-}
-
-fn transition_to_chat(model: &mut Model) {
-    transition_modal(model, Context::AgentApproval, Context::AgentChatDialog);
-}
-
-fn transition_modal(model: &mut Model, from: Context, to: Context) {
-    if !model.agent.dialog_open() || !model.modal.is_active(from) {
-        return;
-    }
-    model.modal.close(from);
-    model.context_stack.pop_if(|context| context == &from);
-    if model.modal.open(to) {
-        model.context_stack.push(to);
-    }
-}
-
 fn submit(model: &mut Model) -> Option<Effect> {
     let surface = super::surface::active(model)?;
     if model.agent.prompt().starts_with('/') {
@@ -297,7 +275,7 @@ fn submit(model: &mut Model) -> Option<Effect> {
             prompt,
             cancellation,
             provider,
-            context: tool_context(model)?,
+            context: super::context::tool_context(model)?,
             progress: RunProgress::default(),
         }));
     }
@@ -314,53 +292,6 @@ fn execute_prompt_command(model: &mut Model, command: super::PromptCommand) -> O
             format!("{} is not implemented yet", command.description()),
         ),
     }
-}
-
-fn approve_write(model: &mut Model) -> Option<Effect> {
-    resolve_write(model, true)
-}
-
-fn reject_write(model: &mut Model) -> Option<Effect> {
-    resolve_write(model, false)
-}
-
-fn resolve_write(model: &mut Model, approved: bool) -> Option<Effect> {
-    let run_id = model.agent.session().run().map(|run| run.id)?;
-    let approval = model.agent.session().pending_approval()?.clone();
-    let provider = model.agent.provider()?;
-    let root = tool_context(model)?.root;
-    let continuation = model.agent.take_suspension(run_id)?;
-    let outcome = match approved {
-        true => super::write::apply(&mut model.editor, &root, &approval.call),
-        false => super::write::rejected(&approval.call),
-    };
-    let super::write::WriteOutcome { result, edited } = outcome;
-    let context = tool_context(model)?;
-    model
-        .agent
-        .session_mut()
-        .resolve_approval(run_id, &approval.call.id);
-    model
-        .agent
-        .session_mut()
-        .complete_tool_call(run_id, result.clone());
-    let after_edit = edited.and_then(|buffer_id| {
-        Effect::combine(
-            crate::buffer::save_if_dirty(model, buffer_id),
-            crate::code_navigation::synchronize_buffer(model, buffer_id),
-        )
-    });
-    let cancellation = model.agent.begin_cancellation();
-    let resume = Effect::feature(ProviderAgentRun {
-        run_id,
-        prompt: String::new(),
-        cancellation,
-        provider,
-        context,
-        progress: RunProgress::from(continuation).with_results(vec![result]),
-    });
-    transition_to_chat(model);
-    Effect::combine(after_edit, Some(resume))
 }
 
 fn backspace(model: &mut Model) -> Option<Effect> {
@@ -391,7 +322,7 @@ fn interrupt(model: &mut Model) -> Option<Effect> {
             model.agent.session_mut().complete_tool_call(run_id, result);
         });
     model.agent.clear_suspension();
-    transition_to_chat(model);
+    super::approval::transition_to_chat(model);
     super::storage::persist_finalized(model)
 }
 
@@ -409,55 +340,6 @@ fn toggle_panel(model: &mut Model) -> Option<Effect> {
         return focus_panel_input(model);
     }
     None
-}
-
-impl AgentContextProvider for Model {
-    fn agent_context(&self) -> Result<EditorContext, String> {
-        let Some(buffer) = self.editor.active_buffer() else {
-            return Err("Open a workspace file to use the agent".to_string());
-        };
-        if self.workspace.is_none()
-            || crate::capabilities::readonly::active_buffer_is_read_only(self)
-        {
-            return Err("Agent is available only for workspace files".to_string());
-        }
-        let path = self
-            .editor
-            .buffer_path(buffer)
-            .ok_or_else(|| "Open a workspace file to use the agent".to_string())?
-            .to_path_buf();
-        let (_, revision) = self
-            .editor
-            .active_revision()
-            .ok_or_else(|| "Open a workspace file to use the agent".to_string())?;
-        let line = self
-            .editor
-            .active_position()
-            .map(|position| position.line + 1)
-            .unwrap_or(1);
-        Ok(EditorContext {
-            buffer,
-            path,
-            revision,
-            line,
-        })
-    }
-}
-
-fn tool_context(model: &Model) -> Option<ToolContext> {
-    let root = model.workspace.as_ref()?.root().to_path_buf();
-    let buffers = model
-        .editor
-        .file_buffer_ids()
-        .into_iter()
-        .filter_map(|buffer_id| {
-            let path = model.editor.buffer_path(buffer_id)?.to_path_buf();
-            let snapshot = model.editor.buffer_text_snapshot(buffer_id)?;
-            path.starts_with(&root)
-                .then_some(BufferContext { path, snapshot })
-        })
-        .collect();
-    Some(ToolContext { root, buffers })
 }
 
 fn notify(model: &mut Model, message: String) -> Option<Effect> {
@@ -503,7 +385,7 @@ impl Completion for AgentCompletion {
                     .request_approval(self.run_id, approval)
                 {
                     model.agent.suspend(self.run_id, continuation);
-                    transition_to_approval(model);
+                    super::approval::transition_to_approval(model);
                 }
             }
             AgentEvent::Failed(error) => {
@@ -524,6 +406,7 @@ mod tests {
     use eggplant_agent_storage::SessionStore as _;
 
     use super::*;
+    use crate::agent::approval::{approve_write, reject_write};
     use crate::{
         manager::message_manager::MessageManager, startup::initial_model, test_utils::open_file,
     };

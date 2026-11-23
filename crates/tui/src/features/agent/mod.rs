@@ -1,3 +1,5 @@
+mod approval;
+mod context;
 mod prompt;
 mod prompt_command;
 mod run;
