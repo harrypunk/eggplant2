@@ -19,6 +19,8 @@ StatusSlot.Message
 
 For example, `HistoryListProps` supplies only history state, selection, expanded commit identity, file details, and theme. `CommitDetailProps` similarly supplies detail state, file selection/expansion, diff state, and theme. `ChangeSectionProps` provides changes, selection, expanded diff identity, workspace root, and theme for staged and unstaged sections. Route pages assemble those props from `Model`; the components and their tests operate without application state. `CommitHeaderProps` likewise isolates staged-summary formatting to changes, workspace root, notice, and theme. The page-local `MergePopup` component separates its named query/targets/status layout from pure target-line and status formatting helpers.
 
+Agent presentation follows the same boundary. `features/agent/ui.rs` is only a registration and props adapter; `component/agent/` contains pure dialog, panel, transcript, and help views. Their props expose only session, prompt, input mode, focus, storage warning, and theme inputs as needed. Panel layout, chrome, transcript, prompt, and cursor rendering are separate functions, and component tests construct props directly rather than building a global `Model`.
+
 The shell resolves overlay ordering by semantic priority, not accidental registration order. Feature components never query terminal size, perform filesystem work, or install global key handlers.
 
 ## Rendering and cursor policy

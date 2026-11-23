@@ -1,13 +1,13 @@
-mod component;
-mod help;
 mod storage;
 mod tools;
+mod ui;
 mod work;
 mod write;
 
-pub use component::{AgentDialog, AgentPanel};
+pub use ui::register_ui;
+pub(crate) use ui::render_panel;
 pub(crate) use work::{close_panel_input, focus_panel_input};
-pub use work::{handle_command, register_commands, register_text_input, register_ui};
+pub use work::{handle_command, register_commands, register_text_input};
 
 use crate::component::text_input::{TextInput, TextInputEvent};
 use editor::BufferId;

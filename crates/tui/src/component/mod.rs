@@ -1,3 +1,4 @@
+pub mod agent;
 pub mod auto_height;
 pub mod buffer_tabs;
 pub mod commit_message;

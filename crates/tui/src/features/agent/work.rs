@@ -19,7 +19,6 @@ use crate::{
         text_input_registry::TextInputRegistry,
     },
     tools::ToolKind,
-    ui::UiRegistry,
 };
 
 pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<()> {
@@ -91,11 +90,6 @@ fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
     }
     model.agent.handle_input_event(event);
     None
-}
-
-pub fn register_ui(ui: &mut UiRegistry) -> color_eyre::Result<()> {
-    ui.register_overlay("agent", super::AgentDialog::overlay)?;
-    ui.register_overlay("agent_help", super::help::overlay)
 }
 
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {

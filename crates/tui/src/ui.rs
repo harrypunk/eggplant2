@@ -252,13 +252,7 @@ fn render_explorer_panel(model: &Model, frame: &mut Frame, area: Rect) {
 
 fn render_tools_panel(model: &Model, frame: &mut Frame, area: Rect) {
     if model.tools.active_tool == Some(crate::tools::ToolKind::Agent) {
-        crate::agent::AgentPanel::render(
-            &model.agent,
-            model.current_focus,
-            model.theme.ui(),
-            frame,
-            area,
-        );
+        crate::agent::render_panel(model, frame, area);
         return;
     }
     if model.tools.active_tool == Some(crate::tools::ToolKind::Diagnostics) {
