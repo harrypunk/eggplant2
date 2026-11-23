@@ -13,7 +13,7 @@ use crate::{
     component::text_input::TextInputEvent,
     data_object::{CommandId, Context, Model, StatusMessage},
     document,
-    manager::{command_registry::Command, effect::Effect, input_context::input_context},
+    manager::{command_registry::Command, effect::Effect},
     ui::UiRegistry,
 };
 
@@ -90,13 +90,6 @@ pub fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> 
 }
 
 fn open(model: &mut Model) {
-    // Only Normal or Explorer may open grep; another modal keeps its input context.
-    if !matches!(
-        input_context(model),
-        Some(Context::AppNormal | Context::Explorer)
-    ) {
-        return;
-    }
     let Some(root) = model
         .workspace
         .as_ref()
