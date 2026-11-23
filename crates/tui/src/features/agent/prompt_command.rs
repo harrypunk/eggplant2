@@ -1,24 +1,26 @@
+use crate::component::list::ListState;
+
 /// Commands offered by the Agent prompt's leading-slash menu.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct PromptCommandState {
-    selected: Option<PromptCommand>,
+    list: ListState<PromptCommand>,
     query: String,
 }
 
 impl PromptCommandState {
     pub fn selected(&self) -> Option<PromptCommand> {
-        self.selected
+        self.list.selected_item().copied()
     }
 
     pub fn commands(&self, prompt: &str) -> Option<Vec<PromptCommand>> {
-        match self.selected {
-            Some(_) => filter(&self.query),
+        match self.selected() {
+            Some(_) => Some(self.list.items().to_vec()),
             None => filter(prompt),
         }
     }
 
     pub fn clear(&mut self) {
-        self.selected = None;
+        self.list = ListState::default();
         self.query.clear();
     }
 
@@ -28,27 +30,20 @@ impl PromptCommandState {
         movement: PromptCommandMovement,
     ) -> Option<&'static str> {
         let query = self
-            .selected
+            .selected()
             .map(|_| self.query.clone())
             .unwrap_or_else(|| prompt.to_string());
-        let commands = filter(&query)?;
-        if commands.is_empty() {
-            return None;
+        if self.selected().is_none() {
+            self.list = ListState::new(filter(&query)?);
         }
-        let current = self
-            .selected
-            .and_then(|selected| commands.iter().position(|command| *command == selected));
-        let index = match movement {
-            PromptCommandMovement::Next => current.map_or(0, |index| (index + 1) % commands.len()),
-            PromptCommandMovement::Previous => current.map_or(commands.len() - 1, |index| {
-                (index + commands.len() - 1) % commands.len()
-            }),
-            PromptCommandMovement::Current => current.unwrap_or(0),
+        let selected = match movement {
+            PromptCommandMovement::Next => self.list.select_next(),
+            PromptCommandMovement::Previous => self.list.select_previous(),
+            PromptCommandMovement::Current => self.list.select_current(),
         };
-        let selected = commands[index];
-        self.selected = Some(selected);
+        let name = selected?.name();
         self.query = query;
-        Some(selected.name())
+        Some(name)
     }
 }
 

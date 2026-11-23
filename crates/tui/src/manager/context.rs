@@ -173,9 +173,7 @@ impl ContextBindings {
     /// Resolve a direct binding before terminal compatibility fallbacks.
     pub fn resolve_chord(&self, key: KeyChord) -> Option<CommandId> {
         self.resolve(key)
-            .or_else(|| {
-                menu_navigation_alias(self.context, key).and_then(|alias| self.resolve(alias))
-            })
+            .or_else(|| navigation_alias(key).and_then(|alias| self.resolve(alias)))
             .or_else(|| {
                 key.shifted_symbol()
                     .and_then(|shifted| self.resolve(shifted))
@@ -183,19 +181,9 @@ impl ContextBindings {
     }
 }
 
-fn menu_navigation_alias(context: Context, key: KeyChord) -> Option<KeyChord> {
-    if key.modifiers != KeyModifiers::CONTROL
-        || ![
-            Context::FilePicker,
-            Context::ThemePicker,
-            Context::BufferGrep,
-            Context::ProjectGrep,
-            Context::VcsBranch,
-            Context::VcsMerge,
-            Context::VcsReset,
-        ]
-        .contains(&context)
-    {
+/// Ctrl-N/P are aliases for whatever Down/Up mean in the active context.
+fn navigation_alias(key: KeyChord) -> Option<KeyChord> {
+    if key.modifiers != KeyModifiers::CONTROL {
         return None;
     }
     let code = match key.code {
