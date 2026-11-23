@@ -4,7 +4,6 @@ use crate::{
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::Effect,
-        text_input_registry::TextInputRegistry,
     },
 };
 
@@ -54,10 +53,6 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
     .try_for_each(|command| commands.register(command))
 }
 
-pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
-    input.register(Context::BufferNavigation, handle_input)
-}
-
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     match id.as_str() {
         "next_buffer_pending" => start(model, BufferMovement::Next),
@@ -99,6 +94,7 @@ fn reset(model: &mut Model) {
 
 #[cfg(test)]
 mod tests {
+    use crate::component::text_input::TextInputEvent;
     use editor::SaveRequest;
 
     use super::*;
@@ -154,7 +150,7 @@ mod tests {
             Some("]")
         );
         assert_eq!(model.context_stack.last(), Some(&Context::BufferNavigation));
-        manager.update(&mut model, Message::TextInput('b'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('b')));
         assert_eq!(model.editor.active_buffer(), Some(first));
         assert_eq!(model.pending_input, None);
         assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
@@ -167,7 +163,7 @@ mod tests {
             model.pending_input.as_ref().map(PendingInput::text),
             Some("[")
         );
-        manager.update(&mut model, Message::TextInput('b'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('b')));
         assert_eq!(model.editor.active_buffer(), Some(second));
 
         manager.update(
@@ -185,7 +181,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("previous_buffer_pending")),
         );
-        manager.update(&mut model, Message::TextInput('x'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('x')));
         assert_eq!(model.editor.active_buffer(), Some(second));
         assert_eq!(model.pending_input, None);
         assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
@@ -217,7 +213,9 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("next_buffer_pending")),
         );
-        let request = expect_save(manager.update(&mut model, Message::TextInput('b')));
+        let request = expect_save(
+            manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('b'))),
+        );
         assert_eq!(model.editor.active_buffer(), Some(second));
         let completion = request.perform().await;
         manager.update(&mut model, Message::SaveFinished(completion));

@@ -5,7 +5,6 @@ use crate::{
         command_registry::{Command, CommandRegistry},
         effect::Effect,
         input_context::input_context,
-        text_input_registry::TextInputRegistry,
     },
 };
 
@@ -93,11 +92,6 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
         .into_iter()
         .map(|command| Command::feature(command.id(), command.description(), handle_command))
         .try_for_each(|command| commands.register(command))
-}
-
-pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
-    input.register_with_cursor(Context::AgentChatDialog, handle_input)?;
-    input.register_with_cursor(Context::AgentChatInsert, handle_input)
 }
 
 pub(crate) fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {

@@ -6,7 +6,6 @@ use crate::{
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::Effect,
-        text_input_registry::TextInputRegistry,
     },
     navigation::VerticalNavigation,
     vcs::navigation::HistoryNavigation,
@@ -122,14 +121,6 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
     ))
 }
 
-pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
-    input.register(Context::AppNormal, handle_input)?;
-    input.register(Context::LineJump, handle_input)?;
-    input.register(Context::Explorer, handle_input)?;
-    input.register(Context::VcsHistory, handle_input)?;
-    input.register(Context::EditorVisual, handle_input)
-}
-
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     match id.as_str() {
         "line_jump_cancel" => reset(model),
@@ -241,13 +232,14 @@ fn reset(model: &mut Model) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::component::text_input::TextInputEvent;
     use crate::{
         data_object::Message, manager::message_manager::MessageManager, test_utils::create_buffer,
     };
 
     fn input(model: &mut Model, manager: &MessageManager, text: &str) {
         for character in text.chars() {
-            manager.update(model, Message::TextInput(character));
+            manager.update(model, Message::TextInput(TextInputEvent::Insert(character)));
         }
     }
 

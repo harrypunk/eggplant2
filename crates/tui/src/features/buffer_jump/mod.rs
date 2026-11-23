@@ -11,7 +11,6 @@ use crate::{
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::Effect,
-        text_input_registry::TextInputRegistry,
     },
     ui::UiRegistry,
 };
@@ -37,10 +36,6 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
     ]
     .into_iter()
     .try_for_each(|command| commands.register(command))
-}
-
-pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
-    input.register(Context::BufferJump, handle_input)
 }
 
 pub fn register_ui(ui: &mut UiRegistry) -> color_eyre::Result<()> {
@@ -137,6 +132,7 @@ fn close(model: &mut Model) {
 
 #[cfg(test)]
 mod tests {
+    use crate::component::text_input::TextInputEvent;
     use crossterm::event::KeyCode;
     use ratatui::{
         Terminal,
@@ -169,7 +165,10 @@ mod tests {
 
         start_jump(&mut model, &manager);
         for character in ['e', 'l'] {
-            manager.update(&mut model, Message::TextInput(character));
+            manager.update(
+                &mut model,
+                Message::TextInput(TextInputEvent::Insert(character)),
+            );
         }
         assert_eq!(model.buffer_jump.targets().len(), 3);
         assert_eq!(
@@ -183,7 +182,7 @@ mod tests {
             0
         );
 
-        manager.update(&mut model, Message::TextInput('z'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('z')));
         assert!(!model.buffer_jump.is_active());
         assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
         assert_eq!(
@@ -208,7 +207,10 @@ mod tests {
         manager.update(&mut model, Message::Resize(80, 10));
         start_jump(&mut model, &manager);
         for character in ['e', 'l'] {
-            manager.update(&mut model, Message::TextInput(character));
+            manager.update(
+                &mut model,
+                Message::TextInput(TextInputEvent::Insert(character)),
+            );
         }
         assert!(!model.buffer_jump.targets().is_empty());
 
@@ -224,7 +226,7 @@ mod tests {
         }
         let cursor_before_label = model.editor.active_snapshot().unwrap().cursor;
 
-        manager.update(&mut model, Message::TextInput('z'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('z')));
 
         assert!(!model.buffer_jump.is_active());
         assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
@@ -246,7 +248,7 @@ mod tests {
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(80, 10));
         start_jump(&mut model, &manager);
-        manager.update(&mut model, Message::TextInput('e'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('e')));
 
         manager.update(
             &mut model,
@@ -277,7 +279,10 @@ mod tests {
         start_jump(&mut model, &manager);
 
         for character in ['z', 'z'] {
-            manager.update(&mut model, Message::TextInput(character));
+            manager.update(
+                &mut model,
+                Message::TextInput(TextInputEvent::Insert(character)),
+            );
         }
 
         assert!(!model.buffer_jump.is_active());
@@ -309,7 +314,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("buffer_jump_start")),
         );
-        manager.update(&mut model, Message::TextInput('e'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('e')));
 
         assert_eq!(model.buffer_jump.matches().len(), 4);
         assert!(model.buffer_jump.targets().is_empty());
@@ -349,8 +354,8 @@ mod tests {
         let manager = MessageManager::default();
         manager.update(&mut model, Message::Resize(40, 6));
         start_jump(&mut model, &manager);
-        manager.update(&mut model, Message::TextInput('e'));
-        manager.update(&mut model, Message::TextInput('l'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('e')));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('l')));
 
         let backend = TestBackend::new(40, 6);
         let mut terminal = Terminal::new(backend).unwrap();

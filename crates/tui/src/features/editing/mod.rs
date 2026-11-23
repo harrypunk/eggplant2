@@ -221,6 +221,7 @@ fn insert(target: &mut dyn EditingTarget, text: &str) -> Option<Effect> {
 
 #[cfg(test)]
 mod tests {
+    use crate::component::text_input::TextInputEvent;
     use editor::{DocumentFactory, EditMode, EditorSession, SaveRequest};
 
     use super::*;
@@ -401,7 +402,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("enter_insert_mode")),
         );
-        manager.update(&mut model, Message::TextInput('b'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('b')));
         assert_eq!(
             model.editor.active_snapshot().unwrap().text.lines[0].text,
             "ab"
@@ -412,7 +413,7 @@ mod tests {
             model.editor.active_snapshot().unwrap().text.lines[0].text,
             "a"
         );
-        manager.update(&mut model, Message::TextInput('c'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('c')));
         manager.update(
             &mut model,
             Message::InvokeCommand(CommandId("exit_insert_mode")),
@@ -549,8 +550,8 @@ mod tests {
             model.editor.active_editor().unwrap().selected_text(),
             "hello w"
         );
-        manager.update(&mut model, Message::TextInput('2'));
-        manager.update(&mut model, Message::TextInput('G'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('2')));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('G')));
         assert!(
             model
                 .editor
@@ -656,7 +657,7 @@ mod tests {
             manager.update(&mut model, Message::Resize(40, 4));
 
             manager.update(&mut model, Message::InvokeCommand(CommandId(command)));
-            manager.update(&mut model, Message::TextInput('x'));
+            manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('x')));
 
             assert_eq!(model.editor.mode(), EditMode::Insert);
             assert_eq!(model.context_stack.last(), Some(&Context::EditorInput));
@@ -677,7 +678,7 @@ mod tests {
             manager.update(&mut model, Message::Resize(40, 4));
 
             manager.update(&mut model, Message::InvokeCommand(CommandId(command)));
-            manager.update(&mut model, Message::TextInput('x'));
+            manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('x')));
             assert_eq!(model.editor.mode(), EditMode::Insert);
             manager.update(
                 &mut model,
@@ -740,7 +741,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("enter_insert_mode")),
         );
-        manager.update(&mut model, Message::TextInput('!'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('!')));
         let effect = manager
             .update(
                 &mut model,

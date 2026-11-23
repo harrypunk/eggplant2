@@ -50,11 +50,7 @@ impl MessageManager {
             }
             Message::InvokeCommand(id) => return self.invoke_command(model, id),
             Message::FeatureCompletion(completion) => return completion.update(model),
-            Message::TextInput(character) => return self.text_input.handle(model, character),
-            Message::TextInputBackspace => return self.text_input.handle_backspace(model),
-            Message::TextInputCursor(movement) => {
-                return self.text_input.handle_cursor(model, movement);
-            }
+            Message::TextInput(event) => return self.text_input.handle(model, event),
             Message::SaveFinished(completion) => {
                 return Self::finish_save(model, completion);
             }
@@ -169,6 +165,7 @@ impl MessageManager {
 
 #[cfg(test)]
 mod tests {
+    use crate::component::text_input::TextInputEvent;
     use editor::{EditMode, SaveRequest};
 
     use super::*;
@@ -237,7 +234,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("enter_insert_mode")),
         );
-        manager.update(&mut model, Message::TextInput('A'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('A')));
         let request = expect_save(manager.update(
             &mut model,
             Message::InvokeCommand(CommandId("exit_insert_mode")),
@@ -272,7 +269,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("enter_insert_mode")),
         );
-        manager.update(&mut model, Message::TextInput('B'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('B')));
         assert!(model.editor.active_is_modified());
         let effect = manager.update(&mut model, Message::InvokeCommand(CommandId("quit")));
         assert!(effect.is_some(), "quit did not save: {:?}", model.status);
@@ -321,7 +318,7 @@ mod tests {
             Message::InvokeCommand(CommandId("enter_insert_mode")),
         );
 
-        manager.update(&mut model, Message::TextInput('!'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('!')));
         let effect = manager.update(
             &mut model,
             Message::InvokeCommand(CommandId("exit_insert_mode")),
@@ -344,7 +341,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("enter_insert_mode")),
         );
-        manager.update(&mut model, Message::TextInput('!'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('!')));
 
         let request = expect_save(manager.update(&mut model, Message::FocusLost));
         let completion = request.perform().await;

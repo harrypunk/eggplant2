@@ -4,7 +4,6 @@ use crate::{
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::Effect,
-        text_input_registry::TextInputRegistry,
     },
 };
 
@@ -108,10 +107,6 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
     ]
     .into_iter()
     .try_for_each(|command| commands.register(command))
-}
-
-pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
-    input.register(Context::EditorChange, handle_input)
 }
 
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
@@ -316,6 +311,7 @@ fn change_word_with(target: &mut dyn EditingTarget) -> Option<Effect> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::component::text_input::TextInputEvent;
     use crate::{
         data_object::{AppPage, Message, Workspace},
         manager::message_manager::MessageManager,
@@ -423,7 +419,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("delete_line_pending")),
         );
-        manager.update(&mut model, Message::TextInput('w'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('w')));
         assert_eq!(commit_text(&model), "world");
         assert_eq!(model.pending_input, None);
         assert_eq!(model.context_stack.last(), Some(&Context::VcsCommit));
@@ -434,7 +430,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("delete_line_pending")),
         );
-        manager.update(&mut model, Message::TextInput('d'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('d')));
         assert_eq!(commit_text(&model), "");
         assert!(model.editor.is_empty());
         assert_eq!(model.register.unnamed(), "");
@@ -455,13 +451,16 @@ mod tests {
             model.pending_input.as_ref().map(PendingInput::text),
             Some("c")
         );
-        manager.update(&mut model, Message::TextInput('c'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('c')));
         assert_eq!(commit_text(&model), "");
         assert_eq!(model.vcs.commit.editor.mode(), editor::EditMode::Insert);
         assert_eq!(model.context_stack.last(), Some(&Context::VcsCommitInput));
 
         for character in "new line".chars() {
-            manager.update(&mut model, Message::TextInput(character));
+            manager.update(
+                &mut model,
+                Message::TextInput(TextInputEvent::Insert(character)),
+            );
         }
         manager.update(
             &mut model,
@@ -489,7 +488,7 @@ mod tests {
             model.pending_input.as_ref().map(PendingInput::text),
             Some("d")
         );
-        manager.update(&mut model, Message::TextInput('d'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('d')));
         assert_eq!(
             model.editor.active_snapshot().unwrap().text.lines[0].text,
             "second"
@@ -516,7 +515,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("change_line_pending")),
         );
-        manager.update(&mut model, Message::TextInput('c'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('c')));
         assert_eq!(model.editor.mode(), editor::EditMode::Insert);
         assert_eq!(model.register.unnamed(), "second");
         assert_eq!(
@@ -539,7 +538,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("delete_line_pending")),
         );
-        manager.update(&mut model, Message::TextInput('w'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('w')));
         assert_eq!(
             model.editor.active_snapshot().unwrap().text.lines[0].text,
             "world"
@@ -554,10 +553,10 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("change_line_pending")),
         );
-        manager.update(&mut model, Message::TextInput('w'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('w')));
         assert_eq!(model.editor.mode(), editor::EditMode::Insert);
         assert_eq!(model.register.unnamed(), "héllo ");
-        manager.update(&mut model, Message::TextInput('!'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('!')));
         assert_eq!(
             model.editor.active_snapshot().unwrap().text.lines[0].text,
             "!world"
@@ -616,7 +615,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("change_selection")),
         );
-        manager.update(&mut model, Message::TextInput('X'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('X')));
         assert_eq!(model.editor.mode(), editor::EditMode::Insert);
         assert_eq!(model.register.unnamed(), "he");
         assert_eq!(

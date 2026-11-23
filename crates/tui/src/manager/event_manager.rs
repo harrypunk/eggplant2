@@ -3,7 +3,7 @@ use std::time::Duration;
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ratatui::crossterm::event::{self, Event};
 
-use crate::component::text_input::TextCursorMovement;
+use crate::component::text_input::{TextCursorMovement, TextInputEvent};
 use crate::config::Config;
 use crate::data_object::{Context, Message, Model};
 use crate::manager::{
@@ -81,24 +81,20 @@ impl EventManager {
     }
 
     fn unbound_key_message(&self, context: &Context, key: KeyChord) -> Option<Message> {
-        match key.code {
-            KeyCode::Left if self.text_input.accepts_cursor(context) => {
-                Some(Message::TextInputCursor(TextCursorMovement::Left))
-            }
-            KeyCode::Right if self.text_input.accepts_cursor(context) => {
-                Some(Message::TextInputCursor(TextCursorMovement::Right))
-            }
-            KeyCode::Backspace if self.text_input.accepts_cursor(context) => {
-                Some(Message::TextInputBackspace)
-            }
+        let event = match key.code {
+            KeyCode::Left => TextInputEvent::Cursor(TextCursorMovement::Left),
+            KeyCode::Right => TextInputEvent::Cursor(TextCursorMovement::Right),
+            KeyCode::Backspace => TextInputEvent::DeleteBackward,
             KeyCode::Char(character)
-                if (key.modifiers.is_empty() || key.modifiers == KeyModifiers::SHIFT)
-                    && self.text_input.accepts(context) =>
+                if key.modifiers.is_empty() || key.modifiers == KeyModifiers::SHIFT =>
             {
-                Some(Message::TextInput(character))
+                TextInputEvent::Insert(character)
             }
-            _ => None,
-        }
+            _ => return None,
+        };
+        self.text_input
+            .accepts(context, event)
+            .then_some(Message::TextInput(event))
     }
 }
 
@@ -129,7 +125,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::TextInput('x'))
+            Some(Message::TextInput(TextInputEvent::Insert('x')))
         ));
 
         let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::CONTROL));
@@ -138,7 +134,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::TextInput(' '))
+            Some(Message::TextInput(TextInputEvent::Insert(' ')))
         ));
     }
 
@@ -151,7 +147,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::TextInput(' '))
+            Some(Message::TextInput(TextInputEvent::Insert(' ')))
         ));
         let event = Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert!(matches!(
@@ -246,7 +242,7 @@ mod tests {
                 Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE)),
                 &model,
             ),
-            Some(Message::TextInputBackspace)
+            Some(Message::TextInput(TextInputEvent::DeleteBackward))
         ));
 
         model.context_stack.pop();
@@ -310,13 +306,13 @@ mod tests {
             let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
             assert!(matches!(
                 manager.translate(event, &model),
-                Some(Message::TextInput(actual)) if actual == character
+                Some(Message::TextInput(TextInputEvent::Insert(actual))) if actual == character
             ));
         }
         let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::TextInputBackspace)
+            Some(Message::TextInput(TextInputEvent::DeleteBackward))
         ));
     }
 
@@ -340,7 +336,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Char('b'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::TextInput('b'))
+            Some(Message::TextInput(TextInputEvent::Insert('b')))
         ));
         let event = Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert!(matches!(
@@ -430,7 +426,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::TextInput('x'))
+            Some(Message::TextInput(TextInputEvent::Insert('x')))
         ));
         for (key, command) in [
             (KeyCode::Down, "vcs_merge_next"),
@@ -447,7 +443,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::TextInputBackspace)
+            Some(Message::TextInput(TextInputEvent::DeleteBackward))
         ));
     }
 
@@ -487,7 +483,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::TextInputBackspace)
+            Some(Message::TextInput(TextInputEvent::DeleteBackward))
         ));
         for (key, movement) in [
             (KeyCode::Left, TextCursorMovement::Left),
@@ -496,13 +492,13 @@ mod tests {
             let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
             assert!(matches!(
                 manager.translate(event, &model),
-                Some(Message::TextInputCursor(actual)) if actual == movement
+                Some(Message::TextInput(TextInputEvent::Cursor(actual))) if actual == movement
             ));
         }
         let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::TextInput('x'))
+            Some(Message::TextInput(TextInputEvent::Insert('x')))
         ));
 
         model.context_stack.push(Context::AgentApproval);
@@ -521,7 +517,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
         assert!(!matches!(
             manager.translate(event, &model),
-            Some(Message::TextInput(_))
+            Some(Message::TextInput(TextInputEvent::Insert(_)))
         ));
     }
 
@@ -613,13 +609,13 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::TextInputBackspace)
+            Some(Message::TextInput(TextInputEvent::DeleteBackward))
         ));
         for key in [KeyCode::Left, KeyCode::Right] {
             let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
             assert!(matches!(
                 manager.translate(event, &model),
-                Some(Message::TextInputCursor(_))
+                Some(Message::TextInput(TextInputEvent::Cursor(_)))
             ));
         }
         for key in [KeyCode::Char('h'), KeyCode::Char('l')] {
@@ -676,12 +672,12 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::TextInputBackspace)
+            Some(Message::TextInput(TextInputEvent::DeleteBackward))
         ));
         let event = Event::Key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::TextInput('a'))
+            Some(Message::TextInput(TextInputEvent::Insert('a')))
         ));
     }
 
@@ -727,7 +723,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::TextInput('x'))
+            Some(Message::TextInput(TextInputEvent::Insert('x')))
         ));
         for (key, command) in [
             (KeyCode::Down, "vcs_branch_next"),
@@ -744,7 +740,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::TextInputBackspace)
+            Some(Message::TextInput(TextInputEvent::DeleteBackward))
         ));
     }
 
@@ -813,7 +809,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::TextInput('x'))
+            Some(Message::TextInput(TextInputEvent::Insert('x')))
         ));
     }
 
@@ -837,7 +833,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::TextInput('z'))
+            Some(Message::TextInput(TextInputEvent::Insert('z')))
         ));
         let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
         assert!(manager.translate(event, &model).is_none());
@@ -857,7 +853,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::TextInput('e'))
+            Some(Message::TextInput(TextInputEvent::Insert('e')))
         ));
         for (key, modifiers, command) in [
             (KeyCode::Down, KeyModifiers::NONE, "buffer_grep_next"),
@@ -892,7 +888,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::TextInput('e'))
+            Some(Message::TextInput(TextInputEvent::Insert('e')))
         ));
         for (key, modifiers, command) in [
             (KeyCode::Down, KeyModifiers::NONE, "project_grep_next"),
@@ -1021,7 +1017,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Char('0'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::TextInput('0'))
+            Some(Message::TextInput(TextInputEvent::Insert('0')))
         ));
     }
 
@@ -1039,7 +1035,7 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::TextInput('z'))
+            Some(Message::TextInput(TextInputEvent::Insert('z')))
         ));
         let event = Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert!(matches!(
@@ -1057,7 +1053,7 @@ mod tests {
             let event = Event::Key(KeyEvent::new(KeyCode::Char(character), modifiers));
             assert!(matches!(
                 manager.translate(event, &model),
-                Some(Message::TextInput(actual)) if actual == character
+                Some(Message::TextInput(TextInputEvent::Insert(actual))) if actual == character
             ));
         }
 
@@ -1188,12 +1184,12 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::TextInputBackspace)
+            Some(Message::TextInput(TextInputEvent::DeleteBackward))
         ));
         let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::TextInput('x'))
+            Some(Message::TextInput(TextInputEvent::Insert('x')))
         ));
 
         model.context_stack.push(Context::ExplorerDelete);
@@ -1224,12 +1220,12 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::TextInputBackspace)
+            Some(Message::TextInput(TextInputEvent::DeleteBackward))
         ));
         let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::TextInput('x'))
+            Some(Message::TextInput(TextInputEvent::Insert('x')))
         ));
     }
 
@@ -1258,7 +1254,7 @@ mod tests {
         model.context_stack.push(Context::EditorInput);
         assert!(matches!(
             manager.translate(event(), &model),
-            Some(Message::TextInput('I'))
+            Some(Message::TextInput(TextInputEvent::Insert('I')))
         ));
     }
 

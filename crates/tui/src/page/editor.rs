@@ -182,6 +182,7 @@ pub fn editor_content_area(
 
 #[cfg(test)]
 mod tests {
+    use crate::component::text_input::TextInputEvent;
     use ratatui::{Terminal, backend::TestBackend};
 
     use super::*;
@@ -311,9 +312,12 @@ mod tests {
             Message::InvokeCommand(crate::data_object::CommandId("agent_open")),
         );
         for _ in 0.."main.rs:1".len() {
-            manager.update(&mut model, Message::TextInputBackspace);
+            manager.update(
+                &mut model,
+                Message::TextInput(TextInputEvent::DeleteBackward),
+            );
         }
-        manager.update(&mut model, Message::TextInput('/'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('/')));
         assert_eq!(model.agent.prompt(), "/");
         let page = Editor::default();
         let mut terminal = Terminal::new(TestBackend::new(100, 24)).unwrap();

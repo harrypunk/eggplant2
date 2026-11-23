@@ -265,6 +265,7 @@ fn request_close(model: &mut Model) -> Option<Effect> {
 
 #[cfg(test)]
 mod tests {
+    use crate::component::text_input::TextInputEvent;
     use editor::SaveRequest;
 
     use super::*;
@@ -528,7 +529,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("enter_insert_mode")),
         );
-        manager.update(&mut model, Message::TextInput('x'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('x')));
         let request = expect_save(manager.update(
             &mut model,
             Message::InvokeCommand(CommandId("exit_insert_mode")),

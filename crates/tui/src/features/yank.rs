@@ -7,7 +7,6 @@ use crate::{
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
-        text_input_registry::TextInputRegistry,
     },
 };
 
@@ -89,10 +88,6 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
     ]
     .into_iter()
     .try_for_each(|command| commands.register(command))
-}
-
-pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
-    input.register(Context::EditorYank, handle_input)
 }
 
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
@@ -315,6 +310,7 @@ fn reset(model: &mut Model) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::component::text_input::TextInputEvent;
     use crate::{
         data_object::{AppPage, Message, Workspace},
         manager::message_manager::MessageManager,
@@ -512,14 +508,14 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("yank_line_pending")),
         );
-        manager.update(&mut model, Message::TextInput('y'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('y')));
         assert_eq!(model.register.unnamed(), "subject");
 
         manager.update(
             &mut model,
             Message::InvokeCommand(CommandId("delete_line_pending")),
         );
-        manager.update(&mut model, Message::TextInput('d'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('d')));
         assert_eq!(commit_text(&model), "");
         assert_eq!(model.register.unnamed(), "subject");
 
@@ -585,7 +581,7 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("yank_line_pending")),
         );
-        manager.update(&mut model, Message::TextInput('y'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('y')));
         assert_eq!(model.register.unnamed(), "hello\n");
         assert_eq!(model.pending_input, None);
         assert!(!model.editor.active_is_modified());

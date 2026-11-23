@@ -15,10 +15,7 @@ use crate::{
     },
     data_object::{Context, Message, Model, StatusMessage},
     filesystem::{self, FileKind, TransferDestination},
-    manager::{
-        effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
-        text_input_registry::TextInputRegistry,
-    },
+    manager::effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
     theme::{Theme, UiTheme},
     ui::{OverlayContribution, OverlayKind, OverlayPlacement},
 };
@@ -200,11 +197,7 @@ pub(super) fn cancel(model: &mut Model) -> Option<Effect> {
     None
 }
 
-pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
-    input.register_with_cursor(Context::ExplorerTransfer, handle_input)
-}
-
-fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
+pub(crate) fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
     model.explorer.transfer.handle_event(event);
     None
 }
@@ -461,7 +454,7 @@ mod tests {
         for character in destination.chars() {
             assert!(
                 manager
-                    .update(model, Message::TextInput(character))
+                    .update(model, Message::TextInput(TextInputEvent::Insert(character)))
                     .is_none()
             );
         }
@@ -469,7 +462,7 @@ mod tests {
 
     fn replace_destination(manager: &MessageManager, model: &mut Model, destination: &str) {
         while !model.explorer.transfer.destination.is_empty() {
-            manager.update(model, Message::TextInputBackspace);
+            manager.update(model, Message::TextInput(TextInputEvent::DeleteBackward));
         }
         type_destination(manager, model, destination);
     }

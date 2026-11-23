@@ -6,7 +6,6 @@ use crate::{
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
-        text_input_registry::TextInputRegistry,
     },
 };
 
@@ -237,10 +236,6 @@ pub(super) fn register_commands(commands: &mut CommandRegistry) -> color_eyre::R
     .try_for_each(|command| commands.register(command))
 }
 
-pub(crate) fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
-    input.register_with_cursor(Context::VcsMerge, handle_input)
-}
-
 pub(super) fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     match id.as_str() {
         "vcs_merge_start" => start(model),
@@ -290,7 +285,7 @@ fn close_merge_context(model: &mut Model) {
         .pop_if(|context| context == &Context::VcsMerge);
 }
 
-fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
+pub(crate) fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
     model.vcs.merge.handle_event(event);
     None
 }

@@ -23,7 +23,6 @@ use crate::{
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::Effect,
-        text_input_registry::TextInputRegistry,
     },
 };
 
@@ -47,10 +46,6 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
     ]
     .into_iter()
     .try_for_each(|command| commands.register(command))
-}
-
-pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
-    input.register(Context::ViewAlign, handle_input)
 }
 
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
@@ -113,6 +108,7 @@ fn reset(model: &mut Model) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::component::text_input::TextInputEvent;
     use crate::{
         data_object::Message, manager::message_manager::MessageManager, test_utils::create_buffer,
     };
@@ -159,18 +155,18 @@ mod tests {
         let revision = model.editor.active_revision();
 
         start_alignment(&mut model, &manager);
-        manager.update(&mut model, Message::TextInput('t'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('t')));
         let snapshot = model.editor.active_snapshot().unwrap();
         assert_eq!(snapshot.text.first_line, 10);
         assert_eq!(snapshot.cursor.unwrap().row, 0);
         assert_eq!(model.pending_input, None);
 
         start_alignment(&mut model, &manager);
-        manager.update(&mut model, Message::TextInput('z'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('z')));
         assert_eq!(model.editor.active_snapshot().unwrap().text.first_line, 7);
 
         start_alignment(&mut model, &manager);
-        manager.update(&mut model, Message::TextInput('b'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('b')));
         let snapshot = model.editor.active_snapshot().unwrap();
         assert_eq!(snapshot.text.first_line, 3);
         assert_eq!(snapshot.cursor.unwrap().row, 7);
@@ -197,7 +193,7 @@ mod tests {
         assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
 
         start_alignment(&mut model, &manager);
-        manager.update(&mut model, Message::TextInput('x'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('x')));
         assert_eq!(model.pending_input, None);
         assert!(model.view_align.is_none());
         assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
@@ -208,7 +204,7 @@ mod tests {
 
         manager.update(&mut model, Message::Resize(0, 0));
         start_alignment(&mut model, &manager);
-        manager.update(&mut model, Message::TextInput('z'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('z')));
         assert_eq!(model.pending_input, None);
     }
 

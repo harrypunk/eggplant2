@@ -14,7 +14,6 @@ use crate::{
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::Effect,
-        text_input_registry::TextInputRegistry,
     },
     ui::UiRegistry,
 };
@@ -53,10 +52,6 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
     ]
     .into_iter()
     .try_for_each(|command| commands.register(command))
-}
-
-pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
-    input.register_with_cursor(Context::BufferGrep, handle_input)
 }
 
 pub fn register_ui(ui: &mut UiRegistry) -> color_eyre::Result<()> {
@@ -187,7 +182,10 @@ mod tests {
 
         let mut effect = None;
         for character in "ell".chars() {
-            effect = manager.update(&mut model, Message::TextInput(character));
+            effect = manager.update(
+                &mut model,
+                Message::TextInput(TextInputEvent::Insert(character)),
+            );
         }
         let Some(Effect::Feature(request)) = effect else {
             panic!("a non-empty query should start a search effect");
@@ -232,7 +230,7 @@ mod tests {
                 Message::CommandMenuKey(KeyCode::Char(key).into()),
             );
         }
-        manager.update(&mut model, Message::TextInput('e'));
+        manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('e')));
         manager.update(
             &mut model,
             Message::InvokeCommand(CommandId("buffer_grep_close")),

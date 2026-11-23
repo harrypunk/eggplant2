@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use color_eyre::eyre::eyre;
 
 use crate::{
-    component::text_input::{TextCursorMovement, TextInputEvent},
+    component::text_input::TextInputEvent,
     data_object::{Context, Model},
     manager::{effect::Effect, input_context::input_context},
 };
@@ -17,7 +17,10 @@ pub enum TextInputHandler {
     Edit(TextEventHandler),
 }
 
-/// Routes unbound printable input to the feature that owns the active context.
+/// Routes semantic text input to the feature that owns the active context.
+///
+/// Character-only handlers implement prefix parsers. Edit handlers accept insertion,
+/// backward deletion, and cursor movement through the shared text-input component.
 #[derive(Debug, Default, Clone)]
 pub struct TextInputRegistry {
     handlers: HashMap<Context, TextInputHandler>,
@@ -25,141 +28,122 @@ pub struct TextInputRegistry {
 
 impl TextInputRegistry {
     pub fn builtin() -> Self {
+        use TextInputHandler::{Edit, Insert};
+
+        Self::from_handlers([
+            (Context::AppNormal, Insert(crate::line_jump::handle_input)),
+            (Context::EditorInput, Insert(crate::editing::insert_char)),
+            (Context::VcsCommitInput, Insert(crate::editing::insert_char)),
+            (Context::FilePicker, Edit(crate::file_picker::handle_input)),
+            (Context::Explorer, Insert(crate::line_jump::handle_input)),
+            (
+                Context::ExplorerAdd,
+                Edit(crate::explorer::handle_add_input),
+            ),
+            (
+                Context::ExplorerTransfer,
+                Edit(crate::explorer::handle_transfer_input),
+            ),
+            (
+                Context::ThemePicker,
+                Edit(crate::theme_picker::handle_input),
+            ),
+            (
+                Context::BufferJump,
+                Insert(crate::buffer_jump::handle_input),
+            ),
+            (Context::BufferGrep, Edit(crate::buffer_grep::handle_input)),
+            (
+                Context::BufferNavigation,
+                Insert(crate::buffer_navigation::handle_input),
+            ),
+            (
+                Context::ProjectGrep,
+                Edit(crate::project_grep::handle_input),
+            ),
+            (Context::LineJump, Insert(crate::line_jump::handle_input)),
+            (Context::ViewAlign, Insert(crate::view_align::handle_input)),
+            (Context::EditorChange, Insert(crate::change::handle_input)),
+            (Context::EditorYank, Insert(crate::yank::handle_input)),
+            (Context::VcsHistory, Insert(crate::line_jump::handle_input)),
+            (
+                Context::EditorVisual,
+                Insert(crate::line_jump::handle_input),
+            ),
+            (Context::VcsMerge, Edit(crate::vcs::merge::handle_input)),
+            (Context::VcsReset, Edit(crate::vcs::reset::handle_input)),
+            (Context::VcsBranch, Edit(crate::vcs::branch::handle_input)),
+            (Context::AgentChatDialog, Edit(crate::agent::handle_input)),
+            (Context::AgentChatInsert, Edit(crate::agent::handle_input)),
+        ])
+        .expect("built-in text-input contexts must be unique")
+    }
+
+    fn from_handlers(
+        handlers: impl IntoIterator<Item = (Context, TextInputHandler)>,
+    ) -> color_eyre::Result<Self> {
         let mut registry = Self::default();
-        registry
-            .register(Context::EditorInput, crate::editing::insert_char)
-            .expect("editor text input must be unique");
-        registry
-            .register(Context::VcsCommitInput, crate::editing::insert_char)
-            .expect("commit-message text input must be unique");
-        registry
-            .register_with_cursor(Context::FilePicker, crate::file_picker::handle_input)
-            .expect("file-picker text input must be unique");
-        crate::explorer::register_text_input(&mut registry)
-            .expect("explorer-add text input must be unique");
-        crate::theme_picker::register_text_input(&mut registry)
-            .expect("theme-picker text input must be unique");
-        crate::buffer_jump::register_text_input(&mut registry)
-            .expect("buffer-jump text input must be unique");
-        crate::buffer_grep::register_text_input(&mut registry)
-            .expect("buffer-grep text input must be unique");
-        crate::buffer_navigation::register_text_input(&mut registry)
-            .expect("buffer-navigation text input must be unique");
-        crate::project_grep::register_text_input(&mut registry)
-            .expect("project-grep text input must be unique");
-        crate::line_jump::register_text_input(&mut registry)
-            .expect("line-jump text input must be unique");
-        crate::view_align::register_text_input(&mut registry)
-            .expect("view-alignment text input must be unique");
-        crate::change::register_text_input(&mut registry)
-            .expect("change text input must be unique");
-        crate::yank::register_text_input(&mut registry).expect("yank text input must be unique");
-        crate::vcs::merge::register_text_input(&mut registry)
-            .expect("merge-target text input must be unique");
-        crate::vcs::reset::register_text_input(&mut registry)
-            .expect("reset-target text input must be unique");
-        crate::vcs::branch::register_text_input(&mut registry)
-            .expect("branch text input must be unique");
-        crate::agent::register_text_input(&mut registry).expect("agent text input must be unique");
-        registry
-    }
-
-    pub fn register(
-        &mut self,
-        context: Context,
-        handler: TextInsertHandler,
-    ) -> color_eyre::Result<()> {
-        self.register_handler(context, TextInputHandler::Insert(handler))
-    }
-
-    pub fn register_with_cursor(
-        &mut self,
-        context: Context,
-        handler: TextEventHandler,
-    ) -> color_eyre::Result<()> {
-        self.register_handler(context, TextInputHandler::Edit(handler))
-    }
-
-    fn register_handler(
-        &mut self,
-        context: Context,
-        handler: TextInputHandler,
-    ) -> color_eyre::Result<()> {
-        if self.handlers.contains_key(&context) {
-            return Err(eyre!("duplicate text-input handler for `{context:?}`"));
+        for (context, handler) in handlers {
+            if registry.handlers.contains_key(&context) {
+                return Err(eyre!("duplicate text-input handler for `{context:?}`"));
+            }
+            registry.handlers.insert(context, handler);
         }
-        self.handlers.insert(context, handler);
-        Ok(())
+        Ok(registry)
     }
 
-    pub fn accepts(&self, context: &Context) -> bool {
-        self.handlers.contains_key(context)
+    pub fn accepts(&self, context: &Context, event: TextInputEvent) -> bool {
+        matches!(
+            (self.handlers.get(context), event),
+            (Some(TextInputHandler::Insert(_)), TextInputEvent::Insert(_))
+                | (Some(TextInputHandler::Edit(_)), _)
+        )
     }
 
-    pub fn accepts_cursor(&self, context: &Context) -> bool {
-        self.handlers
-            .get(context)
-            .is_some_and(|handler| matches!(handler, TextInputHandler::Edit(_)))
-    }
-
-    pub fn handle(&self, model: &mut Model, character: char) -> Option<Effect> {
+    pub fn handle(&self, model: &mut Model, event: TextInputEvent) -> Option<Effect> {
         let context = input_context(model)?;
-        match self.handlers.get(&context)? {
-            TextInputHandler::Insert(handler) => handler(model, character),
-            TextInputHandler::Edit(handler) => handler(model, TextInputEvent::Insert(character)),
+        match (self.handlers.get(&context)?, event) {
+            (TextInputHandler::Insert(handler), TextInputEvent::Insert(character)) => {
+                handler(model, character)
+            }
+            (TextInputHandler::Edit(handler), event) => handler(model, event),
+            _ => None,
         }
-    }
-
-    pub fn handle_backspace(&self, model: &mut Model) -> Option<Effect> {
-        self.handle_event(model, TextInputEvent::DeleteBackward)
-    }
-
-    pub fn handle_cursor(&self, model: &mut Model, movement: TextCursorMovement) -> Option<Effect> {
-        self.handle_event(model, TextInputEvent::Cursor(movement))
-    }
-
-    fn handle_event(&self, model: &mut Model, event: TextInputEvent) -> Option<Effect> {
-        let context = input_context(model)?;
-        let TextInputHandler::Edit(handler) = self.handlers.get(&context)? else {
-            return None;
-        };
-        handler(model, event)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::component::text_input::TextCursorMovement;
 
     fn replacement_input(_: &mut Model, _: char) -> Option<Effect> {
         None
     }
 
     #[test]
-    fn duplicate_input_preserves_the_original_handler() {
-        let mut registry = TextInputRegistry::default();
-        registry
-            .register(Context::EditorInput, crate::editing::insert_char)
-            .unwrap();
-        let original = match registry.handlers.get(&Context::EditorInput) {
-            Some(TextInputHandler::Insert(handler)) => *handler as usize,
-            _ => panic!("expected character handler"),
-        };
-
-        assert!(
-            registry
-                .register(Context::EditorInput, replacement_input)
-                .is_err()
-        );
-        assert!(matches!(
-            registry.handlers.get(&Context::EditorInput),
-            Some(TextInputHandler::Insert(handler)) if *handler as usize == original
-        ));
+    fn rejects_duplicate_context_handlers() {
+        let result = TextInputRegistry::from_handlers([
+            (
+                Context::EditorInput,
+                TextInputHandler::Insert(crate::editing::insert_char),
+            ),
+            (
+                Context::EditorInput,
+                TextInputHandler::Insert(replacement_input),
+            ),
+        ]);
+        assert!(result.is_err());
     }
 
     #[test]
-    fn every_component_input_accepts_cursor_movement() {
+    fn capabilities_follow_the_handler_kind() {
         let registry = TextInputRegistry::builtin();
+        let edit_events = [
+            TextInputEvent::Insert('x'),
+            TextInputEvent::DeleteBackward,
+            TextInputEvent::Cursor(TextCursorMovement::Left),
+        ];
         [
             Context::FilePicker,
             Context::ThemePicker,
@@ -175,16 +159,23 @@ mod tests {
         ]
         .into_iter()
         .for_each(|context| {
-            assert!(registry.accepts_cursor(&context), "{context:?}");
+            for event in edit_events {
+                assert!(registry.accepts(&context, event), "{context:?}: {event:?}");
+            }
         });
 
         [
             Context::EditorInput,
             Context::VcsCommitInput,
-            Context::AgentApproval,
+            Context::BufferJump,
         ]
         .into_iter()
-        .for_each(|context| assert!(!registry.accepts_cursor(&context), "{context:?}"));
+        .for_each(|context| {
+            assert!(registry.accepts(&context, TextInputEvent::Insert('x')));
+            assert!(!registry.accepts(&context, TextInputEvent::DeleteBackward));
+            assert!(!registry.accepts(&context, TextInputEvent::Cursor(TextCursorMovement::Left)));
+        });
+        assert!(!registry.accepts(&Context::AgentApproval, TextInputEvent::Insert('x')));
     }
 
     #[test]
@@ -197,21 +188,8 @@ mod tests {
         model.tools.visibility = crate::data_object::Visibility::Displayed;
         model.agent.enter_insert_mode();
 
-        registry.handle(&mut model, 'x');
+        registry.handle(&mut model, TextInputEvent::Insert('x'));
         assert_eq!(model.agent.prompt(), "x");
         assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
-    }
-
-    #[test]
-    fn rejects_duplicate_context_handlers() {
-        let mut registry = TextInputRegistry::default();
-        registry
-            .register(Context::EditorInput, crate::editing::insert_char)
-            .unwrap();
-        assert!(
-            registry
-                .register(Context::EditorInput, crate::editing::insert_char)
-                .is_err()
-        );
     }
 }

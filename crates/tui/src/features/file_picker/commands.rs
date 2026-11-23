@@ -186,7 +186,8 @@ mod tests {
         assert_eq!(model.current_focus, FocusTarget::FilePicker);
         assert_eq!(model.context_stack.last(), Some(&Context::FilePicker));
 
-        let Some(Effect::Feature(request)) = manager.update(&mut model, Message::TextInput('m'))
+        let Some(Effect::Feature(request)) =
+            manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('m')))
         else {
             panic!("a query should start one recursive scan");
         };

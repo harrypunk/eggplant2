@@ -9,7 +9,7 @@ pub use state::{ThemePickerEntry, ThemePickerState};
 use crate::{
     config::ThemeConfig,
     data_object::{CommandId, Context, ModalController, Model, StatusMessage},
-    manager::{effect::Effect, text_input_registry::TextInputRegistry},
+    manager::effect::Effect,
     theme::{Theme, ThemePersistenceState},
 };
 
@@ -117,11 +117,7 @@ impl ThemePickerAdapter<'_> {
     }
 }
 
-pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
-    input.register_with_cursor(Context::ThemePicker, handle_input)
-}
-
-fn handle_input(
+pub(crate) fn handle_input(
     model: &mut Model,
     event: crate::component::text_input::TextInputEvent,
 ) -> Option<Effect> {
@@ -200,6 +196,7 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
 
 #[cfg(test)]
 mod tests {
+    use crate::component::text_input::TextInputEvent;
     use crossterm::event::KeyCode;
 
     use super::*;
@@ -298,7 +295,10 @@ mod tests {
         model.context_stack.push(Context::ThemePicker);
 
         for character in "xyz".chars() {
-            manager.update(&mut model, Message::TextInput(character));
+            manager.update(
+                &mut model,
+                Message::TextInput(TextInputEvent::Insert(character)),
+            );
         }
         assert_eq!(model.theme_picker.query(), "xyz");
         assert!(model.theme_picker.visible_entries().is_empty());
@@ -312,10 +312,16 @@ mod tests {
         );
 
         for _ in 0..3 {
-            manager.update(&mut model, Message::TextInputBackspace);
+            manager.update(
+                &mut model,
+                Message::TextInput(TextInputEvent::DeleteBackward),
+            );
         }
         for character in "tokyo".chars() {
-            manager.update(&mut model, Message::TextInput(character));
+            manager.update(
+                &mut model,
+                Message::TextInput(TextInputEvent::Insert(character)),
+            );
         }
         assert_eq!(
             model.theme_picker.selected(),

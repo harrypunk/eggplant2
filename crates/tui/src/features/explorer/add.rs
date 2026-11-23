@@ -16,10 +16,7 @@ use crate::{
     data_object::{Context, Message, Model, StatusMessage},
     document,
     filesystem::{self, CreateTarget},
-    manager::{
-        effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
-        text_input_registry::TextInputRegistry,
-    },
+    manager::effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
     theme::{Theme, UiTheme},
     ui::{OverlayContribution, OverlayKind, OverlayPlacement},
 };
@@ -121,11 +118,7 @@ pub(super) fn cancel(model: &mut Model) -> Option<Effect> {
     None
 }
 
-pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
-    input.register_with_cursor(Context::ExplorerAdd, handle_input)
-}
-
-fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
+pub(crate) fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
     model.explorer.add.handle_event(event);
     None
 }
@@ -339,7 +332,7 @@ mod tests {
         for character in path.chars() {
             assert!(
                 manager
-                    .update(model, Message::TextInput(character))
+                    .update(model, Message::TextInput(TextInputEvent::Insert(character)))
                     .is_none()
             );
         }
@@ -488,7 +481,10 @@ mod tests {
         assert_eq!(model.explorer.add.path.value(), "../outside");
 
         while !model.explorer.add.path.is_empty() {
-            manager.update(&mut model, Message::TextInputBackspace);
+            manager.update(
+                &mut model,
+                Message::TextInput(TextInputEvent::DeleteBackward),
+            );
         }
         type_path(&manager, &mut model, "note.txt");
         let effect = manager
