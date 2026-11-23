@@ -32,7 +32,7 @@ Available in Normal and Explorer contexts unless noted otherwise.
 
 ### Welcome command menu
 
-When the focused editor has no buffer, it shows the Eggplant logo and command buttons instead of an empty text area. `Up`/`Down` select a button and `Enter` runs its existing command. The selected button uses the theme's focused selection style; it becomes dimmed when focus moves elsewhere. This is a view and selection state, not a document buffer. The command identities are shared with keyboard dispatch so future mouse hit-testing can activate the same targets.
+When the focused editor has no buffer, it shows the Eggplant logo and command buttons instead of an empty text area. `Up`/`Down` select a button and `Enter` runs its existing command. The selected button uses the theme's focused selection style; it becomes dimmed when focus moves elsewhere. This is a view and selection state, not a document buffer. Welcome input context is derived from page, focus, and buffer state rather than synchronized into the context stack. Command identities are shared with the normal dispatcher so future mouse hit-testing can activate the same targets.
 
 ### Buffers
 

@@ -7,7 +7,8 @@ use crate::component::text_input::TextCursorMovement;
 use crate::config::Config;
 use crate::data_object::{CommandId, Context, Message, Model};
 use crate::manager::{
-    context::KeyChord, keyboard_input_registry::Registry, text_input_registry::TextInputRegistry,
+    context::KeyChord, input_context::input_context, keyboard_input_registry::Registry,
+    text_input_registry::TextInputRegistry,
 };
 
 #[derive(Debug)]
@@ -53,13 +54,13 @@ impl EventManager {
     }
 
     fn translate_key(&self, key: KeyEvent, model: &Model) -> Option<Message> {
-        let context = model.context_stack.last()?;
-        if model.command_menu.is_active() || Self::is_leader_start(context, key) {
+        let context = input_context(model)?;
+        if model.command_menu.is_active() || Self::is_leader_start(&context, key) {
             return Some(Message::CommandMenuKey(key.code));
         }
-        self.resolve_command(context, key)
+        self.resolve_command(&context, key)
             .map(Message::InvokeCommand)
-            .or_else(|| self.unbound_key_message(context, key))
+            .or_else(|| self.unbound_key_message(&context, key))
     }
 
     /// Resolve a command by direct binding, menu alias, then shifted-symbol fallback.
@@ -145,6 +146,13 @@ mod tests {
         let config = Config::default();
         let keymap = Registry::from_config(&config.keymap, &CommandRegistry::default()).unwrap();
         EventManager::new(&config, keymap, TextInputRegistry::builtin())
+    }
+
+    fn model_with_buffer(context: Context) -> Model {
+        let mut model = Model::default();
+        crate::test_utils::create_buffer(&mut model, "text");
+        model.context_stack.push(context);
+        model
     }
 
     #[test]
@@ -316,8 +324,7 @@ mod tests {
     #[test]
     fn routes_bracket_buffer_navigation_and_cancellation() {
         let manager = event_manager();
-        let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
+        let mut model = model_with_buffer(Context::AppNormal);
 
         for (character, command) in [
             (']', "next_buffer_pending"),
@@ -444,8 +451,7 @@ mod tests {
     #[test]
     fn routes_agent_dialog_keys() {
         let manager = event_manager();
-        let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
+        let mut model = model_with_buffer(Context::AppNormal);
         let event = Event::Key(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::CONTROL));
         assert!(matches!(
             manager.translate(event, &model),
@@ -505,7 +511,7 @@ mod tests {
     fn routes_welcome_buttons_and_preserves_leader_commands() {
         let manager = event_manager();
         let model = crate::startup::initial_model(None).unwrap();
-        assert_eq!(model.context_stack.last(), Some(&Context::Welcome));
+        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
 
         for (key, command) in [
             (KeyCode::Up, "welcome_previous"),
@@ -769,8 +775,7 @@ mod tests {
     #[test]
     fn normal_s_routes_to_visible_buffer_jump() {
         let manager = event_manager();
-        let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
+        let model = model_with_buffer(Context::AppNormal);
         let event = Event::Key(KeyEvent::new(KeyCode::Char('s'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
@@ -874,8 +879,7 @@ mod tests {
     #[test]
     fn routes_yank_commands_and_pending_cancellation() {
         let manager = event_manager();
-        let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
+        let mut model = model_with_buffer(Context::AppNormal);
         let event = Event::Key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
@@ -899,8 +903,7 @@ mod tests {
     #[test]
     fn routes_delete_change_commands_and_pending_cancellation() {
         let manager = event_manager();
-        let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
+        let mut model = model_with_buffer(Context::AppNormal);
         for (character, command) in [
             ('x', "delete_grapheme"),
             ('d', "delete_line_pending"),
@@ -930,8 +933,7 @@ mod tests {
     #[test]
     fn routes_visual_entry_motion_and_exit() {
         let manager = event_manager();
-        let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
+        let mut model = model_with_buffer(Context::AppNormal);
         let event = Event::Key(KeyEvent::new(KeyCode::Char('v'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
@@ -959,8 +961,7 @@ mod tests {
     #[test]
     fn line_boundary_bindings_do_not_consume_count_digits() {
         let manager = event_manager();
-        let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
+        let mut model = model_with_buffer(Context::AppNormal);
 
         for (character, modifiers, command) in [
             ('0', KeyModifiers::NONE, "move_line_start"),
@@ -985,8 +986,7 @@ mod tests {
     #[test]
     fn routes_view_alignment_prefix_second_key_and_escape() {
         let manager = event_manager();
-        let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
+        let mut model = model_with_buffer(Context::AppNormal);
         let event = Event::Key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
@@ -1009,8 +1009,7 @@ mod tests {
     #[test]
     fn routes_line_jump_text_and_escape() {
         let manager = event_manager();
-        let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
+        let mut model = model_with_buffer(Context::AppNormal);
 
         for (character, modifiers) in [('2', KeyModifiers::NONE), ('G', KeyModifiers::SHIFT)] {
             let event = Event::Key(KeyEvent::new(KeyCode::Char(character), modifiers));
@@ -1031,8 +1030,7 @@ mod tests {
     #[test]
     fn translates_page_scroll_control_chords_when_crossterm_delivers_them() {
         let manager = event_manager();
-        let mut model = Model::default();
-        model.context_stack.push(Context::AppNormal);
+        let model = model_with_buffer(Context::AppNormal);
 
         for (key, command) in [('f', "page_scroll_down"), ('u', "page_scroll_up")] {
             let event = Event::Key(KeyEvent::new(KeyCode::Char(key), KeyModifiers::CONTROL));
@@ -1046,8 +1044,7 @@ mod tests {
     #[test]
     fn configured_bindings_still_take_precedence() {
         let manager = event_manager();
-        let mut normal_model = Model::default();
-        normal_model.context_stack.push(Context::AppNormal);
+        let normal_model = model_with_buffer(Context::AppNormal);
         let event = Event::Key(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &normal_model),
@@ -1198,6 +1195,7 @@ mod tests {
         ));
 
         model.context_stack.pop();
+        crate::test_utils::create_buffer(&mut model, "text");
         model.context_stack.push(Context::AppNormal);
         assert!(matches!(
             manager.translate(event(), &model),
@@ -1225,8 +1223,7 @@ mod tests {
         ];
 
         for context in [Context::AppNormal, Context::Explorer] {
-            let mut model = Model::default();
-            model.context_stack.push(context);
+            let model = model_with_buffer(context);
             for (key, command) in directions {
                 let event = Event::Key(KeyEvent::new(KeyCode::Char(key), KeyModifiers::CONTROL));
                 assert!(matches!(

@@ -1,8 +1,9 @@
 use crate::{
-    data_object::{CommandId, Context, FocusTarget, Model},
+    data_object::{CommandId, Context, Model},
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::Effect,
+        input_context::input_context,
     },
 };
 
@@ -18,10 +19,10 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
             "select previous welcome command",
             handle_command,
         ),
-        Command::feature(
+        Command::dispatch(
             CommandId("welcome_activate"),
             "run selected welcome command",
-            handle_command,
+            selected_command,
         ),
     ]
     .into_iter()
@@ -33,63 +34,33 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         return None;
     }
     match id.as_str() {
-        "welcome_next" => {
-            model.welcome.select_next();
-            None
-        }
-        "welcome_previous" => {
-            model.welcome.select_previous();
-            None
-        }
-        "welcome_activate" => activate(model, model.welcome.selected_command()),
-        _ => None,
+        "welcome_next" => model.welcome.select_next(),
+        "welcome_previous" => model.welcome.select_previous(),
+        _ => return None,
     }
+    None
 }
 
 fn available(model: &Model) -> bool {
-    model.editor.active_buffer().is_none()
-        && model.current_focus == FocusTarget::Editor
-        && model.context_stack.last() == Some(&Context::Welcome)
+    input_context(model) == Some(Context::Welcome)
 }
 
-fn activate(model: &mut Model, command: CommandId) -> Option<Effect> {
-    match command.as_str() {
-        "open_file_picker" | "close_file_picker" => {
-            crate::file_picker::handle_command(model, command)
-        }
-        "toggle_file_explorer" => crate::focus::handle_command(model, command),
-        "agent_toggle_panel" => crate::agent::handle_command(model, command),
-        "open_theme_picker" => crate::theme_picker::handle_command(model, command),
-        "quit" => crate::lifecycle::handle_command(model, command),
-        _ => None,
-    }
-}
-
-/// Reconcile the base editor input context without disturbing modal/panel contexts.
-pub(crate) fn sync_context(model: &mut Model) {
-    let target = if model.editor.active_buffer().is_none() {
-        Context::Welcome
-    } else {
-        Context::AppNormal
-    };
-    if let Some(context @ (Context::AppNormal | Context::Welcome)) = model.context_stack.last_mut()
-    {
-        *context = target;
-    }
+fn selected_command(model: &Model) -> Option<CommandId> {
+    available(model).then(|| model.welcome.selected_command())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
-        data_object::{Message, Visibility},
+        data_object::{FocusTarget, Message, Visibility},
         manager::message_manager::MessageManager,
         startup::initial_model,
     };
 
     fn welcome_model() -> Model {
         let mut model = Model::default();
-        model.context_stack.push(Context::Welcome);
+        model.context_stack.push(Context::AppNormal);
         model
     }
 
@@ -100,7 +71,6 @@ mod tests {
         let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
         model.current_focus = FocusTarget::Editor;
         model.context_stack.pop();
-        sync_context(&mut model);
         let manager = MessageManager::default();
 
         manager.update(
@@ -136,12 +106,13 @@ mod tests {
     }
 
     #[test]
-    fn base_context_follows_buffer_availability() {
+    fn availability_is_derived_without_mutating_the_context_stack() {
         let mut model = welcome_model();
-        sync_context(&mut model);
-        assert_eq!(model.context_stack.last(), Some(&Context::Welcome));
+        assert_eq!(input_context(&model), Some(Context::Welcome));
+        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
+
         crate::test_utils::create_buffer(&mut model, "text");
-        sync_context(&mut model);
+        assert_eq!(input_context(&model), Some(Context::AppNormal));
         assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
     }
 }

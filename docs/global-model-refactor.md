@@ -38,6 +38,7 @@ The following slices have landed and are covered by the workspace test suite:
 - History, working-change, and repository workflows have separate implementation modules; `vcs/mod.rs` is reduced to composed state, registration/dispatch, shared selection math, and API re-exports.
 - Typed VCS list/detail/change/header/popup props and shared presentation-owned `DiffState`.
 - Explorer folding is immediate in-memory work; reload, selected-subtree unfolding, ignore toggles, and reveal use owned generation-checked effects. Current successful completions commit entries, expansion, ignore mode, and selection transactionally; stale results and invisible reveal targets leave the existing tree unchanged.
+- Welcome keyboard context is derived from page, focus, and buffer availability rather than synchronized into the base context stack. Data-driven command selectors re-enter the central dispatcher, preserving command policy without cross-feature handler calls.
 
 The planned refactor is complete. `Model` remains the intentional Elm composition root; feature workflows, effects, state transitions, and presentation now use narrow interfaces, controllers, owned requests, or explicit props as appropriate.
 

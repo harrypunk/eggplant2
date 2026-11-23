@@ -10,11 +10,14 @@ use crate::{
 };
 
 pub type FeatureHandler = fn(&mut Model, CommandId) -> Option<Effect>;
+pub type CommandSelector = fn(&Model) -> Option<CommandId>;
 
 #[derive(Debug, Clone)]
 pub enum CommandHandler {
     Message(fn() -> Message),
     Feature(FeatureHandler),
+    /// Resolve a data-driven command target, then use the normal dispatch path.
+    Dispatch(CommandSelector),
 }
 
 /// A registered command. Message resolution is the M6.1 compatibility boundary;
@@ -40,6 +43,14 @@ impl Command {
             id,
             description,
             handler: CommandHandler::Feature(handler),
+        }
+    }
+
+    pub fn dispatch(id: CommandId, description: &'static str, selector: CommandSelector) -> Self {
+        Self {
+            id,
+            description,
+            handler: CommandHandler::Dispatch(selector),
         }
     }
 }
