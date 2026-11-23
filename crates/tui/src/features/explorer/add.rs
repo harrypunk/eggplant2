@@ -418,7 +418,7 @@ mod tests {
         let Effect::OpenDocument(request) = open else {
             panic!("expected document-open effect");
         };
-        let reveal = manager.update(&mut model, Message::FileOpened(request.perform()));
+        let reveal = manager.update(&mut model, Message::completion(request.perform()));
         if let Some(effect) = reveal {
             apply_features(&manager, &mut model, effect);
         }

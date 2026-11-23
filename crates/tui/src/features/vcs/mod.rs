@@ -666,7 +666,7 @@ mod tests {
         };
         assert_eq!(model.active_page, AppPage::Editor);
         let manager = MessageManager::default();
-        manager.update(&mut model, Message::FileOpened(request.perform()));
+        manager.update(&mut model, Message::completion(request.perform()));
         assert_eq!(
             model
                 .editor

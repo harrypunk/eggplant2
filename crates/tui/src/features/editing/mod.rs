@@ -702,7 +702,7 @@ mod tests {
             Message::InvokeCommand(CommandId("exit_insert_mode")),
         ));
         let completion = request.perform().await;
-        manager.update(&mut model, Message::SaveFinished(completion));
+        manager.update(&mut model, Message::completion(completion));
 
         assert_eq!(std::fs::read_to_string(path).unwrap(), "first\n\nsecond");
         assert_eq!(model.editor.mode(), EditMode::Normal);
@@ -738,7 +738,7 @@ mod tests {
             .unwrap();
         let request = expect_save(Some(effect));
         let completion = request.perform().await;
-        manager.update(&mut model, Message::SaveFinished(completion));
+        manager.update(&mut model, Message::completion(completion));
 
         assert_eq!(std::fs::read_to_string(path).unwrap(), "hello!");
         assert!(!model.editor.active_is_modified());

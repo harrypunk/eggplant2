@@ -7,8 +7,9 @@ use editor::{
 
 use crate::{
     buffer,
-    data_object::{Context, Model, OpenLocation, StatusMessage},
-    manager::effect::Effect,
+    data_object::{Context, Model, OpenLocation, StatusMessage, Visibility},
+    file_picker, focus,
+    manager::effect::{Completion, Effect},
 };
 
 pub type DocumentCloseHandler = fn(&mut Model, PathBuf) -> Option<Effect>;
@@ -63,6 +64,12 @@ pub struct OpenFileRequest {
 pub struct OpenFileCompletion {
     id: OpenRequestId,
     completion: EditorDocumentOpenCompletion,
+}
+
+impl Completion for OpenFileCompletion {
+    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
+        complete_open(model, *self)
+    }
 }
 
 impl OpenFileRequest {
@@ -152,8 +159,28 @@ pub(crate) fn open_file_at_with_origin(
     }))
 }
 
-/// Apply the latest document-open completion. Picker/focus reconciliation stays
-/// in the shell until the picker command migration.
+/// Apply the latest document-open result and reconcile the workflow that started it.
+fn complete_open(model: &mut Model, completion: OpenFileCompletion) -> Option<Effect> {
+    let opened = finish_open_file(model, completion)?;
+    let reconcile = crate::manager::input_context::input_context(model) == opened.context
+        && match opened.origin {
+            OpenOrigin::FilePicker { session } => {
+                model.file_picker.visibility == Visibility::Displayed
+                    && model.file_picker.session_revision() == session
+            }
+            OpenOrigin::Other => true,
+        };
+    if reconcile {
+        if let OpenOrigin::FilePicker { .. } = opened.origin {
+            file_picker::close(model);
+        }
+        focus::focus_editor(model);
+    }
+    let follow_up = Effect::combine(opened.effect, crate::vcs::sync_active_buffer(model));
+    Effect::combine(follow_up, crate::code_navigation::synchronize(model))
+}
+
+/// Insert an opened document and return its workflow metadata and follow-up effect.
 pub(crate) fn finish_open_file(
     model: &mut Model,
     completion: OpenFileCompletion,

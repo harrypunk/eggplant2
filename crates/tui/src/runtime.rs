@@ -107,14 +107,14 @@ fn apply_effect(effect: Effect, sender: &tokio::sync::mpsc::UnboundedSender<Mess
             let sender = sender.clone();
             tokio::spawn(async move {
                 let completion = request.perform().await;
-                let _ = sender.send(Message::SaveFinished(completion));
+                let _ = sender.send(Message::completion(completion));
             });
         }
         Effect::Feature(effect) => effect.execute(sender.clone()),
         Effect::OpenDocument(request) => {
             let sender = sender.clone();
             tokio::task::spawn_blocking(move || {
-                let _ = sender.send(Message::FileOpened(request.perform()));
+                let _ = sender.send(Message::completion(request.perform()));
             });
         }
         Effect::Batch(effects) => {

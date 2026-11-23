@@ -342,7 +342,7 @@ mod tests {
     }
 
     fn finish_save(model: &mut Model, completion: editor::SaveCompletion) -> Option<Effect> {
-        MessageManager::default().update(model, Message::SaveFinished(completion))
+        MessageManager::default().update(model, Message::completion(completion))
     }
 
     #[test]

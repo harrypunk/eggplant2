@@ -155,7 +155,7 @@ mod tests {
         );
         assert_eq!(model.editor.active_buffer(), Some(second));
         let completion = request.perform().await;
-        manager.update(&mut model, Message::SaveFinished(completion));
+        manager.update(&mut model, Message::completion(completion));
 
         assert_eq!(std::fs::read_to_string(first_path).unwrap(), "!first");
         assert!(!model.editor.is_modified(first).unwrap());

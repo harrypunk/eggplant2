@@ -196,7 +196,7 @@ mod tests {
         let Some(Effect::OpenDocument(request)) = effect else {
             panic!("acceptance should open the selected file");
         };
-        manager.update(&mut model, Message::FileOpened(request.perform()));
+        manager.update(&mut model, Message::completion(request.perform()));
 
         let snapshot = model.editor.active_snapshot().unwrap();
         assert_eq!(snapshot.cursor.unwrap().row, 2);

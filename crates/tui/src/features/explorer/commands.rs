@@ -1,17 +1,32 @@
 use std::path::Path;
 
+use editor::DocumentFactory;
+
 use crate::{
     data_object::{CommandId, Context, Model, StatusMessage},
+    document,
     manager::effect::Effect,
 };
 
 use super::{
-    ExpansionState, TreeChange, add, delete,
+    ExpansionState, ExplorerEntryKind, TreeChange, add, delete,
     transfer::{self, TransferOperation},
     work::ExplorerRefreshKind,
 };
 
-/// Explorer state commands. File opening and panel focus stay in separate slices.
+/// Open the selected entry through the document capability, or expand a directory.
+pub(crate) fn open_selected(documents: &DocumentFactory, model: &mut Model) -> Option<Effect> {
+    let entry = model.explorer.selected_entry()?;
+    let path = entry.path.clone();
+    match entry.kind {
+        ExplorerEntryKind::File | ExplorerEntryKind::Link | ExplorerEntryKind::Other => {
+            document::open_file(documents, model, &path)
+        }
+        ExplorerEntryKind::Directory => handle_command(model, CommandId("explorer_unfold")),
+    }
+}
+
+/// Explorer state and navigation commands.
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     match id.as_str() {
         "explorer_next" => model.explorer.select_next(),
@@ -135,7 +150,10 @@ mod tests {
         let manager = MessageManager::default();
         let workspace_root = model.workspace.as_ref().unwrap().root().to_path_buf();
 
-        let effect = manager.update(&mut model, Message::OpenSelected);
+        let effect = manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("open_selected")),
+        );
         if let Some(effect) = effect {
             apply(&mut model, effect);
         }
@@ -289,7 +307,10 @@ mod tests {
         std::fs::remove_dir(&child).unwrap();
         std::fs::remove_dir(directory.path()).unwrap();
 
-        let effect = manager.update(&mut model, Message::OpenSelected);
+        let effect = manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("open_selected")),
+        );
         if let Some(effect) = effect {
             apply(&mut model, effect);
         }

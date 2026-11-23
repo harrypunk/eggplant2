@@ -45,7 +45,7 @@ commands.register(Command::feature(
 ))?;
 ```
 
-The handler receives the model and command ID and returns an optional effect. Keep physical keys out of the handler: configured direct chords and built-in leader sequences resolve to the same command ID.
+The handler receives the model and command ID and returns an optional effect. Keep physical keys out of the handler: configured direct chords and built-in leader sequences resolve to the same command ID. A command that opens documents can use `Command::document` instead; normal invocation then injects the shared `DocumentFactory`, as with Explorer's `open_selected`, without a feature-specific message or manager arm.
 
 - Preserve existing IDs when renaming behavior.
 - Use feature-specific prefixes for new IDs.
@@ -73,7 +73,7 @@ Implement `FeatureEffect::perform` to return a completion `Message`. The default
 ```rust
 impl FeatureEffect for ExampleEffect {
     fn perform(self: Box<Self>) -> Message {
-        Message::FeatureCompletion(FeatureCompletion::new(ExampleCompletion))
+        Message::completion(ExampleCompletion)
     }
 }
 
@@ -85,7 +85,7 @@ impl Completion for ExampleCompletion {
 }
 ```
 
-Return the request from update with `Effect::feature(request)`. `FeatureCompletion` carries a typed result back to its owner through one generic shell arm; do not add a feature-specific completion message or `MessageManager` match arm.
+Return the request from update with `Effect::feature(request)`. `Message::completion` and `FeatureCompletion` carry a typed result back to its owner through one generic shell arm; do not add a feature-specific completion message or `MessageManager` match arm. The completion implementation owns its success, error, and follow-up-effect policy.
 
 Override `execute` only when the work needs different scheduling, such as async save or main-thread construction of non-`Send` Helix values. Preserve request IDs, buffer IDs, and revisions so stale completions cannot replace newer state. The runtime must not gain a feature-specific effect arm.
 

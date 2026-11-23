@@ -810,7 +810,7 @@ language-servers = ["ts"]
         let Some(Effect::OpenDocument(request)) = open else {
             panic!("expected document-open effect");
         };
-        manager.update(&mut model, Message::FileOpened(request.perform()));
+        manager.update(&mut model, Message::completion(request.perform()));
         let active = model.editor.active_buffer().unwrap();
         assert_eq!(model.editor.buffer_path(active), Some(target.as_path()));
     }
@@ -1014,7 +1014,7 @@ language-servers = ["ts"]
         let Some(Effect::OpenDocument(request)) = open else {
             panic!("expected selected-location open effect");
         };
-        manager.update(&mut model, Message::FileOpened(request.perform()));
+        manager.update(&mut model, Message::completion(request.perform()));
         let active = model.editor.active_buffer().unwrap();
         assert_eq!(model.editor.buffer_path(active), Some(second.as_path()));
         assert!(!model.modal.is_active(Context::CodeNavigation));

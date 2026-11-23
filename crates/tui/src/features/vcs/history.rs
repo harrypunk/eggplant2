@@ -830,7 +830,7 @@ mod tests {
         assert!(model.context_stack.is_empty());
 
         crate::manager::message_manager::MessageManager::default()
-            .update(&mut model, Message::FileOpened(request.perform()));
+            .update(&mut model, Message::completion(request.perform()));
 
         assert_eq!(model.current_focus, crate::data_object::FocusTarget::Editor);
         assert_eq!(

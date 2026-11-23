@@ -4,11 +4,17 @@ use crate::{
     buffer,
     data_object::{CommandId, DeferredAction, Model, RunningState, StatusMessage},
     document,
-    manager::effect::Effect,
+    manager::effect::{Completion, Effect},
 };
 
 /// Application lifecycle commands and save-completion coordination.
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
+    if model.vcs.commit.is_in_progress() {
+        return Some(crate::notifications::report_rejection(
+            model,
+            "Commit in progress; try again after it finishes",
+        ));
+    }
     match id.as_str() {
         "quit" => request_quit(model),
         "close_buffer" => request_close(model),
@@ -25,12 +31,32 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     }
 }
 
-pub(crate) enum SaveOutcome {
+enum SaveOutcome {
     Saved(editor::BufferId),
     Failed(String),
 }
 
-pub(crate) fn complete_save(model: &mut Model, completion: SaveCompletion) -> SaveOutcome {
+impl Completion for SaveCompletion {
+    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
+        match complete_save(model, *self) {
+            SaveOutcome::Saved(buffer_id) => {
+                if model.vcs.commit.is_waiting_for_save() {
+                    crate::vcs::commit::continue_after_save(model)
+                } else {
+                    let continuation = continue_save(model, buffer_id);
+                    Effect::combine(continuation, crate::external_sync::save_completed(model))
+                }
+            }
+            SaveOutcome::Failed(error) => {
+                save_failed(model, &error);
+                crate::vcs::commit::save_failed(model, &error);
+                None
+            }
+        }
+    }
+}
+
+fn complete_save(model: &mut Model, completion: SaveCompletion) -> SaveOutcome {
     let buffer_id = completion.buffer_id();
     match model.editor.complete_save(completion) {
         Ok(_) => SaveOutcome::Saved(buffer_id),
@@ -38,12 +64,12 @@ pub(crate) fn complete_save(model: &mut Model, completion: SaveCompletion) -> Sa
     }
 }
 
-pub(crate) fn save_failed(model: &mut Model, error: &str) {
+fn save_failed(model: &mut Model, error: &str) {
     model.deferred_action = None;
     model.status = Some(StatusMessage::error(error));
 }
 
-pub(crate) fn continue_save(model: &mut Model, buffer_id: editor::BufferId) -> Option<Effect> {
+fn continue_save(model: &mut Model, buffer_id: editor::BufferId) -> Option<Effect> {
     match model.deferred_action {
         Some(DeferredAction::Quit) => finish_quit(model),
         Some(DeferredAction::CloseBuffer(id)) => finish_close(model, id),
@@ -366,7 +392,7 @@ mod tests {
         );
         assert_eq!(model.editor.buffer_count(), 2);
         let completion = request.perform().await;
-        manager.update(&mut model, Message::SaveFinished(completion));
+        manager.update(&mut model, Message::completion(completion));
 
         assert_eq!(model.editor.buffer_count(), 1);
         assert_eq!(model.editor.active_buffer(), Some(second));
@@ -415,7 +441,7 @@ mod tests {
         assert_eq!(model.deferred_action, Some(DeferredAction::CloseAll(id)));
         assert_eq!(model.editor.buffer_count(), 1);
         let completion = request.perform().await;
-        manager.update(&mut model, Message::SaveFinished(completion));
+        manager.update(&mut model, Message::completion(completion));
 
         assert!(model.editor.is_empty());
         assert_eq!(std::fs::read_to_string(path).unwrap(), "!original");
@@ -443,7 +469,7 @@ mod tests {
         assert_eq!(model.deferred_action, Some(DeferredAction::Quit));
         assert_eq!(model.running_state, RunningState::Running);
         let completion = request.perform().await;
-        manager.update(&mut model, Message::SaveFinished(completion));
+        manager.update(&mut model, Message::completion(completion));
         assert_eq!(model.running_state, RunningState::Done);
     }
 
@@ -470,7 +496,7 @@ mod tests {
         ));
         assert_eq!(model.editor.buffer_count(), 1);
         let completion = request.perform().await;
-        manager.update(&mut model, Message::SaveFinished(completion));
+        manager.update(&mut model, Message::completion(completion));
         assert!(model.editor.is_empty());
     }
 
@@ -502,7 +528,7 @@ mod tests {
         let completion = request.perform().await;
         assert!(
             manager
-                .update(&mut model, Message::SaveFinished(completion))
+                .update(&mut model, Message::completion(completion))
                 .is_none()
         );
 
@@ -536,7 +562,7 @@ mod tests {
         manager.update(&mut model, Message::InvokeCommand(CommandId("quit")));
         assert_eq!(model.running_state, RunningState::Running);
         let completion = request.perform().await;
-        manager.update(&mut model, Message::SaveFinished(completion));
+        manager.update(&mut model, Message::completion(completion));
         manager.update(&mut model, Message::InvokeCommand(CommandId("quit")));
         assert_eq!(model.running_state, RunningState::Done);
     }

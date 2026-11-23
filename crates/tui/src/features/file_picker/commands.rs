@@ -108,7 +108,7 @@ mod tests {
         let Some(Effect::OpenDocument(request)) = effect else {
             panic!("expected an open-document effect");
         };
-        let effect = manager.update(model, Message::FileOpened(request.perform()));
+        let effect = manager.update(model, Message::completion(request.perform()));
         if let Some(effect) = effect {
             apply(model, manager, effect);
         }
@@ -158,7 +158,7 @@ mod tests {
             Message::InvokeCommand(CommandId("open_file_picker")),
         );
 
-        manager.update(&mut model, Message::FileOpened(completion));
+        manager.update(&mut model, Message::completion(completion));
 
         assert_eq!(model.file_picker.visibility, Visibility::Displayed);
         assert_eq!(model.current_focus, FocusTarget::FilePicker);

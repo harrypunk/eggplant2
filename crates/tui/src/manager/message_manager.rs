@@ -3,10 +3,7 @@ use editor::DocumentFactory;
 use crate::{
     buffer,
     command_menu::CommandMenuOutcome,
-    data_object::{CommandId, Message, Model, StatusMessage, Visibility},
-    document,
-    explorer::ExplorerEntryKind,
-    file_picker, focus, lifecycle,
+    data_object::{Message, Model, StatusMessage},
     manager::{
         command_registry::{CommandHandler, CommandRegistry},
         effect::Effect,
@@ -51,11 +48,6 @@ impl MessageManager {
             Message::InvokeCommand(id) => return self.invoke_command(model, id),
             Message::FeatureCompletion(completion) => return completion.update(model),
             Message::TextInput(event) => return self.text_input.handle(model, event),
-            Message::SaveFinished(completion) => {
-                return Self::finish_save(model, completion);
-            }
-            Message::OpenSelected => return self.open_selected(model),
-            Message::FileOpened(completion) => return Self::finish_open_file(model, completion),
             Message::FocusLost => return buffer::save_active(model),
             Message::ExternalFileChanged { path, kind } => {
                 return crate::external_sync::file_changed(model, &path, kind);
@@ -79,87 +71,15 @@ impl MessageManager {
                 StatusMessage::error(format!("unknown command `{}`", id.as_str())),
             ));
         };
-        if Self::lifecycle_blocked_by_commit(model, id) {
-            return Some(crate::notifications::report_rejection(
-                model,
-                "Commit in progress; try again after it finishes",
-            ));
-        }
         match &command.handler {
             CommandHandler::Message(message) => self.update(model, message()),
             CommandHandler::Feature(handler) => handler(model, id),
+            CommandHandler::Document(handler) => handler(&self.documents, model),
             CommandHandler::Dispatch(selector) => match selector(model) {
                 Some(target) => self.invoke_command(model, target),
                 None => None,
             },
         }
-    }
-
-    fn lifecycle_blocked_by_commit(model: &Model, id: CommandId) -> bool {
-        const LIFECYCLE_COMMANDS: [&str; 5] = [
-            "quit",
-            "close_buffer",
-            "close_other_buffers",
-            "close_buffers_right",
-            "close_all_buffers",
-        ];
-
-        model.vcs.commit.is_in_progress() && LIFECYCLE_COMMANDS.contains(&id.as_str())
-    }
-
-    fn open_selected(&self, model: &mut Model) -> Option<Effect> {
-        let entry = model.explorer.selected_entry()?;
-        let path = entry.path.clone();
-        match entry.kind {
-            ExplorerEntryKind::File | ExplorerEntryKind::Link | ExplorerEntryKind::Other => {
-                document::open_file(&self.documents, model, &path)
-            }
-            ExplorerEntryKind::Directory => crate::explorer::handle_command(
-                model,
-                crate::data_object::CommandId("explorer_unfold"),
-            ),
-        }
-    }
-
-    fn finish_save(model: &mut Model, completion: editor::SaveCompletion) -> Option<Effect> {
-        match lifecycle::complete_save(model, completion) {
-            lifecycle::SaveOutcome::Saved(buffer_id) => {
-                if model.vcs.commit.is_waiting_for_save() {
-                    crate::vcs::commit::continue_after_save(model)
-                } else {
-                    let continuation = lifecycle::continue_save(model, buffer_id);
-                    Effect::combine(continuation, crate::external_sync::save_completed(model))
-                }
-            }
-            lifecycle::SaveOutcome::Failed(error) => {
-                lifecycle::save_failed(model, &error);
-                crate::vcs::commit::save_failed(model, &error);
-                None
-            }
-        }
-    }
-
-    fn finish_open_file(
-        model: &mut Model,
-        completion: document::OpenFileCompletion,
-    ) -> Option<Effect> {
-        let opened = document::finish_open_file(model, completion)?;
-        let reconcile = crate::manager::input_context::input_context(model) == opened.context
-            && match opened.origin {
-                document::OpenOrigin::FilePicker { session } => {
-                    model.file_picker.visibility == Visibility::Displayed
-                        && model.file_picker.session_revision() == session
-                }
-                document::OpenOrigin::Other => true,
-            };
-        if reconcile {
-            if let document::OpenOrigin::FilePicker { .. } = opened.origin {
-                file_picker::close(model);
-            }
-            focus::focus_editor(model);
-        }
-        let follow_up = Effect::combine(opened.effect, crate::vcs::sync_active_buffer(model));
-        Effect::combine(follow_up, crate::code_navigation::synchronize(model))
     }
 }
 
@@ -170,7 +90,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        data_object::{CommandId, Context, FocusTarget, RunningState, StatusKind},
+        data_object::{CommandId, Context, FocusTarget, RunningState, StatusKind, Visibility},
         startup::initial_model,
         test_utils::{create_buffer, open_file},
     };
@@ -186,7 +106,7 @@ mod tests {
         let Some(Effect::OpenDocument(request)) = effect else {
             panic!("expected an open-document effect");
         };
-        manager.update(model, Message::FileOpened(request.perform()));
+        manager.update(model, Message::completion(request.perform()));
     }
 
     #[test]
@@ -195,7 +115,10 @@ mod tests {
         std::fs::write(directory.path().join("note.txt"), "hello").unwrap();
         let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
         let manager = MessageManager::default();
-        let completion = match manager.update(&mut model, Message::OpenSelected) {
+        let completion = match manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("open_selected")),
+        ) {
             Some(Effect::OpenDocument(request)) => request.perform(),
             _ => panic!("expected an open-document effect"),
         };
@@ -205,7 +128,7 @@ mod tests {
             Message::InvokeCommand(CommandId("open_file_picker")),
         );
         assert_eq!(model.current_focus, FocusTarget::FilePicker);
-        manager.update(&mut model, Message::FileOpened(completion));
+        manager.update(&mut model, Message::completion(completion));
 
         assert_eq!(model.file_picker.visibility, Visibility::Displayed);
         assert_eq!(model.current_focus, FocusTarget::FilePicker);
@@ -222,7 +145,10 @@ mod tests {
         let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
         let manager = MessageManager::default();
 
-        let effect = manager.update(&mut model, Message::OpenSelected);
+        let effect = manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("open_selected")),
+        );
         complete_open(&mut model, &manager, effect);
         let first = model.editor.active_buffer().unwrap();
         assert_eq!(
@@ -240,7 +166,7 @@ mod tests {
             Message::InvokeCommand(CommandId("exit_insert_mode")),
         ));
         let completion = request.perform().await;
-        manager.update(&mut model, Message::SaveFinished(completion));
+        manager.update(&mut model, Message::completion(completion));
         assert_eq!(std::fs::read_to_string(&first_path).unwrap(), "Afirst");
 
         manager.update(&mut model, Message::InvokeCommand(CommandId("focus_left")));
@@ -248,7 +174,10 @@ mod tests {
             &mut model,
             Message::InvokeCommand(CommandId("explorer_next")),
         );
-        let effect = manager.update(&mut model, Message::OpenSelected);
+        let effect = manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("open_selected")),
+        );
         complete_open(&mut model, &manager, effect);
         let second = model.editor.active_buffer().unwrap();
         assert_ne!(first, second);
@@ -277,7 +206,7 @@ mod tests {
         assert_eq!(model.running_state, RunningState::Running);
         assert!(model.editor.has_saving_buffers());
         let completion = request.perform().await;
-        manager.update(&mut model, Message::SaveFinished(completion));
+        manager.update(&mut model, Message::completion(completion));
 
         assert_eq!(model.running_state, RunningState::Done);
         assert!(!model.editor.has_saving_buffers());
@@ -301,8 +230,7 @@ mod tests {
         model.editor.enter_normal_mode();
         let completion = model.editor.save_buffer(id).unwrap().perform().await;
 
-        let effect =
-            MessageManager::default().update(&mut model, Message::SaveFinished(completion));
+        let effect = MessageManager::default().update(&mut model, Message::completion(completion));
 
         assert!(matches!(effect, Some(Effect::Feature(_))));
     }
@@ -343,7 +271,7 @@ mod tests {
 
         let request = expect_save(manager.update(&mut model, Message::FocusLost));
         let completion = request.perform().await;
-        manager.update(&mut model, Message::SaveFinished(completion));
+        manager.update(&mut model, Message::completion(completion));
 
         assert_eq!(model.editor.mode(), EditMode::Insert);
         assert_eq!(std::fs::read_to_string(path).unwrap(), "!hello");
@@ -363,7 +291,10 @@ mod tests {
             Message::InvokeCommand(CommandId("explorer_next")),
         );
         assert_eq!(model.explorer.selected, Some(1));
-        let effect = manager.update(&mut model, Message::OpenSelected);
+        let effect = manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("open_selected")),
+        );
         complete_open(&mut model, &manager, effect);
 
         assert_eq!(model.editor.buffer_count(), 1);
@@ -390,7 +321,10 @@ mod tests {
         assert_eq!(model.explorer.visibility, Visibility::Displayed);
         assert_eq!(model.current_focus, FocusTarget::FileExplorer);
         assert!(model.context_stack.is_empty());
-        let effect = manager.update(&mut model, Message::OpenSelected);
+        let effect = manager.update(
+            &mut model,
+            Message::InvokeCommand(CommandId("open_selected")),
+        );
         complete_open(&mut model, &manager, effect);
         assert_eq!(model.editor.buffer_count(), 1);
         assert_eq!(model.current_focus, FocusTarget::Editor);

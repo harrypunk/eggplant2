@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use color_eyre::eyre::eyre;
+use editor::DocumentFactory;
 
 pub use crate::data_object::CommandId;
 use crate::{
@@ -10,12 +11,15 @@ use crate::{
 };
 
 pub type FeatureHandler = fn(&mut Model, CommandId) -> Option<Effect>;
+pub type DocumentHandler = fn(&DocumentFactory, &mut Model) -> Option<Effect>;
 pub type CommandSelector = fn(&Model) -> Option<CommandId>;
 
 #[derive(Debug, Clone)]
 pub enum CommandHandler {
     Message(fn() -> Message),
     Feature(FeatureHandler),
+    /// Invoke a command that needs the shared document-opening capability.
+    Document(DocumentHandler),
     /// Resolve a data-driven command target, then use the normal dispatch path.
     Dispatch(CommandSelector),
 }
@@ -43,6 +47,14 @@ impl Command {
             id,
             description,
             handler: CommandHandler::Feature(handler),
+        }
+    }
+
+    pub fn document(id: CommandId, description: &'static str, handler: DocumentHandler) -> Self {
+        Self {
+            id,
+            description,
+            handler: CommandHandler::Document(handler),
         }
     }
 
@@ -307,9 +319,11 @@ fn builtin_commands() -> impl IntoIterator<Item = Command> {
             "previous entry",
             crate::explorer::handle_command,
         ),
-        Command::new(CommandId("open_selected"), "open selected", || {
-            Message::OpenSelected
-        }),
+        Command::document(
+            CommandId("open_selected"),
+            "open selected",
+            crate::explorer::open_selected,
+        ),
         Command::feature(
             CommandId("explorer_fold"),
             "fold folder",

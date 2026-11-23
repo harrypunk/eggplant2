@@ -12,7 +12,7 @@ mod work;
 
 pub(crate) use add::{handle_input as handle_add_input, overlay as add_overlay};
 pub use commands::handle_command;
-pub(crate) use commands::refresh_changed;
+pub(crate) use commands::{open_selected, refresh_changed};
 pub(crate) use delete::overlay as delete_overlay;
 pub(crate) use help::overlay as help_overlay;
 pub(crate) use state::TreeChange;

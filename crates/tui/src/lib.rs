@@ -35,7 +35,7 @@ pub mod data_object {
     };
 
     use app::language::{LanguageServerRegistry, LanguageServers};
-    use editor::{BufferId, DocumentPosition, EditorSession, SaveCompletion};
+    use editor::{BufferId, DocumentPosition, EditorSession};
 
     use crate::manager::effect::FeatureCompletion;
 
@@ -390,16 +390,20 @@ pub mod data_object {
         InvokeCommand(CommandId),
         FeatureCompletion(FeatureCompletion),
         TextInput(crate::component::text_input::TextInputEvent),
-        SaveFinished(SaveCompletion),
-        FileOpened(crate::document::OpenFileCompletion),
         FocusLost,
         ExternalFileChanged {
             path: PathBuf,
             kind: crate::external_sync::ExternalChangeKind,
         },
         Resize(u16, u16),
-        OpenSelected,
         GotoBuffer(usize),
+    }
+
+    impl Message {
+        /// Route a typed worker result to its owning feature's completion handler.
+        pub fn completion(completion: impl crate::manager::effect::Completion) -> Self {
+            Self::FeatureCompletion(FeatureCompletion::new(completion))
+        }
     }
 
     /// Input-routing identity for a transient workflow or derived shell surface.
