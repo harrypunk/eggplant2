@@ -59,12 +59,6 @@ pub enum AgentDialogState {
     Suspended,
 }
 
-#[derive(Debug, Clone)]
-struct SuspendedRun {
-    run_id: RunId,
-    continuation: AgentContinuation,
-}
-
 #[derive(Debug)]
 pub struct AgentState {
     session: AgentSession,
@@ -74,13 +68,10 @@ pub struct AgentState {
     help_visible: bool,
     context: Option<EditorContext>,
     provider: Option<Arc<dyn AgentProvider>>,
-    active_cancellation: Option<CancellationToken>,
-    suspended: Option<SuspendedRun>,
+    run: Option<run::AgentRunState>,
     store: Arc<dyn SessionStore>,
     storage_error: Option<String>,
     session_created_at: Option<i64>,
-    run_started_at: Option<(RunId, i64)>,
-    run_context: Option<(RunId, EditorContext)>,
     provider_name: String,
     model: Option<String>,
 }
@@ -95,13 +86,10 @@ impl Default for AgentState {
             help_visible: false,
             context: None,
             provider: None,
-            active_cancellation: None,
-            suspended: None,
+            run: None,
             store: Arc::new(eggplant_agent_storage::InMemoryStore::new()),
             storage_error: None,
             session_created_at: None,
-            run_started_at: None,
-            run_context: None,
             provider_name: "fake".to_string(),
             model: None,
         }
@@ -223,8 +211,7 @@ impl AgentState {
         self.prompt.complete_submission();
         let now = chrono::Utc::now().timestamp_millis();
         self.session_created_at.get_or_insert(now);
-        self.run_started_at = Some((run_id, now));
-        self.run_context = self.context.clone().map(|context| (run_id, context));
+        self.run = Some(run::AgentRunState::new(run_id, now, self.context.clone()));
         Some(run_id)
     }
 
@@ -259,16 +246,11 @@ impl AgentState {
     }
 
     fn run_started_at(&self, run_id: RunId) -> Option<i64> {
-        self.run_started_at
-            .filter(|(id, _)| *id == run_id)
-            .map(|(_, started)| started)
+        self.run.as_ref().and_then(|run| run.started_at(run_id))
     }
 
     fn run_context(&self, run_id: RunId) -> Option<&EditorContext> {
-        self.run_context
-            .as_ref()
-            .filter(|(id, _)| *id == run_id)
-            .map(|(_, context)| context)
+        self.run.as_ref().and_then(|run| run.editor_context(run_id))
     }
 
     fn complete_storage(
@@ -287,35 +269,34 @@ impl AgentState {
     }
 
     pub fn begin_cancellation(&mut self) -> CancellationToken {
-        let cancellation = CancellationToken::default();
-        self.active_cancellation = Some(cancellation.clone());
-        cancellation
+        self.run
+            .as_ref()
+            .map(|run| run.cancellation())
+            .unwrap_or_default()
     }
 
     pub fn cancel_active(&self) {
-        if let Some(cancellation) = &self.active_cancellation {
-            cancellation.cancel();
+        if let Some(run) = &self.run {
+            run.cancel();
         }
     }
 
     fn suspend(&mut self, run_id: RunId, continuation: AgentContinuation) {
-        self.suspended = Some(SuspendedRun {
-            run_id,
-            continuation,
-        });
+        if let Some(run) = &mut self.run {
+            run.suspend(run_id, continuation);
+        }
     }
 
     fn take_suspension(&mut self, run_id: RunId) -> Option<AgentContinuation> {
-        self.suspended
-            .as_ref()
-            .is_some_and(|suspended| suspended.run_id == run_id)
-            .then_some(())
-            .and_then(|_| self.suspended.take())
-            .map(|suspended| suspended.continuation)
+        self.run
+            .as_mut()
+            .and_then(|run| run.take_suspension(run_id))
     }
 
     fn clear_suspension(&mut self) {
-        self.suspended = None;
+        if let Some(run) = &mut self.run {
+            run.clear_suspension();
+        }
     }
 }
 

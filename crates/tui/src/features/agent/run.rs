@@ -5,8 +5,68 @@ use eggplant_agent::{
     RunId, ToolApproval, ToolResult, ToolResultStatus,
 };
 
-use super::tools::ToolContext;
+use super::{EditorContext, tools::ToolContext};
 use crate::manager::effect::{FeatureCompletion, FeatureEffect};
+
+/// Identity and lifecycle data owned by one foreground provider run.
+#[derive(Debug)]
+pub(crate) struct AgentRunState {
+    id: RunId,
+    started_at: i64,
+    editor_context: Option<EditorContext>,
+    cancellation: CancellationToken,
+    suspension: Option<AgentContinuation>,
+}
+
+impl AgentRunState {
+    pub(crate) fn new(id: RunId, started_at: i64, editor_context: Option<EditorContext>) -> Self {
+        Self {
+            id,
+            started_at,
+            editor_context,
+            cancellation: CancellationToken::default(),
+            suspension: None,
+        }
+    }
+
+    fn matches(&self, run_id: RunId) -> bool {
+        self.id == run_id
+    }
+
+    pub(crate) fn started_at(&self, run_id: RunId) -> Option<i64> {
+        self.matches(run_id).then_some(self.started_at)
+    }
+
+    pub(crate) fn editor_context(&self, run_id: RunId) -> Option<&EditorContext> {
+        self.matches(run_id)
+            .then_some(self.editor_context.as_ref())
+            .flatten()
+    }
+
+    pub(crate) fn cancellation(&self) -> CancellationToken {
+        self.cancellation.clone()
+    }
+
+    pub(crate) fn cancel(&self) {
+        self.cancellation.cancel();
+    }
+
+    pub(crate) fn suspend(&mut self, run_id: RunId, continuation: AgentContinuation) {
+        if self.matches(run_id) {
+            self.suspension = Some(continuation);
+        }
+    }
+
+    pub(crate) fn take_suspension(&mut self, run_id: RunId) -> Option<AgentContinuation> {
+        self.matches(run_id)
+            .then_some(self.suspension.take())
+            .flatten()
+    }
+
+    pub(crate) fn clear_suspension(&mut self) {
+        self.suspension = None;
+    }
+}
 
 pub(crate) struct FakeAgentRun {
     pub(crate) run_id: RunId,

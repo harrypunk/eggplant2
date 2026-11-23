@@ -194,15 +194,15 @@ mod tests {
         let run = model.agent.begin_prompt().unwrap();
         model.agent.session_mut().complete(run);
         let created = model.agent.session_created_at;
-        let started = model.agent.run_started_at;
+        let started = model.agent.run_started_at(run);
 
         let record = finalized_run(&model, 123).unwrap();
 
         assert_eq!(record.session.created_at, created.unwrap());
-        assert_eq!(record.run.created_at, started.unwrap().1);
+        assert_eq!(record.run.created_at, started.unwrap());
         assert_eq!(record.run.completed_at, Some(123));
         assert_eq!(model.agent.session_created_at, created);
-        assert_eq!(model.agent.run_started_at, started);
+        assert_eq!(model.agent.run_started_at(run), started);
     }
 
     #[test]
