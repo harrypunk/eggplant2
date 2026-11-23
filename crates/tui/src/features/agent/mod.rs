@@ -1,5 +1,8 @@
 mod approval;
+mod commands;
 mod context;
+mod dialog;
+mod panel;
 mod prompt;
 mod prompt_command;
 mod run;
@@ -10,11 +13,11 @@ mod ui;
 mod work;
 mod write;
 
+pub use commands::{handle_command, register_commands, register_text_input};
+pub(crate) use panel::{close_panel_input, focus_panel_input};
 pub(crate) use prompt_command::{PromptCommand, PromptCommandMovement, PromptCommandState};
 pub use ui::register_ui;
 pub(crate) use ui::render_panel;
-pub(crate) use work::{close_panel_input, focus_panel_input};
-pub use work::{handle_command, register_commands, register_text_input};
 
 use crate::component::text_input::{TextInput, TextInputEvent};
 use editor::BufferId;

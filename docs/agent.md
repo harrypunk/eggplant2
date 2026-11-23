@@ -131,6 +131,8 @@ Context is a point-in-time snapshot, not authority to edit. A later mutation mus
 
 ## Runtime boundaries
 
+`commands.rs` owns the typed `AgentCommand` catalog, registration, and dispatch. `dialog.rs` owns inline open/close and `path:line` prefill; `panel.rs` owns focus, Normal/Insert, and help. `context.rs` captures editor/workspace inputs, `approval.rs` owns write resolution, and `run.rs` owns provider/tool execution without `Model`. `work.rs` retains submission, interruption, and completion application rather than becoming a second command registry.
+
 The intended ownership is:
 
 | Module | Responsibility |

@@ -1,249 +1,12 @@
 use eggplant_agent::{AgentEvent, ToolResult, ToolResultStatus};
 
-use super::{AgentContextProvider, EditorContext};
+use super::AgentContextProvider;
 use crate::{
-    component::text_input::TextInputEvent,
-    data_object::{CommandId, Context, Model, StatusMessage, Visibility},
-    manager::{
-        command_registry::{Command, CommandRegistry},
-        effect::{Completion, Effect},
-        input_context::input_context,
-        text_input_registry::TextInputRegistry,
-    },
-    tools::ToolKind,
+    data_object::{Model, StatusMessage},
+    manager::effect::{Completion, Effect},
 };
 
-pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<()> {
-    [
-        Command::feature(CommandId("agent_open"), "open AI agent", handle_command),
-        Command::feature(CommandId("agent_close"), "hide AI agent", handle_command),
-        Command::feature(
-            CommandId("agent_submit"),
-            "submit agent prompt",
-            handle_command,
-        ),
-        Command::feature(
-            CommandId("agent_backspace"),
-            "delete agent prompt character",
-            handle_command,
-        ),
-        Command::feature(
-            CommandId("agent_interrupt"),
-            "interrupt agent run",
-            handle_command,
-        ),
-        Command::feature(
-            CommandId("agent_approve"),
-            "approve agent write",
-            handle_command,
-        ),
-        Command::feature(
-            CommandId("agent_reject"),
-            "reject agent write",
-            handle_command,
-        ),
-        Command::feature(
-            CommandId("agent_toggle_panel"),
-            "toggle agent tool panel",
-            handle_command,
-        ),
-        Command::feature(
-            CommandId("agent_panel_close"),
-            "leave agent panel input",
-            handle_command,
-        ),
-        Command::feature(
-            CommandId("agent_insert"),
-            "enter agent insert mode",
-            handle_command,
-        ),
-        Command::feature(
-            CommandId("agent_panel_normal"),
-            "return to agent normal mode",
-            handle_command,
-        ),
-        Command::feature(CommandId("agent_help"), "toggle agent help", handle_command),
-        Command::feature(
-            CommandId("agent_command_next"),
-            "select next agent command",
-            handle_command,
-        ),
-        Command::feature(
-            CommandId("agent_command_previous"),
-            "select previous agent command",
-            handle_command,
-        ),
-        Command::feature(
-            CommandId("agent_command_quick_fill"),
-            "quick fill agent command",
-            handle_command,
-        ),
-    ]
-    .into_iter()
-    .try_for_each(|command| commands.register(command))
-}
-
-pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
-    input.register_with_cursor(Context::AgentChatDialog, handle_input)?;
-    input.register_with_cursor(Context::AgentChatInsert, handle_input)
-}
-
-fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
-    if !matches!(
-        input_context(model),
-        Some(Context::AgentChatDialog | Context::AgentChatInsert)
-    ) {
-        return None;
-    }
-    model.agent.handle_input_event(event);
-    None
-}
-
-pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    match id.as_str() {
-        "agent_open" => open(model),
-        "agent_close" => close(model),
-        "agent_submit" => submit(model),
-        "agent_backspace" => backspace(model),
-        "agent_interrupt" => interrupt(model),
-        "agent_approve" => super::approval::approve_write(model),
-        "agent_reject" => super::approval::reject_write(model),
-        "agent_toggle_panel" => toggle_panel(model),
-        "agent_panel_close" => {
-            close_panel_input(model);
-            None
-        }
-        "agent_insert" => enter_insert_mode(model),
-        "agent_panel_normal" => {
-            if model.agent.help_visible() {
-                close_help(model)
-            } else {
-                enter_normal_mode(model)
-            }
-        }
-        "agent_help" => toggle_help(model),
-        "agent_command_next" => {
-            model
-                .agent
-                .quick_fill_prompt_command(super::PromptCommandMovement::Next);
-            None
-        }
-        "agent_command_previous" => {
-            model
-                .agent
-                .quick_fill_prompt_command(super::PromptCommandMovement::Previous);
-            None
-        }
-        "agent_command_quick_fill" => {
-            model
-                .agent
-                .quick_fill_prompt_command(super::PromptCommandMovement::Current);
-            None
-        }
-        _ => None,
-    }
-}
-
-fn open(model: &mut Model) -> Option<Effect> {
-    if model.agent.dialog_open() {
-        return None;
-    }
-    let context = match model.agent_context() {
-        Ok(context) => context,
-        Err(message) => return notify(model, message),
-    };
-    let input_context = match model.agent.session().pending_approval() {
-        Some(_) => Context::AgentApproval,
-        None => Context::AgentChatDialog,
-    };
-    if !model.modal.open(input_context) {
-        return None;
-    }
-    let label = prompt_label(model, &context);
-    model.agent.open_dialog(context, label);
-    model.context_stack.push(input_context);
-    None
-}
-
-fn prompt_label(model: &Model, context: &EditorContext) -> String {
-    let relative = model
-        .workspace
-        .as_ref()
-        .and_then(|workspace| context.path.strip_prefix(workspace.root()).ok())
-        .unwrap_or(&context.path);
-    format!("{}:{}", relative.display(), context.line)
-}
-
-pub(crate) fn focus_panel_input(model: &mut Model) -> Option<Effect> {
-    if model.tools.visibility != Visibility::Displayed
-        || model.tools.active_tool != Some(ToolKind::Agent)
-    {
-        return None;
-    }
-    if model.workspace.is_none() {
-        return notify(model, "Open a project to use the agent".to_string());
-    }
-    close_help(model);
-    model.agent.prepare_panel_prompt();
-    model.current_focus = crate::data_object::FocusTarget::ToolsPanel;
-    None
-}
-
-fn enter_insert_mode(model: &mut Model) -> Option<Effect> {
-    if input_context(model) == Some(Context::AgentChat) {
-        model.agent.enter_insert_mode();
-    }
-    None
-}
-
-fn enter_normal_mode(model: &mut Model) -> Option<Effect> {
-    model.agent.enter_normal_mode();
-    None
-}
-
-fn toggle_help(model: &mut Model) -> Option<Effect> {
-    if model.agent.help_visible() {
-        return close_help(model);
-    }
-    if input_context(model) != Some(Context::AgentChat) || !model.modal.open(Context::AgentChatHelp)
-    {
-        return None;
-    }
-    model.agent.toggle_help();
-    model.context_stack.push(Context::AgentChatHelp);
-    None
-}
-
-fn close_help(model: &mut Model) -> Option<Effect> {
-    model.agent.close_help();
-    model.modal.close(Context::AgentChatHelp);
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::AgentChatHelp);
-    None
-}
-
-pub(crate) fn close_panel_input(model: &mut Model) {
-    close_help(model);
-    model.agent.prepare_panel_prompt();
-    crate::focus::focus_editor(model);
-}
-
-fn close(model: &mut Model) -> Option<Effect> {
-    if !model.agent.dialog_open() {
-        return None;
-    }
-    model.agent.close_dialog();
-    [Context::AgentChatDialog, Context::AgentApproval]
-        .into_iter()
-        .for_each(|context| {
-            model.modal.close(context);
-            model.context_stack.pop_if(|active| active == &context);
-        });
-    None
-}
-
-fn submit(model: &mut Model) -> Option<Effect> {
+pub(crate) fn submit(model: &mut Model) -> Option<Effect> {
     let surface = super::surface::active(model)?;
     if model.agent.prompt().starts_with('/') {
         let command = model.agent.command_state().selected()?;
@@ -294,12 +57,12 @@ fn execute_prompt_command(model: &mut Model, command: super::PromptCommand) -> O
     }
 }
 
-fn backspace(model: &mut Model) -> Option<Effect> {
+pub(crate) fn backspace(model: &mut Model) -> Option<Effect> {
     model.agent.backspace();
     None
 }
 
-fn interrupt(model: &mut Model) -> Option<Effect> {
+pub(crate) fn interrupt(model: &mut Model) -> Option<Effect> {
     let pending = model.agent.session().pending_approval().cloned();
     let run_id = model.agent.session().run().map(|run| run.id);
     model.agent.cancel_active();
@@ -326,23 +89,7 @@ fn interrupt(model: &mut Model) -> Option<Effect> {
     super::storage::persist_finalized(model)
 }
 
-fn toggle_panel(model: &mut Model) -> Option<Effect> {
-    if model.tools.visibility == Visibility::Displayed
-        && model.tools.active_tool == Some(ToolKind::Agent)
-    {
-        model.tools.visibility = Visibility::Hidden;
-        if model.current_focus == crate::data_object::FocusTarget::ToolsPanel {
-            close_panel_input(model);
-        }
-    } else {
-        model.tools.active_tool = Some(ToolKind::Agent);
-        model.tools.visibility = Visibility::Displayed;
-        return focus_panel_input(model);
-    }
-    None
-}
-
-fn notify(model: &mut Model, message: String) -> Option<Effect> {
+pub(crate) fn notify(model: &mut Model, message: String) -> Option<Effect> {
     Some(crate::notifications::publish_status(
         model,
         StatusMessage::info(message),
@@ -408,7 +155,20 @@ mod tests {
     use super::*;
     use crate::agent::approval::{approve_write, reject_write};
     use crate::{
-        manager::message_manager::MessageManager, startup::initial_model, test_utils::open_file,
+        agent::{
+            commands::{handle_command, handle_input},
+            dialog::{close, open},
+            panel::{
+                close_panel_input, enter_insert_mode, enter_normal_mode, focus_panel_input,
+                toggle_help, toggle_panel,
+            },
+        },
+        component::text_input::TextInputEvent,
+        data_object::{CommandId, Context, Visibility},
+        manager::{input_context::input_context, message_manager::MessageManager},
+        startup::initial_model,
+        test_utils::open_file,
+        tools::ToolKind,
     };
 
     fn perform(manager: &MessageManager, model: &mut Model, effect: Effect) -> Option<Effect> {
