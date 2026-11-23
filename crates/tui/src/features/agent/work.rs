@@ -15,6 +15,7 @@ use crate::{
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
+        input_context::input_context,
         text_input_registry::TextInputRegistry,
     },
     tools::ToolKind,
@@ -78,14 +79,14 @@ pub fn register_commands(commands: &mut CommandRegistry) -> color_eyre::Result<(
 
 pub fn register_text_input(input: &mut TextInputRegistry) -> color_eyre::Result<()> {
     input.register_with_cursor(Context::AgentChatDialog, handle_input)?;
-    input.register_with_cursor(Context::AgentChat, handle_input)?;
     input.register_with_cursor(Context::AgentChatInsert, handle_input)
 }
 
 fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
-    if model.context_stack.last() == Some(&Context::AgentChat)
-        && model.agent.panel_mode() == super::AgentInputMode::Normal
-    {
+    if !matches!(
+        input_context(model),
+        Some(Context::AgentChatDialog | Context::AgentChatInsert)
+    ) {
         return None;
     }
     model.agent.handle_input_event(event);
@@ -166,28 +167,18 @@ pub(crate) fn focus_panel_input(model: &mut Model) -> Option<Effect> {
     close_help(model);
     model.agent.prepare_panel_prompt();
     model.current_focus = crate::data_object::FocusTarget::ToolsPanel;
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::AgentChatInsert);
-    if model.context_stack.last() != Some(&Context::AgentChat) {
-        model.context_stack.push(Context::AgentChat);
-    }
     None
 }
 
 fn enter_insert_mode(model: &mut Model) -> Option<Effect> {
-    if model.context_stack.last() == Some(&Context::AgentChat) {
+    if input_context(model) == Some(Context::AgentChat) {
         model.agent.enter_insert_mode();
-        model.context_stack.push(Context::AgentChatInsert);
     }
     None
 }
 
 fn enter_normal_mode(model: &mut Model) -> Option<Effect> {
     model.agent.enter_normal_mode();
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::AgentChatInsert);
     None
 }
 
@@ -195,9 +186,7 @@ fn toggle_help(model: &mut Model) -> Option<Effect> {
     if model.agent.help_visible() {
         return close_help(model);
     }
-    if model.context_stack.last() != Some(&Context::AgentChat)
-        || model.agent.panel_mode() != super::AgentInputMode::Normal
-        || !model.modal.open(Context::AgentChatHelp)
+    if input_context(model) != Some(Context::AgentChat) || !model.modal.open(Context::AgentChatHelp)
     {
         return None;
     }
@@ -217,12 +206,6 @@ fn close_help(model: &mut Model) -> Option<Effect> {
 
 pub(crate) fn close_panel_input(model: &mut Model) {
     close_help(model);
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::AgentChatInsert);
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::AgentChat);
     model.agent.prepare_panel_prompt();
     crate::focus::focus_editor(model);
 }
@@ -262,7 +245,7 @@ fn transition_modal(model: &mut Model, from: Context, to: Context) {
 
 fn submit(model: &mut Model) -> Option<Effect> {
     let panel_input = matches!(
-        model.context_stack.last(),
+        input_context(model),
         Some(Context::AgentChat | Context::AgentChatInsert)
     ) && model.tools.active_tool == Some(ToolKind::Agent);
     if !model.agent.dialog_open() && !panel_input {
@@ -969,10 +952,10 @@ mod tests {
             model.current_focus,
             crate::data_object::FocusTarget::ToolsPanel
         );
-        assert_eq!(model.context_stack.last(), Some(&Context::AgentChat));
+        assert_eq!(input_context(&model), Some(Context::AgentChat));
         assert_eq!(model.agent.prompt(), "");
         enter_insert_mode(&mut model);
-        assert_eq!(model.context_stack.last(), Some(&Context::AgentChatInsert));
+        assert_eq!(input_context(&model), Some(Context::AgentChatInsert));
         handle_input(&mut model, TextInputEvent::Character('?'));
         assert_eq!(model.agent.prompt(), "?");
 
@@ -995,10 +978,10 @@ mod tests {
             model.current_focus,
             crate::data_object::FocusTarget::ToolsPanel
         );
-        assert_eq!(model.context_stack.last(), Some(&Context::AgentChat));
+        assert_eq!(input_context(&model), Some(Context::AgentChat));
         close_panel_input(&mut model);
         assert_eq!(model.current_focus, crate::data_object::FocusTarget::Editor);
-        assert_ne!(model.context_stack.last(), Some(&Context::AgentChat));
+        assert_ne!(input_context(&model), Some(Context::AgentChat));
     }
 
     #[test]
@@ -1007,7 +990,9 @@ mod tests {
             current_focus: crate::data_object::FocusTarget::ToolsPanel,
             ..Model::default()
         };
-        model.context_stack.push(Context::AgentChat);
+        model.context_stack.push(Context::AppNormal);
+        model.tools.active_tool = Some(ToolKind::Agent);
+        model.tools.visibility = Visibility::Displayed;
 
         toggle_help(&mut model);
         assert!(model.agent.help_visible());
@@ -1021,7 +1006,7 @@ mod tests {
         toggle_help(&mut model);
         assert!(!model.agent.help_visible());
         assert!(!model.modal.is_active(Context::AgentChatHelp));
-        assert_eq!(model.context_stack.last(), Some(&Context::AgentChat));
+        assert_eq!(input_context(&model), Some(Context::AgentChat));
         assert_eq!(
             model.current_focus,
             crate::data_object::FocusTarget::ToolsPanel
@@ -1043,7 +1028,7 @@ mod tests {
         model.tools.visibility = Visibility::Displayed;
 
         focus_panel_input(&mut model);
-        assert_eq!(model.context_stack.last(), Some(&Context::AgentChat));
+        assert_eq!(input_context(&model), Some(Context::AgentChat));
         handle_input(&mut model, TextInputEvent::Character('x'));
         assert_eq!(model.agent.prompt(), "");
         enter_insert_mode(&mut model);
@@ -1167,10 +1152,10 @@ mod tests {
             model.current_focus,
             crate::data_object::FocusTarget::ToolsPanel
         );
-        assert_eq!(model.context_stack.last(), Some(&Context::AgentChat));
+        assert_eq!(input_context(&model), Some(Context::AgentChat));
         toggle_panel(&mut model);
         assert_eq!(model.current_focus, crate::data_object::FocusTarget::Editor);
-        assert_ne!(model.context_stack.last(), Some(&Context::AgentChat));
+        assert_ne!(input_context(&model), Some(Context::AgentChat));
 
         open(&mut model);
         assert_eq!(model.agent.prompt(), "main.rs:1");

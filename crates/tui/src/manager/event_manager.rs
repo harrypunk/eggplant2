@@ -542,7 +542,10 @@ mod tests {
     fn routes_agent_panel_input_keys() {
         let manager = event_manager();
         let mut model = Model::default();
-        model.context_stack.push(Context::AgentChat);
+        model.context_stack.push(Context::AppNormal);
+        model.current_focus = crate::data_object::FocusTarget::ToolsPanel;
+        model.tools.active_tool = Some(crate::tools::ToolKind::Agent);
+        model.tools.visibility = crate::data_object::Visibility::Displayed;
 
         for (key, command) in [
             (KeyCode::Char('i'), "agent_insert"),
@@ -566,7 +569,7 @@ mod tests {
             ));
         }
 
-        model.context_stack.push(Context::AgentChatInsert);
+        model.agent.enter_insert_mode();
         for (key, modifiers, command) in [
             (KeyCode::Enter, KeyModifiers::NONE, "agent_submit"),
             (KeyCode::Backspace, KeyModifiers::NONE, "agent_backspace"),
@@ -591,6 +594,7 @@ mod tests {
             assert!(manager.translate(event, &model).is_none());
         }
 
+        model.agent.enter_normal_mode();
         model.context_stack.push(Context::AgentChatHelp);
         for (key, command) in [
             (KeyCode::Char('?'), "agent_help"),

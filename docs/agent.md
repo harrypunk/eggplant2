@@ -92,7 +92,7 @@ The panel and popup read the same `AgentSession`; neither owns a separate provid
 
 The inline prompt starts as `workspace/relative/path:line` and remains editable for quick file-focused questions. Empty, standalone-file, and external read-only contexts are rejected for this inline flow. The project panel instead starts with a freeform prompt and does not require an active buffer; `@path` references remain ordinary prompt text and do not implicitly attach file contents. The scripted provider used in this slice streams `Simulated response to: <prompt>`; `fail` simulates a provider failure.
 
-`AgentChatDialog` is the inline modal context. `AgentChat` is the project-panel Normal context, `AgentChatInsert` owns prompt editing, and `AgentChatHelp` owns the modal help popup.
+`AgentChatDialog` is the inline modal context. `AgentChat` and `AgentChatInsert` are derived from panel focus and `AgentInputMode`; they are not stored in the context stack. `AgentChatHelp` owns the stored modal help context.
 
 ## Session and run state
 

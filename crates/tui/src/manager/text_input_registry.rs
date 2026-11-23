@@ -5,7 +5,7 @@ use color_eyre::eyre::eyre;
 use crate::{
     component::text_input::{TextCursorMovement, TextInputEvent},
     data_object::{Context, Model},
-    manager::effect::Effect,
+    manager::{effect::Effect, input_context::input_context},
 };
 
 pub type TextInsertHandler = fn(&mut Model, char) -> Option<Effect>;
@@ -103,16 +103,16 @@ impl TextInputRegistry {
     }
 
     pub fn handle(&self, model: &mut Model, character: char) -> Option<Effect> {
-        let context = model.context_stack.last()?;
-        match self.handlers.get(context)? {
+        let context = input_context(model)?;
+        match self.handlers.get(&context)? {
             TextInputHandler::Insert(handler) => handler(model, character),
             TextInputHandler::Edit(handler) => handler(model, TextInputEvent::Character(character)),
         }
     }
 
     pub fn handle_cursor(&self, model: &mut Model, movement: TextCursorMovement) -> Option<Effect> {
-        let context = model.context_stack.last()?;
-        let TextInputHandler::Edit(handler) = self.handlers.get(context)? else {
+        let context = input_context(model)?;
+        let TextInputHandler::Edit(handler) = self.handlers.get(&context)? else {
             return None;
         };
         handler(model, TextInputEvent::Cursor(movement))
@@ -160,7 +160,6 @@ mod tests {
             Context::ExplorerAdd,
             Context::ExplorerTransfer,
             Context::AgentChatDialog,
-            Context::AgentChat,
             Context::AgentChatInsert,
             Context::VcsMerge,
             Context::VcsReset,
@@ -178,6 +177,21 @@ mod tests {
         ]
         .into_iter()
         .for_each(|context| assert!(!registry.accepts_cursor(&context), "{context:?}"));
+    }
+
+    #[test]
+    fn dispatches_to_a_derived_agent_insert_context() {
+        let registry = TextInputRegistry::builtin();
+        let mut model = Model::default();
+        model.context_stack.push(Context::AppNormal);
+        model.current_focus = crate::data_object::FocusTarget::ToolsPanel;
+        model.tools.active_tool = Some(crate::tools::ToolKind::Agent);
+        model.tools.visibility = crate::data_object::Visibility::Displayed;
+        model.agent.enter_insert_mode();
+
+        registry.handle(&mut model, 'x');
+        assert_eq!(model.agent.prompt(), "x");
+        assert_eq!(model.context_stack.last(), Some(&Context::AppNormal));
     }
 
     #[test]
