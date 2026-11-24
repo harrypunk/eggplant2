@@ -28,6 +28,8 @@ pub struct Model {
     pub provider_id: String,
     /// Credential discriminator stored as `oauth` or `api_key`.
     pub auth_type: AuthType,
+    /// Optional OpenAI-compatible endpoint or provider-specific base URL.
+    pub base_url: Option<String>,
     /// Secret used by API-key authentication.
     pub api_key: Option<String>,
     /// Short-lived bearer token used by account/OAuth authentication.
@@ -50,6 +52,7 @@ impl fmt::Debug for Model {
             .debug_struct("Model")
             .field("provider_id", &self.provider_id)
             .field("auth_type", &self.auth_type)
+            .field("base_url", &self.base_url)
             .field("api_key", &redacted(&self.api_key))
             .field("access_token", &redacted(&self.access_token))
             .field("refresh_token", &redacted(&self.refresh_token))
@@ -94,6 +97,7 @@ mod tests {
         let model = Model {
             provider_id: "openai".to_string(),
             auth_type: AuthType::OAuth,
+            base_url: None,
             api_key: Some("api-secret".to_string()),
             access_token: Some("access-secret".to_string()),
             refresh_token: Some("refresh-secret".to_string()),

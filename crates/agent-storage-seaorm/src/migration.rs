@@ -8,6 +8,7 @@ use sea_orm::{
 
 const INITIAL_MIGRATION: &str = "m20261121_000001_create_agent_storage";
 const PROVIDER_CREDENTIALS_MIGRATION: &str = "m20261124_000002_create_agent_provider_credentials";
+const PROVIDER_BASE_URL_MIGRATION: &str = "m20261124_000003_add_provider_base_url";
 
 type Migration = for<'a> fn(&'a DatabaseTransaction) -> BoxFuture<'a, Result<(), DbErr>>;
 
@@ -17,6 +18,7 @@ const MIGRATIONS: &[(&str, Migration)] = &[
         PROVIDER_CREDENTIALS_MIGRATION,
         provider_credentials_migration,
     ),
+    (PROVIDER_BASE_URL_MIGRATION, provider_base_url_migration),
 ];
 
 pub async fn migrate(db: &DatabaseConnection) -> Result<(), DbErr> {
@@ -64,6 +66,12 @@ fn provider_credentials_migration(
     transaction: &DatabaseTransaction,
 ) -> BoxFuture<'_, Result<(), DbErr>> {
     Box::pin(create_provider_credentials(transaction))
+}
+
+fn provider_base_url_migration(
+    transaction: &DatabaseTransaction,
+) -> BoxFuture<'_, Result<(), DbErr>> {
+    Box::pin(add_provider_base_url(transaction))
 }
 
 async fn create_agent_storage<C: ConnectionTrait>(db: &C) -> Result<(), DbErr> {
@@ -238,6 +246,17 @@ async fn create_provider_credentials<C: ConnectionTrait>(db: &C) -> Result<(), D
             .col(big_integer("created_at"))
             .col(big_integer("updated_at"))
             .check(Expr::col(Alias::new("auth_type")).is_in(["oauth", "api_key"]))
+            .to_owned(),
+    )
+    .await
+}
+
+async fn add_provider_base_url<C: ConnectionTrait>(db: &C) -> Result<(), DbErr> {
+    execute(
+        db,
+        Table::alter()
+            .table("agent_provider_credentials")
+            .add_column(text("base_url").null())
             .to_owned(),
     )
     .await

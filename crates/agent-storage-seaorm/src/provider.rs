@@ -67,6 +67,7 @@ impl ProviderCredentialStore for SeaOrmProviderCredentialStore {
                     OnConflict::column(agent_provider_credentials::Column::ProviderId)
                         .update_columns([
                             agent_provider_credentials::Column::AuthType,
+                            agent_provider_credentials::Column::BaseUrl,
                             agent_provider_credentials::Column::ApiKey,
                             agent_provider_credentials::Column::AccessToken,
                             agent_provider_credentials::Column::RefreshToken,
@@ -99,6 +100,7 @@ fn credential_active(credential: ProviderCredential) -> agent_provider_credentia
     let ProviderCredential {
         provider_id,
         auth_type,
+        base_url,
         api_key,
         access_token,
         refresh_token,
@@ -110,6 +112,7 @@ fn credential_active(credential: ProviderCredential) -> agent_provider_credentia
     agent_provider_credentials::ActiveModel {
         provider_id: Set(provider_id),
         auth_type: Set(entity_auth_type(auth_type)),
+        base_url: Set(base_url),
         api_key: Set(api_key),
         access_token: Set(access_token),
         refresh_token: Set(refresh_token),
@@ -124,6 +127,7 @@ fn credential_record(model: agent_provider_credentials::Model) -> ProviderCreden
     ProviderCredential {
         provider_id: model.provider_id,
         auth_type: provider_auth_type(model.auth_type),
+        base_url: model.base_url,
         api_key: model.api_key,
         access_token: model.access_token,
         refresh_token: model.refresh_token,
@@ -162,6 +166,7 @@ mod tests {
         ProviderCredential {
             provider_id: provider_id.to_string(),
             auth_type: ProviderAuthType::ApiKey,
+            base_url: None,
             api_key: Some("key-secret".to_string()),
             access_token: None,
             refresh_token: None,
@@ -176,6 +181,7 @@ mod tests {
         ProviderCredential {
             provider_id: provider_id.to_string(),
             auth_type: ProviderAuthType::OAuth,
+            base_url: None,
             api_key: None,
             access_token: Some("access-secret".to_string()),
             refresh_token: Some("refresh-secret".to_string()),
@@ -191,7 +197,8 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("nested/agent.sqlite");
         let store = SeaOrmProviderCredentialStore::connect(&path).await.unwrap();
-        let original = api_key("openai", 10);
+        let mut original = api_key("openai", 10);
+        original.base_url = Some("https://api.openai.com/v1".to_string());
         store.upsert(original.clone()).await.unwrap();
         assert_eq!(store.get("openai").await.unwrap(), Some(original));
 
@@ -268,7 +275,7 @@ mod tests {
         let store = SeaOrmProviderCredentialStore::connect(&path).await.unwrap();
         let pool = store.db.get_sqlite_connection_pool();
         pool.execute(
-            "DELETE FROM agent_schema_migrations WHERE name = 'm20261124_000002_create_agent_provider_credentials'",
+            "DELETE FROM agent_schema_migrations WHERE name IN ('m20261124_000002_create_agent_provider_credentials', 'm20261124_000003_add_provider_base_url')",
         )
         .await
         .unwrap();

@@ -96,6 +96,7 @@ fn activate(model: &mut Model) -> Option<Effect> {
         ProviderCredential {
             provider_id: provider.id().to_string(),
             auth_type: ProviderAuthType::ApiKey,
+            base_url: None,
             api_key: Some(key),
             access_token: None,
             refresh_token: None,
