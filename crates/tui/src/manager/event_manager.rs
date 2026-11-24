@@ -569,6 +569,39 @@ mod tests {
     }
 
     #[test]
+    fn routes_provider_login_menu_keys() {
+        let manager = event_manager();
+        let model = model_with_buffer(Context::ProviderLogin);
+
+        for (key, modifiers, command) in [
+            (KeyCode::Down, KeyModifiers::NONE, "provider_login_next"),
+            (KeyCode::Up, KeyModifiers::NONE, "provider_login_previous"),
+            (
+                KeyCode::Char('n'),
+                KeyModifiers::CONTROL,
+                "provider_login_next",
+            ),
+            (
+                KeyCode::Char('p'),
+                KeyModifiers::CONTROL,
+                "provider_login_previous",
+            ),
+            (
+                KeyCode::Enter,
+                KeyModifiers::NONE,
+                "provider_login_activate",
+            ),
+            (KeyCode::Esc, KeyModifiers::NONE, "provider_login_close"),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, modifiers));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+            ));
+        }
+    }
+
+    #[test]
     fn routes_agent_panel_input_keys() {
         let manager = event_manager();
         let mut model = Model {

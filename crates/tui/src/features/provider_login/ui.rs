@@ -1,7 +1,4 @@
-use ratatui::{
-    Frame,
-    layout::{Rect, Size},
-};
+use ratatui::{Frame, layout::Rect};
 
 use crate::{
     component::agent::ProviderLogin,
@@ -21,12 +18,12 @@ fn overlay(model: &Model) -> Option<OverlayContribution> {
             OverlayContribution::new(
                 "provider_login",
                 OverlayKind::Modal,
-                OverlayPlacement::Centered(Size::new(58, 8)),
+                OverlayPlacement::Centered(ProviderLogin::size(&model.provider_login)),
                 render,
             )
         })
 }
 
 fn render(model: &Model, frame: &mut Frame, area: Rect) {
-    ProviderLogin::render(model.theme.ui(), frame, area);
+    ProviderLogin::render(&model.provider_login, model.theme.ui(), frame, area);
 }

@@ -72,6 +72,7 @@ fn list_navigation_contexts() -> &'static [&'static str] {
         "vcs_reset",
         "agent_chat_dialog",
         "agent_chat_insert",
+        "provider_login",
     ]
 }
 
@@ -201,7 +202,15 @@ fn common_bindings() -> KeymapConfig {
                 ("agent_interrupt", "ctrl-f7"),
             ],
         ),
-        keymap_context("provider_login", [("provider_login_close", "esc")]),
+        keymap_context(
+            "provider_login",
+            [
+                ("provider_login_next", "down"),
+                ("provider_login_previous", "up"),
+                ("provider_login_activate", "enter"),
+                ("provider_login_close", "esc"),
+            ],
+        ),
         keymap_context(
             "buffer_grep",
             [

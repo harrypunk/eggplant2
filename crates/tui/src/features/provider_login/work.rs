@@ -11,8 +11,23 @@ pub fn commands() -> Vec<Command> {
             handle_command,
         ),
         Command::feature(
+            CommandId("provider_login_next"),
+            "select next provider login option",
+            handle_command,
+        ),
+        Command::feature(
+            CommandId("provider_login_previous"),
+            "select previous provider login option",
+            handle_command,
+        ),
+        Command::feature(
+            CommandId("provider_login_activate"),
+            "activate provider login option",
+            handle_command,
+        ),
+        Command::feature(
             CommandId("provider_login_close"),
-            "close provider login",
+            "go back or close provider login",
             handle_command,
         ),
     ]
@@ -21,11 +36,25 @@ pub fn commands() -> Vec<Command> {
 }
 
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    match id.as_str() {
-        "provider_login_open" => open(model),
-        "provider_login_close" => close(model),
-        _ => None,
+    if id.as_str() == "provider_login_open" {
+        return open(model);
     }
+    if input_context(model) != Some(Context::ProviderLogin) || !model.provider_login.is_open() {
+        return None;
+    }
+    match id.as_str() {
+        "provider_login_next" => model.provider_login.select_next(),
+        "provider_login_previous" => model.provider_login.select_previous(),
+        "provider_login_activate" => model.provider_login.activate(),
+        "provider_login_close" => {
+            return match model.provider_login.back() {
+                super::ProviderLoginBack::Back => None,
+                super::ProviderLoginBack::Close => close(model),
+            };
+        }
+        _ => {}
+    }
+    None
 }
 
 pub fn open(model: &mut Model) -> Option<Effect> {
@@ -95,6 +124,43 @@ mod tests {
         assert!(!model.provider_login.is_open());
         assert!(!model.modal.is_active(Context::ProviderLogin));
         assert!(model.context_stack.is_empty());
+    }
+
+    #[test]
+    fn commands_navigate_submenus_and_escape_steps_back() {
+        use crate::provider_login::{ProviderAuthMethod, ProviderLoginPage};
+
+        let mut model = Model::default();
+        open(&mut model);
+        handle_command(&mut model, CommandId("provider_login_activate"));
+        assert_eq!(
+            model.provider_login.page(),
+            ProviderLoginPage::Providers(ProviderAuthMethod::Account)
+        );
+
+        handle_command(&mut model, CommandId("provider_login_close"));
+        assert_eq!(
+            model.provider_login.page(),
+            ProviderLoginPage::AuthenticationMethod
+        );
+        handle_command(&mut model, CommandId("provider_login_next"));
+        handle_command(&mut model, CommandId("provider_login_activate"));
+        handle_command(&mut model, CommandId("provider_login_next"));
+        handle_command(&mut model, CommandId("provider_login_activate"));
+        let ProviderLoginPage::Placeholder(provider) = model.provider_login.page() else {
+            panic!("provider selection should open its placeholder");
+        };
+        assert_eq!(provider.id(), "kimi-for-coding");
+
+        handle_command(&mut model, CommandId("provider_login_close"));
+        assert_eq!(
+            model.provider_login.page(),
+            ProviderLoginPage::Providers(ProviderAuthMethod::ApiKey)
+        );
+        handle_command(&mut model, CommandId("provider_login_close"));
+        handle_command(&mut model, CommandId("provider_login_close"));
+        assert!(!model.provider_login.is_open());
+        assert!(!model.modal.is_active(Context::ProviderLogin));
     }
 
     #[test]

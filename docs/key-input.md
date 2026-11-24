@@ -20,7 +20,7 @@ Available in Normal and Explorer contexts unless noted otherwise.
 | Toggle editor text wrapping | `Space u w` |
 | Toggle cursor-line background | `Space u c` |
 | Toggle agent tool panel | `Space a t` |
-| Open provider-login placeholder | `Space a p` |
+| Open provider login | `Space a p` |
 | Focus Agent panel input | `Ctrl-L` |
 | Return from Agent panel to editor | `Ctrl-H` |
 | Go to definition | `Space c d` |
@@ -151,7 +151,7 @@ On an expanded directory, `h` folds that directory. On a file or collapsed direc
 
 The inline dialog requires an open project but no active buffer. An active workspace file supplies an editable/deletable `workspace/relative/path:line` prefill; otherwise the prompt starts empty. External buffers do not supply prefill and do not prevent chatting. Dismissal preserves the run and conversation. The project panel uses the same project requirement and no-buffer availability, accepts freeform text and `@path` references, and focuses its bottom input when opened. The fake provider streams a simulated response for this first slice; no credentials are needed.
 
-Panel input starts in Normal mode: `i` enters Insert, `?` opens a modal help popup, and `Ctrl-H`/`Ctrl-L` move focus. The help popup closes with `?` or `Esc` without activating the panel underneath. Insert accepts text, Backspace edits, Enter submits, and `Esc` returns to Normal without leaving the panel. A leading `/` in either Agent input opens the same minimal live-filtered command list immediately above the input instead of normal prompt submission. No command is selected initially, so Enter does nothing. Tab quick-fills the first match; Ctrl-N/Ctrl-P move selection with wrapping and quick-fill each command. Enter runs only an explicitly selected command. `/provider` opens the provider-login placeholder and restores the originating Agent input when closed; `/model`, `/thinking`, and `/logout` are placeholders. The focus controller itself remains geometry-only; keyboard maps decide which mode emits focus commands.
+Panel input starts in Normal mode: `i` enters Insert, `?` opens a modal help popup, and `Ctrl-H`/`Ctrl-L` move focus. The help popup closes with `?` or `Esc` without activating the panel underneath. Insert accepts text, Backspace edits, Enter submits, and `Esc` returns to Normal without leaving the panel. A leading `/` in either Agent input opens the same minimal live-filtered command list immediately above the input instead of normal prompt submission. No command is selected initially, so Enter does nothing. Tab quick-fills the first match; Ctrl-N/Ctrl-P move selection with wrapping and quick-fill each command. Enter runs only an explicitly selected command. `/provider` opens the provider-login menu and restores the originating Agent input when closed; `/model`, `/thinking`, and `/logout` are placeholders. In provider login, Up/Down or Ctrl-N/Ctrl-P navigate, Enter opens the selected submenu or provider placeholder, and Escape steps back before closing. Account lists `openai`, `qwen.com`, and `kimi.com`; API key lists `openai`, `kimi-for-coding`, `qwen-tokenplan-individual-cn`, and `deepseek`. Provider sign-in remains a placeholder and does not request or change credentials. The focus controller itself remains geometry-only; keyboard maps decide which mode emits focus commands.
 
 ### Agent write approval
 
