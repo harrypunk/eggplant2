@@ -198,7 +198,7 @@ Provider SDK types must not appear in `Model`, components, filesystem tools, or 
 - `tools/state.rs` owns only tool-panel visibility/active selection. Agent transcript/run state must remain in `AgentSession` so hiding the panel preserves it. Extend the existing tool-content dispatcher in `ui.rs`; do not register a duplicate `PanelSlot::Tools`.
 - `component/text_input.rs` supplies a stateful bordered input with local value/cursor state and Unicode-scalar Left/Right movement. `component/text_layout.rs` keeps measurement, visual wrapping, cursor geometry, and viewport selection consistent. `component/auto_height.rs` owns dialog size clamps and reserved-content policy. The Agent panel uses `TextFlow::Wrapped` with the shared `AutoHeight` policy; the margin-filled dialog measures the same wrapped input against its available content area instead of choosing a fixed outer size. Picker and grep inputs retain `TextFlow::SingleLine`. The prompt remains one logical line, not a multiline editor.
 - `capabilities/document.rs` supplies safe user-visible open behavior and the lifecycle port pattern; use it for navigation rather than treating it as the agent's bounded read tool.
-- `config/mod.rs` declares typed `[features.agent]` settings. `startup/agent.rs` is the composition seam for injected providers and persistence; `main.rs` only invokes `configure_agent` and does not construct provider or database implementations.
+- `config/mod.rs` declares typed `[features.agent]` settings. `composition/agent.rs` is the composition seam for injected providers and persistence; `main.rs` only invokes `configure_agent` and does not construct provider or database implementations.
 
 ### Streaming through the existing effect model
 

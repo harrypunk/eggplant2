@@ -1,5 +1,6 @@
 pub mod capabilities;
 pub mod component;
+pub mod composition;
 pub mod config;
 pub mod features;
 pub mod manager;

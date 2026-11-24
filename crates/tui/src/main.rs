@@ -2,13 +2,14 @@ use std::sync::Arc;
 
 use tui::{
     capabilities::page_scroll::PageScroll,
+    composition::agent::configure as configure_agent,
     config::{Config, load_language_servers},
     manager::{
         command_registry::CommandRegistry, keyboard_input_registry::Registry,
         text_input_registry::TextInputRegistry,
     },
     runtime,
-    startup::{configure_agent, initial_model_with_languages, startup_path_from},
+    startup::{initial_model_with_languages, startup_path_from},
     terminal,
     ui::UiRegistry,
 };
