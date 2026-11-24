@@ -29,6 +29,16 @@ pub fn commands() -> Vec<Command> {
             handle_command,
         ),
         Command::feature(
+            CommandId("provider_login_focus_next"),
+            "focus next provider login field",
+            handle_command,
+        ),
+        Command::feature(
+            CommandId("provider_login_paste"),
+            "paste into the focused provider login field",
+            handle_command,
+        ),
+        Command::feature(
             CommandId("provider_login_close"),
             "go back or close provider login",
             handle_command,
@@ -49,6 +59,8 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         "provider_login_next" => model.provider_login.select_next(),
         "provider_login_previous" => model.provider_login.select_previous(),
         "provider_login_activate" => return activate(model),
+        "provider_login_focus_next" => model.provider_login.focus_next(),
+        "provider_login_paste" => return super::paste::paste(model),
         "provider_login_close" => {
             return match model.provider_login.back() {
                 super::ProviderLoginBack::Back => None,
@@ -72,10 +84,34 @@ fn available(model: &Model) -> bool {
 }
 
 fn activate(model: &mut Model) -> Option<Effect> {
-    let Some((provider, key)) = model.provider_login.api_key_submission() else {
+    let Some(submission) = model.provider_login.submission() else {
         model.provider_login.activate();
         return None;
     };
+    let (provider, base_url, key) = match submission {
+        super::ProviderLoginSubmission::OpenAi {
+            provider,
+            endpoint,
+            api_key,
+        } => {
+            let endpoint = endpoint.trim().to_string();
+            if endpoint.is_empty() {
+                model.provider_login.set_error("Endpoint must not be empty");
+                return None;
+            }
+            (provider, Some(endpoint), api_key)
+        }
+        super::ProviderLoginSubmission::ApiKey { provider, api_key } => (provider, None, api_key),
+    };
+    save_api_key(model, provider, base_url, key)
+}
+
+fn save_api_key(
+    model: &mut Model,
+    provider: super::ProviderSpec,
+    base_url: Option<String>,
+    key: String,
+) -> Option<Effect> {
     let key = key.trim().to_string();
     if key.is_empty() {
         model.provider_login.set_error("API key must not be empty");
@@ -96,7 +132,7 @@ fn activate(model: &mut Model) -> Option<Effect> {
         ProviderCredential {
             provider_id: provider.id().to_string(),
             auth_type: ProviderAuthType::ApiKey,
-            base_url: None,
+            base_url,
             api_key: Some(key),
             access_token: None,
             refresh_token: None,
@@ -196,8 +232,18 @@ mod tests {
 
     use eggplant_agent_storage::{InMemoryStore, ProviderCredentialStore};
 
-    use super::*;
-    use crate::manager::message_manager::MessageManager;
+    use super::{super::paste, *};
+    use crate::{
+        capabilities::clipboard::ClipboardReader, manager::message_manager::MessageManager,
+    };
+
+    struct TestClipboard(Result<String, String>);
+
+    impl ClipboardReader for TestClipboard {
+        fn read_text(&self) -> Result<String, String> {
+            self.0.clone()
+        }
+    }
 
     fn open_api_key_at(model: &mut Model, index: usize) {
         open(model);
@@ -210,19 +256,28 @@ mod tests {
     }
 
     fn insert_key(model: &mut Model, key: &str) {
+        if let crate::provider_login::ProviderLoginPage::OpenAiInput(_) =
+            model.provider_login.page()
+        {
+            handle_command(model, CommandId("provider_login_focus_next"));
+        }
         key.chars().for_each(|character| {
             handle_input(model, TextInputEvent::Insert(character));
         });
     }
 
-    fn submit_and_complete(model: &mut Model) {
-        let effect = handle_command(model, CommandId("provider_login_activate"))
-            .expect("API-key submission should create a save effect");
+    fn complete_effect(model: &mut Model, effect: Effect) {
         let Effect::Feature(effect) = effect else {
-            panic!("API-key submission should use a feature effect");
+            panic!("provider login should use a feature effect");
         };
         let message = effect.perform();
         MessageManager::default().update(model, message);
+    }
+
+    fn submit_and_complete(model: &mut Model) {
+        let effect = handle_command(model, CommandId("provider_login_activate"))
+            .expect("API-key submission should create a save effect");
+        complete_effect(model, effect);
     }
 
     #[test]
@@ -303,8 +358,61 @@ mod tests {
         let openai = runtime.block_on(store.get("openai")).unwrap().unwrap();
         let deepseek = runtime.block_on(store.get("deepseek")).unwrap().unwrap();
         assert_eq!(openai.api_key.as_deref(), Some("openai-secret"));
+        assert_eq!(
+            openai.base_url.as_deref(),
+            Some("https://api.openai.com/v1")
+        );
         assert_eq!(deepseek.api_key.as_deref(), Some("deepseek-secret"));
+        assert_eq!(deepseek.base_url, None);
         assert_eq!(runtime.block_on(store.list()).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn clipboard_paste_is_revision_checked_across_fields() {
+        let mut model = Model::default();
+        open_api_key_at(&mut model, 0);
+        for _ in 0..crate::provider_login::DEFAULT_OPENAI_ENDPOINT.len() {
+            handle_input(&mut model, TextInputEvent::DeleteBackward);
+        }
+        let effect = paste::paste_with_reader(
+            &mut model,
+            TestClipboard(Ok("https://localhost:1234/v1\n".to_string())),
+        )
+        .unwrap();
+        complete_effect(&mut model, effect);
+        assert_eq!(
+            model
+                .provider_login
+                .openai_input(crate::provider_login::OpenAiField::Endpoint)
+                .value(),
+            "https://localhost:1234/v1"
+        );
+
+        handle_command(&mut model, CommandId("provider_login_focus_next"));
+        let effect =
+            paste::paste_with_reader(&mut model, TestClipboard(Ok("key-secret".to_string())))
+                .unwrap();
+        complete_effect(&mut model, effect);
+        assert_eq!(
+            model
+                .provider_login
+                .openai_input(crate::provider_login::OpenAiField::ApiKey)
+                .value(),
+            "key-secret"
+        );
+
+        let stale =
+            paste::paste_with_reader(&mut model, TestClipboard(Ok("must-not-paste".to_string())))
+                .unwrap();
+        handle_command(&mut model, CommandId("provider_login_focus_next"));
+        complete_effect(&mut model, stale);
+        assert_eq!(
+            model
+                .provider_login
+                .openai_input(crate::provider_login::OpenAiField::ApiKey)
+                .value(),
+            "key-secret"
+        );
     }
 
     #[test]
@@ -326,7 +434,13 @@ mod tests {
                 .unwrap()
                 .contains("agent-sqlite")
         );
-        assert_eq!(model.provider_login.api_key_input().value(), "secret");
+        assert_eq!(
+            model
+                .provider_login
+                .openai_input(crate::provider_login::OpenAiField::ApiKey)
+                .value(),
+            "secret"
+        );
         assert!(model.provider_login.is_open());
     }
 

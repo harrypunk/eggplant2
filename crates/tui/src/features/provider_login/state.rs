@@ -1,5 +1,6 @@
 use std::fmt;
 
+use super::openai::{OpenAiField, OpenAiForm};
 use crate::{
     component::{
         list::ListState,
@@ -46,6 +47,48 @@ pub enum ProviderLoginPage {
     Providers(ProviderAuthMethod),
     Placeholder(ProviderSpec),
     ApiKeyInput(ProviderSpec),
+    OpenAiInput(ProviderSpec),
+}
+
+impl ProviderLoginPage {
+    fn is_menu(self) -> bool {
+        if let ProviderLoginPage::AuthenticationMethod = self {
+            return true;
+        }
+        if let ProviderLoginPage::Providers(_) = self {
+            return true;
+        }
+        false
+    }
+
+    fn is_openai_input(self) -> bool {
+        if let ProviderLoginPage::OpenAiInput(_) = self {
+            return true;
+        }
+        false
+    }
+
+    fn accepts_error(self) -> bool {
+        if self.is_openai_input() {
+            return true;
+        }
+        if let ProviderLoginPage::ApiKeyInput(_) = self {
+            return true;
+        }
+        false
+    }
+}
+
+pub enum ProviderLoginSubmission {
+    OpenAi {
+        provider: ProviderSpec,
+        endpoint: String,
+        api_key: String,
+    },
+    ApiKey {
+        provider: ProviderSpec,
+        api_key: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,6 +105,7 @@ pub struct ProviderLoginState {
     page: ProviderLoginPage,
     options: ListState<ProviderLoginOption>,
     api_key_input: TextInput,
+    openai: OpenAiForm,
     saving: bool,
     error: Option<String>,
 }
@@ -78,6 +122,12 @@ impl fmt::Debug for ProviderLoginState {
                 "api_key",
                 &(!self.api_key_input.value().is_empty()).then_some("[redacted]"),
             )
+            .field("openai_focused", &self.openai.focused_field())
+            .field(
+                "openai_api_key",
+                &(!self.openai.input(OpenAiField::ApiKey).value().is_empty())
+                    .then_some("[redacted]"),
+            )
             .field("saving", &self.saving)
             .field("error", &self.error)
             .finish()
@@ -92,6 +142,7 @@ impl Default for ProviderLoginState {
             page: ProviderLoginPage::AuthenticationMethod,
             options: authentication_options(),
             api_key_input: TextInput::default(),
+            openai: OpenAiForm::default(),
             saving: false,
             error: None,
         }
@@ -109,6 +160,7 @@ impl ProviderLoginState {
         self.page = ProviderLoginPage::AuthenticationMethod;
         self.options = authentication_options();
         self.api_key_input.clear();
+        self.openai.reset();
         self.saving = false;
         self.error = None;
     }
@@ -116,6 +168,7 @@ impl ProviderLoginState {
     pub fn close(&mut self) -> Option<Context> {
         self.open = false;
         self.api_key_input.clear();
+        self.openai.reset();
         self.saving = false;
         self.error = None;
         self.return_context.take()
@@ -137,6 +190,14 @@ impl ProviderLoginState {
         &self.api_key_input
     }
 
+    pub fn openai_input(&self, field: OpenAiField) -> &TextInput {
+        self.openai.input(field)
+    }
+
+    pub fn openai_focused_field(&self) -> OpenAiField {
+        self.openai.focused_field()
+    }
+
     pub fn is_saving(&self) -> bool {
         self.saving
     }
@@ -146,23 +207,15 @@ impl ProviderLoginState {
     }
 
     pub fn select_next(&mut self) {
-        if !self.saving
-            && matches!(
-                self.page,
-                ProviderLoginPage::AuthenticationMethod | ProviderLoginPage::Providers(_)
-            )
-        {
+        let navigable = self.page.is_menu();
+        if !self.saving && navigable {
             self.options.select_next();
         }
     }
 
     pub fn select_previous(&mut self) {
-        if !self.saving
-            && matches!(
-                self.page,
-                ProviderLoginPage::AuthenticationMethod | ProviderLoginPage::Providers(_)
-            )
-        {
+        let navigable = self.page.is_menu();
+        if !self.saving && navigable {
             self.options.select_previous();
         }
     }
@@ -182,6 +235,10 @@ impl ProviderLoginState {
             (ProviderLoginPage::Providers(_), ProviderLoginOption::Provider(provider)) => {
                 self.page = match provider.method() {
                     ProviderAuthMethod::Account => ProviderLoginPage::Placeholder(provider),
+                    ProviderAuthMethod::ApiKey if provider.id() == "openai" => {
+                        self.openai.reset();
+                        ProviderLoginPage::OpenAiInput(provider)
+                    }
                     ProviderAuthMethod::ApiKey => ProviderLoginPage::ApiKeyInput(provider),
                 };
                 self.api_key_input.clear();
@@ -192,42 +249,100 @@ impl ProviderLoginState {
     }
 
     pub fn handle_input_event(&mut self, event: TextInputEvent) {
-        if !matches!(self.page, ProviderLoginPage::ApiKeyInput(_)) || self.saving {
+        if self.saving {
             return;
         }
-        if self.api_key_input.handle_event(event).content_changed() {
+        let changed = match self.page {
+            ProviderLoginPage::ApiKeyInput(_) => {
+                self.api_key_input.handle_event(event).content_changed()
+            }
+            ProviderLoginPage::OpenAiInput(_) => self.openai.handle_input(event),
+            _ => return,
+        };
+        if changed {
             self.error = None;
         }
     }
 
-    pub fn api_key_submission(&self) -> Option<(ProviderSpec, &str)> {
+    pub fn submission(&self) -> Option<ProviderLoginSubmission> {
+        if self.saving {
+            return None;
+        }
         match self.page {
-            ProviderLoginPage::ApiKeyInput(provider) if !self.saving => {
-                Some((provider, self.api_key_input.value()))
+            ProviderLoginPage::ApiKeyInput(provider) => Some(ProviderLoginSubmission::ApiKey {
+                provider,
+                api_key: self.api_key_input.value().to_string(),
+            }),
+            ProviderLoginPage::OpenAiInput(provider) => {
+                let (endpoint, api_key) = self.openai.values();
+                Some(ProviderLoginSubmission::OpenAi {
+                    provider,
+                    endpoint: endpoint.to_string(),
+                    api_key: api_key.to_string(),
+                })
             }
             _ => None,
         }
     }
 
+    pub fn focus_next(&mut self) {
+        if self.page.is_openai_input() && !self.saving {
+            self.openai.focus_next();
+        }
+    }
+
+    pub fn begin_openai_paste(&mut self) -> Option<u64> {
+        if !self.page.is_openai_input() || self.saving {
+            return None;
+        }
+        Some(self.openai.begin_paste())
+    }
+
+    pub fn complete_openai_paste(
+        &mut self,
+        revision: u64,
+        text: Result<String, String>,
+    ) -> Option<Result<(), String>> {
+        if !self.page.is_openai_input() {
+            return None;
+        }
+        let result = self.openai.complete_paste(revision, text)?;
+        if result.is_ok() {
+            self.error = None;
+        }
+        Some(result)
+    }
+
     pub fn set_error(&mut self, error: impl Into<String>) {
-        if matches!(self.page, ProviderLoginPage::ApiKeyInput(_)) {
+        let accepts_error = self.page.accepts_error();
+        if accepts_error {
             self.error = Some(error.into());
         }
     }
 
     pub fn begin_save(&mut self, provider: ProviderSpec) -> bool {
-        if self.page != ProviderLoginPage::ApiKeyInput(provider) || self.saving {
+        let provider_matches = match self.page {
+            ProviderLoginPage::ApiKeyInput(current) | ProviderLoginPage::OpenAiInput(current) => {
+                current == provider
+            }
+            _ => false,
+        };
+        if !provider_matches || self.saving {
             return false;
         }
         self.saving = true;
         self.error = None;
+        self.openai.invalidate();
         true
     }
 
     /// Return whether the current save completed successfully, or `None` for a stale completion.
     pub fn complete_save(&mut self, provider_id: &str, error: Option<String>) -> Option<bool> {
-        let ProviderLoginPage::ApiKeyInput(provider) = self.page else {
-            return None;
+        let provider = match self.page {
+            ProviderLoginPage::ApiKeyInput(provider) | ProviderLoginPage::OpenAiInput(provider) => {
+                provider
+            }
+            _ => return None,
         };
         if !self.saving || provider.id() != provider_id {
             return None;
@@ -248,6 +363,15 @@ impl ProviderLoginState {
                     return ProviderLoginBack::Back;
                 }
                 self.api_key_input.clear();
+                self.error = None;
+                self.page = ProviderLoginPage::Providers(provider.method());
+                ProviderLoginBack::Back
+            }
+            ProviderLoginPage::OpenAiInput(provider) => {
+                if self.saving {
+                    return ProviderLoginBack::Back;
+                }
+                self.openai.reset();
                 self.error = None;
                 self.page = ProviderLoginPage::Providers(provider.method());
                 ProviderLoginBack::Back
@@ -322,6 +446,9 @@ mod tests {
         state.open(None);
         state.select_next();
         state.activate();
+        for _ in 0..3 {
+            state.select_next();
+        }
         state.activate();
         let ProviderLoginPage::ApiKeyInput(provider) = state.page() else {
             panic!("API-key provider should open its input");
@@ -367,7 +494,10 @@ mod tests {
 
         state.select_next();
         state.activate();
-        assert!(matches!(state.page(), ProviderLoginPage::ApiKeyInput(_)));
+        match state.page() {
+            ProviderLoginPage::ApiKeyInput(_) => {}
+            other => panic!("expected generic API-key input, got {other:?}"),
+        }
         let selected = state.selected();
         state.select_next();
         assert_eq!(state.selected(), selected);
@@ -397,7 +527,7 @@ mod tests {
         assert!(state.begin_save(provider));
         state.handle_input_event(TextInputEvent::Insert('x'));
         assert_eq!(state.api_key_input().value(), "key-secret");
-        assert_eq!(state.complete_save("deepseek", None), None);
+        assert_eq!(state.complete_save("other-provider", None), None);
         assert_eq!(state.complete_save(provider.id(), None), Some(true));
         assert!(!state.is_saving());
 

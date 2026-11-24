@@ -19,10 +19,6 @@ impl FormFocus {
         self.index = (self.index + 1) % self.fields;
     }
 
-    pub fn previous(&mut self) {
-        self.index = (self.index + self.fields - 1) % self.fields;
-    }
-
     pub fn reset(&mut self) {
         self.index = 0;
     }
@@ -46,7 +42,7 @@ mod tests {
         assert_eq!(focus.index(), 1);
         focus.next();
         assert_eq!(focus.index(), 0);
-        focus.previous();
+        focus.next();
         assert_eq!(focus.index(), 1);
         focus.reset();
         assert_eq!(focus.index(), 0);

@@ -591,6 +591,16 @@ mod tests {
                 KeyModifiers::NONE,
                 "provider_login_activate",
             ),
+            (
+                KeyCode::Tab,
+                KeyModifiers::NONE,
+                "provider_login_focus_next",
+            ),
+            (
+                KeyCode::Char('v'),
+                KeyModifiers::CONTROL,
+                "provider_login_paste",
+            ),
             (KeyCode::Esc, KeyModifiers::NONE, "provider_login_close"),
         ] {
             let event = Event::Key(KeyEvent::new(key, modifiers));

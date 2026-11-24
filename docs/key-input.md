@@ -151,7 +151,28 @@ On an expanded directory, `h` folds that directory. On a file or collapsed direc
 
 The inline dialog requires an open project but no active buffer. An active workspace file supplies an editable/deletable `workspace/relative/path:line` prefill; otherwise the prompt starts empty. External buffers do not supply prefill and do not prevent chatting. Dismissal preserves the run and conversation. The project panel uses the same project requirement and no-buffer availability, accepts freeform text and `@path` references, and focuses its bottom input when opened. The fake provider streams a simulated response for this first slice; no credentials are needed.
 
-Panel input starts in Normal mode: `i` enters Insert, `?` opens a modal help popup, and `Ctrl-H`/`Ctrl-L` move focus. The help popup closes with `?` or `Esc` without activating the panel underneath. Insert accepts text, Backspace edits, Enter submits, and `Esc` returns to Normal without leaving the panel. A leading `/` in either Agent input opens the same minimal live-filtered command list immediately above the input instead of normal prompt submission. No command is selected initially, so Enter does nothing. Tab quick-fills the first match; Ctrl-N/Ctrl-P move selection with wrapping and quick-fill each command. Enter runs only an explicitly selected command. `/provider` opens the provider-login menu and restores the originating Agent input when closed; `/model`, `/thinking`, and `/logout` are placeholders. In provider login, Up/Down or Ctrl-N/Ctrl-P navigate, Enter opens the selected submenu or provider placeholder, and Escape steps back before closing. Account lists `openai`, `qwen.com`, and `kimi.com`; API key lists `openai`, `kimi-for-coding`, `qwen-tokenplan-individual-cn`, and `deepseek`. Account sign-in remains a placeholder. API-key providers accept a masked draft; Enter saves it through the configured credential store, while Backspace and Left/Right edit it. Durable saves require `agent-sqlite` and an absolute `session_db`. Multiple providers can store keys independently, but saving does not choose an active provider or model. The focus controller itself remains geometry-only; keyboard maps decide which mode emits focus commands.
+Panel input starts in Normal mode: `i` enters Insert, `?` opens a modal help popup, and `Ctrl-H`/`Ctrl-L` move focus. The help popup closes with `?` or `Esc` without activating the panel underneath. Insert accepts text, Backspace edits, Enter submits, and `Esc` returns to Normal without leaving the panel.
+
+Agent slash commands:
+
+- A leading `/` opens the filtered command list above either Agent input.
+- Enter does nothing until a command is selected.
+- Tab quick-fills the first match; Ctrl-N/Ctrl-P move selection with wrapping and quick-fill each command.
+- `/provider` opens provider login and restores the originating Agent input when closed.
+- `/model`, `/thinking`, and `/logout` remain placeholders.
+
+Provider login:
+
+- Up/Down or Ctrl-N/Ctrl-P navigate menus; Enter opens the selected page; Escape steps back before closing.
+- Account lists `openai`, `qwen.com`, and `kimi.com` as placeholders.
+- API key lists `openai`, `kimi-for-coding`, `qwen-tokenplan-individual-cn`, and `deepseek`.
+- API-key drafts use Backspace and Left/Right editing; Enter saves through the configured credential store.
+- OpenAI has wrappable Endpoint and API-key fields. Tab loops between them, and Ctrl-V pastes through `ClipboardReader`.
+- Clipboard completions are discarded after focus or edits change, preventing stale pastes.
+- Durable saves require `agent-sqlite` and an absolute `session_db`.
+- Multiple providers can store keys independently, but saving does not choose an active provider or model.
+
+The focus controller itself remains geometry-only; keyboard maps decide which mode emits focus commands.
 
 ### Agent write approval
 

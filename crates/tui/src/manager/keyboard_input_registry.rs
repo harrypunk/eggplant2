@@ -208,6 +208,8 @@ fn common_bindings() -> KeymapConfig {
                 ("provider_login_next", "down"),
                 ("provider_login_previous", "up"),
                 ("provider_login_activate", "enter"),
+                ("provider_login_focus_next", "tab"),
+                ("provider_login_paste", "ctrl-v"),
                 ("provider_login_close", "esc"),
             ],
         ),

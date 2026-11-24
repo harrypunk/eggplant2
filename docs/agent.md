@@ -97,7 +97,44 @@ The inline dialog requires an open project, not an active buffer. With an active
 
 ### Provider-login UX shell
 
-`Space a p` opens the provider-login menu prototype. Its first menu offers account and API-key sign-in. Account lists `openai`, `qwen.com`, and `kimi.com`; API key lists `openai`, `kimi-for-coding`, `qwen-tokenplan-individual-cn`, and `deepseek`. Up/Down and Ctrl-N/Ctrl-P navigate, Enter opens a submenu or provider page, and Escape steps back before closing. Account providers remain placeholders. API-key providers open a masked editor; Enter asynchronously saves an independent credential for each provider when `agent-sqlite` and an absolute `session_db` are configured. Saving does not select a provider or model, start OAuth, or mutate the active provider configuration. In either the inline Agent dialog or the panel's Insert input, a leading `/` opens a minimal command menu immediately above the text input whose candidates are derived directly from the same prompt state and catalog. It shows command names with short descriptions, with no title or key-hint rows. Its height is derived from content and bounded by available layout space; when the list exceeds that viewport, the shared selection-following window keeps the quick-filled command visible. Empty conversations leave the assistant area blank rather than showing placeholder text. `/`, `/p`, and `/PRO` filter the shared catalog containing `/provider`, `/model`, `/thinking`, and `/logout`. Opening or typing a filter selects nothing, so Enter does nothing. Tab quick-fills the first match; Ctrl-N/Ctrl-P quick-fill and move the selection with wrapping while retaining the original query's candidates. Only then does Enter execute the selected command, never submitting slash text as a provider message. Model, thinking, and logout commands currently publish placeholder notifications. The separate `provider_login` feature owns dialog state, commands, and modal registration; `component/agent/provider_login.rs` is a pure menu, masked-input, and placeholder view; its mask is injected through the `TextInputViewStyle` interface. Opening it from the inline dialog suspends and later restores `AgentChatDialog`, while panel Insert state is derived and resumes automatically. Account/OAuth authentication, token refresh, and provider/model selection are deferred; API-key credentials can already be persisted independently through the shared credential-store interface.
+`Space a p` opens provider login. The workflow has separate authentication, provider, and form pages.
+
+#### Menus and navigation
+
+- Account providers: `openai`, `qwen.com`, and `kimi.com`. These remain placeholders.
+- API-key providers: `openai`, `kimi-for-coding`, `qwen-tokenplan-individual-cn`, and `deepseek`.
+- Up/Down and Ctrl-N/Ctrl-P navigate menus.
+- Enter opens the selected submenu or provider page.
+- Escape steps back through provider pages before closing the dialog.
+
+#### OpenAI-compatible form
+
+- The Endpoint field defaults to `https://api.openai.com/v1` and supports custom compatible endpoints.
+- The API-key field is masked through an injected `TextInputViewStyle`; neither field exposes the key in debug output.
+- Both fields use wrappable `TextInput` views, and dialog height follows their measured content.
+- Tab loops focus through Endpoint and API key. No backward-focus binding is needed.
+- Ctrl-V reads through the `ClipboardReader` interface in a background effect. Focus/edit revisions discard stale clipboard completions instead of pasting into the wrong field.
+- Enter asynchronously saves the endpoint and key through `ProviderCredentialStore`. Durable saves require `agent-sqlite` and an absolute `session_db`.
+- Providers have independent credentials, but saving does not select a provider or model or mutate the active provider configuration.
+
+The OpenAI adapter also supports authenticated `GET {base_url}/models`. Login completion does not yet call it or present model selection.
+
+#### Agent slash commands
+
+A leading `/` in the inline dialog or panel Insert input opens a live-filtered command menu above the prompt. The menu derives candidates from the shared prompt state and catalog: `/provider`, `/model`, `/thinking`, and `/logout`.
+
+- Opening or changing the filter selects nothing, so Enter does nothing.
+- Tab quick-fills the first match.
+- Ctrl-N/Ctrl-P quick-fill and move selection with wrapping while retaining the original query's candidates.
+- Enter executes only an explicitly selected command and never submits slash text as a provider message.
+- The menu height follows content within the available layout. Its selection-following viewport keeps the selected row visible.
+- Model, thinking, and logout currently publish placeholder notifications.
+
+#### Ownership and deferred work
+
+`provider_login` owns dialog state, commands, and modal registration. `component/agent/provider_login.rs` is a pure menu, form, and placeholder view. Opening provider login from the inline Agent dialog suspends and later restores `AgentChatDialog`; panel Insert state resumes automatically.
+
+Account/OAuth authentication, token refresh, and provider/model selection remain deferred. API-key credentials can already be persisted independently through the shared credential-store interface.
 
 ## Session and run state
 

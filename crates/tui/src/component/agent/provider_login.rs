@@ -10,10 +10,11 @@ use crate::{
     component::{
         popup::{Popup, content_area},
         text_input::{TextInputStyleInput, TextInputStyleOutput, TextInputViewStyle},
+        text_layout::TextFlow,
     },
     provider_login::{
-        ProviderAuthMethod, ProviderLoginOption, ProviderLoginPage, ProviderLoginState,
-        ProviderSpec,
+        OpenAiField, ProviderAuthMethod, ProviderLoginOption, ProviderLoginPage,
+        ProviderLoginState, ProviderSpec,
     },
     theme::UiTheme,
 };
@@ -26,6 +27,7 @@ impl ProviderLogin {
         let height = match state.page() {
             ProviderLoginPage::Placeholder(_) => 8,
             ProviderLoginPage::ApiKeyInput(_) => 11,
+            ProviderLoginPage::OpenAiInput(_) => openai_height(state, 62),
             _ => u16::try_from(state.options().len())
                 .unwrap_or(u16::MAX)
                 .saturating_add(6),
@@ -45,15 +47,36 @@ impl ProviderLogin {
     }
 
     pub fn cursor(state: &ProviderLoginState, styles: &UiTheme, area: Rect) -> Option<Position> {
-        if !matches!(state.page(), ProviderLoginPage::ApiKeyInput(_)) || state.is_saving() {
+        if state.is_saving() {
             return None;
         }
-        let areas = api_key_areas(content_area(area));
-        state
-            .api_key_input()
-            .view(styles)
-            .with_style(&API_KEY_MASK_STYLE)
-            .cursor_position(areas.input)
+        match state.page() {
+            ProviderLoginPage::ApiKeyInput(_) => {
+                let areas = api_key_areas(content_area(area));
+                state
+                    .api_key_input()
+                    .view(styles)
+                    .with_style(&API_KEY_MASK_STYLE)
+                    .cursor_position(areas.input)
+            }
+            ProviderLoginPage::OpenAiInput(_) => {
+                let areas = openai_areas(state, content_area(area));
+                let field = state.openai_focused_field();
+                let input = state.openai_input(field);
+                let area = match field {
+                    OpenAiField::Endpoint => areas.endpoint,
+                    OpenAiField::ApiKey => areas.api_key,
+                };
+                let view = input.view_with_flow(styles, TextFlow::Wrapped);
+                match field {
+                    OpenAiField::Endpoint => view.cursor_position(area),
+                    OpenAiField::ApiKey => {
+                        view.with_style(&API_KEY_MASK_STYLE).cursor_position(area)
+                    }
+                }
+            }
+            _ => None,
+        }
     }
 }
 
@@ -67,6 +90,9 @@ impl Widget for ProviderLoginContent<'_> {
         match self.state.page() {
             ProviderLoginPage::ApiKeyInput(provider) => {
                 render_api_key(self.state, provider, self.styles, area, buffer)
+            }
+            ProviderLoginPage::OpenAiInput(provider) => {
+                render_openai(self.state, provider, self.styles, area, buffer)
             }
             ProviderLoginPage::Placeholder(provider) => {
                 Paragraph::new(placeholder_lines(provider, self.styles))
@@ -86,7 +112,9 @@ fn menu_lines(state: &ProviderLoginState, styles: &UiTheme) -> Vec<Line<'static>
             ("Select authentication method:", "Enter select · Esc close")
         }
         ProviderLoginPage::Providers(method) => (method_label(method), "Enter select · Esc back"),
-        ProviderLoginPage::Placeholder(_) | ProviderLoginPage::ApiKeyInput(_) => {
+        ProviderLoginPage::Placeholder(_)
+        | ProviderLoginPage::ApiKeyInput(_)
+        | ProviderLoginPage::OpenAiInput(_) => {
             unreachable!("provider pages use separate content")
         }
     };
@@ -188,6 +216,128 @@ fn render_api_key(
     .render(areas.hints, buffer);
 }
 
+struct OpenAiAreas {
+    heading: Rect,
+    provider: Rect,
+    endpoint_label: Rect,
+    endpoint: Rect,
+    api_key_label: Rect,
+    api_key: Rect,
+    status: Rect,
+    hints: Rect,
+}
+
+fn openai_input_heights(state: &ProviderLoginState, width: u16) -> (u16, u16) {
+    let endpoint = state
+        .openai_input(OpenAiField::Endpoint)
+        .measure(width, TextFlow::Wrapped)
+        .height;
+    let api_key = state
+        .openai_input(OpenAiField::ApiKey)
+        .measure(width, TextFlow::Wrapped)
+        .height;
+    (endpoint, api_key)
+}
+
+fn openai_height(state: &ProviderLoginState, width: u16) -> u16 {
+    let (endpoint, api_key) = openai_input_heights(state, width);
+    endpoint.saturating_add(api_key).saturating_add(10)
+}
+
+fn openai_areas(state: &ProviderLoginState, area: Rect) -> OpenAiAreas {
+    let (endpoint_height, api_key_height) = openai_input_heights(state, area.width);
+    let [
+        heading,
+        _,
+        provider,
+        endpoint_label,
+        endpoint,
+        api_key_label,
+        api_key,
+        status,
+        _,
+        hints,
+    ] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Length(endpoint_height),
+        Constraint::Length(1),
+        Constraint::Length(api_key_height),
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Length(1),
+    ])
+    .areas(area);
+    OpenAiAreas {
+        heading,
+        provider,
+        endpoint_label,
+        endpoint,
+        api_key_label,
+        api_key,
+        status,
+        hints,
+    }
+}
+
+fn render_openai(
+    state: &ProviderLoginState,
+    provider: ProviderSpec,
+    styles: &UiTheme,
+    area: Rect,
+    buffer: &mut Buffer,
+) {
+    let areas = openai_areas(state, area);
+    let focused = state.openai_focused_field();
+    Paragraph::new("OpenAI-compatible sign-in")
+        .style(styles.action_hint)
+        .render(areas.heading, buffer);
+    Paragraph::new(format!("Provider: {}", provider.id()))
+        .style(styles.base)
+        .render(areas.provider, buffer);
+    Paragraph::new("Endpoint")
+        .style(if focused == OpenAiField::Endpoint {
+            styles.action_hint
+        } else {
+            styles.muted
+        })
+        .render(areas.endpoint_label, buffer);
+    state
+        .openai_input(OpenAiField::Endpoint)
+        .view_with_flow(styles, TextFlow::Wrapped)
+        .render(areas.endpoint, buffer);
+    Paragraph::new("API key")
+        .style(if focused == OpenAiField::ApiKey {
+            styles.action_hint
+        } else {
+            styles.muted
+        })
+        .render(areas.api_key_label, buffer);
+    state
+        .openai_input(OpenAiField::ApiKey)
+        .view_with_flow(styles, TextFlow::Wrapped)
+        .with_style(&API_KEY_MASK_STYLE)
+        .render(areas.api_key, buffer);
+    if let Some(error) = state.error() {
+        Paragraph::new(error)
+            .style(styles.error)
+            .render(areas.status, buffer);
+    } else if state.is_saving() {
+        Paragraph::new("Saving...")
+            .style(styles.muted)
+            .render(areas.status, buffer);
+    }
+    Paragraph::new(if state.is_saving() {
+        "Saving..."
+    } else {
+        "Tab focus · Ctrl-V paste · Enter save · Esc back"
+    })
+    .style(styles.muted)
+    .render(areas.hints, buffer);
+}
+
 #[derive(Debug)]
 struct ApiKeyMaskStyle;
 
@@ -217,7 +367,10 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend};
 
     use super::*;
-    use crate::{component::text_input::TextInputEvent, theme::Theme};
+    use crate::{
+        component::text_input::TextInputEvent, provider_login::DEFAULT_OPENAI_ENDPOINT,
+        theme::Theme,
+    };
 
     fn render(state: &ProviderLoginState) -> String {
         let theme = Theme::default();
@@ -289,6 +442,9 @@ mod tests {
         state.open(None);
         state.select_next();
         state.activate();
+        for _ in 0..3 {
+            state.select_next();
+        }
         state.activate();
         for character in "key-secret".chars() {
             state.handle_input_event(TextInputEvent::Insert(character));
@@ -307,5 +463,39 @@ mod tests {
         assert!(state.begin_save(provider));
         assert!(ProviderLogin::cursor(&state, theme.ui(), area).is_none());
         assert!(render(&state).contains("Saving..."));
+    }
+
+    #[test]
+    fn openai_form_wraps_both_fields_and_tracks_focus() {
+        let mut state = ProviderLoginState::default();
+        state.open(None);
+        state.select_next();
+        state.activate();
+        state.activate();
+        assert!(render(&state).contains(DEFAULT_OPENAI_ENDPOINT));
+
+        for character in "segment/".repeat(12).chars() {
+            state.handle_input_event(TextInputEvent::Insert(character));
+        }
+        state.focus_next();
+        for character in "key-secret".chars() {
+            state.handle_input_event(TextInputEvent::Insert(character));
+        }
+        assert_eq!(state.openai_focused_field(), OpenAiField::ApiKey);
+        let content = render(&state);
+        assert!(content.contains("Endpoint"));
+        assert!(content.contains("API key"));
+        assert!(content.contains("segment/"));
+        assert!(content.contains("••••••••••"));
+        assert!(!content.contains("key-secret"));
+        assert!(ProviderLogin::size(&state).height > 16);
+
+        let theme = Theme::default();
+        let size = ProviderLogin::size(&state);
+        let area = Rect::new(0, 0, size.width, size.height);
+        assert!(ProviderLogin::cursor(&state, theme.ui(), area).is_some());
+        state.focus_next();
+        assert_eq!(state.openai_focused_field(), OpenAiField::Endpoint);
+        assert!(ProviderLogin::cursor(&state, theme.ui(), area).is_some());
     }
 }
