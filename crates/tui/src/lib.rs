@@ -47,6 +47,7 @@ pub mod data_object {
         buffer_navigation::BufferNavigationState,
         capabilities::document::{DocumentLifecycle, DocumentOpening},
         capabilities::notification::NotificationCenter,
+        capabilities::openai::OpenAiProviderFactory,
         capabilities::page_scroll::PageScroll,
         change::ChangeState,
         code_navigation::CodeNavigationState,
@@ -165,6 +166,8 @@ pub mod data_object {
         pub provider_login: ProviderLoginState,
         /// Optional durable credential capability shared by login and later model selection.
         pub provider_credentials: Option<Arc<dyn ProviderCredentialStore>>,
+        /// OpenAI-compatible catalog and provider construction used by login/model selection.
+        pub openai_factory: Option<Arc<dyn OpenAiProviderFactory>>,
         pub deferred_action: Option<DeferredAction>,
         pub command_menu: CommandMenuState,
         pub code_navigation: CodeNavigationState,
@@ -214,6 +217,7 @@ pub mod data_object {
                 agent: AgentState::default(),
                 provider_login: ProviderLoginState::default(),
                 provider_credentials: None,
+                openai_factory: None,
                 deferred_action: None,
                 command_menu: CommandMenuState::default(),
                 code_navigation: CodeNavigationState::default(),

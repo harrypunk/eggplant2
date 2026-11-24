@@ -1,4 +1,5 @@
 pub mod agent;
+pub mod openai;
 
 pub use agent::configure as configure_agent;
 

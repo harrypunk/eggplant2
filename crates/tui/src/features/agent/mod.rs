@@ -226,6 +226,14 @@ impl AgentState {
         self.provider.clone()
     }
 
+    pub fn provider_name(&self) -> &str {
+        &self.provider_name
+    }
+
+    pub fn model(&self) -> Option<&str> {
+        self.model.as_deref()
+    }
+
     pub fn set_session_store(&mut self, store: Arc<dyn SessionStore>) {
         self.store = store;
     }
