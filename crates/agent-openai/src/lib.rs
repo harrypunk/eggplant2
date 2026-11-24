@@ -31,7 +31,7 @@ impl fmt::Debug for OpenAiApiKey {
 #[derive(Debug, Clone)]
 pub struct OpenAiConfig {
     pub base_url: String,
-    pub model: String,
+    pub model: Option<String>,
     pub api_key_env: String,
     pub api_key: Option<OpenAiApiKey>,
 }
@@ -40,7 +40,7 @@ impl Default for OpenAiConfig {
     fn default() -> Self {
         Self {
             base_url: "https://api.openai.com/v1".to_string(),
-            model: "gpt-4o-mini".to_string(),
+            model: Some("gpt-4o-mini".to_string()),
             api_key_env: "OPENAI_API_KEY".to_string(),
             api_key: None,
         }
@@ -69,7 +69,11 @@ impl OpenAiProvider {
                 "OpenAI base URL must use http or https".to_string(),
             ));
         }
-        if config.model.trim().is_empty() {
+        if config
+            .model
+            .as_deref()
+            .is_some_and(|model| model.trim().is_empty())
+        {
             return Err(AgentError("OpenAI model must not be empty".to_string()));
         }
         if config.api_key.is_none() && config.api_key_env.trim().is_empty() {
@@ -173,13 +177,16 @@ impl AgentProvider for OpenAiProvider {
             if request.cancellation.is_cancelled() {
                 return Ok(());
             }
+            let model = self.config.model.as_deref().ok_or_else(|| {
+                AgentError("OpenAI model must be selected before streaming".to_string())
+            })?;
             let api_key = self.api_key()?;
             let response = self
                 .client
                 .post(self.endpoint())
                 .bearer_auth(api_key)
                 .json(&serde_json::json!({
-                    "model": self.config.model,
+                    "model": model,
                     "messages": request_messages(&request),
                     "tools": tool_declarations(),
                     "stream": true,
@@ -529,7 +536,7 @@ mod tests {
         unsafe { std::env::set_var(key_env, "test-key") };
         let provider = OpenAiProvider::new(OpenAiConfig {
             base_url,
-            model: "gpt-test".to_string(),
+            model: Some("gpt-test".to_string()),
             api_key_env: key_env.to_string(),
             api_key: None,
         })
@@ -567,6 +574,7 @@ mod tests {
         let (base_url, server) = spawn_server("200 OK", body);
         let config = OpenAiConfig {
             base_url,
+            model: None,
             api_key_env: "EGGPLANT_TEST_MISSING_OPENAI_KEY".to_string(),
             ..OpenAiConfig::default()
         }
@@ -610,7 +618,7 @@ mod tests {
         unsafe { std::env::set_var(key_env, "test-key") };
         let provider = OpenAiProvider::new(OpenAiConfig {
             base_url,
-            model: "gpt-test".to_string(),
+            model: Some("gpt-test".to_string()),
             api_key_env: key_env.to_string(),
             api_key: None,
         })
@@ -629,6 +637,26 @@ mod tests {
         unsafe { std::env::remove_var(key_env) };
     }
 
+    #[tokio::test]
+    async fn catalog_clients_do_not_need_a_model_but_streaming_does() {
+        let provider = OpenAiProvider::new(
+            OpenAiConfig {
+                model: None,
+                ..OpenAiConfig::default()
+            }
+            .with_api_key("stored-secret"),
+        )
+        .unwrap();
+        let error = provider
+            .stream(
+                AgentRequest::new("hello".to_string(), CancellationToken::default()),
+                Box::new(|_| {}),
+            )
+            .await
+            .unwrap_err();
+        assert!(error.0.contains("model must be selected"));
+    }
+
     #[test]
     fn config_validation_rejects_invalid_urls_and_models() {
         let config = OpenAiConfig {
@@ -637,7 +665,7 @@ mod tests {
         };
         assert!(OpenAiProvider::new(config).is_err());
         let config = OpenAiConfig {
-            model: " ".to_string(),
+            model: Some(" ".to_string()),
             ..OpenAiConfig::default()
         };
         assert!(OpenAiProvider::new(config).is_err());

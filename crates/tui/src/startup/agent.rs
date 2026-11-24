@@ -77,7 +77,7 @@ fn agent_provider(config: &Config) -> color_eyre::Result<Option<Arc<dyn AgentPro
         Some("openai") => {
             let mut provider_config = OpenAiConfig::default();
             if let Some(model) = &config.features.agent.model {
-                provider_config.model = model.clone();
+                provider_config.model = Some(model.clone());
             }
             if let Some(base_url) = &config.features.agent.base_url {
                 provider_config.base_url = base_url.clone();
