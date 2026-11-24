@@ -5,11 +5,12 @@ use editor::DocumentFactory;
 use crate::{
     buffer,
     command_menu::CommandMenuOutcome,
+    composition::actions::general_actions,
     data_object::{Message, Model, StatusMessage},
     manager::{
         command_registry::{CommandHandler, CommandRegistry},
         effect::Effect,
-        general_action::{BuiltinGeneralActionHandler, GeneralActionHandler},
+        general_action::GeneralActionHandler,
         text_input_registry::TextInputRegistry,
     },
 };
@@ -34,7 +35,7 @@ impl MessageManager {
             documents: DocumentFactory::new(),
             commands,
             text_input,
-            general_actions: Arc::new(BuiltinGeneralActionHandler),
+            general_actions: Arc::new(general_actions()),
         }
     }
 

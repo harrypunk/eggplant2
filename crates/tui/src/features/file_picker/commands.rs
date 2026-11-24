@@ -2,8 +2,15 @@ use crate::{
     component::text_input::TextInputEvent,
     data_object::{CommandId, Context, FocusTarget, GeneralAction, Model, StatusMessage},
     document,
-    manager::effect::Effect,
+    manager::{effect::Effect, general_action::GeneralActionSubscription},
 };
+
+pub fn general_action_subscriptions() -> Vec<GeneralActionSubscription> {
+    vec![GeneralActionSubscription::new(
+        Context::FilePicker,
+        handle_general_action,
+    )]
+}
 
 /// General modal actions operate directly on the file-picker workflow.
 pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option<Effect> {

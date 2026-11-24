@@ -15,7 +15,7 @@ mod work;
 mod write;
 
 pub(crate) use commands::handle_input;
-pub use commands::{commands, handle_command, handle_general_action};
+pub use commands::{commands, general_action_subscriptions, handle_command, handle_general_action};
 pub(crate) use panel::{close_panel_input, focus_panel_input};
 pub(crate) use prompt_command::{PromptCommand, PromptCommandMovement, PromptCommandState};
 pub use ui::register_ui;

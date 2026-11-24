@@ -62,7 +62,7 @@ Use `GeneralAction` for common modal behavior instead of creating feature-specif
 | Enter | `GeneralAction::Activate` |
 | Escape | `GeneralAction::Back` |
 
-The shared keyboard policy publishes these actions without per-feature string bindings. `BuiltinGeneralActionHandler` selects the subscriber from the active `Context`. A subscriber implements `handle_general_action` and operates directly on its workflow; it must not translate the published action back into a feature-specific command ID. Both paths may call the same domain helper, as theme application does, but their input identities remain distinct.
+The shared keyboard policy publishes these actions without per-feature string bindings. `GeneralActionDispatcher` selects a registered subscription from the active `Context`; it has no concrete feature dependencies. Each feature exposes `general_action_subscriptions()` and implements `handle_general_action` directly on its workflow. `composition/actions.rs` assembles those subscriptions and rejects duplicate contexts. Do not translate a published action back into a feature-specific command ID. Both paths may call the same domain helper, as theme application does, but their input identities remain distinct.
 
 Backspace is deliberately excluded: it remains `TextInputEvent::DeleteBackward` through `TextInputRegistry`, not a feature command. Direct custom commands keep their own bindings, and an explicit Ctrl-N/P binding takes precedence over the navigation alias.
 

@@ -3,7 +3,10 @@ use eggplant_agent_storage::{ProviderAuthType, ProviderCredential, StorageError}
 use crate::{
     component::text_input::TextInputEvent,
     data_object::{CommandId, Context, GeneralAction, Model, StatusMessage},
-    manager::{command_registry::Command, effect::Effect, input_context::input_context},
+    manager::{
+        command_registry::Command, effect::Effect, general_action::GeneralActionSubscription,
+        input_context::input_context,
+    },
 };
 
 pub fn commands() -> Vec<Command> {
@@ -65,6 +68,13 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         _ => {}
     }
     None
+}
+
+pub fn general_action_subscriptions() -> Vec<GeneralActionSubscription> {
+    vec![GeneralActionSubscription::new(
+        Context::ProviderLogin,
+        handle_general_action,
+    )]
 }
 
 pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option<Effect> {

@@ -1,7 +1,10 @@
 use crate::{
     component::text_input::TextInputEvent,
     data_object::{CommandId, Context, GeneralAction, Model},
-    manager::{command_registry::Command, effect::Effect, input_context::input_context},
+    manager::{
+        command_registry::Command, effect::Effect, general_action::GeneralActionSubscription,
+        input_context::input_context,
+    },
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,6 +100,13 @@ pub(crate) fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<E
     }
     model.agent.handle_input_event(event);
     None
+}
+
+pub fn general_action_subscriptions() -> Vec<GeneralActionSubscription> {
+    vec![
+        GeneralActionSubscription::new(Context::AgentChatDialog, handle_general_action),
+        GeneralActionSubscription::new(Context::AgentChatInsert, handle_general_action),
+    ]
 }
 
 pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option<Effect> {

@@ -9,7 +9,7 @@ pub use state::{ThemePickerEntry, ThemePickerState};
 use crate::{
     config::ThemeConfig,
     data_object::{CommandId, Context, GeneralAction, ModalController, Model, StatusMessage},
-    manager::effect::Effect,
+    manager::{effect::Effect, general_action::GeneralActionSubscription},
     theme::{Theme, ThemePersistenceState},
 };
 
@@ -123,6 +123,13 @@ pub(crate) fn handle_input(
 ) -> Option<Effect> {
     model.theme_picker.handle_query_event(event);
     None
+}
+
+pub fn general_action_subscriptions() -> Vec<GeneralActionSubscription> {
+    vec![GeneralActionSubscription::new(
+        Context::ThemePicker,
+        handle_general_action,
+    )]
 }
 
 /// General modal actions operate directly on theme-picker state and workflows.

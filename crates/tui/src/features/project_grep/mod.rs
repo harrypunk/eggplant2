@@ -13,7 +13,9 @@ use crate::{
     component::text_input::TextInputEvent,
     data_object::{CommandId, Context, GeneralAction, Model, StatusMessage},
     document,
-    manager::{command_registry::Command, effect::Effect},
+    manager::{
+        command_registry::Command, effect::Effect, general_action::GeneralActionSubscription,
+    },
     ui::UiRegistry,
 };
 
@@ -54,6 +56,13 @@ pub fn commands() -> Vec<Command> {
 
 pub fn register_ui(ui: &mut UiRegistry) -> color_eyre::Result<()> {
     ui.register_overlay("project_grep", component::overlay)
+}
+
+pub fn general_action_subscriptions() -> Vec<GeneralActionSubscription> {
+    vec![GeneralActionSubscription::new(
+        Context::ProjectGrep,
+        handle_general_action,
+    )]
 }
 
 pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option<Effect> {

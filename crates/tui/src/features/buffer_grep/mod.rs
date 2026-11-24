@@ -11,7 +11,10 @@ use crate::{
     component::text_input::TextInputEvent,
     data_object::{CommandId, Context, GeneralAction, Model, StatusMessage},
     focus,
-    manager::{command_registry::Command, effect::Effect, input_context::input_context},
+    manager::{
+        command_registry::Command, effect::Effect, general_action::GeneralActionSubscription,
+        input_context::input_context,
+    },
     ui::UiRegistry,
 };
 use editor::DocumentPosition;
@@ -53,6 +56,13 @@ pub fn commands() -> Vec<Command> {
 
 pub fn register_ui(ui: &mut UiRegistry) -> color_eyre::Result<()> {
     ui.register_overlay("buffer_grep", component::overlay)
+}
+
+pub fn general_action_subscriptions() -> Vec<GeneralActionSubscription> {
+    vec![GeneralActionSubscription::new(
+        Context::BufferGrep,
+        handle_general_action,
+    )]
 }
 
 pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option<Effect> {
