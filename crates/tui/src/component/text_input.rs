@@ -165,6 +165,7 @@ impl TextInput {
             cursor: self.cursor,
             flow,
             styles,
+            style: &PLAIN_TEXT_INPUT_STYLE,
         }
     }
 
@@ -200,6 +201,40 @@ impl std::ops::Deref for TextInput {
     }
 }
 
+/// Original value and cursor positions supplied to a view-style implementation.
+#[derive(Debug, Clone, Copy)]
+pub struct TextInputStyleInput<'a> {
+    pub value: &'a str,
+    pub cursor_byte: usize,
+    pub cursor_offset: usize,
+}
+
+/// Owned text and cursor byte produced by a view style.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TextInputStyleOutput {
+    pub text: String,
+    pub cursor_byte: usize,
+}
+
+/// Presentation transformation independent of text editing and cursor movement.
+pub trait TextInputViewStyle: std::fmt::Debug {
+    fn style(&self, input: TextInputStyleInput<'_>) -> TextInputStyleOutput;
+}
+
+#[derive(Debug)]
+struct PlainTextInputStyle;
+
+static PLAIN_TEXT_INPUT_STYLE: PlainTextInputStyle = PlainTextInputStyle;
+
+impl TextInputViewStyle for PlainTextInputStyle {
+    fn style(&self, input: TextInputStyleInput<'_>) -> TextInputStyleOutput {
+        TextInputStyleOutput {
+            text: input.value.to_string(),
+            cursor_byte: input.cursor_byte,
+        }
+    }
+}
+
 /// Stateless cursor-aware rendering of a [`TextInput`] component.
 #[derive(Debug, Clone, Copy)]
 pub struct TextInputView<'a> {
@@ -207,6 +242,7 @@ pub struct TextInputView<'a> {
     cursor: TextCursor,
     flow: TextFlow,
     styles: &'a UiTheme,
+    style: &'a dyn TextInputViewStyle,
 }
 
 impl<'a> TextInputView<'a> {
@@ -216,7 +252,13 @@ impl<'a> TextInputView<'a> {
             cursor: TextCursor::end(value),
             flow: TextFlow::SingleLine,
             styles,
+            style: &PLAIN_TEXT_INPUT_STYLE,
         }
+    }
+
+    pub fn with_style(mut self, style: &'a dyn TextInputViewStyle) -> Self {
+        self.style = style;
+        self
     }
 
     pub fn cursor_position(self, area: Rect) -> Option<Position> {
@@ -225,9 +267,14 @@ impl<'a> TextInputView<'a> {
     }
 
     fn layout(self, area: Rect) -> TextLayout {
+        let output = self.style.style(TextInputStyleInput {
+            value: self.value,
+            cursor_byte: self.cursor.byte_index(self.value),
+            cursor_offset: self.cursor.offset(self.value),
+        });
         TextLayout::new(
-            self.value,
-            self.cursor.byte_index(self.value),
+            &output.text,
+            output.cursor_byte,
             Block::bordered().inner(area).width,
             self.flow,
         )
@@ -252,6 +299,21 @@ mod tests {
 
     use super::*;
     use crate::theme::Theme;
+
+    #[derive(Debug)]
+    struct MaskStyle;
+
+    impl TextInputViewStyle for MaskStyle {
+        fn style(&self, input: TextInputStyleInput<'_>) -> TextInputStyleOutput {
+            let text = "•".repeat(input.value.chars().count());
+            let cursor_byte = text
+                .char_indices()
+                .nth(input.cursor_offset)
+                .map(|(index, _)| index)
+                .unwrap_or(text.len());
+            TextInputStyleOutput { text, cursor_byte }
+        }
+    }
 
     #[test]
     fn component_moves_and_edits_at_unicode_scalar_boundaries() {
@@ -281,6 +343,33 @@ mod tests {
         input.handle_event(TextInputEvent::Cursor(TextCursorMovement::Right));
         input.handle_event(TextInputEvent::Cursor(TextCursorMovement::Right));
         assert_eq!(input.cursor, TextCursor::end(input.value()));
+    }
+
+    #[test]
+    fn injected_mask_style_hides_the_value_and_tracks_scalar_cursor_position() {
+        let theme = Theme::default();
+        let area = Rect::new(0, 0, 10, 3);
+        let mut input = TextInput::new("a界🙂");
+        input.handle_event(TextInputEvent::Cursor(TextCursorMovement::Left));
+        let style = MaskStyle;
+        let view = input.view(theme.ui()).with_style(&style);
+        assert_eq!(view.cursor_position(area), Some(Position::new(3, 1)));
+
+        let mut terminal = Terminal::new(TestBackend::new(10, 3)).unwrap();
+        terminal
+            .draw(|frame| frame.render_widget(view, frame.area()))
+            .unwrap();
+        let content = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(content.contains("•••"));
+        assert!(!content.contains('a'));
+        assert!(!content.contains('界'));
+        assert!(!content.contains('🙂'));
     }
 
     #[test]
