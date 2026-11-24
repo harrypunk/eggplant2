@@ -14,6 +14,7 @@ pub struct ProviderCredential {
     pub provider_id: String,
     pub auth_type: ProviderAuthType,
     pub base_url: Option<String>,
+    pub selected_model: Option<String>,
     pub api_key: Option<String>,
     pub access_token: Option<String>,
     pub refresh_token: Option<String>,
@@ -64,6 +65,7 @@ impl fmt::Debug for ProviderCredential {
             .field("provider_id", &self.provider_id)
             .field("auth_type", &self.auth_type)
             .field("base_url", &self.base_url)
+            .field("selected_model", &self.selected_model)
             .field("api_key", &redacted(&self.api_key))
             .field("access_token", &redacted(&self.access_token))
             .field("refresh_token", &redacted(&self.refresh_token))
@@ -122,6 +124,7 @@ mod tests {
             provider_id: "openai".to_string(),
             auth_type,
             base_url: None,
+            selected_model: None,
             api_key: None,
             access_token: None,
             refresh_token: None,

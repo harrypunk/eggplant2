@@ -109,6 +109,7 @@ Append message/run/session updates in one transaction where the backend requires
 - `provider_id` (primary key and stable provider catalog ID)
 - `auth_type` (`oauth` or `api_key`, enforced by a database check and SeaORM active enum)
 - Optional `base_url` for OpenAI-compatible endpoints or provider-specific configuration
+- Optional `selected_model`, set only after the user chooses from the provider's available catalog
 - Optional `api_key`
 - Optional OAuth `access_token`, `refresh_token`, `expires_at`, and `account_id`
 - `created_at`, `updated_at` as Unix milliseconds

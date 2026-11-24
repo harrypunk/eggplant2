@@ -30,6 +30,8 @@ pub struct Model {
     pub auth_type: AuthType,
     /// Optional OpenAI-compatible endpoint or provider-specific base URL.
     pub base_url: Option<String>,
+    /// Model selected from the provider's available catalog, if one was chosen.
+    pub selected_model: Option<String>,
     /// Secret used by API-key authentication.
     pub api_key: Option<String>,
     /// Short-lived bearer token used by account/OAuth authentication.
@@ -53,6 +55,7 @@ impl fmt::Debug for Model {
             .field("provider_id", &self.provider_id)
             .field("auth_type", &self.auth_type)
             .field("base_url", &self.base_url)
+            .field("selected_model", &self.selected_model)
             .field("api_key", &redacted(&self.api_key))
             .field("access_token", &redacted(&self.access_token))
             .field("refresh_token", &redacted(&self.refresh_token))
@@ -98,6 +101,7 @@ mod tests {
             provider_id: "openai".to_string(),
             auth_type: AuthType::OAuth,
             base_url: None,
+            selected_model: None,
             api_key: Some("api-secret".to_string()),
             access_token: Some("access-secret".to_string()),
             refresh_token: Some("refresh-secret".to_string()),

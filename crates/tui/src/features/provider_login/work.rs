@@ -133,6 +133,7 @@ fn save_api_key(
             provider_id: provider.id().to_string(),
             auth_type: ProviderAuthType::ApiKey,
             base_url,
+            selected_model: None,
             api_key: Some(key),
             access_token: None,
             refresh_token: None,
