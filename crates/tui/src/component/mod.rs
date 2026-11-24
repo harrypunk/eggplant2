@@ -6,6 +6,7 @@ pub mod diagnostics_panel;
 pub mod editor;
 pub mod file_explorer;
 pub mod file_picker;
+pub mod form;
 pub mod key_hints;
 pub mod list;
 pub mod notification;

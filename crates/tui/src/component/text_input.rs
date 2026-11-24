@@ -128,6 +128,10 @@ impl TextInput {
         self.cursor = self.cursor.insert(&mut self.value, character);
     }
 
+    pub fn insert_str(&mut self, text: &str) {
+        text.chars().for_each(|character| self.insert(character));
+    }
+
     pub fn backspace(&mut self) -> bool {
         match self.cursor.backspace(&mut self.value) {
             Some(cursor) => {
@@ -343,6 +347,15 @@ mod tests {
         input.handle_event(TextInputEvent::Cursor(TextCursorMovement::Right));
         input.handle_event(TextInputEvent::Cursor(TextCursorMovement::Right));
         assert_eq!(input.cursor, TextCursor::end(input.value()));
+    }
+
+    #[test]
+    fn insert_str_pastes_at_the_current_unicode_cursor() {
+        let mut input = TextInput::new("ab");
+        input.handle_event(TextInputEvent::Cursor(TextCursorMovement::Left));
+        input.insert_str("界🙂");
+        assert_eq!(input.value(), "a界🙂b");
+        assert_eq!(input.cursor.byte_index(input.value()), "a界🙂".len());
     }
 
     #[test]
