@@ -9,7 +9,7 @@ pub use work::BufferGrepRequest;
 use crate::{
     command_menu::CommandMenuItem,
     component::text_input::TextInputEvent,
-    data_object::{CommandId, Context, Model, StatusMessage},
+    data_object::{CommandId, Context, GeneralAction, Model, StatusMessage},
     focus,
     manager::{command_registry::Command, effect::Effect, input_context::input_context},
     ui::UiRegistry,
@@ -53,6 +53,22 @@ pub fn commands() -> Vec<Command> {
 
 pub fn register_ui(ui: &mut UiRegistry) -> color_eyre::Result<()> {
     ui.register_overlay("buffer_grep", component::overlay)
+}
+
+pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option<Effect> {
+    match action {
+        GeneralAction::Next => {
+            model.buffer_grep.select_next();
+            model.buffer_grep.refresh_preview(&model.editor);
+        }
+        GeneralAction::Previous => {
+            model.buffer_grep.select_previous();
+            model.buffer_grep.refresh_preview(&model.editor);
+        }
+        GeneralAction::Activate => accept(model),
+        GeneralAction::Back => close(model),
+    }
+    None
 }
 
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {

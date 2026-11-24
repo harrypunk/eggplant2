@@ -1,6 +1,6 @@
 use crate::{
     component::text_input::TextInputEvent,
-    data_object::{CommandId, Context, Model},
+    data_object::{CommandId, Context, GeneralAction, Model},
     manager::{command_registry::Command, effect::Effect, input_context::input_context},
 };
 
@@ -97,6 +97,29 @@ pub(crate) fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<E
     }
     model.agent.handle_input_event(event);
     None
+}
+
+pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option<Effect> {
+    match action {
+        GeneralAction::Next => {
+            model
+                .agent
+                .quick_fill_prompt_command(super::PromptCommandMovement::Next);
+            None
+        }
+        GeneralAction::Previous => {
+            model
+                .agent
+                .quick_fill_prompt_command(super::PromptCommandMovement::Previous);
+            None
+        }
+        GeneralAction::Activate => super::work::submit(model),
+        GeneralAction::Back => match input_context(model) {
+            Some(Context::AgentChatInsert) => super::panel::enter_normal_mode(model),
+            Some(Context::AgentChatDialog) => super::dialog::close(model),
+            _ => None,
+        },
+    }
 }
 
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {

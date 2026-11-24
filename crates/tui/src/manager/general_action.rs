@@ -14,6 +14,13 @@ pub struct BuiltinGeneralActionHandler;
 impl GeneralActionHandler for BuiltinGeneralActionHandler {
     fn handle(&self, model: &mut Model, action: GeneralAction) -> Option<Effect> {
         match input_context(model)? {
+            Context::FilePicker => crate::file_picker::handle_general_action(model, action),
+            Context::ThemePicker => crate::theme_picker::handle_general_action(model, action),
+            Context::BufferGrep => crate::buffer_grep::handle_general_action(model, action),
+            Context::ProjectGrep => crate::project_grep::handle_general_action(model, action),
+            Context::AgentChatDialog | Context::AgentChatInsert => {
+                crate::agent::handle_general_action(model, action)
+            }
             Context::ProviderLogin => crate::provider_login::handle_general_action(model, action),
             _ => None,
         }

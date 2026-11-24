@@ -51,6 +51,21 @@ Add the function to the provider list in `CommandRegistry::builtin`. The registr
 
 The handler receives the model and command ID and returns an optional effect. Keep physical keys out of the handler: configured direct chords and built-in leader sequences resolve to the same command ID. A command that opens documents can use `Command::document` instead; normal invocation then injects the shared `DocumentFactory`, as with Explorer's `open_selected`, without a feature-specific message or manager arm.
 
+### General modal actions
+
+Use `GeneralAction` for common modal behavior instead of creating feature-specific `my_feature_next`, `my_feature_previous`, `my_feature_activate`, or `my_feature_back` key bindings:
+
+| Physical input | Published action |
+| --- | --- |
+| Down / Ctrl-N | `GeneralAction::Next` |
+| Up / Ctrl-P | `GeneralAction::Previous` |
+| Enter | `GeneralAction::Activate` |
+| Escape | `GeneralAction::Back` |
+
+The shared keyboard policy publishes these actions without per-feature string bindings. `BuiltinGeneralActionHandler` selects the subscriber from the active `Context`. A subscriber implements `handle_general_action` and operates directly on its workflow; it must not translate the published action back into a feature-specific command ID. Both paths may call the same domain helper, as theme application does, but their input identities remain distinct.
+
+Backspace is deliberately excluded: it remains `TextInputEvent::DeleteBackward` through `TextInputRegistry`, not a feature command. Direct custom commands keep their own bindings, and an explicit Ctrl-N/P binding takes precedence over the navigation alias.
+
 - Preserve existing IDs when renaming behavior.
 - Use feature-specific prefixes for new IDs.
 - Return an error status for an unexpected ID instead of silently ignoring it.

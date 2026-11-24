@@ -11,7 +11,7 @@ use editor::DocumentPosition;
 use crate::{
     command_menu::CommandMenuItem,
     component::text_input::TextInputEvent,
-    data_object::{CommandId, Context, Model, StatusMessage},
+    data_object::{CommandId, Context, GeneralAction, Model, StatusMessage},
     document,
     manager::{command_registry::Command, effect::Effect},
     ui::UiRegistry,
@@ -54,6 +54,18 @@ pub fn commands() -> Vec<Command> {
 
 pub fn register_ui(ui: &mut UiRegistry) -> color_eyre::Result<()> {
     ui.register_overlay("project_grep", component::overlay)
+}
+
+pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option<Effect> {
+    match action {
+        GeneralAction::Next => return model.project_grep.select_next().map(Effect::feature),
+        GeneralAction::Previous => {
+            return model.project_grep.select_previous().map(Effect::feature);
+        }
+        GeneralAction::Activate => return accept(model),
+        GeneralAction::Back => close(model),
+    }
+    None
 }
 
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {

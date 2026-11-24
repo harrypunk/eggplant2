@@ -165,21 +165,21 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::InvokeCommand(CommandId("close_file_picker")))
+            Some(Message::GeneralAction(GeneralAction::Back))
         ));
         let event = Event::Key(KeyEvent::new(KeyCode::Down, KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
-            Some(Message::InvokeCommand(CommandId("file_picker_next")))
+            Some(Message::GeneralAction(GeneralAction::Next))
         ));
-        for (character, command) in [('n', "file_picker_next"), ('p', "file_picker_previous")] {
+        for (character, action) in [('n', GeneralAction::Next), ('p', GeneralAction::Previous)] {
             let event = Event::Key(KeyEvent::new(
                 KeyCode::Char(character),
                 KeyModifiers::CONTROL,
             ));
             assert!(matches!(
                 manager.translate(event, &model),
-                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+                Some(Message::GeneralAction(actual)) if actual == action
             ));
         }
     }
@@ -248,7 +248,7 @@ mod tests {
                 Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)),
                 &model,
             ),
-            Some(Message::InvokeCommand(CommandId("close_theme_picker")))
+            Some(Message::GeneralAction(GeneralAction::Back))
         ));
         assert!(matches!(
             manager.translate(
@@ -286,29 +286,29 @@ mod tests {
             |key| manager.translate(Event::Key(KeyEvent::new(key, KeyModifiers::NONE)), &model);
         assert!(matches!(
             translate(KeyCode::Down),
-            Some(Message::InvokeCommand(CommandId("theme_picker_next")))
+            Some(Message::GeneralAction(GeneralAction::Next))
         ));
         assert!(matches!(
             translate(KeyCode::Up),
-            Some(Message::InvokeCommand(CommandId("theme_picker_previous")))
+            Some(Message::GeneralAction(GeneralAction::Previous))
         ));
-        for (character, command) in [('n', "theme_picker_next"), ('p', "theme_picker_previous")] {
+        for (character, action) in [('n', GeneralAction::Next), ('p', GeneralAction::Previous)] {
             let event = Event::Key(KeyEvent::new(
                 KeyCode::Char(character),
                 KeyModifiers::CONTROL,
             ));
             assert!(matches!(
                 manager.translate(event, &model),
-                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+                Some(Message::GeneralAction(actual)) if actual == action
             ));
         }
         assert!(matches!(
             translate(KeyCode::Enter),
-            Some(Message::InvokeCommand(CommandId("apply_theme")))
+            Some(Message::GeneralAction(GeneralAction::Activate))
         ));
         assert!(matches!(
             translate(KeyCode::Esc),
-            Some(Message::InvokeCommand(CommandId("close_theme_picker")))
+            Some(Message::GeneralAction(GeneralAction::Back))
         ));
 
         for (key, character) in [
@@ -475,20 +475,28 @@ mod tests {
         ));
 
         model.context_stack.push(Context::AgentChatDialog);
-        for (key, modifiers, command) in [
-            (KeyCode::Enter, KeyModifiers::NONE, "agent_submit"),
-            (KeyCode::Esc, KeyModifiers::NONE, "agent_close"),
-            (KeyCode::F(7), KeyModifiers::CONTROL, "agent_interrupt"),
+        for (key, modifiers, action) in [
+            (KeyCode::Enter, KeyModifiers::NONE, GeneralAction::Activate),
+            (KeyCode::Esc, KeyModifiers::NONE, GeneralAction::Back),
             (
                 KeyCode::Char('n'),
                 KeyModifiers::CONTROL,
-                "agent_command_next",
+                GeneralAction::Next,
             ),
             (
                 KeyCode::Char('p'),
                 KeyModifiers::CONTROL,
-                "agent_command_previous",
+                GeneralAction::Previous,
             ),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, modifiers));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::GeneralAction(actual)) if actual == action
+            ));
+        }
+        for (key, modifiers, command) in [
+            (KeyCode::F(7), KeyModifiers::CONTROL, "agent_interrupt"),
             (KeyCode::Tab, KeyModifiers::NONE, "agent_command_quick_fill"),
         ] {
             let event = Event::Key(KeyEvent::new(key, modifiers));
@@ -651,20 +659,28 @@ mod tests {
         }
 
         model.agent.enter_insert_mode();
-        for (key, modifiers, command) in [
-            (KeyCode::Enter, KeyModifiers::NONE, "agent_submit"),
-            (KeyCode::Esc, KeyModifiers::NONE, "agent_panel_normal"),
-            (KeyCode::F(7), KeyModifiers::CONTROL, "agent_interrupt"),
+        for (key, modifiers, action) in [
+            (KeyCode::Enter, KeyModifiers::NONE, GeneralAction::Activate),
+            (KeyCode::Esc, KeyModifiers::NONE, GeneralAction::Back),
             (
                 KeyCode::Char('n'),
                 KeyModifiers::CONTROL,
-                "agent_command_next",
+                GeneralAction::Next,
             ),
             (
                 KeyCode::Char('p'),
                 KeyModifiers::CONTROL,
-                "agent_command_previous",
+                GeneralAction::Previous,
             ),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, modifiers));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::GeneralAction(actual)) if actual == action
+            ));
+        }
+        for (key, modifiers, command) in [
+            (KeyCode::F(7), KeyModifiers::CONTROL, "agent_interrupt"),
             (KeyCode::Tab, KeyModifiers::NONE, "agent_command_quick_fill"),
         ] {
             let event = Event::Key(KeyEvent::new(key, modifiers));
@@ -924,26 +940,26 @@ mod tests {
             manager.translate(event, &model),
             Some(Message::TextInput(TextInputEvent::Insert('e')))
         ));
-        for (key, modifiers, command) in [
-            (KeyCode::Down, KeyModifiers::NONE, "buffer_grep_next"),
+        for (key, modifiers, action) in [
+            (KeyCode::Down, KeyModifiers::NONE, GeneralAction::Next),
             (
                 KeyCode::Char('n'),
                 KeyModifiers::CONTROL,
-                "buffer_grep_next",
+                GeneralAction::Next,
             ),
-            (KeyCode::Up, KeyModifiers::NONE, "buffer_grep_previous"),
+            (KeyCode::Up, KeyModifiers::NONE, GeneralAction::Previous),
             (
                 KeyCode::Char('p'),
                 KeyModifiers::CONTROL,
-                "buffer_grep_previous",
+                GeneralAction::Previous,
             ),
-            (KeyCode::Enter, KeyModifiers::NONE, "buffer_grep_accept"),
-            (KeyCode::Esc, KeyModifiers::NONE, "buffer_grep_close"),
+            (KeyCode::Enter, KeyModifiers::NONE, GeneralAction::Activate),
+            (KeyCode::Esc, KeyModifiers::NONE, GeneralAction::Back),
         ] {
             let event = Event::Key(KeyEvent::new(key, modifiers));
             assert!(matches!(
                 manager.translate(event, &model),
-                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+                Some(Message::GeneralAction(actual)) if actual == action
             ));
         }
     }
@@ -959,26 +975,26 @@ mod tests {
             manager.translate(event, &model),
             Some(Message::TextInput(TextInputEvent::Insert('e')))
         ));
-        for (key, modifiers, command) in [
-            (KeyCode::Down, KeyModifiers::NONE, "project_grep_next"),
+        for (key, modifiers, action) in [
+            (KeyCode::Down, KeyModifiers::NONE, GeneralAction::Next),
             (
                 KeyCode::Char('n'),
                 KeyModifiers::CONTROL,
-                "project_grep_next",
+                GeneralAction::Next,
             ),
-            (KeyCode::Up, KeyModifiers::NONE, "project_grep_previous"),
+            (KeyCode::Up, KeyModifiers::NONE, GeneralAction::Previous),
             (
                 KeyCode::Char('p'),
                 KeyModifiers::CONTROL,
-                "project_grep_previous",
+                GeneralAction::Previous,
             ),
-            (KeyCode::Enter, KeyModifiers::NONE, "project_grep_accept"),
-            (KeyCode::Esc, KeyModifiers::NONE, "project_grep_close"),
+            (KeyCode::Enter, KeyModifiers::NONE, GeneralAction::Activate),
+            (KeyCode::Esc, KeyModifiers::NONE, GeneralAction::Back),
         ] {
             let event = Event::Key(KeyEvent::new(key, modifiers));
             assert!(matches!(
                 manager.translate(event, &model),
-                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+                Some(Message::GeneralAction(actual)) if actual == action
             ));
         }
     }

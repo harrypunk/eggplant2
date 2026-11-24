@@ -61,25 +61,27 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         "provider_login_activate" => return activate(model),
         "provider_login_focus_next" => model.provider_login.focus_next(),
         "provider_login_paste" => return super::paste::paste(model),
-        "provider_login_close" => {
-            return match model.provider_login.back() {
-                super::ProviderLoginBack::Back => None,
-                super::ProviderLoginBack::Close => close(model),
-            };
-        }
+        "provider_login_close" => return back(model),
         _ => {}
     }
     None
 }
 
 pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option<Effect> {
-    let command = match action {
-        GeneralAction::Next => CommandId("provider_login_next"),
-        GeneralAction::Previous => CommandId("provider_login_previous"),
-        GeneralAction::Activate => CommandId("provider_login_activate"),
-        GeneralAction::Back => CommandId("provider_login_close"),
-    };
-    handle_command(model, command)
+    match action {
+        GeneralAction::Next => model.provider_login.select_next(),
+        GeneralAction::Previous => model.provider_login.select_previous(),
+        GeneralAction::Activate => return activate(model),
+        GeneralAction::Back => return back(model),
+    }
+    None
+}
+
+fn back(model: &mut Model) -> Option<Effect> {
+    match model.provider_login.back() {
+        super::ProviderLoginBack::Back => None,
+        super::ProviderLoginBack::Close => close(model),
+    }
 }
 
 pub fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {

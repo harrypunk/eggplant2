@@ -1,9 +1,35 @@
 use crate::{
     component::text_input::TextInputEvent,
-    data_object::{CommandId, Context, FocusTarget, Model, StatusMessage},
+    data_object::{CommandId, Context, FocusTarget, GeneralAction, Model, StatusMessage},
     document,
     manager::effect::Effect,
 };
+
+/// General modal actions operate directly on the file-picker workflow.
+pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option<Effect> {
+    match action {
+        GeneralAction::Next => model.file_picker.select_next().map(Effect::feature),
+        GeneralAction::Previous => model.file_picker.select_previous().map(Effect::feature),
+        GeneralAction::Activate => open_selected(model),
+        GeneralAction::Back => {
+            close(model);
+            None
+        }
+    }
+}
+
+fn open_selected(model: &mut Model) -> Option<Effect> {
+    let path = model.file_picker.selected_entry()?.path.clone();
+    let documents = model.file_picker.documents().clone();
+    let session = model.file_picker.session_revision();
+    document::open_file_at_with_origin(
+        &documents,
+        model,
+        &path,
+        None,
+        document::OpenOrigin::FilePicker { session },
+    )
+}
 
 /// File-picker command adapter.
 pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
@@ -13,18 +39,7 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
             close(model);
             None
         }
-        "open_picker_file" => {
-            let path = model.file_picker.selected_entry()?.path.clone();
-            let documents = model.file_picker.documents().clone();
-            let session = model.file_picker.session_revision();
-            document::open_file_at_with_origin(
-                &documents,
-                model,
-                &path,
-                None,
-                document::OpenOrigin::FilePicker { session },
-            )
-        }
+        "open_picker_file" => open_selected(model),
         "file_picker_next" => model.file_picker.select_next().map(Effect::feature),
         "file_picker_previous" => model.file_picker.select_previous().map(Effect::feature),
         _ => {

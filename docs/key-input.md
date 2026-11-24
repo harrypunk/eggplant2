@@ -306,7 +306,7 @@ The current `KeyHints` component deliberately does not claim to be the complete 
 
 ## Current single-key flow
 
-Direct bindings use one `KeyChord`. `Registry` resolves the chord in the active `Context` and returns a semantic command invocation; for example, Normal `h` becomes `Message::InvokeCommand(CommandId("move_left"))` and is handled by the editing feature.
+Direct bindings use one `KeyChord`. `Registry` resolves the chord in the active `Context` and returns an `InputAction`. Feature-specific commands become `Message::InvokeCommand(CommandId)`; common modal actions become `Message::GeneralAction`. For example, Normal `h` becomes `Message::InvokeCommand(CommandId("move_left"))`, while a picker Down becomes `Message::GeneralAction(GeneralAction::Next)`.
 
 ```text
 Crossterm Event::Key
@@ -335,6 +335,10 @@ active input Context + Registry
 Input translation is pure. It does not change the model, execute commands, sleep, or perform I/O. Only `MessageManager::update` changes application state. Rendering reads the resulting model and never resolves commands itself.
 
 Direct bindings and leader targets share `CommandRegistry`: each stable command ID has metadata and a handler. Resolved input emits `InvokeCommand(CommandId)`; unmigrated commands use compatibility messages, while the theme picker, file picker, buffer switching, editing commands, explorer state commands, lifecycle commands, and focus commands already use feature-owned handlers. Duplicate command registrations and duplicate chords in one input context are startup errors. Later feature migrations replace compatibility handlers without changing keybindings.
+
+Common modal keys follow a separate publish/subscribe path. `GeneralAction::{Next, Previous, Activate, Back}` carries semantic behavior without a feature prefix. `GeneralActionHandler` selects a subscriber from the active `Context`, and that subscriber operates directly on its workflow instead of translating the action back into a feature command ID. This lets file picker, theme picker, grep, Agent, and provider-login workflows share Down/Up, Ctrl-N/P, Enter, and Escape without adding `yet_another_next` bindings. Custom direct commands retain their own command IDs and bindings.
+
+Backspace does not participate in general actions. It remains a semantic text-editing event through `TextInputRegistry`, alongside character insertion and cursor movement.
 
 The configured leader (`Space` by default) opens a small data-driven sequence state machine. `EventManager` validates the configured chord once, converts terminal events to `KeyChord`, and delegates start/pending decisions to `manager::context::leader_input`. `CommandMenuStart` opens the root without the menu knowing the physical leader chord; `CommandMenuKey(KeyChord)` continues an active sequence. Each `CommandMenuContext` owns its semantic title and items, and each item targets either a submenu or a semantic `CommandId`. `KeyHints` renders the current context's candidates and composes its title by joining active context titles, such as `Leader > buffer`.
 

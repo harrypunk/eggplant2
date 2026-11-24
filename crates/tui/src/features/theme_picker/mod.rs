@@ -8,7 +8,7 @@ pub use state::{ThemePickerEntry, ThemePickerState};
 
 use crate::{
     config::ThemeConfig,
-    data_object::{CommandId, Context, ModalController, Model, StatusMessage},
+    data_object::{CommandId, Context, GeneralAction, ModalController, Model, StatusMessage},
     manager::effect::Effect,
     theme::{Theme, ThemePersistenceState},
 };
@@ -125,24 +125,46 @@ pub(crate) fn handle_input(
     None
 }
 
-/// Registered composition-root adapter for theme-picker commands.
-pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    let Some(command) = ThemePickerCommand::from_id(id) else {
-        model.status = Some(StatusMessage::error(format!(
-            "unknown theme command `{}`",
-            id.as_str()
-        )));
-        return None;
-    };
-    if command == ThemePickerCommand::Apply && !model.theme_picker.selection_is_visible() {
+/// General modal actions operate directly on theme-picker state and workflows.
+pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option<Effect> {
+    match action {
+        GeneralAction::Next => {
+            model.theme_picker.select_next();
+            None
+        }
+        GeneralAction::Previous => {
+            model.theme_picker.select_previous();
+            None
+        }
+        GeneralAction::Activate => apply(model),
+        GeneralAction::Back => {
+            close_theme_picker(model);
+            None
+        }
+    }
+}
+
+fn close_theme_picker(model: &mut Model) {
+    ThemePickerAdapter {
+        state: &mut model.theme_picker,
+        theme: &mut model.theme,
+        persistence: &mut model.theme_persistence,
+        contexts: &mut model.context_stack,
+        modal: &mut model.modal,
+        status: &mut model.status,
+    }
+    .close();
+}
+
+fn apply(model: &mut Model) -> Option<Effect> {
+    if !model.theme_picker.selection_is_visible() {
         return None;
     }
-    if command == ThemePickerCommand::Apply
-        && let Some(path) = model
-            .theme_picker
-            .selected()
-            .file_path()
-            .map(std::path::Path::to_path_buf)
+    if let Some(path) = model
+        .theme_picker
+        .selected()
+        .file_path()
+        .map(std::path::Path::to_path_buf)
     {
         let source = ThemeConfig::Ghostty {
             provider: model
@@ -161,17 +183,42 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         };
         let effect = crate::theme::start_loading_and_persist(&source, model);
         if effect.is_some() {
-            ThemePickerAdapter {
-                state: &mut model.theme_picker,
-                theme: &mut model.theme,
-                persistence: &mut model.theme_persistence,
-                contexts: &mut model.context_stack,
-                modal: &mut model.modal,
-                status: &mut model.status,
-            }
-            .close();
+            close_theme_picker(model);
         }
         return effect;
+    }
+
+    let Model {
+        theme_picker,
+        theme,
+        theme_persistence,
+        context_stack,
+        modal,
+        status,
+        ..
+    } = model;
+    ThemePickerAdapter {
+        state: theme_picker,
+        theme,
+        persistence: theme_persistence,
+        contexts: context_stack,
+        modal,
+        status,
+    }
+    .handle(ThemePickerCommand::Apply)
+}
+
+/// Registered composition-root adapter for theme-picker commands.
+pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
+    let Some(command) = ThemePickerCommand::from_id(id) else {
+        model.status = Some(StatusMessage::error(format!(
+            "unknown theme command `{}`",
+            id.as_str()
+        )));
+        return None;
+    };
+    if command == ThemePickerCommand::Apply {
+        return apply(model);
     }
 
     let Model {

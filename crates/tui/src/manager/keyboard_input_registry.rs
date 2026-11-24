@@ -87,7 +87,8 @@ const MODAL_GENERAL_ACTIONS: [(KeyCode, GeneralAction); 4] = [
 
 fn with_common_actions(context_name: &str, bindings: ContextBindings) -> ContextBindings {
     match context_name {
-        "provider_login" => bindings.with_general_actions(
+        "provider_login" | "file_picker" | "theme_picker" | "buffer_grep" | "project_grep"
+        | "agent_chat_dialog" | "agent_chat_insert" => bindings.with_general_actions(
             MODAL_GENERAL_ACTIONS.map(|(key, action)| (KeyChord::from(key), action)),
         ),
         _ => bindings,
@@ -154,34 +155,14 @@ fn common_bindings() -> KeymapConfig {
             "explorer_help",
             [("close_explorer_help", "esc"), ("explorer_help", "?")],
         ),
-        keymap_context(
-            "file_picker",
-            [
-                ("open_picker_file", "enter"),
-                ("file_picker_next", "down"),
-                ("file_picker_previous", "up"),
-                ("close_file_picker", "esc"),
-            ],
-        ),
-        keymap_context(
-            "theme_picker",
-            [
-                ("apply_theme", "enter"),
-                ("theme_picker_next", "down"),
-                ("theme_picker_previous", "up"),
-                ("close_theme_picker", "esc"),
-            ],
-        ),
+        keymap_context("file_picker", []),
+        keymap_context("theme_picker", []),
         keymap_context("buffer_jump", [("buffer_jump_cancel", "esc")]),
         keymap_context("buffer_navigation", [("buffer_navigation_cancel", "esc")]),
         keymap_context(
             "agent_chat_dialog",
             [
-                ("agent_close", "esc"),
-                ("agent_submit", "enter"),
                 ("agent_interrupt", "ctrl-f7"),
-                ("agent_command_next", "down"),
-                ("agent_command_previous", "up"),
                 ("agent_command_quick_fill", "tab"),
             ],
         ),
@@ -199,11 +180,7 @@ fn common_bindings() -> KeymapConfig {
         keymap_context(
             "agent_chat_insert",
             [
-                ("agent_panel_normal", "esc"),
-                ("agent_submit", "enter"),
                 ("agent_interrupt", "ctrl-f7"),
-                ("agent_command_next", "down"),
-                ("agent_command_previous", "up"),
                 ("agent_command_quick_fill", "tab"),
             ],
         ),
@@ -227,24 +204,8 @@ fn common_bindings() -> KeymapConfig {
                 ("provider_login_paste", "ctrl-v"),
             ],
         ),
-        keymap_context(
-            "buffer_grep",
-            [
-                ("buffer_grep_next", "down"),
-                ("buffer_grep_previous", "up"),
-                ("buffer_grep_accept", "enter"),
-                ("buffer_grep_close", "esc"),
-            ],
-        ),
-        keymap_context(
-            "project_grep",
-            [
-                ("project_grep_next", "down"),
-                ("project_grep_previous", "up"),
-                ("project_grep_accept", "enter"),
-                ("project_grep_close", "esc"),
-            ],
-        ),
+        keymap_context("buffer_grep", []),
+        keymap_context("project_grep", []),
         keymap_context("line_jump", [("line_jump_cancel", "esc")]),
         keymap_context("view_align", [("view_align_cancel", "esc")]),
         keymap_context("change", [("change_cancel", "esc")]),
@@ -467,7 +428,7 @@ mod tests {
     }
 
     #[test]
-    fn common_keys_cannot_be_overridden_by_custom_entries() {
+    fn common_keys_keep_priority_and_custom_commands_remain_available() {
         let config = HashMap::from([
             (
                 "file_picker".to_string(),
@@ -486,15 +447,19 @@ mod tests {
         let picker = registry.get_binding(&Context::FilePicker).unwrap();
         assert_eq!(
             picker.resolve(KeyChord::new(KeyCode::Enter, KeyModifiers::NONE)),
-            Some(InputAction::Command(CommandId("open_picker_file")))
+            Some(InputAction::General(GeneralAction::Activate))
         );
         assert_eq!(
             picker.resolve(KeyChord::new(KeyCode::Down, KeyModifiers::NONE)),
-            Some(InputAction::Command(CommandId("file_picker_next")))
+            Some(InputAction::General(GeneralAction::Next))
         );
         assert_eq!(
             picker.resolve(KeyChord::new(KeyCode::Char('x'), KeyModifiers::NONE)),
-            None
+            Some(InputAction::Command(CommandId("open_picker_file")))
+        );
+        assert_eq!(
+            picker.resolve(KeyChord::new(KeyCode::Char('n'), KeyModifiers::NONE)),
+            Some(InputAction::Command(CommandId("file_picker_next")))
         );
 
         let delete = registry.get_binding(&Context::ExplorerDelete).unwrap();
