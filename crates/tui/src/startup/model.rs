@@ -1,25 +1,30 @@
 use std::{path::PathBuf, sync::Arc};
 
 use app::language::{LanguageServerRegistry, LanguageServers};
-use color_eyre::eyre::WrapErr;
-use editor::DocumentFactory;
 
-use crate::{
-    data_object::{Model, Workspace},
-    explorer::{ExplorerEntryKind, ExplorerState},
-    file_picker::FileEntry,
-};
+use super::source::{FilesystemStartupLoader, StartupSourceLoader};
+use crate::data_object::Model;
 
 /// Build the initial application model before terminal raw mode is enabled.
 pub fn initial_model(path: Option<PathBuf>) -> color_eyre::Result<Model> {
     initial_model_with_languages(path, Arc::new(LanguageServers::defaults()))
 }
 
-/// Compose a model with an externally constructed language-server registry.
+/// Compose a model with externally constructed language and startup-source interfaces.
 pub fn initial_model_with_languages(
     path: Option<PathBuf>,
     language_servers: Arc<dyn LanguageServerRegistry>,
 ) -> color_eyre::Result<Model> {
+    initial_model_with_loader(path, language_servers, &FilesystemStartupLoader)
+}
+
+/// Assemble a model from semantic startup content and injected dependencies.
+pub fn initial_model_with_loader(
+    path: Option<PathBuf>,
+    language_servers: Arc<dyn LanguageServerRegistry>,
+    loader: &dyn StartupSourceLoader,
+) -> color_eyre::Result<Model> {
+    let source = loader.load(path)?;
     let mut model = Model {
         language_servers,
         ..Model::default()
@@ -27,36 +32,7 @@ pub fn initial_model_with_languages(
     model
         .document_lifecycle
         .set_on_close(crate::code_navigation::close_document);
-
-    match path {
-        Some(path) if path.is_dir() => {
-            let root = std::fs::canonicalize(&path)
-                .wrap_err_with(|| format!("failed to open folder `{}`", path.display()))?;
-            model.explorer = ExplorerState::load(&root)
-                .wrap_err_with(|| format!("failed to read folder `{}`", root.display()))?;
-            let picker_files = model
-                .explorer
-                .entries
-                .iter()
-                .filter(|entry| entry.kind != ExplorerEntryKind::Directory && entry.path.is_file())
-                .map(|entry| FileEntry {
-                    path: entry.path.clone(),
-                    display: entry.name.to_string_lossy().into_owned(),
-                })
-                .collect();
-            model.file_picker.seed_top_level(picker_files);
-            model.workspace = Some(Workspace::new(root));
-        }
-        Some(path) => {
-            let document = DocumentFactory::new()
-                .open(&path)
-                .wrap_err_with(|| format!("failed to open `{}`", path.display()))?;
-            model.editor.insert_document(document);
-        }
-        None => {}
-    }
-
-    Ok(model)
+    Ok(source.install(model))
 }
 
 #[cfg(test)]
@@ -68,6 +44,7 @@ mod tests {
         data_object::{Context, FocusTarget},
         file_picker::FileCollectionState,
         manager::input_context::input_context,
+        startup::StartupSource,
     };
 
     #[test]
@@ -113,6 +90,27 @@ mod tests {
             .unwrap();
         assert_eq!(spec.command(), "typescript-language-server");
         assert_eq!(spec.args(), &[String::from("--stdio")]);
+    }
+
+    #[test]
+    fn startup_source_loader_is_replaceable() {
+        struct EmptyLoader;
+
+        impl StartupSourceLoader for EmptyLoader {
+            fn load(&self, _path: Option<PathBuf>) -> color_eyre::Result<StartupSource> {
+                Ok(StartupSource::Empty)
+            }
+        }
+
+        let model = initial_model_with_loader(
+            Some(PathBuf::from("/path/that/does/not/exist")),
+            Arc::new(LanguageServers::default()),
+            &EmptyLoader,
+        )
+        .unwrap();
+
+        assert!(model.editor.is_empty());
+        assert!(model.workspace.is_none());
     }
 
     #[test]

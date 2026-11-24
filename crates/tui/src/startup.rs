@@ -1,8 +1,10 @@
 mod effects;
 mod model;
+mod source;
 
 pub use effects::initial_effects;
-pub use model::{initial_model, initial_model_with_languages};
+pub use model::{initial_model, initial_model_with_languages, initial_model_with_loader};
+pub use source::{StartupSource, StartupSourceLoader, WorkspaceSnapshot};
 
 use std::{ffi::OsString, path::PathBuf};
 
