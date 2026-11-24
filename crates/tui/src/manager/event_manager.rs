@@ -7,7 +7,7 @@ use crate::component::text_input::{TextCursorMovement, TextInputEvent};
 use crate::config::Config;
 use crate::data_object::{Context, Message, Model};
 use crate::manager::{
-    context::{KeyChord, LeaderInput, leader_input},
+    context::{InputAction, KeyChord, LeaderInput, leader_input},
     input_context::input_context,
     keyboard_input_registry::Registry,
     text_input_registry::TextInputRegistry,
@@ -76,7 +76,10 @@ impl EventManager {
         self.keymap
             .get_binding(&context)
             .and_then(|bindings| bindings.resolve_chord(chord))
-            .map(Message::InvokeCommand)
+            .map(|action| match action {
+                InputAction::Command(id) => Message::InvokeCommand(id),
+                InputAction::General(action) => Message::GeneralAction(action),
+            })
             .or_else(|| self.unbound_key_message(&context, chord))
     }
 
@@ -102,7 +105,7 @@ impl EventManager {
 mod tests {
     use super::*;
     use crate::{
-        data_object::{AppPage, FocusTarget},
+        data_object::{AppPage, FocusTarget, GeneralAction},
         manager::command_registry::{CommandId, CommandRegistry},
     };
 
@@ -573,24 +576,29 @@ mod tests {
         let manager = event_manager();
         let model = model_with_buffer(Context::ProviderLogin);
 
-        for (key, modifiers, command) in [
-            (KeyCode::Down, KeyModifiers::NONE, "provider_login_next"),
-            (KeyCode::Up, KeyModifiers::NONE, "provider_login_previous"),
+        for (key, modifiers, action) in [
+            (KeyCode::Down, KeyModifiers::NONE, GeneralAction::Next),
+            (KeyCode::Up, KeyModifiers::NONE, GeneralAction::Previous),
             (
                 KeyCode::Char('n'),
                 KeyModifiers::CONTROL,
-                "provider_login_next",
+                GeneralAction::Next,
             ),
             (
                 KeyCode::Char('p'),
                 KeyModifiers::CONTROL,
-                "provider_login_previous",
+                GeneralAction::Previous,
             ),
-            (
-                KeyCode::Enter,
-                KeyModifiers::NONE,
-                "provider_login_activate",
-            ),
+            (KeyCode::Enter, KeyModifiers::NONE, GeneralAction::Activate),
+            (KeyCode::Esc, KeyModifiers::NONE, GeneralAction::Back),
+        ] {
+            let event = Event::Key(KeyEvent::new(key, modifiers));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::GeneralAction(actual)) if actual == action
+            ));
+        }
+        for (key, modifiers, command) in [
             (
                 KeyCode::Tab,
                 KeyModifiers::NONE,
@@ -601,7 +609,6 @@ mod tests {
                 KeyModifiers::CONTROL,
                 "provider_login_paste",
             ),
-            (KeyCode::Esc, KeyModifiers::NONE, "provider_login_close"),
         ] {
             let event = Event::Key(KeyEvent::new(key, modifiers));
             assert!(matches!(

@@ -1,10 +1,11 @@
 use std::collections::{HashMap, hash_map::Entry};
 
 use color_eyre::eyre::eyre;
+use crossterm::event::KeyCode;
 
 use crate::{
     config::{KeymapConfig, keymap_context},
-    data_object::{CommandId, Context},
+    data_object::{CommandId, Context, GeneralAction},
     manager::{
         command_registry::CommandRegistry,
         context::{ContextBindings, KeyChord},
@@ -48,6 +49,7 @@ impl Registry {
                             bindings
                         }
                     })
+                    .map(|bindings| with_common_actions(context_name, bindings))
                     .map(|bindings| (bindings.context, bindings))
             })
             .collect::<color_eyre::Result<ContextBindingMap>>()
@@ -74,6 +76,22 @@ fn list_navigation_contexts() -> &'static [&'static str] {
         "agent_chat_insert",
         "provider_login",
     ]
+}
+
+const MODAL_GENERAL_ACTIONS: [(KeyCode, GeneralAction); 4] = [
+    (KeyCode::Down, GeneralAction::Next),
+    (KeyCode::Up, GeneralAction::Previous),
+    (KeyCode::Enter, GeneralAction::Activate),
+    (KeyCode::Esc, GeneralAction::Back),
+];
+
+fn with_common_actions(context_name: &str, bindings: ContextBindings) -> ContextBindings {
+    match context_name {
+        "provider_login" => bindings.with_general_actions(
+            MODAL_GENERAL_ACTIONS.map(|(key, action)| (KeyChord::from(key), action)),
+        ),
+        _ => bindings,
+    }
 }
 
 fn common_bindings() -> KeymapConfig {
@@ -205,12 +223,8 @@ fn common_bindings() -> KeymapConfig {
         keymap_context(
             "provider_login",
             [
-                ("provider_login_next", "down"),
-                ("provider_login_previous", "up"),
-                ("provider_login_activate", "enter"),
                 ("provider_login_focus_next", "tab"),
                 ("provider_login_paste", "ctrl-v"),
-                ("provider_login_close", "esc"),
             ],
         ),
         keymap_context(
@@ -387,7 +401,7 @@ mod tests {
     use crossterm::event::{KeyCode, KeyModifiers};
 
     use super::*;
-    use crate::config::Config;
+    use crate::{config::Config, manager::context::InputAction};
 
     #[test]
     fn removed_backspace_actions_do_not_break_existing_config() {
@@ -424,7 +438,7 @@ mod tests {
                 .get_binding(&Context::EditorInput)
                 .unwrap()
                 .resolve(KeyChord::new(KeyCode::Esc, KeyModifiers::NONE)),
-            Some(CommandId("exit_insert_mode"))
+            Some(InputAction::Command(CommandId("exit_insert_mode")))
         ));
     }
 
@@ -441,7 +455,7 @@ mod tests {
                 .get_binding(&Context::AppNormal)
                 .unwrap()
                 .resolve(KeyChord::new(KeyCode::Char('q'), KeyModifiers::CONTROL)),
-            Some(CommandId("quit"))
+            Some(InputAction::Command(CommandId("quit")))
         ));
         assert!(
             registry
@@ -472,11 +486,11 @@ mod tests {
         let picker = registry.get_binding(&Context::FilePicker).unwrap();
         assert_eq!(
             picker.resolve(KeyChord::new(KeyCode::Enter, KeyModifiers::NONE)),
-            Some(CommandId("open_picker_file"))
+            Some(InputAction::Command(CommandId("open_picker_file")))
         );
         assert_eq!(
             picker.resolve(KeyChord::new(KeyCode::Down, KeyModifiers::NONE)),
-            Some(CommandId("file_picker_next"))
+            Some(InputAction::Command(CommandId("file_picker_next")))
         );
         assert_eq!(
             picker.resolve(KeyChord::new(KeyCode::Char('x'), KeyModifiers::NONE)),
@@ -486,7 +500,7 @@ mod tests {
         let delete = registry.get_binding(&Context::ExplorerDelete).unwrap();
         assert_eq!(
             delete.resolve(KeyChord::new(KeyCode::Char('y'), KeyModifiers::NONE)),
-            Some(CommandId("explorer_delete_confirm"))
+            Some(InputAction::Command(CommandId("explorer_delete_confirm")))
         );
         assert_eq!(
             delete.resolve(KeyChord::new(KeyCode::Char('n'), KeyModifiers::NONE)),

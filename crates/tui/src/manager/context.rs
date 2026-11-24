@@ -2,7 +2,19 @@ use std::{collections::HashMap, str::FromStr};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-use crate::data_object::{CommandId, Context};
+use crate::data_object::{CommandId, Context, GeneralAction};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InputAction {
+    Command(CommandId),
+    General(GeneralAction),
+}
+
+impl From<CommandId> for InputAction {
+    fn from(id: CommandId) -> Self {
+        Self::Command(id)
+    }
+}
 
 /// A key press used for binding lookup, independent of terminal event metadata.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -146,7 +158,7 @@ fn parse_key_code(value: &str) -> Result<KeyCode, String> {
     Ok(code)
 }
 
-type KeyCommandMap = HashMap<KeyChord, CommandId>;
+type KeyActionMap = HashMap<KeyChord, InputAction>;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum NavigationPolicy {
@@ -158,7 +170,7 @@ pub enum NavigationPolicy {
 /// Keybindings associated with one input context.
 #[derive(Debug, Clone)]
 pub struct ContextBindings {
-    key_command_map: KeyCommandMap,
+    key_action_map: KeyActionMap,
     pub context: Context,
     navigation: NavigationPolicy,
 }
@@ -168,11 +180,35 @@ impl ContextBindings {
         context: Context,
         bindings: impl IntoIterator<Item = (KeyChord, CommandId)>,
     ) -> Self {
+        Self::from_actions(
+            context,
+            bindings
+                .into_iter()
+                .map(|(key, command)| (key, InputAction::Command(command))),
+        )
+    }
+
+    pub fn from_actions(
+        context: Context,
+        actions: impl IntoIterator<Item = (KeyChord, InputAction)>,
+    ) -> Self {
         Self {
-            key_command_map: bindings.into_iter().collect(),
+            key_action_map: actions.into_iter().collect(),
             context,
             navigation: NavigationPolicy::Plain,
         }
+    }
+
+    pub fn with_general_actions(
+        mut self,
+        actions: impl IntoIterator<Item = (KeyChord, GeneralAction)>,
+    ) -> Self {
+        self.key_action_map.extend(
+            actions
+                .into_iter()
+                .map(|(key, action)| (key, InputAction::General(action))),
+        );
+        self
     }
 
     pub fn with_list_navigation(mut self) -> Self {
@@ -180,12 +216,12 @@ impl ContextBindings {
         self
     }
 
-    pub fn resolve(&self, key: KeyChord) -> Option<CommandId> {
-        self.key_command_map.get(&key).copied()
+    pub fn resolve(&self, key: KeyChord) -> Option<InputAction> {
+        self.key_action_map.get(&key).copied()
     }
 
     /// Resolve a direct binding before terminal compatibility fallbacks.
-    pub fn resolve_chord(&self, key: KeyChord) -> Option<CommandId> {
+    pub fn resolve_chord(&self, key: KeyChord) -> Option<InputAction> {
         self.resolve(key)
             .or_else(|| {
                 (self.navigation == NavigationPolicy::List)
@@ -298,7 +334,20 @@ mod tests {
         assert_eq!(plain.resolve_chord(ctrl_n), None);
 
         let list = plain.with_list_navigation();
-        assert_eq!(list.resolve_chord(ctrl_n), Some(next));
+        assert_eq!(list.resolve_chord(ctrl_n), Some(InputAction::Command(next)));
+
+        let general = ContextBindings::from_actions(
+            Context::AppNormal,
+            [(
+                KeyChord::from(KeyCode::Down),
+                InputAction::General(GeneralAction::Next),
+            )],
+        )
+        .with_list_navigation();
+        assert_eq!(
+            general.resolve_chord(ctrl_n),
+            Some(InputAction::General(GeneralAction::Next))
+        );
     }
 
     #[test]

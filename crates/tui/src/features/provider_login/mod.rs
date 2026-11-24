@@ -12,4 +12,4 @@ pub use state::{
     ProviderLoginState, ProviderLoginSubmission, ProviderSpec,
 };
 pub use ui::register_ui;
-pub use work::{commands, handle_command, handle_input, open};
+pub use work::{commands, handle_command, handle_general_action, handle_input, open};

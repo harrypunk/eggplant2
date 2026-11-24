@@ -72,6 +72,14 @@ pub mod data_object {
 
     /// Stable semantic command identity shared by keymaps and feature handlers.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub enum GeneralAction {
+        Next,
+        Previous,
+        Activate,
+        Back,
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub struct CommandId(pub &'static str);
 
     impl CommandId {
@@ -397,6 +405,7 @@ pub mod data_object {
         CommandMenuStart,
         CommandMenuKey(crate::manager::context::KeyChord),
         InvokeCommand(CommandId),
+        GeneralAction(GeneralAction),
         FeatureCompletion(FeatureCompletion),
         TextInput(crate::component::text_input::TextInputEvent),
         FocusLost,

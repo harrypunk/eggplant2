@@ -2,7 +2,7 @@ use eggplant_agent_storage::{ProviderAuthType, ProviderCredential, StorageError}
 
 use crate::{
     component::text_input::TextInputEvent,
-    data_object::{CommandId, Context, Model, StatusMessage},
+    data_object::{CommandId, Context, GeneralAction, Model, StatusMessage},
     manager::{command_registry::Command, effect::Effect, input_context::input_context},
 };
 
@@ -70,6 +70,16 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         _ => {}
     }
     None
+}
+
+pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option<Effect> {
+    let command = match action {
+        GeneralAction::Next => CommandId("provider_login_next"),
+        GeneralAction::Previous => CommandId("provider_login_previous"),
+        GeneralAction::Activate => CommandId("provider_login_activate"),
+        GeneralAction::Back => CommandId("provider_login_close"),
+    };
+    handle_command(model, command)
 }
 
 pub fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {

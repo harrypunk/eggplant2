@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use editor::DocumentFactory;
 
 use crate::{
@@ -7,6 +9,7 @@ use crate::{
     manager::{
         command_registry::{CommandHandler, CommandRegistry},
         effect::Effect,
+        general_action::{BuiltinGeneralActionHandler, GeneralActionHandler},
         text_input_registry::TextInputRegistry,
     },
 };
@@ -16,6 +19,7 @@ pub struct MessageManager {
     documents: DocumentFactory,
     commands: CommandRegistry,
     text_input: TextInputRegistry,
+    general_actions: Arc<dyn GeneralActionHandler>,
 }
 
 impl Default for MessageManager {
@@ -30,7 +34,16 @@ impl MessageManager {
             documents: DocumentFactory::new(),
             commands,
             text_input,
+            general_actions: Arc::new(BuiltinGeneralActionHandler),
         }
+    }
+
+    pub fn with_general_action_handler(
+        mut self,
+        general_actions: Arc<dyn GeneralActionHandler>,
+    ) -> Self {
+        self.general_actions = general_actions;
+        self
     }
 
     pub fn update(&self, model: &mut Model, msg: Message) -> Option<Effect> {
@@ -46,6 +59,7 @@ impl MessageManager {
                 };
             }
             Message::InvokeCommand(id) => return self.invoke_command(model, id),
+            Message::GeneralAction(action) => return self.general_actions.handle(model, action),
             Message::FeatureCompletion(completion) => return completion.update(model),
             Message::TextInput(event) => return self.text_input.handle(model, event),
             Message::FocusLost => return buffer::save_active(model),
