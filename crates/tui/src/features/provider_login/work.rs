@@ -1,5 +1,8 @@
+use eggplant_agent_storage::{ProviderAuthType, ProviderCredential, StorageError};
+
 use crate::{
-    data_object::{CommandId, Context, Model},
+    component::text_input::TextInputEvent,
+    data_object::{CommandId, Context, Model, StatusMessage},
     manager::{command_registry::Command, effect::Effect, input_context::input_context},
 };
 
@@ -39,13 +42,13 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
     if id.as_str() == "provider_login_open" {
         return open(model);
     }
-    if input_context(model) != Some(Context::ProviderLogin) || !model.provider_login.is_open() {
+    if !available(model) || model.provider_login.is_saving() {
         return None;
     }
     match id.as_str() {
         "provider_login_next" => model.provider_login.select_next(),
         "provider_login_previous" => model.provider_login.select_previous(),
-        "provider_login_activate" => model.provider_login.activate(),
+        "provider_login_activate" => return activate(model),
         "provider_login_close" => {
             return match model.provider_login.back() {
                 super::ProviderLoginBack::Back => None,
@@ -55,6 +58,85 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         _ => {}
     }
     None
+}
+
+pub fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
+    if available(model) {
+        model.provider_login.handle_input_event(event);
+    }
+    None
+}
+
+fn available(model: &Model) -> bool {
+    input_context(model) == Some(Context::ProviderLogin) && model.provider_login.is_open()
+}
+
+fn activate(model: &mut Model) -> Option<Effect> {
+    let Some((provider, key)) = model.provider_login.api_key_submission() else {
+        model.provider_login.activate();
+        return None;
+    };
+    let key = key.trim().to_string();
+    if key.is_empty() {
+        model.provider_login.set_error("API key must not be empty");
+        return None;
+    }
+    let Some(store) = model.provider_credentials.clone() else {
+        model.provider_login.set_error(
+            "Durable login requires the agent-sqlite feature and an absolute session_db path",
+        );
+        return None;
+    };
+    if !model.provider_login.begin_save(provider) {
+        return None;
+    }
+    let now = chrono::Utc::now().timestamp_millis();
+    Some(super::storage::persist(
+        store,
+        ProviderCredential {
+            provider_id: provider.id().to_string(),
+            auth_type: ProviderAuthType::ApiKey,
+            api_key: Some(key),
+            access_token: None,
+            refresh_token: None,
+            expires_at: None,
+            account_id: None,
+            created_at: now,
+            updated_at: now,
+        },
+    ))
+}
+
+pub(super) fn complete_save(
+    model: &mut Model,
+    provider_id: &str,
+    result: Result<(), StorageError>,
+) -> Option<Effect> {
+    let error = result
+        .err()
+        .map(|error| error.to_string().chars().take(512).collect::<String>());
+    match model
+        .provider_login
+        .complete_save(provider_id, error.clone())
+    {
+        Some(true) => {
+            close(model);
+            Some(crate::notifications::publish_status(
+                model,
+                StatusMessage::info(format!("Saved API key for {provider_id}")),
+                Some("Provider"),
+            ))
+        }
+        Some(false) => Some(crate::notifications::publish_status(
+            model,
+            StatusMessage::error(format!(
+                "Failed to save API key for {provider_id}: {}",
+                error.unwrap_or_else(|| "unknown storage error".to_string())
+            )),
+            Some("Provider"),
+        )),
+        None => None,
+    }
 }
 
 pub fn open(model: &mut Model) -> Option<Effect> {
@@ -109,7 +191,38 @@ fn resume_inline_agent(model: &mut Model, context: Option<Context>) {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
+    use eggplant_agent_storage::{InMemoryStore, ProviderCredentialStore};
+
     use super::*;
+    use crate::manager::message_manager::MessageManager;
+
+    fn open_api_key_at(model: &mut Model, index: usize) {
+        open(model);
+        handle_command(model, CommandId("provider_login_next"));
+        handle_command(model, CommandId("provider_login_activate"));
+        for _ in 0..index {
+            handle_command(model, CommandId("provider_login_next"));
+        }
+        handle_command(model, CommandId("provider_login_activate"));
+    }
+
+    fn insert_key(model: &mut Model, key: &str) {
+        key.chars().for_each(|character| {
+            handle_input(model, TextInputEvent::Insert(character));
+        });
+    }
+
+    fn submit_and_complete(model: &mut Model) {
+        let effect = handle_command(model, CommandId("provider_login_activate"))
+            .expect("API-key submission should create a save effect");
+        let Effect::Feature(effect) = effect else {
+            panic!("API-key submission should use a feature effect");
+        };
+        let message = effect.perform();
+        MessageManager::default().update(model, message);
+    }
 
     #[test]
     fn dialog_owns_modal_input_until_closed() {
@@ -147,8 +260,8 @@ mod tests {
         handle_command(&mut model, CommandId("provider_login_activate"));
         handle_command(&mut model, CommandId("provider_login_next"));
         handle_command(&mut model, CommandId("provider_login_activate"));
-        let ProviderLoginPage::Placeholder(provider) = model.provider_login.page() else {
-            panic!("provider selection should open its placeholder");
+        let ProviderLoginPage::ApiKeyInput(provider) = model.provider_login.page() else {
+            panic!("provider selection should open its API-key input");
         };
         assert_eq!(provider.id(), "kimi-for-coding");
 
@@ -161,6 +274,59 @@ mod tests {
         handle_command(&mut model, CommandId("provider_login_close"));
         assert!(!model.provider_login.is_open());
         assert!(!model.modal.is_active(Context::ProviderLogin));
+    }
+
+    #[test]
+    fn saves_multiple_providers_without_selecting_a_runtime_provider() {
+        let store = Arc::new(InMemoryStore::new());
+        let mut model = Model {
+            provider_credentials: Some(store.clone()),
+            ..Model::default()
+        };
+
+        open_api_key_at(&mut model, 0);
+        insert_key(&mut model, "openai-secret");
+        submit_and_complete(&mut model);
+        assert!(!model.provider_login.is_open());
+        assert!(model.agent.provider().is_none());
+
+        open_api_key_at(&mut model, 3);
+        insert_key(&mut model, "deepseek-secret");
+        submit_and_complete(&mut model);
+        assert!(!model.provider_login.is_open());
+        assert!(model.agent.provider().is_none());
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        let openai = runtime.block_on(store.get("openai")).unwrap().unwrap();
+        let deepseek = runtime.block_on(store.get("deepseek")).unwrap().unwrap();
+        assert_eq!(openai.api_key.as_deref(), Some("openai-secret"));
+        assert_eq!(deepseek.api_key.as_deref(), Some("deepseek-secret"));
+        assert_eq!(runtime.block_on(store.list()).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn invalid_or_unpersistable_keys_stay_in_the_masked_draft() {
+        let mut model = Model::default();
+        open_api_key_at(&mut model, 0);
+        handle_command(&mut model, CommandId("provider_login_activate"));
+        assert_eq!(
+            model.provider_login.error(),
+            Some("API key must not be empty")
+        );
+
+        insert_key(&mut model, "secret");
+        assert!(handle_command(&mut model, CommandId("provider_login_activate")).is_none());
+        assert!(
+            model
+                .provider_login
+                .error()
+                .unwrap()
+                .contains("agent-sqlite")
+        );
+        assert_eq!(model.provider_login.api_key_input().value(), "secret");
+        assert!(model.provider_login.is_open());
     }
 
     #[test]

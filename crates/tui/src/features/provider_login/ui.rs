@@ -21,9 +21,14 @@ fn overlay(model: &Model) -> Option<OverlayContribution> {
                 OverlayPlacement::Centered(ProviderLogin::size(&model.provider_login)),
                 render,
             )
+            .with_cursor(cursor)
         })
 }
 
 fn render(model: &Model, frame: &mut Frame, area: Rect) {
     ProviderLogin::render(&model.provider_login, model.theme.ui(), frame, area);
+}
+
+fn cursor(model: &Model, area: Rect) -> Option<ratatui::layout::Position> {
+    ProviderLogin::cursor(&model.provider_login, model.theme.ui(), area)
 }

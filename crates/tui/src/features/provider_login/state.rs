@@ -1,4 +1,12 @@
-use crate::{component::list::ListState, data_object::Context};
+use std::fmt;
+
+use crate::{
+    component::{
+        list::ListState,
+        text_input::{TextInput, TextInputEvent},
+    },
+    data_object::Context,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProviderAuthMethod {
@@ -37,6 +45,7 @@ pub enum ProviderLoginPage {
     AuthenticationMethod,
     Providers(ProviderAuthMethod),
     Placeholder(ProviderSpec),
+    ApiKeyInput(ProviderSpec),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -45,13 +54,34 @@ pub enum ProviderLoginBack {
     Close,
 }
 
-/// Provider-login menu navigation and parent-dialog state.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Provider-login menu navigation, secret draft, and parent-dialog state.
+#[derive(Clone, PartialEq, Eq)]
 pub struct ProviderLoginState {
     open: bool,
     return_context: Option<Context>,
     page: ProviderLoginPage,
     options: ListState<ProviderLoginOption>,
+    api_key_input: TextInput,
+    saving: bool,
+    error: Option<String>,
+}
+
+impl fmt::Debug for ProviderLoginState {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ProviderLoginState")
+            .field("open", &self.open)
+            .field("return_context", &self.return_context)
+            .field("page", &self.page)
+            .field("options", &self.options)
+            .field(
+                "api_key",
+                &(!self.api_key_input.value().is_empty()).then_some("[redacted]"),
+            )
+            .field("saving", &self.saving)
+            .field("error", &self.error)
+            .finish()
+    }
 }
 
 impl Default for ProviderLoginState {
@@ -61,6 +91,9 @@ impl Default for ProviderLoginState {
             return_context: None,
             page: ProviderLoginPage::AuthenticationMethod,
             options: authentication_options(),
+            api_key_input: TextInput::default(),
+            saving: false,
+            error: None,
         }
     }
 }
@@ -75,10 +108,16 @@ impl ProviderLoginState {
         self.return_context = return_context;
         self.page = ProviderLoginPage::AuthenticationMethod;
         self.options = authentication_options();
+        self.api_key_input.clear();
+        self.saving = false;
+        self.error = None;
     }
 
     pub fn close(&mut self) -> Option<Context> {
         self.open = false;
+        self.api_key_input.clear();
+        self.saving = false;
+        self.error = None;
         self.return_context.take()
     }
 
@@ -94,19 +133,44 @@ impl ProviderLoginState {
         self.options.selected()
     }
 
+    pub fn api_key_input(&self) -> &TextInput {
+        &self.api_key_input
+    }
+
+    pub fn is_saving(&self) -> bool {
+        self.saving
+    }
+
+    pub fn error(&self) -> Option<&str> {
+        self.error.as_deref()
+    }
+
     pub fn select_next(&mut self) {
-        if !matches!(self.page, ProviderLoginPage::Placeholder(_)) {
+        if !self.saving
+            && matches!(
+                self.page,
+                ProviderLoginPage::AuthenticationMethod | ProviderLoginPage::Providers(_)
+            )
+        {
             self.options.select_next();
         }
     }
 
     pub fn select_previous(&mut self) {
-        if !matches!(self.page, ProviderLoginPage::Placeholder(_)) {
+        if !self.saving
+            && matches!(
+                self.page,
+                ProviderLoginPage::AuthenticationMethod | ProviderLoginPage::Providers(_)
+            )
+        {
             self.options.select_previous();
         }
     }
 
     pub fn activate(&mut self) {
+        if self.saving {
+            return;
+        }
         let Some(option) = self.options.selected_item().copied() else {
             return;
         };
@@ -116,15 +180,75 @@ impl ProviderLoginState {
                 self.options = provider_options(method);
             }
             (ProviderLoginPage::Providers(_), ProviderLoginOption::Provider(provider)) => {
-                self.page = ProviderLoginPage::Placeholder(provider);
+                self.page = match provider.method() {
+                    ProviderAuthMethod::Account => ProviderLoginPage::Placeholder(provider),
+                    ProviderAuthMethod::ApiKey => ProviderLoginPage::ApiKeyInput(provider),
+                };
+                self.api_key_input.clear();
+                self.error = None;
             }
             _ => {}
         }
     }
 
+    pub fn handle_input_event(&mut self, event: TextInputEvent) {
+        if !matches!(self.page, ProviderLoginPage::ApiKeyInput(_)) || self.saving {
+            return;
+        }
+        if self.api_key_input.handle_event(event).content_changed() {
+            self.error = None;
+        }
+    }
+
+    pub fn api_key_submission(&self) -> Option<(ProviderSpec, &str)> {
+        match self.page {
+            ProviderLoginPage::ApiKeyInput(provider) if !self.saving => {
+                Some((provider, self.api_key_input.value()))
+            }
+            _ => None,
+        }
+    }
+
+    pub fn set_error(&mut self, error: impl Into<String>) {
+        if matches!(self.page, ProviderLoginPage::ApiKeyInput(_)) {
+            self.error = Some(error.into());
+        }
+    }
+
+    pub fn begin_save(&mut self, provider: ProviderSpec) -> bool {
+        if self.page != ProviderLoginPage::ApiKeyInput(provider) || self.saving {
+            return false;
+        }
+        self.saving = true;
+        self.error = None;
+        true
+    }
+
+    /// Return whether the current save completed successfully, or `None` for a stale completion.
+    pub fn complete_save(&mut self, provider_id: &str, error: Option<String>) -> Option<bool> {
+        let ProviderLoginPage::ApiKeyInput(provider) = self.page else {
+            return None;
+        };
+        if !self.saving || provider.id() != provider_id {
+            return None;
+        }
+        self.saving = false;
+        self.error = error;
+        Some(self.error.is_none())
+    }
+
     pub fn back(&mut self) -> ProviderLoginBack {
         match self.page {
             ProviderLoginPage::Placeholder(provider) => {
+                self.page = ProviderLoginPage::Providers(provider.method());
+                ProviderLoginBack::Back
+            }
+            ProviderLoginPage::ApiKeyInput(provider) => {
+                if self.saving {
+                    return ProviderLoginBack::Back;
+                }
+                self.api_key_input.clear();
+                self.error = None;
                 self.page = ProviderLoginPage::Providers(provider.method());
                 ProviderLoginBack::Back
             }
@@ -194,6 +318,17 @@ mod tests {
             .collect()
     }
 
+    fn open_api_key(state: &mut ProviderLoginState) -> ProviderSpec {
+        state.open(None);
+        state.select_next();
+        state.activate();
+        state.activate();
+        let ProviderLoginPage::ApiKeyInput(provider) = state.page() else {
+            panic!("API-key provider should open its input");
+        };
+        provider
+    }
+
     #[test]
     fn catalogs_have_the_requested_provider_order() {
         let mut state = ProviderLoginState::default();
@@ -232,7 +367,7 @@ mod tests {
 
         state.select_next();
         state.activate();
-        assert!(matches!(state.page(), ProviderLoginPage::Placeholder(_)));
+        assert!(matches!(state.page(), ProviderLoginPage::ApiKeyInput(_)));
         let selected = state.selected();
         state.select_next();
         assert_eq!(state.selected(), selected);
@@ -245,5 +380,34 @@ mod tests {
         assert_eq!(state.back(), ProviderLoginBack::Back);
         assert_eq!(state.page(), ProviderLoginPage::AuthenticationMethod);
         assert_eq!(state.back(), ProviderLoginBack::Close);
+    }
+
+    #[test]
+    fn secret_drafts_are_redacted_and_save_completions_are_scoped() {
+        let mut state = ProviderLoginState::default();
+        let provider = open_api_key(&mut state);
+        for character in "key-secret".chars() {
+            state.handle_input_event(TextInputEvent::Insert(character));
+        }
+        assert_eq!(state.api_key_input().value(), "key-secret");
+        let debug = format!("{state:?}");
+        assert!(!debug.contains("key-secret"));
+        assert!(debug.contains("[redacted]"));
+
+        assert!(state.begin_save(provider));
+        state.handle_input_event(TextInputEvent::Insert('x'));
+        assert_eq!(state.api_key_input().value(), "key-secret");
+        assert_eq!(state.complete_save("deepseek", None), None);
+        assert_eq!(state.complete_save(provider.id(), None), Some(true));
+        assert!(!state.is_saving());
+
+        assert!(state.begin_save(provider));
+        assert_eq!(
+            state.complete_save(provider.id(), Some("failed".to_string())),
+            Some(false)
+        );
+        assert_eq!(state.error(), Some("failed"));
+        state.handle_input_event(TextInputEvent::Insert('x'));
+        assert_eq!(state.error(), None);
     }
 }

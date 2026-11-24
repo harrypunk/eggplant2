@@ -1,12 +1,16 @@
 use ratatui::{
     Frame,
-    layout::{Rect, Size},
+    buffer::Buffer,
+    layout::{Constraint, Layout, Position, Rect, Size},
     text::Line,
-    widgets::Paragraph,
+    widgets::{Paragraph, Widget},
 };
 
 use crate::{
-    component::popup::Popup,
+    component::{
+        popup::{Popup, content_area},
+        text_input::{TextInputStyleInput, TextInputStyleOutput, TextInputViewStyle},
+    },
     provider_login::{
         ProviderAuthMethod, ProviderLoginOption, ProviderLoginPage, ProviderLoginState,
         ProviderSpec,
@@ -14,13 +18,14 @@ use crate::{
     theme::UiTheme,
 };
 
-/// Pure presentation for the provider-login menu prototype.
+/// Pure presentation for provider-login menus and API-key drafts.
 pub struct ProviderLogin;
 
 impl ProviderLogin {
     pub fn size(state: &ProviderLoginState) -> Size {
         let height = match state.page() {
             ProviderLoginPage::Placeholder(_) => 8,
+            ProviderLoginPage::ApiKeyInput(_) => 11,
             _ => u16::try_from(state.options().len())
                 .unwrap_or(u16::MAX)
                 .saturating_add(6),
@@ -29,12 +34,49 @@ impl ProviderLogin {
     }
 
     pub fn render(state: &ProviderLoginState, styles: &UiTheme, frame: &mut Frame, area: Rect) {
-        let lines = match state.page() {
-            ProviderLoginPage::Placeholder(provider) => placeholder_lines(provider, styles),
-            _ => menu_lines(state, styles),
-        };
-        let content = Paragraph::new(lines).style(styles.popup_surface());
-        frame.render_widget(Popup::new("Provider login", content, styles), area);
+        frame.render_widget(
+            Popup::new(
+                "Provider login",
+                ProviderLoginContent { state, styles },
+                styles,
+            ),
+            area,
+        );
+    }
+
+    pub fn cursor(state: &ProviderLoginState, styles: &UiTheme, area: Rect) -> Option<Position> {
+        if !matches!(state.page(), ProviderLoginPage::ApiKeyInput(_)) || state.is_saving() {
+            return None;
+        }
+        let areas = api_key_areas(content_area(area));
+        state
+            .api_key_input()
+            .view(styles)
+            .with_style(&API_KEY_MASK_STYLE)
+            .cursor_position(areas.input)
+    }
+}
+
+struct ProviderLoginContent<'a> {
+    state: &'a ProviderLoginState,
+    styles: &'a UiTheme,
+}
+
+impl Widget for ProviderLoginContent<'_> {
+    fn render(self, area: Rect, buffer: &mut Buffer) {
+        match self.state.page() {
+            ProviderLoginPage::ApiKeyInput(provider) => {
+                render_api_key(self.state, provider, self.styles, area, buffer)
+            }
+            ProviderLoginPage::Placeholder(provider) => {
+                Paragraph::new(placeholder_lines(provider, self.styles))
+                    .style(self.styles.popup_surface())
+                    .render(area, buffer)
+            }
+            _ => Paragraph::new(menu_lines(self.state, self.styles))
+                .style(self.styles.popup_surface())
+                .render(area, buffer),
+        }
     }
 }
 
@@ -44,7 +86,9 @@ fn menu_lines(state: &ProviderLoginState, styles: &UiTheme) -> Vec<Line<'static>
             ("Select authentication method:", "Enter select · Esc close")
         }
         ProviderLoginPage::Providers(method) => (method_label(method), "Enter select · Esc back"),
-        ProviderLoginPage::Placeholder(_) => unreachable!("placeholders use separate content"),
+        ProviderLoginPage::Placeholder(_) | ProviderLoginPage::ApiKeyInput(_) => {
+            unreachable!("provider pages use separate content")
+        }
     };
     let mut lines = vec![Line::styled(heading, styles.action_hint), Line::raw("")];
     lines.extend(state.options().iter().enumerate().map(|(index, option)| {
@@ -69,18 +113,96 @@ fn menu_lines(state: &ProviderLoginState, styles: &UiTheme) -> Vec<Line<'static>
 }
 
 fn placeholder_lines(provider: ProviderSpec, styles: &UiTheme) -> Vec<Line<'static>> {
-    let heading = match provider.method() {
-        ProviderAuthMethod::Account => "Account sign-in",
-        ProviderAuthMethod::ApiKey => "API key sign-in",
-    };
     vec![
-        Line::styled(heading, styles.action_hint),
+        Line::styled("Account sign-in", styles.action_hint),
         Line::raw(""),
         Line::styled(format!("Provider: {}", provider.id()), styles.base),
         Line::styled("Sign-in is not implemented yet.", styles.muted),
         Line::raw(""),
         Line::styled("Esc back", styles.muted),
     ]
+}
+
+struct ApiKeyAreas {
+    heading: Rect,
+    provider: Rect,
+    input: Rect,
+    status: Rect,
+    hints: Rect,
+}
+
+fn api_key_areas(area: Rect) -> ApiKeyAreas {
+    let [heading, _, provider, input, status, _, hints] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Length(3),
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Length(1),
+    ])
+    .areas(area);
+    ApiKeyAreas {
+        heading,
+        provider,
+        input,
+        status,
+        hints,
+    }
+}
+
+fn render_api_key(
+    state: &ProviderLoginState,
+    provider: ProviderSpec,
+    styles: &UiTheme,
+    area: Rect,
+    buffer: &mut Buffer,
+) {
+    let areas = api_key_areas(area);
+    Paragraph::new("API key sign-in")
+        .style(styles.action_hint)
+        .render(areas.heading, buffer);
+    Paragraph::new(format!("Provider: {}", provider.id()))
+        .style(styles.base)
+        .render(areas.provider, buffer);
+    state
+        .api_key_input()
+        .view(styles)
+        .with_style(&API_KEY_MASK_STYLE)
+        .render(areas.input, buffer);
+    if let Some(error) = state.error() {
+        Paragraph::new(error)
+            .style(styles.error)
+            .render(areas.status, buffer);
+    } else if state.is_saving() {
+        Paragraph::new("Saving...")
+            .style(styles.muted)
+            .render(areas.status, buffer);
+    }
+    Paragraph::new(if state.is_saving() {
+        "Saving..."
+    } else {
+        "Enter save · Esc back"
+    })
+    .style(styles.muted)
+    .render(areas.hints, buffer);
+}
+
+#[derive(Debug)]
+struct ApiKeyMaskStyle;
+
+static API_KEY_MASK_STYLE: ApiKeyMaskStyle = ApiKeyMaskStyle;
+
+impl TextInputViewStyle for ApiKeyMaskStyle {
+    fn style(&self, input: TextInputStyleInput<'_>) -> TextInputStyleOutput {
+        let text = "•".repeat(input.value.chars().count());
+        let cursor_byte = text
+            .char_indices()
+            .nth(input.cursor_offset)
+            .map(|(index, _)| index)
+            .unwrap_or(text.len());
+        TextInputStyleOutput { text, cursor_byte }
+    }
 }
 
 fn method_label(method: ProviderAuthMethod) -> &'static str {
@@ -95,7 +217,7 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend};
 
     use super::*;
-    use crate::theme::Theme;
+    use crate::{component::text_input::TextInputEvent, theme::Theme};
 
     fn render(state: &ProviderLoginState) -> String {
         let theme = Theme::default();
@@ -159,5 +281,31 @@ mod tests {
             assert!(content.contains(provider), "missing {provider}");
         }
         assert!(!content.contains("qwen.com"));
+    }
+
+    #[test]
+    fn api_key_input_uses_the_injected_mask_and_preserves_the_cursor() {
+        let mut state = ProviderLoginState::default();
+        state.open(None);
+        state.select_next();
+        state.activate();
+        state.activate();
+        for character in "key-secret".chars() {
+            state.handle_input_event(TextInputEvent::Insert(character));
+        }
+        let content = render(&state);
+        assert!(content.contains("••••••••••"), "{content:?}");
+        assert!(!content.contains("key-secret"));
+        assert!(content.contains("Enter save"));
+
+        let theme = Theme::default();
+        let area = Rect::new(0, 0, 64, 11);
+        assert!(ProviderLogin::cursor(&state, theme.ui(), area).is_some());
+        let ProviderLoginPage::ApiKeyInput(provider) = state.page() else {
+            unreachable!();
+        };
+        assert!(state.begin_save(provider));
+        assert!(ProviderLogin::cursor(&state, theme.ui(), area).is_none());
+        assert!(render(&state).contains("Saving..."));
     }
 }

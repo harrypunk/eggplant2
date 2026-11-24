@@ -36,6 +36,7 @@ pub mod data_object {
 
     use app::language::{LanguageServerRegistry, LanguageServers};
     use editor::{BufferId, DocumentPosition, EditorSession};
+    use eggplant_agent_storage::ProviderCredentialStore;
 
     use crate::manager::effect::FeatureCompletion;
 
@@ -162,6 +163,8 @@ pub mod data_object {
         pub document_lifecycle: DocumentLifecycle,
         pub agent: AgentState,
         pub provider_login: ProviderLoginState,
+        /// Optional durable credential capability shared by login and later model selection.
+        pub provider_credentials: Option<Arc<dyn ProviderCredentialStore>>,
         pub deferred_action: Option<DeferredAction>,
         pub command_menu: CommandMenuState,
         pub code_navigation: CodeNavigationState,
@@ -210,6 +213,7 @@ pub mod data_object {
                 document_lifecycle: DocumentLifecycle::default(),
                 agent: AgentState::default(),
                 provider_login: ProviderLoginState::default(),
+                provider_credentials: None,
                 deferred_action: None,
                 command_menu: CommandMenuState::default(),
                 code_navigation: CodeNavigationState::default(),

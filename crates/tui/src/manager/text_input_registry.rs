@@ -75,6 +75,10 @@ impl TextInputRegistry {
             (Context::VcsBranch, Edit(crate::vcs::branch::handle_input)),
             (Context::AgentChatDialog, Edit(crate::agent::handle_input)),
             (Context::AgentChatInsert, Edit(crate::agent::handle_input)),
+            (
+                Context::ProviderLogin,
+                Edit(crate::provider_login::handle_input),
+            ),
         ])
         .expect("built-in text-input contexts must be unique")
     }

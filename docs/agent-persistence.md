@@ -1,6 +1,6 @@
 # Agent persistence
 
-Status: implemented. Provider-neutral records, asynchronous `SessionStore`, in-memory storage, finalized-run effects, and a separate SeaORM SQLite adapter with migrations, transactions, keyset reads, and search are complete. Provider credentials also have a separate backend-neutral `ProviderCredentialStore` and SeaORM SQLite migration/CRUD implementation; interactive account and API-key login remain deferred. In-memory session storage remains the default; `agent-sqlite` opts into durable local storage. Cloud backends and backend-specific full-text search remain deferred.
+Status: implemented. Provider-neutral records, asynchronous `SessionStore`, in-memory storage, finalized-run effects, and a separate SeaORM SQLite adapter with migrations, transactions, keyset reads, and search are complete. Provider credentials also have a separate backend-neutral `ProviderCredentialStore`, in-memory implementation, SeaORM SQLite migration/CRUD implementation, and masked multi-provider API-key save workflow; interactive account login and provider/model selection remain deferred. In-memory session storage remains the default; `agent-sqlite` opts into durable local storage. Cloud backends and backend-specific full-text search remain deferred.
 
 ## Recommendation
 
@@ -114,7 +114,7 @@ Append message/run/session updates in one transaction where the backend requires
 
 One provider has at most one stored credential. Upserting another authentication method replaces the old method and clears its inapplicable fields. `ProviderCredentialStore` is separate from `SessionStore`: credentials are per-user authentication state, not workspace transcript records. Metadata listing selects only provider ID and method, while reading a credential returns the secrets needed by provider authentication. API-key records require a nonempty key and no OAuth fields; OAuth records require a nonempty access token and no API key.
 
-This prototype stores local database secrets as plaintext, similar to a private credential file; encryption or OS keychain integration is not implemented. Keep the database in the per-user data directory with appropriate filesystem permissions, and never include credential values in debug output, notifications, or logs. Interactive login, token refresh orchestration, and UI wiring are separate later slices.
+This prototype stores local database secrets as plaintext, similar to a private credential file; encryption or OS keychain integration is not implemented. Keep the database in the per-user data directory with appropriate filesystem permissions, and never include credential values in debug output, notifications, or logs. API-key saves use the same per-user `session_db` connection policy and run asynchronously without selecting an active provider or model. Account/OAuth login, token refresh orchestration, and provider/model selection are separate later slices.
 
 ## Search and scale
 

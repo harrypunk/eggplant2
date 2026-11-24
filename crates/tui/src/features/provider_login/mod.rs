@@ -1,4 +1,5 @@
 mod state;
+mod storage;
 mod ui;
 mod work;
 
@@ -7,4 +8,4 @@ pub use state::{
     ProviderLoginState, ProviderSpec,
 };
 pub use ui::register_ui;
-pub use work::{commands, handle_command, open};
+pub use work::{commands, handle_command, handle_input, open};

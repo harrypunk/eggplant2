@@ -3,9 +3,9 @@ use std::sync::Arc;
 use color_eyre::eyre::bail;
 use eggplant_agent::AgentProvider;
 use eggplant_agent_openai::{OpenAiConfig, OpenAiProvider};
-use eggplant_agent_storage::SessionStore;
+use eggplant_agent_storage::{ProviderCredentialStore, SessionStore};
 #[cfg(feature = "agent-sqlite")]
-use eggplant_agent_storage_seaorm::SeaOrmSessionStore;
+use eggplant_agent_storage_seaorm::{SeaOrmProviderCredentialStore, SeaOrmSessionStore};
 
 use crate::{config::Config, data_object::Model};
 
@@ -36,6 +36,7 @@ async fn configure_store(config: &Config, model: &mut Model) -> color_eyre::Resu
         }
         let store = connect_store(path).await?;
         model.agent.set_session_store(store);
+        model.provider_credentials = Some(connect_credential_store(path).await?);
     }
     Ok(())
 }
@@ -50,6 +51,23 @@ async fn connect_store(path: &std::path::Path) -> color_eyre::Result<Arc<dyn Ses
 
 #[cfg(not(feature = "agent-sqlite"))]
 async fn connect_store(_path: &std::path::Path) -> color_eyre::Result<Arc<dyn SessionStore>> {
+    bail!("agent session_db requires the `agent-sqlite` build feature")
+}
+
+#[cfg(feature = "agent-sqlite")]
+async fn connect_credential_store(
+    path: &std::path::Path,
+) -> color_eyre::Result<Arc<dyn ProviderCredentialStore>> {
+    let store = SeaOrmProviderCredentialStore::connect(path)
+        .await
+        .map_err(|error| color_eyre::eyre::eyre!(error.to_string()))?;
+    Ok(Arc::new(store))
+}
+
+#[cfg(not(feature = "agent-sqlite"))]
+async fn connect_credential_store(
+    _path: &std::path::Path,
+) -> color_eyre::Result<Arc<dyn ProviderCredentialStore>> {
     bail!("agent session_db requires the `agent-sqlite` build feature")
 }
 
@@ -87,6 +105,7 @@ mod tests {
                 .await
                 .is_ok()
         );
+        assert!(model.provider_credentials.is_none());
     }
 
     #[tokio::test]
@@ -110,6 +129,8 @@ mod tests {
         configure_store(&config, &mut model).await.unwrap();
 
         assert!(path.is_file());
+        let credentials = model.provider_credentials.clone().unwrap();
+        assert!(credentials.list().await.unwrap().is_empty());
         let store = SeaOrmSessionStore::connect(&path).await.unwrap();
         let recent = store
             .recent_sessions(eggplant_agent_storage::RecentQuery::default())
