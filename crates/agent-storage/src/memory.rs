@@ -3,7 +3,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use eggplant_agent::{CancellationToken, RunId, SessionId};
 
 use crate::{
-    FinalizedRun, MessageRecord, RecentPage, RecentQuery, RunRecord, SearchCursor, SearchHit,
+    FinalizedRun, MessageRecord, ProviderCredential, ProviderCredentialInfo,
+    ProviderCredentialStore, RecentPage, RecentQuery, RunRecord, SearchCursor, SearchHit,
     SearchKind, SearchPage, SearchQuery, SessionCursor, SessionRecord, SessionStore, StorageError,
     StoreFuture, ToolCallRecord, TranscriptCursor, TranscriptPage, TranscriptQuery, page_limit,
 };
@@ -14,6 +15,7 @@ struct MemoryState {
     runs: BTreeMap<(SessionId, RunId), RunRecord>,
     messages: BTreeMap<(SessionId, RunId, u64), MessageRecord>,
     tool_calls: BTreeMap<(SessionId, RunId, u64), ToolCallRecord>,
+    provider_credentials: BTreeMap<String, ProviderCredential>,
 }
 
 #[derive(Debug, Default)]
@@ -156,6 +158,59 @@ impl SessionStore for InMemoryStore {
                 .map_err(|_| StorageError::Backend("in-memory store lock failed".to_string()))?;
             let hits = matching_hits(&state, &query);
             Ok(search_page(hits, query.after, query.limit))
+        })
+    }
+}
+
+impl ProviderCredentialStore for InMemoryStore {
+    fn get<'a>(&'a self, provider_id: &'a str) -> StoreFuture<'a, Option<ProviderCredential>> {
+        Box::pin(async move {
+            let state = self
+                .state
+                .read()
+                .map_err(|_| StorageError::Backend("in-memory store lock failed".to_string()))?;
+            Ok(state.provider_credentials.get(provider_id).cloned())
+        })
+    }
+
+    fn list<'a>(&'a self) -> StoreFuture<'a, Vec<ProviderCredentialInfo>> {
+        Box::pin(async move {
+            let state = self
+                .state
+                .read()
+                .map_err(|_| StorageError::Backend("in-memory store lock failed".to_string()))?;
+            Ok(state
+                .provider_credentials
+                .values()
+                .map(|credential| ProviderCredentialInfo {
+                    provider_id: credential.provider_id.clone(),
+                    auth_type: credential.auth_type,
+                })
+                .collect())
+        })
+    }
+
+    fn upsert<'a>(&'a self, credential: ProviderCredential) -> StoreFuture<'a, ()> {
+        Box::pin(async move {
+            credential.validate()?;
+            let mut state = self
+                .state
+                .write()
+                .map_err(|_| StorageError::Backend("in-memory store lock failed".to_string()))?;
+            state
+                .provider_credentials
+                .insert(credential.provider_id.clone(), credential);
+            Ok(())
+        })
+    }
+
+    fn delete<'a>(&'a self, provider_id: &'a str) -> StoreFuture<'a, bool> {
+        Box::pin(async move {
+            let mut state = self
+                .state
+                .write()
+                .map_err(|_| StorageError::Backend("in-memory store lock failed".to_string()))?;
+            Ok(state.provider_credentials.remove(provider_id).is_some())
         })
     }
 }
