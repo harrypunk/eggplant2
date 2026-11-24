@@ -1,4 +1,7 @@
-use ratatui::{Frame, layout::Rect};
+use ratatui::{
+    Frame,
+    layout::{Margin, Rect},
+};
 
 use crate::{
     component::agent::{
@@ -21,7 +24,7 @@ fn dialog_overlay(model: &Model) -> Option<OverlayContribution> {
         OverlayContribution::new(
             "agent",
             OverlayKind::Modal,
-            OverlayPlacement::Centered(AgentDialog::size(&view_props(model))),
+            OverlayPlacement::MainPanelFill(Margin::new(4, 2)),
             render_dialog,
         )
         .with_cursor(dialog_cursor)
@@ -118,6 +121,20 @@ mod tests {
         assert!(help_overlay(&model).is_some());
         model.modal.close(Context::AgentChatHelp);
         assert!(help_overlay(&model).is_none());
+    }
+
+    #[test]
+    fn dialog_fills_the_available_area_inside_its_margins() {
+        let mut model = Model::default();
+        assert!(model.modal.open(Context::AgentChatDialog));
+        let overlay = dialog_overlay(&model).unwrap();
+        let main = Rect::new(10, 20, 120, 40);
+
+        assert_eq!(
+            overlay.area(main, main),
+            Rect::new(14, 22, 112, 36),
+            "dialog should grow with the main panel rather than use a fixed size"
+        );
     }
 
     #[test]

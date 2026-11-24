@@ -2,34 +2,25 @@ use eggplant_agent::{MessageRole, ToolApproval};
 use ratatui::{
     Frame,
     buffer::Buffer,
-    layout::{Constraint, Layout, Position, Rect, Size},
+    layout::{Constraint, Layout, Position, Rect},
     widgets::{Paragraph, Widget, Wrap},
 };
 
 use super::{prompt::AgentPromptView, props::AgentViewProps, transcript::diff_lines};
 use crate::component::{
-    auto_height::AutoHeight,
     popup::{Popup, content_area},
     text_input::TextInput,
     text_layout::TextFlow,
 };
 
-const AUTO_HEIGHT: AutoHeight = AutoHeight::new(12, 24, 2, 9, 4);
+const STATUS_HEIGHT: u16 = 1;
+const MIN_ASSISTANT_HEIGHT: u16 = 3;
 
 pub type AgentDialogProps<'a> = AgentViewProps<'a>;
 
 pub struct AgentDialog;
 
 impl AgentDialog {
-    pub fn size(props: &AgentDialogProps<'_>) -> Size {
-        if props.session.pending_approval().is_some() {
-            return Size::new(90, 24);
-        }
-        let mut size = AUTO_HEIGHT.dialog_size(props.prompt.input(), 68, TextFlow::Wrapped);
-        size.height = size.height.saturating_add(command_height(props)).min(24);
-        size
-    }
-
     pub fn render(props: &AgentDialogProps<'_>, frame: &mut Frame, area: Rect) {
         frame.render_widget(
             Popup::new("AI agent", AgentDialogContent { props }, props.styles),
@@ -133,7 +124,7 @@ fn command_height(props: &AgentDialogProps<'_>) -> u16 {
 
 fn dialog_layout(area: Rect, prompt: u16) -> [Rect; 3] {
     Layout::vertical([
-        Constraint::Length(1),
+        Constraint::Length(STATUS_HEIGHT),
         Constraint::Fill(1),
         Constraint::Length(prompt),
     ])
@@ -141,13 +132,16 @@ fn dialog_layout(area: Rect, prompt: u16) -> [Rect; 3] {
 }
 
 fn prompt_input_height(prompt: &TextInput, area: Rect) -> u16 {
-    AUTO_HEIGHT.input_height(prompt, area, TextFlow::Wrapped)
+    prompt.measure(area.width, TextFlow::Wrapped).height.min(
+        area.height
+            .saturating_sub(STATUS_HEIGHT + MIN_ASSISTANT_HEIGHT),
+    )
 }
 
 /// Measure the combined menu + input prompt and bound the menu to the actual dialog viewport.
 fn prompt_heights(props: &AgentDialogProps<'_>, area: Rect) -> (u16, u16) {
     let input = prompt_input_height(props.prompt.input(), area);
-    let commands = command_height(props).min(area.height.saturating_sub(input.saturating_add(1)));
+    let commands = command_height(props).min(area.height.saturating_sub(input + STATUS_HEIGHT));
     (input, commands.saturating_add(input))
 }
 
@@ -252,8 +246,7 @@ mod tests {
             storage_error: None,
             styles: theme.ui(),
         };
-        let size = AgentDialog::size(&props);
-        let area = Rect::new(0, 0, size.width, size.height);
+        let area = Rect::new(0, 0, 90, 24);
         let input = input_area(&props, area);
         let [commands, laid_out_input] = AgentPromptView::layout(
             &props.prompt,
@@ -266,11 +259,23 @@ mod tests {
         assert_eq!(laid_out_input, input);
         let cursor = AgentDialog::cursor(&props, area).unwrap();
         assert!(cursor.y >= input.y && cursor.y < input.y + input.height);
-        render(&props, size.width, size.height);
+        render(&props, area.width, area.height);
     }
 
     #[test]
-    fn wrapped_prompt_grows_dialog_and_keeps_cursor_visible() {
+    fn assistant_area_flexes_with_the_available_dialog_height() {
+        let compact = dialog_layout(Rect::new(0, 0, 90, 16), 5);
+        let expanded = dialog_layout(Rect::new(0, 0, 90, 28), 5);
+
+        assert_eq!(compact[0].height, STATUS_HEIGHT);
+        assert_eq!(compact[1].height, 10);
+        assert_eq!(expanded[1].height, 22);
+        assert_eq!(compact[1].y + compact[1].height, compact[2].y);
+        assert_eq!(expanded[1].y + expanded[1].height, expanded[2].y);
+    }
+
+    #[test]
+    fn wrapped_prompt_keeps_cursor_visible_in_a_flexible_dialog() {
         let theme = Theme::default();
         let session = AgentSession::default();
         let prompt = TextInput::new("ab".repeat(100));
@@ -280,12 +285,13 @@ mod tests {
             storage_error: None,
             styles: theme.ui(),
         };
-        let size = AgentDialog::size(&props);
-        assert_eq!(size, Size::new(70, 15));
-        let area = Rect::new(0, 0, size.width, size.height);
+        let area = Rect::new(0, 0, 90, 24);
         let cursor = AgentDialog::cursor(&props, area).unwrap();
         assert!(cursor.x < area.width && cursor.y < area.height);
-        assert!(prompt_input_height(&prompt, content_area(area)) <= content_area(area).height - 4);
-        render(&props, size.width, size.height);
+        assert!(
+            prompt_input_height(&prompt, content_area(area))
+                <= content_area(area).height - (STATUS_HEIGHT + MIN_ASSISTANT_HEIGHT)
+        );
+        render(&props, area.width, area.height);
     }
 }

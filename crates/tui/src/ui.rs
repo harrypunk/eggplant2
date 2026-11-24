@@ -5,7 +5,7 @@ use editor::{CursorPosition, EditorSnapshot, TextViewSnapshot};
 use ratatui::{
     Frame,
     buffer::Buffer,
-    layout::{Constraint, Flex, Layout, Position, Rect, Size},
+    layout::{Constraint, Flex, Layout, Margin, Position, Rect, Size},
 };
 
 use crate::{
@@ -94,6 +94,7 @@ pub enum OverlayKind {
 pub enum OverlayPlacement {
     Centered(Size),
     BottomRight(Size),
+    MainPanelFill(Margin),
     MainPanel {
         max_width: u16,
         max_height: u16,
@@ -135,6 +136,7 @@ impl OverlayContribution {
         match self.placement {
             OverlayPlacement::Centered(size) => centered_area(main, size),
             OverlayPlacement::BottomRight(size) => bottom_right_area(frame, size),
+            OverlayPlacement::MainPanelFill(margin) => main_panel_fill_area(main, margin),
             OverlayPlacement::MainPanel {
                 max_width,
                 max_height,
@@ -442,6 +444,24 @@ fn bottom_right_area(area: Rect, size: Size) -> Rect {
     let [_, popup] = Layout::horizontal([Constraint::Fill(1), Constraint::Length(width)])
         .flex(Flex::Start)
         .areas(popup_band);
+    popup
+}
+
+fn main_panel_fill_area(area: Rect, margin: Margin) -> Rect {
+    let [_, popup_band, _] = Layout::vertical([
+        Constraint::Length(margin.vertical),
+        Constraint::Fill(1),
+        Constraint::Length(margin.vertical),
+    ])
+    .flex(Flex::Start)
+    .areas(area);
+    let [_, popup, _] = Layout::horizontal([
+        Constraint::Length(margin.horizontal),
+        Constraint::Fill(1),
+        Constraint::Length(margin.horizontal),
+    ])
+    .flex(Flex::Start)
+    .areas(popup_band);
     popup
 }
 
