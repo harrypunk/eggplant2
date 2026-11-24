@@ -13,6 +13,7 @@ pub enum StorageError {
     Cancelled,
     InvalidIdentity,
     SessionNotFound(SessionId),
+    InvalidCredential(String),
     Backend(String),
 }
 
@@ -22,6 +23,9 @@ impl std::fmt::Display for StorageError {
             Self::Cancelled => formatter.write_str("session storage was cancelled"),
             Self::InvalidIdentity => formatter.write_str("session storage identity mismatch"),
             Self::SessionNotFound(_) => formatter.write_str("agent session was not found"),
+            Self::InvalidCredential(message) => {
+                write!(formatter, "invalid provider credential: {message}")
+            }
             Self::Backend(message) => formatter.write_str(message),
         }
     }

@@ -2,10 +2,12 @@
 //! Database drivers and frontend state remain outside this crate.
 
 mod memory;
+mod provider;
 mod records;
 mod store;
 
 pub use memory::InMemoryStore;
+pub use provider::*;
 pub use records::*;
 pub use store::{SessionStore, StorageError, StoreFuture};
 

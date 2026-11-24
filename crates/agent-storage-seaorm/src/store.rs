@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, path::Path, time::Duration};
+use std::{collections::BTreeSet, path::Path};
 
 use eggplant_agent::{
     CancellationToken, MessageRole, RunId, RunStatus, SessionId, ToolResult, ToolResultStatus,
@@ -13,17 +13,13 @@ use sea_orm::{
     ColumnTrait, Condition, DatabaseConnection, DatabaseTransaction, EntityTrait, QueryFilter,
     QueryOrder, QuerySelect, TransactionError, TransactionTrait,
     sea_query::{Expr, ExprTrait, Func, LikeExpr, OnConflict},
-    sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions},
 };
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    connection,
     entity::{agent_messages, agent_runs, agent_sessions, agent_tool_calls},
-    migration,
 };
-
-const BUSY_TIMEOUT: Duration = Duration::from_secs(2);
-const POOL_SIZE: u32 = 5;
 
 /// SQLite-backed session storage. Construction opens the database and applies migrations.
 #[derive(Debug)]
@@ -34,30 +30,9 @@ pub struct SeaOrmSessionStore {
 impl SeaOrmSessionStore {
     /// Open an absolute SQLite file path, creating parent directories and applying migrations.
     pub async fn connect(path: impl AsRef<Path>) -> Result<Self, StorageError> {
-        let path = path.as_ref();
-        if !path.is_absolute() {
-            return Err(StorageError::Backend(
-                "agent storage requires an absolute SQLite path".to_string(),
-            ));
-        }
-        path.parent()
-            .map(std::fs::create_dir_all)
-            .transpose()
-            .map_err(backend)?;
-        let options = SqliteConnectOptions::new()
-            .filename(path)
-            .create_if_missing(true)
-            .foreign_keys(true)
-            .busy_timeout(BUSY_TIMEOUT);
-        let pool = SqlitePoolOptions::new()
-            .max_connections(POOL_SIZE)
-            .acquire_timeout(BUSY_TIMEOUT)
-            .connect_with(options)
-            .await
-            .map_err(backend)?;
-        let db = DatabaseConnection::from(pool);
-        migration::migrate(&db).await.map_err(backend)?;
-        Ok(Self { db })
+        Ok(Self {
+            db: connection::connect(path).await?,
+        })
     }
 }
 

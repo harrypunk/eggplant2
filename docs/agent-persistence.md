@@ -1,6 +1,6 @@
 # Agent persistence
 
-Status: implemented. Provider-neutral records, asynchronous `SessionStore`, in-memory storage, finalized-run effects, and a separate SeaORM SQLite adapter with migrations, transactions, keyset reads, and search are complete. In-memory remains the default; `agent-sqlite` opts into durable local storage. Cloud backends and backend-specific full-text search remain deferred.
+Status: implemented. Provider-neutral records, asynchronous `SessionStore`, in-memory storage, finalized-run effects, and a separate SeaORM SQLite adapter with migrations, transactions, keyset reads, and search are complete. Provider credentials also have a separate backend-neutral `ProviderCredentialStore` and SeaORM SQLite migration/CRUD implementation; interactive account and API-key login remain deferred. In-memory session storage remains the default; `agent-sqlite` opts into durable local storage. Cloud backends and backend-specific full-text search remain deferred.
 
 ## Recommendation
 
@@ -103,6 +103,18 @@ Unique `(session_id, sequence)` and index `(run_id, sequence)` for ordered, batc
 Index `(run_id, name)` for common tool filtering. Store bounded results by default; very large artifacts need a separate object/reference model later, not unbounded database blobs.
 
 Append message/run/session updates in one transaction where the backend requires consistent transcript state. Load related rows in batches rather than one query per message.
+
+### `agent_provider_credentials`
+
+- `provider_id` (primary key and stable provider catalog ID)
+- `auth_type` (`oauth` or `api_key`, enforced by a database check and SeaORM active enum)
+- Optional `api_key`
+- Optional OAuth `access_token`, `refresh_token`, `expires_at`, and `account_id`
+- `created_at`, `updated_at` as Unix milliseconds
+
+One provider has at most one stored credential. Upserting another authentication method replaces the old method and clears its inapplicable fields. `ProviderCredentialStore` is separate from `SessionStore`: credentials are per-user authentication state, not workspace transcript records. Metadata listing selects only provider ID and method, while reading a credential returns the secrets needed by provider authentication. API-key records require a nonempty key and no OAuth fields; OAuth records require a nonempty access token and no API key.
+
+This prototype stores local database secrets as plaintext, similar to a private credential file; encryption or OS keychain integration is not implemented. Keep the database in the per-user data directory with appropriate filesystem permissions, and never include credential values in debug output, notifications, or logs. Interactive login, token refresh orchestration, and UI wiring are separate later slices.
 
 ## Search and scale
 

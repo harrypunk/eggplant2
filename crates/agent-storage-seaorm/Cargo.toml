@@ -2,7 +2,7 @@
 name = "eggplant-agent-storage-seaorm"
 version.workspace = true
 edition.workspace = true
-description = "SeaORM SQLite persistence adapter for Eggplant agent sessions"
+description = "SeaORM SQLite persistence adapter for Eggplant agent sessions and provider credentials"
 license = "MIT"
 
 [dependencies]
