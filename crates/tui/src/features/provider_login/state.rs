@@ -48,19 +48,12 @@ pub enum ProviderLoginPage {
     Placeholder(ProviderSpec),
     ApiKeyInput(ProviderSpec),
     OpenAiInput(ProviderSpec),
+    OpenAiModelsLoading(ProviderSpec),
+    OpenAiModelSelection(ProviderSpec),
+    OpenAiActivating(ProviderSpec),
 }
 
 impl ProviderLoginPage {
-    fn is_menu(self) -> bool {
-        if let ProviderLoginPage::AuthenticationMethod = self {
-            return true;
-        }
-        if let ProviderLoginPage::Providers(_) = self {
-            return true;
-        }
-        false
-    }
-
     fn is_openai_input(self) -> bool {
         if let ProviderLoginPage::OpenAiInput(_) = self {
             return true;
@@ -106,6 +99,7 @@ pub struct ProviderLoginState {
     options: ListState<ProviderLoginOption>,
     api_key_input: TextInput,
     openai: OpenAiForm,
+    models: ListState<String>,
     saving: bool,
     error: Option<String>,
 }
@@ -128,6 +122,7 @@ impl fmt::Debug for ProviderLoginState {
                 &(!self.openai.input(OpenAiField::ApiKey).value().is_empty())
                     .then_some("[redacted]"),
             )
+            .field("selected_model", &self.models.selected_item())
             .field("saving", &self.saving)
             .field("error", &self.error)
             .finish()
@@ -143,6 +138,7 @@ impl Default for ProviderLoginState {
             options: authentication_options(),
             api_key_input: TextInput::default(),
             openai: OpenAiForm::default(),
+            models: ListState::default(),
             saving: false,
             error: None,
         }
@@ -161,6 +157,7 @@ impl ProviderLoginState {
         self.options = authentication_options();
         self.api_key_input.clear();
         self.openai.reset();
+        self.models = ListState::default();
         self.saving = false;
         self.error = None;
     }
@@ -169,6 +166,7 @@ impl ProviderLoginState {
         self.open = false;
         self.api_key_input.clear();
         self.openai.reset();
+        self.models = ListState::default();
         self.saving = false;
         self.error = None;
         self.return_context.take()
@@ -198,6 +196,18 @@ impl ProviderLoginState {
         self.openai.focused_field()
     }
 
+    pub fn models(&self) -> &[String] {
+        self.models.items()
+    }
+
+    pub fn model_selected(&self) -> Option<usize> {
+        self.models.selected()
+    }
+
+    pub fn selected_model(&self) -> Option<&str> {
+        self.models.selected_item().map(String::as_str)
+    }
+
     pub fn is_saving(&self) -> bool {
         self.saving
     }
@@ -207,16 +217,32 @@ impl ProviderLoginState {
     }
 
     pub fn select_next(&mut self) {
-        let navigable = self.page.is_menu();
-        if !self.saving && navigable {
-            self.options.select_next();
+        if self.saving {
+            return;
+        }
+        match self.page {
+            ProviderLoginPage::AuthenticationMethod | ProviderLoginPage::Providers(_) => {
+                self.options.select_next();
+            }
+            ProviderLoginPage::OpenAiModelSelection(_) => {
+                self.models.select_next();
+            }
+            _ => {}
         }
     }
 
     pub fn select_previous(&mut self) {
-        let navigable = self.page.is_menu();
-        if !self.saving && navigable {
-            self.options.select_previous();
+        if self.saving {
+            return;
+        }
+        match self.page {
+            ProviderLoginPage::AuthenticationMethod | ProviderLoginPage::Providers(_) => {
+                self.options.select_previous();
+            }
+            ProviderLoginPage::OpenAiModelSelection(_) => {
+                self.models.select_previous();
+            }
+            _ => {}
         }
     }
 
@@ -352,6 +378,84 @@ impl ProviderLoginState {
         Some(self.error.is_none())
     }
 
+    pub fn begin_model_loading(&mut self, provider_id: &str) -> Option<()> {
+        let ProviderLoginPage::OpenAiInput(provider) = self.page else {
+            return None;
+        };
+        if provider.id() != provider_id {
+            return None;
+        }
+        self.page = ProviderLoginPage::OpenAiModelsLoading(provider);
+        self.error = None;
+        Some(())
+    }
+
+    pub fn complete_model_loading(
+        &mut self,
+        provider_id: &str,
+        result: Result<Vec<String>, String>,
+    ) -> Option<Result<(), String>> {
+        let ProviderLoginPage::OpenAiModelsLoading(provider) = self.page else {
+            return None;
+        };
+        if provider.id() != provider_id {
+            return None;
+        }
+        match result {
+            Ok(models) if !models.is_empty() => {
+                self.models = selected_list(models);
+                self.page = ProviderLoginPage::OpenAiModelSelection(provider);
+                self.error = None;
+                Some(Ok(()))
+            }
+            Ok(_) => {
+                let error = "OpenAI model catalog contained no models".to_string();
+                self.page = ProviderLoginPage::OpenAiInput(provider);
+                self.error = Some(error.clone());
+                Some(Err(error))
+            }
+            Err(error) => {
+                self.page = ProviderLoginPage::OpenAiInput(provider);
+                self.error = Some(error.clone());
+                Some(Err(error))
+            }
+        }
+    }
+
+    pub fn begin_activation(&mut self, provider_id: &str) -> Option<String> {
+        let ProviderLoginPage::OpenAiModelSelection(provider) = self.page else {
+            return None;
+        };
+        if provider.id() != provider_id {
+            return None;
+        }
+        let model = self.selected_model()?.to_string();
+        self.page = ProviderLoginPage::OpenAiActivating(provider);
+        self.error = None;
+        Some(model)
+    }
+
+    pub fn complete_activation(
+        &mut self,
+        provider_id: &str,
+        error: Option<String>,
+    ) -> Option<bool> {
+        let ProviderLoginPage::OpenAiActivating(provider) = self.page else {
+            return None;
+        };
+        if provider.id() != provider_id {
+            return None;
+        }
+        let succeeded = error.is_none();
+        if let Some(error) = error {
+            self.page = ProviderLoginPage::OpenAiModelSelection(provider);
+            self.error = Some(error);
+        } else {
+            self.error = None;
+        }
+        Some(succeeded)
+    }
+
     pub fn back(&mut self) -> ProviderLoginBack {
         match self.page {
             ProviderLoginPage::Placeholder(provider) => {
@@ -374,6 +478,15 @@ impl ProviderLoginState {
                 self.openai.reset();
                 self.error = None;
                 self.page = ProviderLoginPage::Providers(provider.method());
+                ProviderLoginBack::Back
+            }
+            ProviderLoginPage::OpenAiModelSelection(provider) => {
+                self.models = ListState::default();
+                self.error = None;
+                self.page = ProviderLoginPage::OpenAiInput(provider);
+                ProviderLoginBack::Back
+            }
+            ProviderLoginPage::OpenAiModelsLoading(_) | ProviderLoginPage::OpenAiActivating(_) => {
                 ProviderLoginBack::Back
             }
             ProviderLoginPage::Providers(_) => {
@@ -420,7 +533,7 @@ fn provider_options(method: ProviderAuthMethod) -> ListState<ProviderLoginOption
     )
 }
 
-fn selected_list(items: Vec<ProviderLoginOption>) -> ListState<ProviderLoginOption> {
+fn selected_list<T>(items: Vec<T>) -> ListState<T> {
     let mut list = ListState::new(items);
     list.select_current();
     list

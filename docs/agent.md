@@ -117,7 +117,14 @@ The inline dialog requires an open project, not an active buffer. With an active
 - Enter asynchronously saves the endpoint and key through `ProviderCredentialStore`. Durable saves require `agent-sqlite` and an absolute `session_db`.
 - Providers have independent credentials, but saving does not select a provider or model or mutate the active provider configuration.
 
-The OpenAI adapter also supports authenticated `GET {base_url}/models`. Login completion does not yet call it or present model selection.
+#### Catalog and model activation
+
+- A successful OpenAI save fetches authenticated `GET {base_url}/models` through the injected `OpenAiProviderFactory`.
+- Explicit loading, selection, and activation pages replace boolean workflow flags.
+- Only model IDs returned by the endpoint are selectable. The list uses a bounded, selection-following viewport.
+- Enter persists the chosen model and then activates that provider. Activation failures leave the selection available and do not install a provider.
+- Catalog failures return to the preserved endpoint/key form, so the user can retry without re-entering secrets.
+- Startup restores the selected OpenAI model when configuration does not explicitly select `openai` or `fake`; explicit configuration takes precedence.
 
 #### Agent slash commands
 
@@ -134,7 +141,7 @@ A leading `/` in the inline dialog or panel Insert input opens a live-filtered c
 
 `provider_login` owns dialog state, commands, and modal registration. `component/agent/provider_login.rs` is a pure menu, form, and placeholder view. Opening provider login from the inline Agent dialog suspends and later restores `AgentChatDialog`; panel Insert state resumes automatically.
 
-Account/OAuth authentication, token refresh, and provider/model selection remain deferred. API-key credentials can already be persisted independently through the shared credential-store interface.
+Account/OAuth authentication, token refresh, and non-OpenAI provider/model selection remain deferred. OpenAI-compatible API-key login, catalog selection, activation, and restart restoration use the shared credential-store and factory interfaces.
 
 ## Session and run state
 

@@ -54,8 +54,9 @@ cargo run -p tui -- "$workdir"
      - Press `Space a p` and navigate with Up/Down or Ctrl-N/Ctrl-P. Confirm account lists `openai`, `qwen.com`, and `kimi.com` as placeholders; API key lists `openai`, `kimi-for-coding`, `qwen-tokenplan-individual-cn`, and `deepseek`.
      - For OpenAI, confirm the default endpoint, long-endpoint wrapping, masked key, and Tab looping between Endpoint and API key.
      - Paste a custom endpoint and key with Ctrl-V. Confirm multiline input is rejected and a slow clipboard result never moves to another field after Tab or editing.
-     - With `agent-sqlite` and an absolute `session_db`, save disposable test keys for two providers. Confirm keys never appear in notifications, and verify both credentials and the OpenAI endpoint persist without changing the active provider/model.
-     - Confirm empty-key and missing-database errors preserve the draft. Escape should step back through the menus before closing.
+     - With `agent-sqlite` and an absolute `session_db`, save disposable test keys for two providers. Confirm keys never appear in notifications and both credentials plus the OpenAI endpoint persist. Saving a non-OpenAI provider does not change the active provider/model.
+     - After an OpenAI save, confirm the endpoint's `/models` response appears in a bounded list. Select an available model with Up/Down and Enter, verify activation and persisted selection, then restart and confirm the same model is restored.
+     - Confirm catalog failures preserve the endpoint/key form for retry, and activation failures leave the model list available. Empty-key and missing-database errors preserve the draft; Escape steps back through the menus before closing.
      - In Agent panel Insert mode, type `/`, `/p`, and `/PRO` to filter `/provider`; `/unknown` should have no matches. Enter before selection does nothing.
      - Use Tab to quick-fill the first match, then Enter to open provider login without starting an agent run. Ctrl-N/Ctrl-P should quick-fill `/model`, `/thinking`, and `/logout`; their Enter actions show placeholder notifications.
      - Closing provider login returns to the same Insert input. Repeat `/provider` in the inline Agent dialog and confirm the same menu and prompt cursor remain available after closing.

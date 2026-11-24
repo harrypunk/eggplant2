@@ -84,6 +84,14 @@ fn available(model: &Model) -> bool {
 }
 
 fn activate(model: &mut Model) -> Option<Effect> {
+    match model.provider_login.page() {
+        super::ProviderLoginPage::OpenAiModelSelection(_) => {
+            return super::openai_work::activate_selected(model);
+        }
+        super::ProviderLoginPage::OpenAiModelsLoading(_)
+        | super::ProviderLoginPage::OpenAiActivating(_) => return None,
+        _ => {}
+    }
     let Some(submission) = model.provider_login.submission() else {
         model.provider_login.activate();
         return None;
@@ -157,14 +165,7 @@ pub(super) fn complete_save(
         .provider_login
         .complete_save(provider_id, error.clone())
     {
-        Some(true) => {
-            close(model);
-            Some(crate::notifications::publish_status(
-                model,
-                StatusMessage::info(format!("Saved API key for {provider_id}")),
-                Some("Provider"),
-            ))
-        }
+        Some(true) => complete_save_success(model, provider_id),
         Some(false) => Some(crate::notifications::publish_status(
             model,
             StatusMessage::error(format!(
@@ -175,6 +176,27 @@ pub(super) fn complete_save(
         )),
         None => None,
     }
+}
+
+fn complete_save_success(model: &mut Model, provider_id: &str) -> Option<Effect> {
+    match provider_id {
+        "openai" => match super::openai_work::after_save(model) {
+            super::openai_work::OpenAiAfterSave::FetchModels(effect) => Some(effect),
+            super::openai_work::OpenAiAfterSave::CloseWithoutCatalog => {
+                close_with_saved_notice(model, provider_id)
+            }
+        },
+        _ => close_with_saved_notice(model, provider_id),
+    }
+}
+
+fn close_with_saved_notice(model: &mut Model, provider_id: &str) -> Option<Effect> {
+    close(model);
+    Some(crate::notifications::publish_status(
+        model,
+        StatusMessage::info(format!("Saved API key for {provider_id}")),
+        Some("Provider"),
+    ))
 }
 
 pub fn open(model: &mut Model) -> Option<Effect> {
@@ -206,7 +228,7 @@ fn suspend_inline_agent(model: &mut Model) -> Option<Context> {
     Some(Context::AgentChatDialog)
 }
 
-fn close(model: &mut Model) -> Option<Effect> {
+pub(super) fn close(model: &mut Model) -> Option<Effect> {
     let return_context = model.provider_login.close();
     model.modal.close(Context::ProviderLogin);
     model

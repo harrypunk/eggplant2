@@ -170,7 +170,9 @@ Provider login:
 - OpenAI has wrappable Endpoint and API-key fields. Tab loops between them, and Ctrl-V pastes through `ClipboardReader`.
 - Clipboard completions are discarded after focus or edits change, preventing stale pastes.
 - Durable saves require `agent-sqlite` and an absolute `session_db`.
-- Multiple providers can store keys independently, but saving does not choose an active provider or model.
+- After an OpenAI save, the endpoint returns available models. Up/Down or Ctrl-N/Ctrl-P navigate the catalog and Enter activates the selected model.
+- Catalog failures preserve the form for retry. Activation persists the selected model and restores it on the next startup.
+- Other providers can store keys independently without changing the active provider or model.
 
 The focus controller itself remains geometry-only; keyboard maps decide which mode emits focus commands.
 

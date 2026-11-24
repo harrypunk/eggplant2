@@ -1,4 +1,5 @@
 mod openai;
+mod openai_work;
 mod paste;
 mod state;
 mod storage;

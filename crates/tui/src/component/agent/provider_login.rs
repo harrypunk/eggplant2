@@ -8,6 +8,7 @@ use ratatui::{
 
 use crate::{
     component::{
+        picker,
         popup::{Popup, content_area},
         text_input::{TextInputStyleInput, TextInputStyleOutput, TextInputViewStyle},
         text_layout::TextFlow,
@@ -19,6 +20,8 @@ use crate::{
     theme::UiTheme,
 };
 
+const MAX_MODEL_ROWS: u16 = 10;
+
 /// Pure presentation for provider-login menus and API-key drafts.
 pub struct ProviderLogin;
 
@@ -28,6 +31,8 @@ impl ProviderLogin {
             ProviderLoginPage::Placeholder(_) => 8,
             ProviderLoginPage::ApiKeyInput(_) => 11,
             ProviderLoginPage::OpenAiInput(_) => openai_height(state, 62),
+            ProviderLoginPage::OpenAiModelSelection(_) => model_height(state),
+            ProviderLoginPage::OpenAiModelsLoading(_) | ProviderLoginPage::OpenAiActivating(_) => 8,
             _ => u16::try_from(state.options().len())
                 .unwrap_or(u16::MAX)
                 .saturating_add(6),
@@ -94,6 +99,16 @@ impl Widget for ProviderLoginContent<'_> {
             ProviderLoginPage::OpenAiInput(provider) => {
                 render_openai(self.state, provider, self.styles, area, buffer)
             }
+            ProviderLoginPage::OpenAiModelSelection(_) => {
+                Paragraph::new(model_lines(self.state, self.styles, area.height))
+                    .style(self.styles.popup_surface())
+                    .render(area, buffer)
+            }
+            ProviderLoginPage::OpenAiModelsLoading(_) | ProviderLoginPage::OpenAiActivating(_) => {
+                Paragraph::new(operation_lines(self.state, self.styles))
+                    .style(self.styles.popup_surface())
+                    .render(area, buffer)
+            }
             ProviderLoginPage::Placeholder(provider) => {
                 Paragraph::new(placeholder_lines(provider, self.styles))
                     .style(self.styles.popup_surface())
@@ -114,7 +129,10 @@ fn menu_lines(state: &ProviderLoginState, styles: &UiTheme) -> Vec<Line<'static>
         ProviderLoginPage::Providers(method) => (method_label(method), "Enter select · Esc back"),
         ProviderLoginPage::Placeholder(_)
         | ProviderLoginPage::ApiKeyInput(_)
-        | ProviderLoginPage::OpenAiInput(_) => {
+        | ProviderLoginPage::OpenAiInput(_)
+        | ProviderLoginPage::OpenAiModelsLoading(_)
+        | ProviderLoginPage::OpenAiModelSelection(_)
+        | ProviderLoginPage::OpenAiActivating(_) => {
             unreachable!("provider pages use separate content")
         }
     };
@@ -148,6 +166,74 @@ fn placeholder_lines(provider: ProviderSpec, styles: &UiTheme) -> Vec<Line<'stat
         Line::styled("Sign-in is not implemented yet.", styles.muted),
         Line::raw(""),
         Line::styled("Esc back", styles.muted),
+    ]
+}
+
+fn model_height(state: &ProviderLoginState) -> u16 {
+    let rows = u16::try_from(state.models().len())
+        .unwrap_or(MAX_MODEL_ROWS)
+        .clamp(1, MAX_MODEL_ROWS);
+    rows.saturating_add(6)
+        .saturating_add(u16::from(state.error().is_some()))
+}
+
+fn model_lines(state: &ProviderLoginState, styles: &UiTheme, height: u16) -> Vec<Line<'static>> {
+    let error_height = u16::from(state.error().is_some());
+    let viewport = height.saturating_sub(4 + error_height);
+    let options = state
+        .models()
+        .iter()
+        .enumerate()
+        .map(|(index, model)| {
+            let selected = state.model_selected() == Some(index);
+            Line::styled(
+                format!("{} {model}", if selected { ">" } else { " " }),
+                if selected {
+                    styles.selection
+                } else {
+                    styles.base
+                },
+            )
+        })
+        .collect();
+    let options = picker::visible_lines(options, state.model_selected(), viewport);
+    let mut lines = vec![
+        Line::styled("Select a model:", styles.action_hint),
+        Line::raw(""),
+    ];
+    lines.extend(options);
+    if let Some(error) = state.error() {
+        lines.push(Line::styled(error.to_string(), styles.error));
+    }
+    lines.push(Line::raw(""));
+    lines.push(Line::styled("Enter select · Esc back", styles.muted));
+    lines
+}
+
+fn operation_lines(state: &ProviderLoginState, styles: &UiTheme) -> Vec<Line<'static>> {
+    let (provider, heading, detail) = match state.page() {
+        ProviderLoginPage::OpenAiModelsLoading(provider) => (
+            provider,
+            "Fetching available models",
+            "Contacting the OpenAI-compatible endpoint...".to_string(),
+        ),
+        ProviderLoginPage::OpenAiActivating(provider) => (
+            provider,
+            "Activating model",
+            format!(
+                "Preparing {}...",
+                state.selected_model().unwrap_or("selected model")
+            ),
+        ),
+        _ => unreachable!("operation pages have dedicated content"),
+    };
+    vec![
+        Line::styled(heading, styles.action_hint),
+        Line::raw(""),
+        Line::styled(format!("Provider: {}", provider.id()), styles.base),
+        Line::styled(detail, styles.muted),
+        Line::raw(""),
+        Line::styled("Please wait", styles.muted),
     ]
 }
 
@@ -463,6 +549,29 @@ mod tests {
         assert!(state.begin_save(provider));
         assert!(ProviderLogin::cursor(&state, theme.ui(), area).is_none());
         assert!(render(&state).contains("Saving..."));
+    }
+
+    #[test]
+    fn model_catalog_uses_a_selection_following_viewport() {
+        let mut state = ProviderLoginState::default();
+        state.open(None);
+        state.select_next();
+        state.activate();
+        state.activate();
+        state.begin_model_loading("openai").unwrap();
+        let models = (0..20).map(|index| format!("model-{index:02}")).collect();
+        state
+            .complete_model_loading("openai", Ok(models))
+            .unwrap()
+            .unwrap();
+        for _ in 0..19 {
+            state.select_next();
+        }
+
+        assert_eq!(ProviderLogin::size(&state).height, 16);
+        let content = render(&state);
+        assert!(content.contains("model-19"));
+        assert!(!content.contains("model-00"));
     }
 
     #[test]
