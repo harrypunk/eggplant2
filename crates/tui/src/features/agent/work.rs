@@ -1,39 +1,112 @@
-use eggplant_agent::{ToolResult, ToolResultStatus};
+use std::sync::Arc;
+
+use eggplant_agent::{AgentProvider, ToolResult, ToolResultStatus};
 
 use crate::{
     data_object::{Model, StatusMessage},
     manager::effect::Effect,
 };
 
-pub(crate) fn submit(model: &mut Model) -> Option<Effect> {
-    super::surface::active(model)?;
-    if model.agent.prompt().starts_with('/') {
-        let command = model.agent.command_state().selected()?;
-        return execute_prompt_command(model, command);
+enum Submission {
+    Inactive,
+    Command(super::PromptCommand),
+    Rejected(SubmissionRejection),
+    Accepted(AcceptedSubmission),
+}
+
+enum SubmissionRejection {
+    EmptyPrompt,
+    AlreadyRunning,
+    MissingProject,
+}
+
+impl SubmissionRejection {
+    fn message(self) -> &'static str {
+        match self {
+            Self::EmptyPrompt => "Enter a prompt",
+            Self::AlreadyRunning => "Agent is already running",
+            Self::MissingProject => "Open a project to use the agent",
+        }
     }
-    let prompt = model.agent.prompt().trim().to_string();
+}
+
+struct AcceptedSubmission {
+    prompt: String,
+    driver: RunDriver,
+}
+
+enum RunDriver {
+    Fake,
+    Provider(Arc<dyn AgentProvider>),
+}
+
+impl Submission {
+    fn evaluate(model: &Model) -> Self {
+        if super::surface::active(model).is_none() {
+            return Self::Inactive;
+        }
+        if model.agent.prompt().starts_with('/') {
+            return model
+                .agent
+                .command_state()
+                .selected()
+                .map_or(Self::Inactive, Self::Command);
+        }
+        let prompt = model.agent.prompt().trim();
+        if let Some(rejection) = rejection(model, prompt) {
+            return Self::Rejected(rejection);
+        }
+        Self::Accepted(AcceptedSubmission {
+            prompt: prompt.to_string(),
+            driver: model
+                .agent
+                .provider()
+                .map_or(RunDriver::Fake, RunDriver::Provider),
+        })
+    }
+}
+
+fn rejection(model: &Model, prompt: &str) -> Option<SubmissionRejection> {
     if prompt.is_empty() {
-        return notify(model, "Enter a prompt".to_string());
+        return Some(SubmissionRejection::EmptyPrompt);
     }
     if model.agent.session().is_running() {
-        return notify(model, "Agent is already running".to_string());
+        return Some(SubmissionRejection::AlreadyRunning);
     }
     if model.workspace.is_none() {
-        return notify(model, "Open a project to use the agent".to_string());
+        return Some(SubmissionRejection::MissingProject);
     }
+    None
+}
+
+pub(crate) fn submit(model: &mut Model) -> Option<Effect> {
+    match Submission::evaluate(model) {
+        Submission::Inactive => None,
+        Submission::Command(command) => execute_prompt_command(model, command),
+        Submission::Rejected(rejection) => notify(model, rejection.message().to_string()),
+        Submission::Accepted(accepted) => start_run(model, accepted),
+    }
+}
+
+fn start_run(model: &mut Model, accepted: AcceptedSubmission) -> Option<Effect> {
     let run_id = model.agent.begin_prompt()?;
-    if let Some(provider) = model.agent.provider() {
-        let cancellation = model.agent.begin_cancellation();
-        return Some(Effect::feature(ProviderAgentRun {
+    match accepted.driver {
+        RunDriver::Fake => Some(Effect::feature(FakeAgentRun {
             run_id,
-            prompt,
-            cancellation,
-            provider,
-            context: super::context::tool_context(model)?,
-            progress: RunProgress::default(),
-        }));
+            prompt: accepted.prompt,
+        })),
+        RunDriver::Provider(provider) => {
+            let cancellation = model.agent.begin_cancellation();
+            Some(Effect::feature(ProviderAgentRun {
+                run_id,
+                prompt: accepted.prompt,
+                cancellation,
+                provider,
+                context: super::context::tool_context(model)?,
+                progress: RunProgress::default(),
+            }))
+        }
     }
-    Some(Effect::feature(FakeAgentRun { run_id, prompt }))
 }
 
 fn execute_prompt_command(model: &mut Model, command: super::PromptCommand) -> Option<Effect> {
