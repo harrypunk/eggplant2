@@ -1,18 +1,39 @@
 //! OpenAI-compatible streaming provider for `eggplant-agent`.
 
-use std::time::Duration;
+use std::{collections::BTreeSet, fmt, time::Duration};
 
 use eggplant_agent::{
     AgentError, AgentEvent, AgentProvider, AgentRequest, ProviderMessageRole, ToolCall,
 };
 use futures_util::StreamExt as _;
+use serde::Deserialize;
 use serde_json::Value;
+
+const MAX_MODELS: usize = 256;
+const MAX_MODEL_ID_BYTES: usize = 256;
+
+/// API key that is redacted from configuration and provider debug output.
+#[derive(Clone, PartialEq, Eq)]
+pub struct OpenAiApiKey(String);
+
+impl OpenAiApiKey {
+    pub fn new(value: impl Into<String>) -> Self {
+        Self(value.into())
+    }
+}
+
+impl fmt::Debug for OpenAiApiKey {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("[redacted]")
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct OpenAiConfig {
     pub base_url: String,
     pub model: String,
     pub api_key_env: String,
+    pub api_key: Option<OpenAiApiKey>,
 }
 
 impl Default for OpenAiConfig {
@@ -21,7 +42,15 @@ impl Default for OpenAiConfig {
             base_url: "https://api.openai.com/v1".to_string(),
             model: "gpt-4o-mini".to_string(),
             api_key_env: "OPENAI_API_KEY".to_string(),
+            api_key: None,
         }
+    }
+}
+
+impl OpenAiConfig {
+    pub fn with_api_key(mut self, api_key: impl Into<String>) -> Self {
+        self.api_key = Some(OpenAiApiKey::new(api_key));
+        self
     }
 }
 
@@ -43,10 +72,18 @@ impl OpenAiProvider {
         if config.model.trim().is_empty() {
             return Err(AgentError("OpenAI model must not be empty".to_string()));
         }
-        if config.api_key_env.trim().is_empty() {
+        if config.api_key.is_none() && config.api_key_env.trim().is_empty() {
             return Err(AgentError(
-                "OpenAI API key environment variable must not be empty".to_string(),
+                "OpenAI API key environment variable must not be empty without a stored key"
+                    .to_string(),
             ));
+        }
+        if config
+            .api_key
+            .as_ref()
+            .is_some_and(|key| key.0.trim().is_empty())
+        {
+            return Err(AgentError("OpenAI API key must not be empty".to_string()));
         }
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(60))
@@ -56,8 +93,51 @@ impl OpenAiProvider {
     }
 
     fn api_key(&self) -> Result<String, AgentError> {
+        if let Some(key) = &self.config.api_key {
+            return Ok(key.0.clone());
+        }
         std::env::var(&self.config.api_key_env)
             .map_err(|_| AgentError(format!("{} is not set", self.config.api_key_env)))
+    }
+
+    /// Fetch the available model IDs from the OpenAI-compatible catalog endpoint.
+    pub async fn list_models(&self) -> Result<Vec<String>, AgentError> {
+        let response = self
+            .client
+            .get(self.models_endpoint())
+            .bearer_auth(self.api_key()?)
+            .send()
+            .await
+            .map_err(|_| {
+                AgentError("OpenAI model catalog request failed: transport error".to_string())
+            })?;
+        let status = response.status();
+        if !status.is_success() {
+            return Err(AgentError(format!(
+                "OpenAI model catalog request failed with status {status}"
+            )));
+        }
+        let catalog = response
+            .json::<OpenAiModelCatalog>()
+            .await
+            .map_err(|_| AgentError("OpenAI model catalog response was invalid".to_string()))?;
+        let models = catalog
+            .data
+            .into_iter()
+            .filter_map(|model| {
+                let id = model.id.trim().to_string();
+                (!id.is_empty() && id.len() <= MAX_MODEL_ID_BYTES).then_some(id)
+            })
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .take(MAX_MODELS)
+            .collect::<Vec<_>>();
+        if models.is_empty() {
+            return Err(AgentError(
+                "OpenAI model catalog contained no usable models".to_string(),
+            ));
+        }
+        Ok(models)
     }
 
     fn endpoint(&self) -> String {
@@ -66,6 +146,20 @@ impl OpenAiProvider {
             self.config.base_url.trim_end_matches('/')
         )
     }
+
+    fn models_endpoint(&self) -> String {
+        format!("{}/models", self.config.base_url.trim_end_matches('/'))
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAiModelCatalog {
+    data: Vec<OpenAiModel>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OpenAiModel {
+    id: String,
 }
 
 impl AgentProvider for OpenAiProvider {
@@ -437,6 +531,7 @@ mod tests {
             base_url,
             model: "gpt-test".to_string(),
             api_key_env: key_env.to_string(),
+            api_key: None,
         })
         .unwrap();
         let events = Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -465,6 +560,49 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn stored_key_authenticates_model_catalog_and_redacts_config() {
+        let _guard = ENV_LOCK.lock().await;
+        let body =
+            r#"{"data":[{"id":"gpt-b"},{"id":"gpt-a"},{"id":"gpt-a"},{"id":""}]}"#.to_string();
+        let (base_url, server) = spawn_server("200 OK", body);
+        let config = OpenAiConfig {
+            base_url,
+            api_key_env: "EGGPLANT_TEST_MISSING_OPENAI_KEY".to_string(),
+            ..OpenAiConfig::default()
+        }
+        .with_api_key("stored-secret");
+        assert!(!format!("{config:?}").contains("stored-secret"));
+        let provider = OpenAiProvider::new(config).unwrap();
+
+        let models = provider.list_models().await.unwrap();
+
+        assert_eq!(models, ["gpt-a", "gpt-b"]);
+        let request = server.join().unwrap().to_lowercase();
+        assert!(request.contains("get /v1/models"));
+        assert!(request.contains("authorization: bearer stored-secret"));
+        assert!(!request.contains("chat/completions"));
+    }
+
+    #[tokio::test]
+    async fn model_catalog_http_failures_are_redacted() {
+        let _guard = ENV_LOCK.lock().await;
+        let (base_url, server) = spawn_server("401 Unauthorized", "{}".to_string());
+        let provider = OpenAiProvider::new(
+            OpenAiConfig {
+                base_url,
+                ..OpenAiConfig::default()
+            }
+            .with_api_key("stored-secret"),
+        )
+        .unwrap();
+
+        let error = provider.list_models().await.unwrap_err();
+        assert!(error.0.contains("401"));
+        assert!(!error.0.contains("stored-secret"));
+        server.join().unwrap();
+    }
+
+    #[tokio::test]
     async fn http_failures_are_redacted() {
         let _guard = ENV_LOCK.lock().await;
         let (base_url, server) = spawn_server("401 Unauthorized", "{}".to_string());
@@ -474,6 +612,7 @@ mod tests {
             base_url,
             model: "gpt-test".to_string(),
             api_key_env: key_env.to_string(),
+            api_key: None,
         })
         .unwrap();
         let result = provider
