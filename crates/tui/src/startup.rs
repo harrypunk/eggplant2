@@ -1,3 +1,7 @@
+pub mod agent;
+
+pub use agent::configure as configure_agent;
+
 use std::{ffi::OsString, path::PathBuf, sync::Arc};
 
 use app::language::{LanguageServerRegistry, LanguageServers};
