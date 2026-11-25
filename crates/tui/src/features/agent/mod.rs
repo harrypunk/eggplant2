@@ -120,6 +120,13 @@ impl AgentState {
         self.panel_mode
     }
 
+    pub fn panel_input_context(&self) -> crate::data_object::Context {
+        match self.panel_mode {
+            AgentInputMode::Normal => crate::data_object::Context::AgentChat,
+            AgentInputMode::Insert => crate::data_object::Context::AgentChatInsert,
+        }
+    }
+
     pub fn help_visible(&self) -> bool {
         self.help_visible
     }

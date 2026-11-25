@@ -1,4 +1,7 @@
-use crate::data_object::Visibility;
+use crate::{
+    agent::AgentState,
+    data_object::{Context, Visibility},
+};
 
 /// Tools available in the shared side-panel shell.
 ///
@@ -20,6 +23,16 @@ pub enum ToolKind {
 pub struct ToolsPanelState {
     pub visibility: Visibility,
     pub active_tool: Option<ToolKind>,
+}
+
+impl ToolsPanelState {
+    /// Delegate tool-specific input policy to the active tool.
+    pub fn input_context(&self, agent: &AgentState) -> Option<Context> {
+        match (self.visibility, self.active_tool) {
+            (Visibility::Displayed, Some(ToolKind::Agent)) => Some(agent.panel_input_context()),
+            _ => None,
+        }
+    }
 }
 
 impl Default for ToolsPanelState {

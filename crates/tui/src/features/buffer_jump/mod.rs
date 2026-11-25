@@ -6,9 +6,10 @@ pub use state::BufferJumpState;
 
 use crate::{
     command_menu::CommandMenuItem,
+    composition::input::input_context,
     data_object::{CommandId, Context, Model, StatusMessage},
     focus,
-    manager::{command_registry::Command, effect::Effect, input_context::input_context},
+    manager::{command_registry::Command, effect::Effect},
     ui::UiRegistry,
 };
 

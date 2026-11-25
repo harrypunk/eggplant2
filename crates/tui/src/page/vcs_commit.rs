@@ -16,10 +16,15 @@ use crate::{
         editor::{Editor as EditorComponent, EditorBuffer},
         status_bar::StatusBar,
     },
-    data_object::{FocusState, Model},
+    data_object::{Context, FocusState, Model},
     theme::Theme,
     vcs::ChangesState,
 };
+
+pub fn input_context(model: &Model) -> Option<Context> {
+    crate::editing::target::mode_context(model.vcs.commit.editor.mode(), Context::VcsCommitInput)
+        .or(Some(Context::VcsCommit))
+}
 
 #[derive(Debug, Default)]
 pub struct VcsCommit;

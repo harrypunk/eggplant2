@@ -216,8 +216,9 @@ mod tests {
 
     use super::*;
     use crate::{
+        composition::input::input_context,
         data_object::{AppPage, Context, Message},
-        manager::{input_context::input_context, message_manager::MessageManager},
+        manager::message_manager::MessageManager,
         test_utils::{create_buffer, open_file},
     };
 

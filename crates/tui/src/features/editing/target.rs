@@ -2,7 +2,7 @@ use editor::{EditMode, EditorSession};
 
 use crate::{
     buffer,
-    data_object::{AppPage, Context, FocusTarget, Model},
+    data_object::{AppPage, Context, Model},
     manager::effect::Effect,
 };
 
@@ -58,21 +58,8 @@ pub(crate) fn active_kind(model: &Model) -> Option<EditingTargetKind> {
     }
 }
 
-/// Derive mode-owned input routing without mirroring editor modes into the workflow stack.
-pub(crate) fn mode_context(model: &Model) -> Option<Context> {
-    match active_kind(model)? {
-        EditingTargetKind::Commit => {
-            insert_or_visual_context(model.vcs.commit.editor.mode(), Context::VcsCommitInput)
-                .or(Some(Context::VcsCommit))
-        }
-        EditingTargetKind::Main if model.current_focus == FocusTarget::Editor => {
-            insert_or_visual_context(model.editor.mode(), Context::EditorInput)
-        }
-        EditingTargetKind::Main => None,
-    }
-}
-
-fn insert_or_visual_context(mode: EditMode, insert: Context) -> Option<Context> {
+/// Map an editor-owned mode to its keymap context without consulting application state.
+pub(crate) fn mode_context(mode: EditMode, insert: Context) -> Option<Context> {
     match mode {
         EditMode::Insert => Some(insert),
         EditMode::Visual | EditMode::VisualLine => Some(Context::EditorVisual),

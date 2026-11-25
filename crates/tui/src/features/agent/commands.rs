@@ -1,9 +1,9 @@
 use crate::{
     component::text_input::TextInputEvent,
+    composition::input::input_context,
     data_object::{CommandId, Context, GeneralAction, Model},
     manager::{
         command_registry::Command, effect::Effect, general_action::GeneralActionSubscription,
-        input_context::input_context,
     },
 };
 

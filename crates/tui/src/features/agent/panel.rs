@@ -1,6 +1,7 @@
 use crate::{
+    composition::input::input_context,
     data_object::{Context, FocusTarget, Model, Visibility},
-    manager::{effect::Effect, input_context::input_context},
+    manager::effect::Effect,
     tools::ToolKind,
 };
 

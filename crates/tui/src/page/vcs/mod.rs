@@ -13,7 +13,7 @@ use ratatui::{
 
 use crate::{
     component::commit_message,
-    data_object::Model,
+    data_object::{Context, Model},
     theme::UiTheme,
     vcs::{ChangesState, HistoryState},
 };
@@ -24,6 +24,8 @@ use self::{
     merge_popup::{MergePopup, MergePopupProps},
     reset_popup::{ResetPopup, ResetPopupProps},
 };
+
+pub const INPUT_CONTEXT: Context = Context::VCS;
 
 #[derive(Debug, Default)]
 pub struct Vcs;

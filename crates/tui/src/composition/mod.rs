@@ -2,4 +2,5 @@
 
 pub mod actions;
 pub mod agent;
+pub mod input;
 pub mod openai;

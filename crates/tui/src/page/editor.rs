@@ -6,7 +6,7 @@ use ratatui::{
 
 use crate::{
     component::editor::{Editor as EditorComponent, EditorBuffer},
-    data_object::{FocusState, FocusTarget, Model, Visibility},
+    data_object::{Context, FocusState, FocusTarget, Model, Visibility},
     ui::{PanelSlot, StatusSlot, UiRegistry},
 };
 
@@ -19,6 +19,28 @@ impl Default for Editor {
     fn default() -> Self {
         Self::new(UiRegistry::builtin())
     }
+}
+
+/// Resolve the Editor page's focused region without depending on a global context policy.
+pub fn input_context(model: &Model) -> Option<Context> {
+    match model.current_focus {
+        FocusTarget::FileExplorer => Some(Context::Explorer),
+        FocusTarget::ToolsPanel => model
+            .tools
+            .input_context(&model.agent)
+            .or(Some(Context::AppNormal)),
+        FocusTarget::Editor => editor_input_context(model),
+        FocusTarget::FilePicker | FocusTarget::AgentChatDialog => Some(Context::AppNormal),
+    }
+}
+
+fn editor_input_context(model: &Model) -> Option<Context> {
+    crate::editing::target::mode_context(model.editor.mode(), Context::EditorInput).or_else(|| {
+        match model.editor.active_buffer() {
+            Some(_) => Some(Context::AppNormal),
+            None => Some(Context::Welcome),
+        }
+    })
 }
 
 impl Editor {

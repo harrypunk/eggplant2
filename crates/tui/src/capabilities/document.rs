@@ -151,7 +151,7 @@ pub(crate) fn open_file_at_with_origin(
             position,
         },
         origin,
-        crate::manager::input_context::input_context(model),
+        crate::composition::input::input_context(model),
     );
     Some(Effect::OpenDocument(OpenFileRequest {
         id,
@@ -162,7 +162,7 @@ pub(crate) fn open_file_at_with_origin(
 /// Apply the latest document-open result and reconcile the workflow that started it.
 fn complete_open(model: &mut Model, completion: OpenFileCompletion) -> Option<Effect> {
     let opened = finish_open_file(model, completion)?;
-    let reconcile = crate::manager::input_context::input_context(model) == opened.context
+    let reconcile = crate::composition::input::input_context(model) == opened.context
         && match opened.origin {
             OpenOrigin::FilePicker { session } => {
                 model.file_picker.visibility == Visibility::Displayed

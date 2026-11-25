@@ -8,12 +8,17 @@ use ratatui::{
     widgets::Paragraph,
 };
 
-use crate::{data_object::Model, vcs::HistoryMoreState};
+use crate::{
+    data_object::{Context, Model},
+    vcs::HistoryMoreState,
+};
 
 use self::{
     commit_detail::{CommitDetail, CommitDetailProps},
     history_list::{HistoryList, HistoryListProps},
 };
+
+pub const INPUT_CONTEXT: Context = Context::VcsHistory;
 
 #[derive(Debug, Default)]
 pub struct VcsHistory;

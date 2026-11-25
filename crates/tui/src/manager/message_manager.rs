@@ -11,7 +11,7 @@ use crate::{
         command_registry::{CommandHandler, CommandRegistry},
         effect::Effect,
         general_action::GeneralActionHandler,
-        input_context::input_context,
+        input_routing::InputRouting,
         routed_input::RoutedInput,
         text_input_registry::TextInputRegistry,
     },
@@ -23,6 +23,7 @@ pub struct MessageManager {
     commands: CommandRegistry,
     text_input: TextInputRegistry,
     general_actions: Arc<dyn GeneralActionHandler>,
+    routing: Arc<dyn InputRouting>,
 }
 
 impl Default for MessageManager {
@@ -38,6 +39,7 @@ impl MessageManager {
             commands,
             text_input,
             general_actions: Arc::new(general_actions()),
+            routing: crate::composition::input::routing(),
         }
     }
 
@@ -46,6 +48,11 @@ impl MessageManager {
         general_actions: Arc<dyn GeneralActionHandler>,
     ) -> Self {
         self.general_actions = general_actions;
+        self
+    }
+
+    pub fn with_input_routing(mut self, routing: Arc<dyn InputRouting>) -> Self {
+        self.routing = routing;
         self
     }
 
@@ -76,7 +83,7 @@ impl MessageManager {
             msg @ (Message::GeneralAction(_) | Message::TextInput(_)) => {
                 // Compatibility for direct semantic-message callers. Terminal input uses
                 // `update_input`, so its originally resolved context cannot change in flight.
-                let context = input_context(model)?;
+                let context = self.routing.context(model)?;
                 return self.update_input(model, RoutedInput::new(context, msg));
             }
             Message::FocusLost => return buffer::save_active(model),
@@ -123,6 +130,7 @@ mod tests {
 
     use super::*;
     use crate::{
+        composition::input::input_context,
         data_object::{
             CommandId, Context, FocusTarget, GeneralAction, RunningState, StatusKind, Visibility,
         },

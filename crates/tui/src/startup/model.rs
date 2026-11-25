@@ -41,9 +41,9 @@ mod tests {
 
     use super::*;
     use crate::{
+        composition::input::input_context,
         data_object::{Context, FocusTarget},
         file_picker::FileCollectionState,
-        manager::input_context::input_context,
         startup::StartupSource,
     };
 

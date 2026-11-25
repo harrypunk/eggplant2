@@ -7,8 +7,8 @@ use crate::{
     component::agent::{
         AgentDialog, AgentHelp, AgentPanel, AgentPanelProps, AgentPromptProps, AgentViewProps,
     },
+    composition::input::input_context,
     data_object::{Context, FocusState, FocusTarget, Model},
-    manager::input_context::input_context,
     ui::{OverlayContribution, OverlayKind, OverlayPlacement, UiRegistry},
 };
 

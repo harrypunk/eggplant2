@@ -19,8 +19,9 @@ impl ViewAlignSession {
 }
 
 use crate::{
+    composition::input::input_context,
     data_object::{CommandId, Context, Model, PendingInput, StatusMessage},
-    manager::{command_registry::Command, effect::Effect, input_context::input_context},
+    manager::{command_registry::Command, effect::Effect},
 };
 
 pub fn commands() -> Vec<Command> {

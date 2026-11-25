@@ -1,7 +1,8 @@
 use crate::{
+    composition::input::input_context,
     data_object::{CommandId, Context, Model, PendingInput, StatusMessage},
     editing::{self, EditingTarget, target},
-    manager::{command_registry::Command, effect::Effect, input_context::input_context},
+    manager::{command_registry::Command, effect::Effect},
 };
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]

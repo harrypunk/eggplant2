@@ -1,6 +1,6 @@
 use crate::{
+    composition::input::input_context,
     data_object::{Context, Model},
-    manager::input_context::input_context,
     tools::ToolKind,
 };
 

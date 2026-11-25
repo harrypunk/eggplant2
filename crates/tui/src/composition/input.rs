@@ -1,76 +1,51 @@
+use std::sync::Arc;
+
 use crate::{
-    agent::AgentInputMode,
-    data_object::{AppPage, Context, FocusTarget, Model, Visibility},
-    tools::ToolKind,
+    data_object::{AppPage, Context, Model},
+    manager::input_routing::InputRouting,
+    page,
 };
 
-struct ContextRule {
-    context: Context,
-    matches: fn(&Model) -> bool,
-}
+/// Application router that delegates shell policy to the active page.
+#[derive(Debug, Default)]
+pub struct ApplicationInputRouting;
 
-impl ContextRule {
-    const fn new(context: Context, matches: fn(&Model) -> bool) -> Self {
-        Self { context, matches }
+impl InputRouting for ApplicationInputRouting {
+    fn context(&self, model: &Model) -> Option<Context> {
+        model
+            .modal
+            .active_context()
+            .or_else(|| model.context_stack.last().copied())
+            .or_else(|| page_context(model))
     }
 }
 
-const SHELL_RULES: &[ContextRule] = &[
-    ContextRule::new(Context::VcsHistory, |model| {
-        model.active_page == AppPage::VcsHistory
-    }),
-    ContextRule::new(Context::VCS, |model| model.active_page == AppPage::Vcs),
-    ContextRule::new(Context::AgentChatInsert, |model| {
-        agent_panel_is(model, AgentInputMode::Insert)
-    }),
-    ContextRule::new(Context::AgentChat, |model| {
-        agent_panel_is(model, AgentInputMode::Normal)
-    }),
-    ContextRule::new(Context::Explorer, |model| {
-        model.current_focus == FocusTarget::FileExplorer
-    }),
-    ContextRule::new(Context::Welcome, |model| {
-        model.current_focus == FocusTarget::Editor && model.editor.active_buffer().is_none()
-    }),
-    ContextRule::new(Context::AppNormal, |_| true),
-];
+pub fn routing() -> Arc<dyn InputRouting> {
+    Arc::new(ApplicationInputRouting)
+}
 
-/// Resolve which context owns input, giving modal and transient workflows precedence over the shell.
-///
-/// The active modal session owns both presentation and input. The stack provides transient LIFO
-/// routing underneath it and must not synchronize focus, active page, editor mode, or Agent panel
-/// mode.
-///
-/// When no modal or transient workflow is active, the shell context is derived from source-of-truth
-/// UI state. This avoids stale stack entries when focus, buffers, pages, or panel modes change.
+/// Compatibility boundary for feature adapters that still request the active context directly.
+/// New code should receive `InputRouting` or an explicit `RoutedInput` instead.
 pub fn input_context(model: &Model) -> Option<Context> {
-    model
-        .modal
-        .active_context()
-        .or_else(|| model.context_stack.last().copied())
-        .or_else(|| shell_context(model))
+    ApplicationInputRouting.context(model)
 }
 
-/// Resolve the persistent shell surface underneath all transient workflows.
-fn shell_context(model: &Model) -> Option<Context> {
-    crate::editing::target::mode_context(model).or_else(|| {
-        SHELL_RULES
-            .iter()
-            .find(|rule| (rule.matches)(model))
-            .map(|rule| rule.context)
-    })
-}
-
-fn agent_panel_is(model: &Model, mode: AgentInputMode) -> bool {
-    model.current_focus == FocusTarget::ToolsPanel
-        && model.tools.visibility == Visibility::Displayed
-        && model.tools.active_tool == Some(ToolKind::Agent)
-        && model.agent.panel_mode() == mode
+fn page_context(model: &Model) -> Option<Context> {
+    match model.active_page {
+        AppPage::Editor => page::editor::input_context(model),
+        AppPage::Vcs => Some(page::vcs::INPUT_CONTEXT),
+        AppPage::VcsHistory => Some(page::vcs_history::INPUT_CONTEXT),
+        AppPage::VcsCommit => page::vcs_commit::input_context(model),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        data_object::{FocusTarget, Visibility},
+        tools::ToolKind,
+    };
 
     #[test]
     fn derives_welcome_only_for_the_focused_empty_editor() {

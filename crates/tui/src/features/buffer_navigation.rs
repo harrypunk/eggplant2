@@ -1,7 +1,8 @@
 use crate::{
     buffer::{self, BufferMovement},
+    composition::input::input_context,
     data_object::{CommandId, Context, Model, PendingInput, StatusMessage},
-    manager::{command_registry::Command, effect::Effect, input_context::input_context},
+    manager::{command_registry::Command, effect::Effect},
 };
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]

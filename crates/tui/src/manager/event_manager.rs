@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
 use crossterm::event::{KeyEvent, KeyEventKind};
 use ratatui::crossterm::event::{self, Event};
@@ -7,8 +7,8 @@ use crate::config::Config;
 use crate::data_object::{Message, Model};
 use crate::manager::{
     context::{KeyChord, LeaderInput, leader_input},
-    input_context::input_context,
     input_resolver::{InputResolver, InputResolverChain, default_input_resolvers},
+    input_routing::InputRouting,
     keyboard_input_registry::Registry,
     routed_input::RoutedInput,
     text_input_registry::TextInputRegistry,
@@ -26,6 +26,7 @@ pub struct EventManager {
     poll_timeout: Duration,
     leader: KeyChord,
     input: InputResolverChain,
+    routing: Arc<dyn InputRouting>,
 }
 
 impl EventManager {
@@ -46,11 +47,17 @@ impl EventManager {
             poll_timeout: Duration::from_millis(config.event_poll_timeout),
             leader,
             input,
+            routing: crate::composition::input::routing(),
         })
     }
 
     pub fn with_input_resolver(mut self, input: InputResolverChain) -> Self {
         self.input = input;
+        self
+    }
+
+    pub fn with_input_routing(mut self, routing: Arc<dyn InputRouting>) -> Self {
+        self.routing = routing;
         self
     }
 
@@ -85,7 +92,7 @@ impl EventManager {
     }
 
     fn translate_key(&self, key: KeyEvent, model: &Model) -> Option<RoutedInput> {
-        let context = input_context(model)?;
+        let context = self.routing.context(model)?;
         let chord = KeyChord::from(key);
         let message =
             match leader_input(context, chord, self.leader, model.command_menu.is_active()) {

@@ -2,12 +2,12 @@ use editor::{BufferId, PastePosition};
 use helix_view::clipboard::{ClipboardProvider, ClipboardType};
 
 use crate::{
+    composition::input::input_context,
     data_object::{CommandId, Context, Message, Model, PendingInput, StatusMessage},
     editing::{EditingTarget, target},
     manager::{
         command_registry::Command,
         effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
-        input_context::input_context,
     },
 };
 
