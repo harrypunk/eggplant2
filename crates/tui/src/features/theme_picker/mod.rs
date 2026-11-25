@@ -9,7 +9,9 @@ pub use state::{ThemePickerEntry, ThemePickerState};
 use crate::{
     config::ThemeConfig,
     data_object::{CommandId, Context, GeneralAction, ModalController, Model, StatusMessage},
-    manager::{effect::Effect, general_action::GeneralActionSubscription},
+    manager::{
+        context_stack::ContextStack, effect::Effect, general_action::GeneralActionSubscription,
+    },
     theme::{Theme, ThemePersistenceState},
 };
 
@@ -51,7 +53,7 @@ struct ThemePickerAdapter<'a> {
     state: &'a mut ThemePickerState,
     theme: &'a mut Theme,
     persistence: &'a mut ThemePersistenceState,
-    contexts: &'a mut Vec<Context>,
+    contexts: &'a mut ContextStack,
     modal: &'a mut ModalController,
     status: &'a mut Option<StatusMessage>,
 }

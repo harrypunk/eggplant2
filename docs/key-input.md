@@ -359,7 +359,9 @@ The configured leader (`Space` by default) opens a small data-driven sequence st
 
 `input_context` resolves input in two layers. The top of `context_stack` wins when a transient workflow is active; otherwise, a shell context is derived from source-of-truth page, focus, buffer, and tool state.
 
-The stack contains only workflows with explicit entry and exit transitions, such as pickers, dialogs, approval prompts, and pending operators. Push the workflow's context on entry and pop that same context on exit. Features should query `input_context` when they need to know which surface currently owns input rather than inspecting raw stack entries.
+The stack contains only workflows with explicit entry and exit transitions, such as pickers, dialogs, approval prompts, and pending operators. Push the workflow's context on entry and pop that same context on exit. Features should query `input_context` when they need to know which surface currently owns input rather than inspecting raw stack entries. `ContextStack` owns the transient LIFO mechanics and `pop_if` removes only a matching top frame; it never removes an older workflow or synchronizes shell state.
+
+Shell resolution uses ordered `ContextRule` values rather than nested conditionals. Rules inspect page, focus, tool visibility, and Agent panel mode in priority order: VCS page, Agent Insert/Normal, Explorer, Welcome, then Normal. Add or adjust shell policies through those rules rather than adding another imperative branch. `ModalController` remains the separate authority for modal visibility.
 
 Shell contexts are derived, not pushed: `AppNormal`, `Welcome`, `Explorer`, `AgentChat`, `AgentChatInsert`, `VCS`, `VcsHistory`, and `VcsCommit`. Changing focus, opening or closing the last buffer, switching pages, or changing Agent panel mode must not synchronize these variants into the stack. Workflow-specific restoration data, such as the file picker's opening focus, belongs to that workflow rather than being encoded as a shell stack entry.
 

@@ -4,6 +4,40 @@ use crate::{
     tools::ToolKind,
 };
 
+struct ContextRule {
+    context: Context,
+    matches: fn(&Model) -> bool,
+}
+
+impl ContextRule {
+    const fn new(context: Context, matches: fn(&Model) -> bool) -> Self {
+        Self { context, matches }
+    }
+}
+
+const SHELL_RULES: &[ContextRule] = &[
+    ContextRule::new(Context::VcsCommit, |model| {
+        model.active_page == AppPage::VcsCommit
+    }),
+    ContextRule::new(Context::VcsHistory, |model| {
+        model.active_page == AppPage::VcsHistory
+    }),
+    ContextRule::new(Context::VCS, |model| model.active_page == AppPage::Vcs),
+    ContextRule::new(Context::AgentChatInsert, |model| {
+        agent_panel_is(model, AgentInputMode::Insert)
+    }),
+    ContextRule::new(Context::AgentChat, |model| {
+        agent_panel_is(model, AgentInputMode::Normal)
+    }),
+    ContextRule::new(Context::Explorer, |model| {
+        model.current_focus == FocusTarget::FileExplorer
+    }),
+    ContextRule::new(Context::Welcome, |model| {
+        model.current_focus == FocusTarget::Editor && model.editor.active_buffer().is_none()
+    }),
+    ContextRule::new(Context::AppNormal, |_| true),
+];
+
 /// Resolve which context owns input, giving transient workflows precedence over the shell.
 ///
 /// The stack contains only transient workflows with an explicit lifetime: pickers, dialogs,
@@ -22,27 +56,17 @@ pub fn input_context(model: &Model) -> Option<Context> {
 
 /// Resolve the persistent shell surface underneath all transient workflows.
 fn shell_context(model: &Model) -> Option<Context> {
-    match model.active_page {
-        AppPage::Editor => {}
-        AppPage::Vcs => return Some(Context::VCS),
-        AppPage::VcsHistory => return Some(Context::VcsHistory),
-        AppPage::VcsCommit => return Some(Context::VcsCommit),
-    }
+    SHELL_RULES
+        .iter()
+        .find(|rule| (rule.matches)(model))
+        .map(|rule| rule.context)
+}
 
-    match model.current_focus {
-        FocusTarget::ToolsPanel
-            if model.tools.visibility == Visibility::Displayed
-                && model.tools.active_tool == Some(ToolKind::Agent) =>
-        {
-            match model.agent.panel_mode() {
-                AgentInputMode::Normal => Some(Context::AgentChat),
-                AgentInputMode::Insert => Some(Context::AgentChatInsert),
-            }
-        }
-        FocusTarget::FileExplorer => Some(Context::Explorer),
-        FocusTarget::Editor if model.editor.active_buffer().is_none() => Some(Context::Welcome),
-        _ => Some(Context::AppNormal),
-    }
+fn agent_panel_is(model: &Model, mode: AgentInputMode) -> bool {
+    model.current_focus == FocusTarget::ToolsPanel
+        && model.tools.visibility == Visibility::Displayed
+        && model.tools.active_tool == Some(ToolKind::Agent)
+        && model.agent.panel_mode() == mode
 }
 
 #[cfg(test)]
