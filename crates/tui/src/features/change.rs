@@ -209,8 +209,6 @@ fn delete_selection_with(
             }
         }
     }
-    let context = target.visual_context();
-    target.pop_context(context);
     match operation {
         SelectionOperation::Delete => {
             target.session().enter_normal_mode();
@@ -450,7 +448,8 @@ mod tests {
         manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('c')));
         assert_eq!(commit_text(&model), "");
         assert_eq!(model.vcs.commit.editor.mode(), editor::EditMode::Insert);
-        assert_eq!(model.context_stack.last(), Some(&Context::VcsCommitInput));
+        assert_eq!(input_context(&model), Some(Context::VcsCommitInput));
+        assert!(model.context_stack.is_empty());
 
         for character in "new line".chars() {
             manager.update(

@@ -16,9 +16,6 @@ impl ContextRule {
 }
 
 const SHELL_RULES: &[ContextRule] = &[
-    ContextRule::new(Context::VcsCommit, |model| {
-        model.active_page == AppPage::VcsCommit
-    }),
     ContextRule::new(Context::VcsHistory, |model| {
         model.active_page == AppPage::VcsHistory
     }),
@@ -42,7 +39,8 @@ const SHELL_RULES: &[ContextRule] = &[
 ///
 /// The stack contains only transient workflows with an explicit lifetime: pickers, dialogs,
 /// pending operators, and similar states that are pushed on entry and popped on exit. It must
-/// not be used to synchronize shell state such as focus, the active page, or Agent panel mode.
+/// not be used to synchronize shell state such as focus, the active page, editor mode, or Agent
+/// panel mode.
 ///
 /// When no transient workflow is active, the shell context is derived from source-of-truth UI
 /// state. This avoids stale stack entries when focus, buffers, pages, or panel modes change.
@@ -56,10 +54,12 @@ pub fn input_context(model: &Model) -> Option<Context> {
 
 /// Resolve the persistent shell surface underneath all transient workflows.
 fn shell_context(model: &Model) -> Option<Context> {
-    SHELL_RULES
-        .iter()
-        .find(|rule| (rule.matches)(model))
-        .map(|rule| rule.context)
+    crate::editing::target::mode_context(model).or_else(|| {
+        SHELL_RULES
+            .iter()
+            .find(|rule| (rule.matches)(model))
+            .map(|rule| rule.context)
+    })
 }
 
 fn agent_panel_is(model: &Model, mode: AgentInputMode) -> bool {
@@ -103,6 +103,58 @@ mod tests {
 
         model.current_focus = FocusTarget::Editor;
         assert_eq!(input_context(&model), Some(Context::Welcome));
+        assert!(model.context_stack.is_empty());
+    }
+
+    #[test]
+    fn editor_modes_follow_session_state_without_stack_entries() {
+        let mut model = Model::default();
+        crate::test_utils::create_buffer(&mut model, "text");
+        assert_eq!(input_context(&model), Some(Context::AppNormal));
+
+        model.editor.enter_insert_mode();
+        assert_eq!(input_context(&model), Some(Context::EditorInput));
+        model.editor.enter_normal_mode();
+        assert_eq!(input_context(&model), Some(Context::AppNormal));
+
+        model.editor.enter_visual_mode();
+        assert_eq!(input_context(&model), Some(Context::EditorVisual));
+        model.editor.enter_visual_line_mode();
+        assert_eq!(input_context(&model), Some(Context::EditorVisual));
+        model.editor.enter_normal_mode();
+
+        model.editor.enter_insert_mode();
+        model.current_focus = FocusTarget::FileExplorer;
+        assert_eq!(input_context(&model), Some(Context::Explorer));
+        model.current_focus = FocusTarget::ToolsPanel;
+        model.tools.active_tool = Some(ToolKind::Agent);
+        model.tools.visibility = Visibility::Displayed;
+        assert_eq!(input_context(&model), Some(Context::AgentChat));
+        model.current_focus = FocusTarget::Editor;
+        assert_eq!(input_context(&model), Some(Context::EditorInput));
+        assert!(model.context_stack.is_empty());
+    }
+
+    #[test]
+    fn commit_editor_modes_follow_the_commit_session() {
+        let mut model = Model {
+            active_page: AppPage::VcsCommit,
+            ..Model::default()
+        };
+        model
+            .vcs
+            .commit
+            .editor
+            .insert_document(editor::DocumentFactory::new().create(""));
+        assert_eq!(input_context(&model), Some(Context::VcsCommit));
+
+        model.vcs.commit.editor.enter_insert_mode();
+        assert_eq!(input_context(&model), Some(Context::VcsCommitInput));
+        model.vcs.commit.editor.enter_normal_mode();
+        model.vcs.commit.editor.enter_visual_mode();
+        assert_eq!(input_context(&model), Some(Context::EditorVisual));
+        model.vcs.commit.editor.enter_normal_mode();
+        assert_eq!(input_context(&model), Some(Context::VcsCommit));
         assert!(model.context_stack.is_empty());
     }
 

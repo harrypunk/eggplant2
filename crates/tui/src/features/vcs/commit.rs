@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use editor::EditorSession;
 
 use crate::{
-    data_object::{AppPage, CommandId, Context, Message, Model, StatusMessage},
+    data_object::{AppPage, CommandId, Message, Model, StatusMessage},
     manager::{
         command_registry::Command,
         effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
@@ -149,9 +149,6 @@ fn discard(model: &mut Model) -> Option<Effect> {
 
 fn return_to_status(model: &mut Model) {
     model.active_page = AppPage::Vcs;
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::VcsCommitInput);
 }
 
 fn submit(model: &mut Model) -> Option<Effect> {
@@ -190,9 +187,6 @@ fn submit(model: &mut Model) -> Option<Effect> {
         revision: model.vcs.commit.revision,
     });
     model.vcs.commit.editor.enter_normal_mode();
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::VcsCommitInput);
     model.vcs.notice = Some("Saving before commit…".to_string());
     continue_after_save(model)
 }

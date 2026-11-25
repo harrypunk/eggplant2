@@ -1,8 +1,8 @@
-use editor::EditorSession;
+use editor::{EditMode, EditorSession};
 
 use crate::{
     buffer,
-    data_object::{AppPage, Context, Model},
+    data_object::{AppPage, Context, FocusTarget, Model},
     manager::effect::Effect,
 };
 
@@ -11,13 +11,6 @@ pub(crate) trait EditingTarget {
     fn session(&mut self) -> &mut EditorSession;
     fn normal_context(&self) -> Context {
         Context::AppNormal
-    }
-    fn input_context(&self) -> Context;
-    fn push_context(&mut self, context: Context);
-    fn pop_context(&mut self, context: Context);
-
-    fn visual_context(&self) -> Context {
-        Context::EditorVisual
     }
 
     fn is_editing_enabled(&self) -> bool {
@@ -65,6 +58,28 @@ pub(crate) fn active_kind(model: &Model) -> Option<EditingTargetKind> {
     }
 }
 
+/// Derive mode-owned input routing without mirroring editor modes into the workflow stack.
+pub(crate) fn mode_context(model: &Model) -> Option<Context> {
+    match active_kind(model)? {
+        EditingTargetKind::Commit => {
+            insert_or_visual_context(model.vcs.commit.editor.mode(), Context::VcsCommitInput)
+                .or(Some(Context::VcsCommit))
+        }
+        EditingTargetKind::Main if model.current_focus == FocusTarget::Editor => {
+            insert_or_visual_context(model.editor.mode(), Context::EditorInput)
+        }
+        EditingTargetKind::Main => None,
+    }
+}
+
+fn insert_or_visual_context(mode: EditMode, insert: Context) -> Option<Context> {
+    match mode {
+        EditMode::Insert => Some(insert),
+        EditMode::Visual | EditMode::VisualLine => Some(Context::EditorVisual),
+        EditMode::Normal => None,
+    }
+}
+
 pub(crate) fn with_active<R>(
     model: &mut Model,
     operation: impl FnOnce(&mut dyn EditingTarget) -> R,
@@ -93,20 +108,8 @@ impl EditingTarget for MainEditingTarget<'_> {
         &mut self.model.editor
     }
 
-    fn input_context(&self) -> Context {
-        Context::EditorInput
-    }
-
     fn is_read_only(&self) -> bool {
         crate::capabilities::readonly::active_buffer_is_read_only(self.model)
-    }
-
-    fn push_context(&mut self, context: Context) {
-        self.model.context_stack.push(context);
-    }
-
-    fn pop_context(&mut self, context: Context) {
-        self.model.context_stack.pop_if(|active| *active == context);
     }
 
     fn register_text(&self) -> String {
@@ -140,18 +143,6 @@ impl EditingTarget for CommitEditingTarget<'_> {
 
     fn normal_context(&self) -> Context {
         Context::VcsCommit
-    }
-
-    fn input_context(&self) -> Context {
-        Context::VcsCommitInput
-    }
-
-    fn push_context(&mut self, context: Context) {
-        self.model.context_stack.push(context);
-    }
-
-    fn pop_context(&mut self, context: Context) {
-        self.model.context_stack.pop_if(|active| *active == context);
     }
 
     fn is_editing_enabled(&self) -> bool {

@@ -156,7 +156,8 @@ mod tests {
     fn insert_context_falls_back_to_printable_characters() {
         let manager = event_manager();
         let mut model = Model::default();
-        model.context_stack.push(Context::EditorInput);
+        crate::test_utils::create_buffer(&mut model, "text");
+        model.editor.enter_insert_mode();
 
         let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
         assert!(matches!(
@@ -312,7 +313,8 @@ mod tests {
         ));
 
         model.context_stack.pop();
-        model.context_stack.push(Context::EditorInput);
+        crate::test_utils::create_buffer(&mut model, "text");
+        model.editor.enter_insert_mode();
         assert!(matches!(
             manager.translate(
                 Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)),
@@ -922,7 +924,12 @@ mod tests {
             ));
         }
 
-        model.context_stack.push(Context::VcsCommitInput);
+        model
+            .vcs
+            .commit
+            .editor
+            .insert_document(editor::DocumentFactory::new().create(""));
+        model.vcs.commit.editor.enter_insert_mode();
         for (key, modifiers, command) in [
             (KeyCode::Esc, KeyModifiers::NONE, "exit_insert_mode"),
             (KeyCode::Enter, KeyModifiers::NONE, "insert_newline"),
@@ -1068,7 +1075,8 @@ mod tests {
             manager.translate(event, &model),
             Some(Message::InvokeCommand(CommandId("yank_cancel")))
         ));
-        model.context_stack.push(Context::EditorVisual);
+        assert_eq!(model.context_stack.pop(), Some(Context::EditorYank));
+        model.editor.enter_visual_mode();
         let event = Event::Key(KeyEvent::new(KeyCode::Char('y'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
@@ -1098,7 +1106,8 @@ mod tests {
             manager.translate(event, &model),
             Some(Message::InvokeCommand(CommandId("change_cancel")))
         ));
-        model.context_stack.push(Context::EditorVisual);
+        assert_eq!(model.context_stack.pop(), Some(Context::EditorChange));
+        model.editor.enter_visual_mode();
         let event = Event::Key(KeyEvent::new(KeyCode::Char('d'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
@@ -1121,7 +1130,7 @@ mod tests {
             Some(Message::InvokeCommand(CommandId("enter_visual_line_mode")))
         ));
 
-        model.context_stack.push(Context::EditorVisual);
+        model.editor.enter_visual_mode();
         let event = Event::Key(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
@@ -1228,7 +1237,8 @@ mod tests {
         ));
 
         let mut insert_model = Model::default();
-        insert_model.context_stack.push(Context::EditorInput);
+        crate::test_utils::create_buffer(&mut insert_model, "text");
+        insert_model.editor.enter_insert_mode();
         let event = Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &insert_model),
@@ -1393,8 +1403,7 @@ mod tests {
             )))
         ));
 
-        model.context_stack.pop();
-        model.context_stack.push(Context::EditorInput);
+        model.editor.enter_insert_mode();
         assert!(matches!(
             manager.translate(event(), &model),
             Some(Message::TextInput(TextInputEvent::Insert('I')))
@@ -1427,7 +1436,8 @@ mod tests {
     fn insert_context_has_no_directional_focus_bindings() {
         let manager = event_manager();
         let mut model = Model::default();
-        model.context_stack.push(Context::EditorInput);
+        crate::test_utils::create_buffer(&mut model, "text");
+        model.editor.enter_insert_mode();
 
         for key in ['h', 'j', 'k', 'l', 'n', 'p'] {
             let event = Event::Key(KeyEvent::new(KeyCode::Char(key), KeyModifiers::CONTROL));

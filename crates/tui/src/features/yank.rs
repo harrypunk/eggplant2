@@ -129,8 +129,6 @@ fn yank_selection_with(target: &mut dyn EditingTarget) -> Option<Effect> {
         Ok(editor) => editor.selected_text(),
         Err(_) => return None,
     };
-    let context = target.visual_context();
-    target.pop_context(context);
     target.session().enter_normal_mode();
     target.record_yanked(text)
 }

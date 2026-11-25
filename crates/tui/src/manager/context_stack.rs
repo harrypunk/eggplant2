@@ -4,7 +4,7 @@ use crate::data_object::Context;
 
 /// LIFO stack of transient workflows with explicit lifetimes.
 ///
-/// Shell state such as focus, active page, and Agent panel mode does not belong here.
+/// Shell state such as focus, active page, editor mode, and Agent panel mode does not belong here.
 /// The top frame owns transient input; `pop_if` preserves that ownership discipline.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct ContextStack(Vec<Context>);

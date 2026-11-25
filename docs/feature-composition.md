@@ -44,9 +44,6 @@ An interface should list the inputs an operation needs, no more. `EditingTarget`
 ```rust
 trait EditingTarget {
     fn session(&mut self) -> &mut EditorSession;
-    fn input_context(&self) -> Context;
-    fn push_context(&mut self, context: Context);
-    fn pop_context(&mut self, context: Context);
     fn is_editing_enabled(&self) -> bool { true }
     fn register_text(&self) -> String { String::new() }
     fn record_deleted(&mut self, text: String) -> Option<Effect> { None }
@@ -59,8 +56,10 @@ Reusable editing functions accept `&mut impl EditingTarget`, not `&mut Model`. T
 
 Adapters provide concrete policies:
 
-- `MainEditingTarget` selects `model.editor`, uses `EditorInput`, and auto-saves file-backed buffers.
-- `CommitEditingTarget` selects the scratch session, uses `VcsCommitInput`, checks submission state, and performs no message-file save.
+- `MainEditingTarget` selects `model.editor` and auto-saves file-backed buffers.
+- `CommitEditingTarget` selects the scratch session, checks submission state, and performs no message-file save.
+
+Neither adapter owns input routing. `EditorInput`, `EditorVisual`, and `VcsCommitInput` are derived from the selected session's `EditMode`; entering or leaving a mode does not push or pop a workflow-stack entry.
 
 `record_deleted` applies the same policy separation to operators: `x`, `dd`, and `dw` reuse the `ActiveEditor` text-object operations in both contexts. The main editor records deleted text in its unnamed register; the commit scratch target does not pollute that register.
 

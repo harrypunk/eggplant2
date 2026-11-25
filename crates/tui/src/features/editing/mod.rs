@@ -38,8 +38,6 @@ fn handle_command_with(
         "enter_visual_mode" => enter_visual(target),
         "enter_visual_line_mode" => enter_visual_line(target),
         "exit_visual_mode" => {
-            let context = target.visual_context();
-            target.pop_context(context);
             target.session().enter_normal_mode();
             None
         }
@@ -50,8 +48,6 @@ fn handle_command_with(
         "open_line_below" => open_line(target, OpenLineDirection::Below),
         "open_line_above" => open_line(target, OpenLineDirection::Above),
         "exit_insert_mode" => {
-            let context = target.input_context();
-            target.pop_context(context);
             target.session().enter_normal_mode();
             target.after_edit()
         }
@@ -132,8 +128,6 @@ fn insert_char_with(target: &mut dyn EditingTarget, character: char) -> Option<E
 
 fn enter_visual(target: &mut dyn EditingTarget) -> Option<Effect> {
     if target.session().active_buffer().is_some() {
-        let context = target.visual_context();
-        target.push_context(context);
         target.session().enter_visual_mode();
     }
     None
@@ -141,8 +135,6 @@ fn enter_visual(target: &mut dyn EditingTarget) -> Option<Effect> {
 
 fn enter_visual_line(target: &mut dyn EditingTarget) -> Option<Effect> {
     if target.session().active_buffer().is_some() {
-        let context = target.visual_context();
-        target.push_context(context);
         target.session().enter_visual_line_mode();
     }
     None
@@ -154,8 +146,6 @@ pub(crate) fn enter_insert(model: &mut Model) -> Option<Effect> {
 
 pub(crate) fn enter_insert_with(target: &mut dyn EditingTarget) -> Option<Effect> {
     if target.can_mutate() && target.session().active_buffer().is_some() {
-        let context = target.input_context();
-        target.push_context(context);
         target.session().enter_insert_mode();
     }
     None
@@ -227,7 +217,7 @@ mod tests {
     use super::*;
     use crate::{
         data_object::{AppPage, Context, Message},
-        manager::message_manager::MessageManager,
+        manager::{input_context::input_context, message_manager::MessageManager},
         test_utils::{create_buffer, open_file},
     };
 
@@ -241,25 +231,12 @@ mod tests {
     #[derive(Default)]
     struct TestTarget {
         session: EditorSession,
-        contexts: Vec<Context>,
         after_edits: usize,
     }
 
     impl EditingTarget for TestTarget {
         fn session(&mut self) -> &mut EditorSession {
             &mut self.session
-        }
-
-        fn input_context(&self) -> Context {
-            Context::EditorInput
-        }
-
-        fn push_context(&mut self, context: Context) {
-            self.contexts.push(context);
-        }
-
-        fn pop_context(&mut self, context: Context) {
-            self.contexts.pop_if(|active| *active == context);
         }
 
         fn after_edit(&mut self) -> Option<Effect> {
@@ -348,12 +325,12 @@ mod tests {
         assert!(insert_char_with(&mut target, 'b').is_none());
 
         assert_eq!(target.session.active_text_snapshot().unwrap().text, "b");
-        assert_eq!(target.contexts, [Context::EditorInput]);
+        assert_eq!(target.session.mode(), EditMode::Insert);
         assert_eq!(target.after_edits, 1);
     }
 
     #[test]
-    fn mode_commands_update_editor_session_and_context() {
+    fn mode_commands_derive_context_without_stack_entries() {
         let manager = MessageManager::default();
         let mut model = Model::default();
         create_buffer(&mut model, "");
@@ -363,13 +340,15 @@ mod tests {
             Message::InvokeCommand(CommandId("enter_insert_mode")),
         );
         assert_eq!(model.editor.mode(), EditMode::Insert);
-        assert_eq!(model.context_stack.last(), Some(&Context::EditorInput));
+        assert_eq!(input_context(&model), Some(Context::EditorInput));
+        assert!(model.context_stack.is_empty());
 
         manager.update(
             &mut model,
             Message::InvokeCommand(CommandId("exit_insert_mode")),
         );
         assert_eq!(model.editor.mode(), EditMode::Normal);
+        assert_eq!(input_context(&model), Some(Context::AppNormal));
         assert!(model.context_stack.is_empty());
     }
 
@@ -506,7 +485,8 @@ mod tests {
         );
         manager.update(&mut model, Message::InvokeCommand(CommandId("move_right")));
         assert_eq!(model.editor.mode(), EditMode::Visual);
-        assert_eq!(model.context_stack.last(), Some(&Context::EditorVisual));
+        assert_eq!(input_context(&model), Some(Context::EditorVisual));
+        assert!(model.context_stack.is_empty());
         assert_eq!(
             model.editor.active_snapshot().unwrap().text.lines[0].selection,
             Some(0..2)
@@ -651,7 +631,8 @@ mod tests {
             manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('x')));
 
             assert_eq!(model.editor.mode(), EditMode::Insert);
-            assert_eq!(model.context_stack.last(), Some(&Context::EditorInput));
+            assert_eq!(input_context(&model), Some(Context::EditorInput));
+            assert!(model.context_stack.is_empty());
             assert_eq!(
                 model.editor.active_snapshot().unwrap().text.lines[0].text,
                 expected
