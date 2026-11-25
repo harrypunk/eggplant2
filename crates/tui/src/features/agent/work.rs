@@ -112,9 +112,8 @@ fn start_run(model: &mut Model, accepted: AcceptedSubmission) -> Option<Effect> 
 fn execute_prompt_command(model: &mut Model, command: super::PromptCommand) -> Option<Effect> {
     match command {
         super::PromptCommand::ProviderLogin => crate::provider_login::open(model),
-        super::PromptCommand::Model
-        | super::PromptCommand::Thinking
-        | super::PromptCommand::Logout => notify(
+        super::PromptCommand::Model => crate::model_selector::open(model),
+        super::PromptCommand::Thinking | super::PromptCommand::Logout => notify(
             model,
             format!("{} is not implemented yet", command.description()),
         ),
@@ -407,9 +406,10 @@ mod tests {
     }
 
     #[test]
-    fn navigation_selects_and_placeholder_commands_notify_without_a_run() {
+    fn navigation_opens_model_selector_without_starting_a_run() {
         let directory = tempfile::tempdir().unwrap();
         let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        model.model_catalogs = Some(crate::test_utils::model_catalog_store().0);
         model.tools.active_tool = Some(ToolKind::Agent);
         model.tools.visibility = Visibility::Displayed;
         focus_panel_input(&mut model);
@@ -425,13 +425,8 @@ mod tests {
         );
         submit(&mut model);
         assert!(model.agent.session().run().is_none());
-        assert_eq!(
-            model
-                .notifications
-                .current()
-                .map(|notification| notification.message()),
-            Some("Select model is not implemented yet")
-        );
+        assert!(model.modal.is_active(Context::ModelSelector));
+        assert!(model.notifications.current().is_none());
 
         handle_command(&mut model, CommandId("agent_command_previous"));
         assert_eq!(model.agent.prompt(), "/provider");

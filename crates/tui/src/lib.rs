@@ -19,9 +19,9 @@ pub use shell::{buffer, command_menu, focus, lifecycle};
 
 pub use features::{
     agent, buffer_grep, buffer_jump, buffer_navigation, change, code_navigation, cursor_line,
-    diagnostics, editing, explorer, external_sync, file_picker, line_jump, navigation,
-    notifications, page_scroll, project_grep, provider_login, theme_picker, vcs, view_align,
-    welcome, yank,
+    diagnostics, editing, explorer, external_sync, file_picker, line_jump, model_selector,
+    navigation, notifications, page_scroll, project_grep, provider_login, theme_picker, vcs,
+    view_align, welcome, yank,
 };
 
 #[cfg(test)]
@@ -59,6 +59,7 @@ pub mod data_object {
         explorer::ExplorerState,
         file_picker::FilePickerState,
         line_jump::LineJumpState,
+        model_selector::ModelSelectorState,
         project_grep::ProjectGrepState,
         provider_login::ProviderLoginState,
         register::RegisterState,
@@ -173,6 +174,7 @@ pub mod data_object {
         pub document_lifecycle: DocumentLifecycle,
         pub agent: AgentState,
         pub provider_login: ProviderLoginState,
+        pub model_selector: ModelSelectorState,
         /// Optional durable credential capability shared by login and later model selection.
         pub provider_credentials: Option<Arc<dyn ProviderCredentialStore>>,
         /// Persistent provider model catalogs, independent of credential records.
@@ -227,6 +229,7 @@ pub mod data_object {
                 document_lifecycle: DocumentLifecycle::default(),
                 agent: AgentState::default(),
                 provider_login: ProviderLoginState::default(),
+                model_selector: ModelSelectorState::default(),
                 provider_credentials: None,
                 model_catalogs: None,
                 openai_factory: None,
@@ -439,6 +442,7 @@ pub mod data_object {
         AgentChatDialog,
         AgentApproval,
         ProviderLogin,
+        ModelSelector,
         VCS,
         VcsHistory,
         VcsCommit,

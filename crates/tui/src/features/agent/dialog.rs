@@ -43,6 +43,34 @@ pub(crate) fn close(model: &mut Model) -> Option<Effect> {
     None
 }
 
+pub(crate) fn suspend_for_overlay(model: &mut Model) -> Option<Context> {
+    use crate::manager::input_context::input_context;
+
+    if input_context(model) != Some(Context::AgentChatDialog)
+        || !model.agent.dialog_open()
+        || !model.modal.is_active(Context::AgentChatDialog)
+    {
+        return None;
+    }
+    model.agent.suspend_dialog();
+    model.modal.close(Context::AgentChatDialog);
+    model
+        .context_stack
+        .pop_if(|context| context == &Context::AgentChatDialog);
+    Some(Context::AgentChatDialog)
+}
+
+pub(crate) fn resume_overlay(model: &mut Model, context: Option<Context>) {
+    if context != Some(Context::AgentChatDialog)
+        || !model.agent.dialog_open()
+        || !model.modal.open(Context::AgentChatDialog)
+    {
+        return;
+    }
+    model.agent.resume_dialog();
+    model.context_stack.push(Context::AgentChatDialog);
+}
+
 fn prompt_label(model: &Model, context: &EditorContext) -> String {
     let relative = model
         .workspace

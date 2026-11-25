@@ -75,6 +75,7 @@ fn list_navigation_contexts() -> &'static [&'static str] {
         "agent_chat_dialog",
         "agent_chat_insert",
         "provider_login",
+        "model_selector",
     ]
 }
 
@@ -88,9 +89,10 @@ const MODAL_GENERAL_ACTIONS: [(KeyCode, GeneralAction); 4] = [
 fn with_common_actions(context_name: &str, bindings: ContextBindings) -> ContextBindings {
     match context_name {
         "provider_login" | "file_picker" | "theme_picker" | "buffer_grep" | "project_grep"
-        | "agent_chat_dialog" | "agent_chat_insert" => bindings.with_general_actions(
-            MODAL_GENERAL_ACTIONS.map(|(key, action)| (KeyChord::from(key), action)),
-        ),
+        | "model_selector" | "agent_chat_dialog" | "agent_chat_insert" => bindings
+            .with_general_actions(
+                MODAL_GENERAL_ACTIONS.map(|(key, action)| (KeyChord::from(key), action)),
+            ),
         _ => bindings,
     }
 }
@@ -326,6 +328,7 @@ fn parse_context(value: &str) -> Option<Context> {
         "agent_chat_dialog" => Some(Context::AgentChatDialog),
         "agent_approval" => Some(Context::AgentApproval),
         "provider_login" => Some(Context::ProviderLogin),
+        "model_selector" => Some(Context::ModelSelector),
         "vcs" => Some(Context::VCS),
         "vcs_history" => Some(Context::VcsHistory),
         "vcs_commit" => Some(Context::VcsCommit),

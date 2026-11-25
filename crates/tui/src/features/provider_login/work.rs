@@ -225,29 +225,14 @@ pub fn open(model: &mut Model) -> Option<Effect> {
     if model.provider_login.is_open() {
         return None;
     }
-    let return_context = suspend_inline_agent(model);
+    let return_context = crate::agent::suspend_for_overlay(model);
     if !model.modal.open(Context::ProviderLogin) {
-        resume_inline_agent(model, return_context);
+        crate::agent::resume_overlay(model, return_context);
         return None;
     }
     model.provider_login.open(return_context);
     model.context_stack.push(Context::ProviderLogin);
     None
-}
-
-fn suspend_inline_agent(model: &mut Model) -> Option<Context> {
-    if input_context(model) != Some(Context::AgentChatDialog)
-        || !model.agent.dialog_open()
-        || !model.modal.is_active(Context::AgentChatDialog)
-    {
-        return None;
-    }
-    model.agent.suspend_dialog();
-    model.modal.close(Context::AgentChatDialog);
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::AgentChatDialog);
-    Some(Context::AgentChatDialog)
 }
 
 pub(super) fn close(model: &mut Model) -> Option<Effect> {
@@ -256,19 +241,8 @@ pub(super) fn close(model: &mut Model) -> Option<Effect> {
     model
         .context_stack
         .pop_if(|context| context == &Context::ProviderLogin);
-    resume_inline_agent(model, return_context);
+    crate::agent::resume_overlay(model, return_context);
     None
-}
-
-fn resume_inline_agent(model: &mut Model, context: Option<Context>) {
-    if context != Some(Context::AgentChatDialog)
-        || !model.agent.dialog_open()
-        || !model.modal.open(Context::AgentChatDialog)
-    {
-        return;
-    }
-    model.agent.resume_dialog();
-    model.context_stack.push(Context::AgentChatDialog);
 }
 
 #[cfg(test)]

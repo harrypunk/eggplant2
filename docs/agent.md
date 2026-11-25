@@ -127,6 +127,14 @@ The inline dialog requires an open project, not an active buffer. With an active
 - Catalog failures return to the preserved endpoint/key form, so the user can retry without re-entering secrets.
 - Startup restores the selected OpenAI model when configuration does not explicitly select `openai` or `fake`; explicit configuration takes precedence.
 
+#### `/model` selector
+
+- `/model` loads the cached catalog first, then refreshes it in the background with `GET {base_url}/models` and persists the fresh result.
+- Cached rows remain navigable during `Refreshing`. Selection is preserved by model ID; a missing selected ID falls back to the first model without retaining its old numeric index.
+- Refresh failures keep cached models with a warning. Empty results or missing credentials produce an error.
+- Enter activates the selected available model, persists `selected_model`, and restores it on restart. Activation failures leave the selector open without changing the active provider.
+- The selector shares the general modal actions: Up/Down and Ctrl-N/Ctrl-P navigate, Enter selects, and Escape closes while restoring the originating Agent surface.
+
 #### Agent slash commands
 
 A leading `/` in the inline dialog or panel Insert input opens a live-filtered command menu above the prompt. The menu derives candidates from the shared prompt state and catalog: `/provider`, `/model`, `/thinking`, and `/logout`.
@@ -136,7 +144,7 @@ A leading `/` in the inline dialog or panel Insert input opens a live-filtered c
 - Ctrl-N/Ctrl-P quick-fill and move selection with wrapping while retaining the original query's candidates.
 - Enter executes only an explicitly selected command and never submits slash text as a provider message.
 - The menu height follows content within the available layout. Its selection-following viewport keeps the selected row visible.
-- Model, thinking, and logout currently publish placeholder notifications.
+- `/model` opens the cached model selector; `/thinking` and `/logout` currently publish placeholder notifications.
 
 #### Ownership and deferred work
 

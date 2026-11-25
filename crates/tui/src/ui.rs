@@ -189,6 +189,7 @@ impl UiRegistry {
         crate::project_grep::register_ui(&mut ui).expect("project-grep UI must be unique");
         crate::agent::register_ui(&mut ui).expect("agent UI must be unique");
         crate::provider_login::register_ui(&mut ui).expect("provider-login UI must be unique");
+        crate::model_selector::register_ui(&mut ui).expect("model-selector UI must be unique");
         crate::cursor_line::register_ui(&mut ui).expect("cursor-line UI must be unique");
         ui
     }

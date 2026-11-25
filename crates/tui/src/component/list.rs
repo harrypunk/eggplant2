@@ -31,6 +31,10 @@ impl<T> ListState<T> {
         self.selected.and_then(|index| self.items.get(index))
     }
 
+    pub fn select(&mut self, index: Option<usize>) {
+        self.selected = index.filter(|index| *index < self.items.len());
+    }
+
     pub fn clear_selection(&mut self) {
         self.selected = None;
     }

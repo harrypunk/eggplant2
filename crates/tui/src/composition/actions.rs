@@ -8,6 +8,7 @@ const PROVIDERS: &[SubscriptionProvider] = &[
     crate::buffer_grep::general_action_subscriptions,
     crate::project_grep::general_action_subscriptions,
     crate::agent::general_action_subscriptions,
+    crate::model_selector::general_action_subscriptions,
     crate::provider_login::general_action_subscriptions,
 ];
 
