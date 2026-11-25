@@ -230,16 +230,12 @@ pub fn open(model: &mut Model) -> Option<Effect> {
         return None;
     }
     model.provider_login.open(return_context);
-    model.context_stack.push(Context::ProviderLogin);
     None
 }
 
 pub(super) fn close(model: &mut Model) -> Option<Effect> {
     let return_context = model.provider_login.close();
     model.modal.close(Context::ProviderLogin);
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::ProviderLogin);
     crate::agent::resume_overlay(model, return_context);
     None
 }
@@ -303,7 +299,11 @@ mod tests {
         open(&mut model);
         assert!(model.provider_login.is_open());
         assert!(model.modal.is_active(Context::ProviderLogin));
-        assert_eq!(model.context_stack.last(), Some(&Context::ProviderLogin));
+        assert_eq!(
+            crate::test_utils::input_context(&model),
+            Some(Context::ProviderLogin)
+        );
+        assert!(model.context_stack.is_empty());
 
         close(&mut model);
         assert!(!model.provider_login.is_open());
@@ -480,7 +480,11 @@ mod tests {
         assert!(model.provider_login.is_open());
         assert!(model.modal.is_active(Context::ProviderLogin));
         assert!(!model.modal.is_active(Context::AgentChatDialog));
-        assert_eq!(model.context_stack.last(), Some(&Context::ProviderLogin));
+        assert_eq!(
+            crate::test_utils::input_context(&model),
+            Some(Context::ProviderLogin)
+        );
+        assert!(model.context_stack.is_empty());
         assert!(model.agent.dialog_open());
         assert_eq!(
             model.agent.dialog_state(),

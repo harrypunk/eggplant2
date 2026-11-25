@@ -394,7 +394,8 @@ mod tests {
         assert_eq!(model.agent.prompt(), "/provider");
         submit(&mut model);
         assert!(model.provider_login.is_open());
-        assert_eq!(model.context_stack.last(), Some(&Context::ProviderLogin));
+        assert_eq!(input_context(&model), Some(Context::ProviderLogin));
+        assert!(model.context_stack.is_empty());
         assert!(model.agent.session().run().is_none());
 
         crate::provider_login::handle_command(&mut model, CommandId("provider_login_close"));
@@ -428,6 +429,8 @@ mod tests {
         submit(&mut model);
         assert!(model.agent.session().run().is_none());
         assert!(model.modal.is_active(Context::ModelSelector));
+        assert_eq!(input_context(&model), Some(Context::ModelSelector));
+        assert!(model.context_stack.is_empty());
         assert!(model.notifications.current().is_none());
 
         handle_command(&mut model, CommandId("agent_command_previous"));
@@ -452,7 +455,8 @@ mod tests {
 
         submit(&mut model);
         assert!(model.provider_login.is_open());
-        assert_eq!(model.context_stack.last(), Some(&Context::ProviderLogin));
+        assert_eq!(input_context(&model), Some(Context::ProviderLogin));
+        assert!(model.context_stack.is_empty());
         assert!(model.agent.session().run().is_none());
 
         crate::provider_login::handle_command(&mut model, CommandId("provider_login_close"));

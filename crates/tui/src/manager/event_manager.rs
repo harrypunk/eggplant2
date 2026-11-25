@@ -138,6 +138,7 @@ mod tests {
             Context::VCS => model.active_page = AppPage::Vcs,
             Context::VcsHistory => model.active_page = AppPage::VcsHistory,
             Context::VcsCommit => model.active_page = AppPage::VcsCommit,
+            Context::ProviderLogin => assert!(model.modal.open(Context::ProviderLogin)),
             transient => model.context_stack.push(transient),
         }
         model

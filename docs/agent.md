@@ -148,7 +148,7 @@ A leading `/` in the inline dialog or panel Insert input opens a live-filtered c
 
 #### Ownership and deferred work
 
-`provider_login` owns dialog state, commands, and modal registration. `component/agent/provider_login.rs` is a pure menu, form, and placeholder view. Opening provider login from the inline Agent dialog suspends and later restores the `AgentChatDialog` modal session without duplicating it in the context stack; panel Insert state resumes automatically.
+`provider_login` owns dialog state, commands, and modal registration. `component/agent/provider_login.rs` is a pure menu, form, and placeholder view. Provider login and model selection own modal sessions rather than context-stack entries. Opening either from the inline Agent dialog suspends and later restores the `AgentChatDialog` modal session without duplicating it in the context stack; panel Insert state resumes automatically.
 
 Account/OAuth authentication, token refresh, and non-OpenAI provider/model selection remain deferred. OpenAI-compatible API-key login, catalog selection, activation, and restart restoration use the shared credential-store and factory interfaces.
 

@@ -69,7 +69,6 @@ pub fn open(model: &mut Model) -> Option<Effect> {
     }
     let active_model = model.agent.model().map(str::to_string);
     model.model_selector.open(return_context, active_model);
-    model.context_stack.push(Context::ModelSelector);
     let generation = model.model_selector.generation();
     Some(Effect::feature(LoadCatalog {
         catalogs,
@@ -80,9 +79,6 @@ pub fn open(model: &mut Model) -> Option<Effect> {
 pub fn close(model: &mut Model) -> Option<Effect> {
     let return_context = model.model_selector.close();
     model.modal.close(Context::ModelSelector);
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::ModelSelector);
     crate::agent::resume_overlay(model, return_context);
     None
 }
