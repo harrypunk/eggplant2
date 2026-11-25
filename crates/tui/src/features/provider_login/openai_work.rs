@@ -152,27 +152,17 @@ struct ActivateModel {
 
 impl ActivateModel {
     async fn perform_async(self) -> ModelActivationCompletion {
-        let model_id = self.model_id.clone();
-        let result = async {
-            let mut credential = self
-                .store
-                .get("openai")
-                .await
-                .map_err(|error| error.to_string())?
-                .ok_or_else(|| "OpenAI credential was not found".to_string())?;
-            let provider = self
-                .factory
-                .provider(credential.clone(), model_id.clone())?;
-            credential.selected_model = Some(model_id.clone());
-            credential.updated_at = self.updated_at;
-            self.store
-                .upsert(credential)
-                .await
-                .map_err(|error| error.to_string())?;
-            Ok(provider)
-        }
+        let activation = crate::capabilities::openai::activate(
+            self.store,
+            self.factory,
+            self.model_id,
+            self.updated_at,
+        )
         .await;
-        ModelActivationCompletion { model_id, result }
+        ModelActivationCompletion {
+            model_id: activation.model_id,
+            result: activation.result,
+        }
     }
 }
 

@@ -3,6 +3,8 @@ use ratatui::{
     text::Line,
 };
 
+use crate::theme::UiTheme;
+
 pub struct Areas {
     pub input: Rect,
     pub results: Rect,
@@ -44,6 +46,18 @@ pub fn visible_lines<'a>(
             .min(lines.len() - height)
     });
     lines.into_iter().skip(start).take(height).collect()
+}
+
+/// Render one consistently styled selectable row for picker-style menus.
+pub fn selectable_line(label: String, selected: bool, styles: &UiTheme) -> Line<'static> {
+    Line::styled(
+        format!("{}{label}", if selected { "> " } else { "  " }),
+        if selected {
+            styles.selection
+        } else {
+            styles.base
+        },
+    )
 }
 
 #[cfg(test)]

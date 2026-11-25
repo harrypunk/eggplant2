@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::{
     component::{
-        picker,
+        picker::{self, selectable_line},
         popup::{Popup, content_area},
         text_input::{TextInputStyleInput, TextInputStyleOutput, TextInputViewStyle},
         text_layout::TextFlow,
@@ -198,17 +198,6 @@ fn menu_lines(
     lines.push(Line::raw(""));
     lines.push(Line::styled(chrome.hint, styles.muted));
     lines
-}
-
-fn selectable_line(label: String, selected: bool, styles: &UiTheme) -> Line<'static> {
-    Line::styled(
-        format!("{}{label}", if selected { "> " } else { "  " }),
-        if selected {
-            styles.selection
-        } else {
-            styles.base
-        },
-    )
 }
 
 fn placeholder_lines(provider: ProviderSpec, styles: &UiTheme) -> Vec<Line<'static>> {
