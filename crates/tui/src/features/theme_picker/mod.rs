@@ -9,9 +9,7 @@ pub use state::{ThemePickerEntry, ThemePickerState};
 use crate::{
     config::ThemeConfig,
     data_object::{CommandId, Context, GeneralAction, ModalController, Model, StatusMessage},
-    manager::{
-        context_stack::ContextStack, effect::Effect, general_action::GeneralActionSubscription,
-    },
+    manager::{effect::Effect, general_action::GeneralActionSubscription},
     theme::{Theme, ThemePersistenceState},
 };
 
@@ -53,7 +51,6 @@ struct ThemePickerAdapter<'a> {
     state: &'a mut ThemePickerState,
     theme: &'a mut Theme,
     persistence: &'a mut ThemePersistenceState,
-    contexts: &'a mut ContextStack,
     modal: &'a mut ModalController,
     status: &'a mut Option<StatusMessage>,
 }
@@ -83,17 +80,12 @@ impl ThemePickerAdapter<'_> {
             return None;
         }
         self.state.open(self.theme.builtin(), self.theme.name());
-        if self.contexts.last() != Some(&Context::ThemePicker) {
-            self.contexts.push(Context::ThemePicker);
-        }
         crate::theme::start_discovery(self.state)
     }
 
     fn close(&mut self) {
         self.state.close();
         self.modal.close(Context::ThemePicker);
-        self.contexts
-            .pop_if(|context| context == &Context::ThemePicker);
     }
 
     fn apply(&mut self) -> Option<Effect> {
@@ -158,7 +150,6 @@ fn close_theme_picker(model: &mut Model) {
         state: &mut model.theme_picker,
         theme: &mut model.theme,
         persistence: &mut model.theme_persistence,
-        contexts: &mut model.context_stack,
         modal: &mut model.modal,
         status: &mut model.status,
     }
@@ -201,7 +192,6 @@ fn apply(model: &mut Model) -> Option<Effect> {
         theme_picker,
         theme,
         theme_persistence,
-        context_stack,
         modal,
         status,
         ..
@@ -210,7 +200,6 @@ fn apply(model: &mut Model) -> Option<Effect> {
         state: theme_picker,
         theme,
         persistence: theme_persistence,
-        contexts: context_stack,
         modal,
         status,
     }
@@ -234,7 +223,6 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         theme_picker,
         theme,
         theme_persistence,
-        context_stack,
         modal,
         status,
         ..
@@ -243,7 +231,6 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         state: theme_picker,
         theme,
         persistence: theme_persistence,
-        contexts: context_stack,
         modal,
         status,
     }
@@ -292,7 +279,11 @@ mod tests {
                 .is_some()
         );
         assert!(model.theme_picker.is_open());
-        assert_eq!(model.context_stack.last(), Some(&Context::ThemePicker));
+        assert_eq!(
+            crate::test_utils::input_context(&model),
+            Some(Context::ThemePicker)
+        );
+        assert!(model.context_stack.is_empty());
         assert_eq!(
             model.theme_picker.selected(),
             &state::ThemePickerEntry::builtin(ThemeName::Default)
@@ -348,7 +339,7 @@ mod tests {
         let manager = MessageManager::default();
         let mut model = Model::default();
         model.theme_picker.open(Some(ThemeName::Default), "default");
-        model.context_stack.push(Context::ThemePicker);
+        assert!(model.modal.open(Context::ThemePicker));
 
         for character in "xyz".chars() {
             manager.update(

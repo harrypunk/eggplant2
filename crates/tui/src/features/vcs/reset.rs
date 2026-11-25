@@ -344,7 +344,6 @@ fn start(model: &mut Model) -> Option<Effect> {
     model
         .context_stack
         .pop_if(|context| context == &Context::VcsResetMenu);
-    model.context_stack.push(Context::VcsReset);
     Some(Effect::feature(ResetTargetsRequest {
         repository,
         revision,
@@ -361,9 +360,6 @@ fn cancel(model: &mut Model) -> Option<Effect> {
 
 fn close_reset_context(model: &mut Model) {
     model.modal.close(Context::VcsReset);
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::VcsReset);
 }
 
 pub(crate) fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
@@ -484,7 +480,11 @@ mod tests {
         assert!(model.vcs.reset.is_menu());
         assert!(handle_command(model, CommandId("vcs_reset_soft")).is_some());
         assert!(model.vcs.reset.is_loading());
-        assert_eq!(model.context_stack.last(), Some(&Context::VcsReset));
+        assert_eq!(
+            crate::test_utils::input_context(model),
+            Some(Context::VcsReset)
+        );
+        assert!(model.context_stack.is_empty());
         model.vcs.reset.targets_revision
     }
 

@@ -124,15 +124,11 @@ fn open(model: &mut Model) {
     }
     model.status = None;
     model.project_grep.open(root);
-    model.context_stack.push(Context::ProjectGrep);
 }
 
 fn close(model: &mut Model) {
     model.project_grep.close();
     model.modal.close(Context::ProjectGrep);
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::ProjectGrep);
 }
 
 fn accept(model: &mut Model) -> Option<Effect> {
@@ -176,7 +172,11 @@ mod tests {
                 Message::CommandMenuKey(KeyCode::Char(key).into()),
             );
         }
-        assert_eq!(model.context_stack.last(), Some(&Context::ProjectGrep));
+        assert_eq!(
+            crate::test_utils::input_context(&model),
+            Some(Context::ProjectGrep)
+        );
+        assert!(model.context_stack.is_empty());
 
         let mut effect = None;
         for character in "ell".chars() {

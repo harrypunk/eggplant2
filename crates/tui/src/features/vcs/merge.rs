@@ -263,7 +263,6 @@ fn start(model: &mut Model) -> Option<Effect> {
     }
     let revision = model.vcs.merge.start(repository.clone())?;
     model.vcs.help_visible = false;
-    model.context_stack.push(Context::VcsMerge);
     Some(Effect::feature(MergeTargetsRequest {
         repository,
         revision,
@@ -280,9 +279,6 @@ fn cancel(model: &mut Model) -> Option<Effect> {
 
 fn close_merge_context(model: &mut Model) {
     model.modal.close(Context::VcsMerge);
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::VcsMerge);
 }
 
 pub(crate) fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {

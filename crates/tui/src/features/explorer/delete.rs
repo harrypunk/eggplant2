@@ -138,7 +138,6 @@ pub(super) fn open(model: &mut Model) -> Option<Effect> {
     };
 
     model.explorer.delete.open(target);
-    model.context_stack.push(Context::ExplorerDelete);
     None
 }
 
@@ -176,9 +175,6 @@ pub(super) fn confirm(model: &mut Model) -> Option<Effect> {
 fn close_prompt(model: &mut Model) {
     model.explorer.delete.close();
     model.modal.close(Context::ExplorerDelete);
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::ExplorerDelete);
 }
 
 struct DeleteRequest {
@@ -307,7 +303,11 @@ mod tests {
                 .is_none()
         );
         assert!(model.explorer.delete.is_confirming());
-        assert_eq!(model.context_stack.last(), Some(&Context::ExplorerDelete));
+        assert_eq!(
+            crate::test_utils::input_context(model),
+            Some(Context::ExplorerDelete)
+        );
+        assert!(model.context_stack.is_empty());
     }
 
     #[test]
@@ -447,7 +447,11 @@ mod tests {
         assert!(notification.is_some());
         assert!(model.explorer.delete.is_confirming());
         assert_eq!(model.explorer.delete.target().unwrap().path, path);
-        assert_eq!(model.context_stack.last(), Some(&Context::ExplorerDelete));
+        assert_eq!(
+            crate::test_utils::input_context(&model),
+            Some(Context::ExplorerDelete)
+        );
+        assert!(model.context_stack.is_empty());
         assert!(
             model
                 .notifications

@@ -136,15 +136,11 @@ fn open(model: &mut Model) {
     }
     model.status = None;
     model.buffer_grep.open(source);
-    model.context_stack.push(Context::BufferGrep);
 }
 
 fn close(model: &mut Model) {
     model.buffer_grep.close();
     model.modal.close(Context::BufferGrep);
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::BufferGrep);
 }
 
 fn accept(model: &mut Model) {
@@ -199,7 +195,11 @@ mod tests {
                 Message::CommandMenuKey(KeyCode::Char(key).into()),
             );
         }
-        assert_eq!(model.context_stack.last(), Some(&Context::BufferGrep));
+        assert_eq!(
+            crate::test_utils::input_context(&model),
+            Some(Context::BufferGrep)
+        );
+        assert!(model.context_stack.is_empty());
 
         let mut effect = None;
         for character in "ell".chars() {

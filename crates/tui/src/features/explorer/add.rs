@@ -106,7 +106,6 @@ pub(super) fn open(model: &mut Model) -> Option<Effect> {
 
     let prefill = prefill(&root, model.explorer.selected_entry());
     model.explorer.add.open(prefill);
-    model.context_stack.push(Context::ExplorerAdd);
     None
 }
 
@@ -151,9 +150,6 @@ pub(super) fn submit(model: &mut Model) -> Option<Effect> {
 fn close_prompt(model: &mut Model) {
     model.explorer.add.close();
     model.modal.close(Context::ExplorerAdd);
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::ExplorerAdd);
 }
 
 fn prefill(root: &Path, selected: Option<&ExplorerEntry>) -> String {
@@ -401,7 +397,11 @@ mod tests {
             Message::InvokeCommand(CommandId("explorer_add")),
         );
         assert_eq!(model.explorer.add.path.value(), "folder/");
-        assert_eq!(model.context_stack.last(), Some(&Context::ExplorerAdd));
+        assert_eq!(
+            crate::test_utils::input_context(&model),
+            Some(Context::ExplorerAdd)
+        );
+        assert!(model.context_stack.is_empty());
         type_path(&manager, &mut model, "new.txt");
         let effect = manager
             .update(

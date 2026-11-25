@@ -438,7 +438,6 @@ fn start(model: &mut Model, mode: BranchMode) -> Option<Effect> {
     model
         .context_stack
         .pop_if(|context| context == &Context::VcsBranchMenu);
-    model.context_stack.push(Context::VcsBranch);
     Some(Effect::feature(BranchTargetsRequest {
         repository,
         revision,
@@ -455,9 +454,6 @@ fn cancel(model: &mut Model) -> Option<Effect> {
 
 fn close_branch_context(model: &mut Model) {
     model.modal.close(Context::VcsBranch);
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::VcsBranch);
 }
 
 pub(crate) fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
@@ -764,7 +760,11 @@ mod tests {
         let effect = start(&mut model, BranchMode::Create);
         assert!(matches!(effect, Some(Effect::Feature(_))));
         assert!(model.modal.is_active(Context::VcsBranch));
-        assert_eq!(model.context_stack.last(), Some(&Context::VcsBranch));
+        assert_eq!(
+            crate::test_utils::input_context(&model),
+            Some(Context::VcsBranch)
+        );
+        assert!(model.context_stack.is_empty());
         assert!(model.vcs.branch.is_popup_active());
 
         cancel(&mut model);

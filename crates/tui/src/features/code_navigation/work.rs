@@ -466,11 +466,7 @@ fn navigate_completion(
                 let location = model.code_navigation.locations()[0].clone();
                 open_location(model, location)
             } else {
-                if model.modal.open(Context::CodeNavigation)
-                    && model.context_stack.last() != Some(&Context::CodeNavigation)
-                {
-                    model.context_stack.push(Context::CodeNavigation);
-                }
+                let _ = model.modal.open(Context::CodeNavigation);
                 None
             }
         }
@@ -499,9 +495,6 @@ fn open_location(model: &mut Model, location: app::language::SourceLocation) -> 
 fn close(model: &mut Model) {
     model.code_navigation.clear_locations();
     model.modal.close(Context::CodeNavigation);
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::CodeNavigation);
 }
 
 fn server_notification(message: LanguageMessage) -> Notification {
@@ -1001,7 +994,11 @@ language-servers = ["ts"]
         assert!(effect.is_none());
         assert_eq!(model.code_navigation.locations().len(), 2);
         assert!(model.modal.is_active(Context::CodeNavigation));
-        assert_eq!(model.context_stack.last(), Some(&Context::CodeNavigation));
+        assert_eq!(
+            crate::test_utils::input_context(&model),
+            Some(Context::CodeNavigation)
+        );
+        assert!(model.context_stack.is_empty());
 
         manager.update(
             &mut model,

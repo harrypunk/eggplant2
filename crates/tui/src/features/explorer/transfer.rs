@@ -185,7 +185,6 @@ pub(super) fn open(model: &mut Model, operation: TransferOperation) -> Option<Ef
     };
 
     model.explorer.transfer.open(source, operation);
-    model.context_stack.push(Context::ExplorerTransfer);
     None
 }
 
@@ -237,9 +236,6 @@ pub(super) fn submit(model: &mut Model) -> Option<Effect> {
 fn close_prompt(model: &mut Model) {
     model.explorer.transfer.close();
     model.modal.close(Context::ExplorerTransfer);
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::ExplorerTransfer);
 }
 
 struct TransferRequest {
@@ -437,7 +433,11 @@ mod tests {
                 .is_none()
         );
         assert!(model.explorer.transfer.is_editing());
-        assert_eq!(model.context_stack.last(), Some(&Context::ExplorerTransfer));
+        assert_eq!(
+            crate::test_utils::input_context(model),
+            Some(Context::ExplorerTransfer)
+        );
+        assert!(model.context_stack.is_empty());
     }
 
     fn open_copy(manager: &MessageManager, model: &mut Model) {
@@ -447,7 +447,11 @@ mod tests {
                 .is_none()
         );
         assert!(model.explorer.transfer.is_editing());
-        assert_eq!(model.context_stack.last(), Some(&Context::ExplorerTransfer));
+        assert_eq!(
+            crate::test_utils::input_context(model),
+            Some(Context::ExplorerTransfer)
+        );
+        assert!(model.context_stack.is_empty());
     }
 
     fn type_destination(manager: &MessageManager, model: &mut Model, destination: &str) {

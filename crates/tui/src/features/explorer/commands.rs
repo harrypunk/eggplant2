@@ -104,16 +104,12 @@ fn toggle_help(model: &mut Model) -> Option<Effect> {
         return None;
     }
     model.explorer.open_help();
-    model.context_stack.push(Context::ExplorerHelp);
     None
 }
 
 fn close_help(model: &mut Model) -> Option<Effect> {
     model.explorer.close_help();
     model.modal.close(Context::ExplorerHelp);
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::ExplorerHelp);
     None
 }
 
@@ -273,7 +269,11 @@ mod tests {
                 .is_none()
         );
         assert!(model.explorer.help_visible());
-        assert_eq!(model.context_stack.last(), Some(&Context::ExplorerHelp));
+        assert_eq!(
+            crate::test_utils::input_context(&model),
+            Some(Context::ExplorerHelp)
+        );
+        assert!(model.context_stack.is_empty());
         assert!(model.modal.is_active(Context::ExplorerHelp));
 
         manager.update(

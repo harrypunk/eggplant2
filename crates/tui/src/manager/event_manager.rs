@@ -304,7 +304,7 @@ mod tests {
     fn common_escape_and_backspace_work_without_configured_entries() {
         let manager = event_manager();
         let mut model = Model::default();
-        model.context_stack.push(Context::ThemePicker);
+        assert!(model.modal.open(Context::ThemePicker));
         assert!(matches!(
             manager.translate(
                 Event::Key(KeyEvent::new(KeyCode::Esc, KeyModifiers::NONE)),
@@ -320,7 +320,7 @@ mod tests {
             Some(Message::TextInput(TextInputEvent::DeleteBackward))
         ));
 
-        model.context_stack.pop();
+        model.modal.close(Context::ThemePicker);
         crate::test_utils::create_buffer(&mut model, "text");
         model.editor.enter_insert_mode();
         assert!(matches!(
@@ -343,7 +343,7 @@ mod tests {
     fn routes_only_theme_picker_navigation_and_actions() {
         let manager = event_manager();
         let mut model = Model::default();
-        model.context_stack.push(Context::ThemePicker);
+        assert!(model.modal.open(Context::ThemePicker));
 
         let translate =
             |key| manager.translate(Event::Key(KeyEvent::new(key, KeyModifiers::NONE)), &model);
@@ -501,7 +501,7 @@ mod tests {
     fn routes_vcs_merge_input_keys() {
         let manager = event_manager();
         let mut model = Model::default();
-        model.context_stack.push(Context::VcsMerge);
+        assert!(model.modal.open(Context::VcsMerge));
 
         let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
         assert!(matches!(
@@ -805,8 +805,8 @@ mod tests {
             ));
         }
 
-        model.context_stack.pop();
-        model.context_stack.push(Context::VcsReset);
+        assert_eq!(model.context_stack.pop(), Some(Context::VcsResetMenu));
+        assert!(model.modal.open(Context::VcsReset));
         for (key, command) in [
             (KeyCode::Down, "vcs_reset_next"),
             (KeyCode::Up, "vcs_reset_previous"),
@@ -840,7 +840,7 @@ mod tests {
             (Context::VcsReset, "vcs_reset_next", "vcs_reset_previous"),
         ] {
             let mut model = Model::default();
-            model.context_stack.push(context);
+            assert!(model.modal.open(context));
             for (key, command) in [(KeyCode::Char('n'), next), (KeyCode::Char('p'), previous)] {
                 let event = Event::Key(KeyEvent::new(key, KeyModifiers::CONTROL));
                 assert!(matches!(
@@ -868,8 +868,8 @@ mod tests {
             ));
         }
 
-        model.context_stack.pop();
-        model.context_stack.push(Context::VcsBranch);
+        assert_eq!(model.context_stack.pop(), Some(Context::VcsBranchMenu));
+        assert!(model.modal.open(Context::VcsBranch));
         let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
@@ -985,7 +985,7 @@ mod tests {
     fn routes_buffer_jump_text_and_commands_in_its_context() {
         let manager = event_manager();
         let mut model = Model::default();
-        model.context_stack.push(Context::BufferJump);
+        assert!(model.modal.open(Context::BufferJump));
 
         let event = Event::Key(KeyEvent::new(KeyCode::Char('z'), KeyModifiers::NONE));
         assert!(matches!(
@@ -1005,7 +1005,7 @@ mod tests {
     fn routes_buffer_grep_input_selection_acceptance_and_cancellation() {
         let manager = event_manager();
         let mut model = Model::default();
-        model.context_stack.push(Context::BufferGrep);
+        assert!(model.modal.open(Context::BufferGrep));
 
         let event = Event::Key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE));
         assert!(matches!(
@@ -1040,7 +1040,7 @@ mod tests {
     fn routes_project_grep_input_selection_acceptance_and_cancellation() {
         let manager = event_manager();
         let mut model = Model::default();
-        model.context_stack.push(Context::ProjectGrep);
+        assert!(model.modal.open(Context::ProjectGrep));
 
         let event = Event::Key(KeyEvent::new(KeyCode::Char('e'), KeyModifiers::NONE));
         assert!(matches!(
@@ -1262,7 +1262,7 @@ mod tests {
     fn routes_code_navigation_location_keys() {
         let manager = event_manager();
         let mut model = Model::default();
-        model.context_stack.push(Context::CodeNavigation);
+        assert!(model.modal.open(Context::CodeNavigation));
 
         for (key, command) in [
             (KeyCode::Enter, "code_navigation_open"),
@@ -1320,7 +1320,7 @@ mod tests {
             ));
         }
 
-        model.context_stack.push(Context::ExplorerHelp);
+        assert!(model.modal.open(Context::ExplorerHelp));
         for (key, command) in [
             (KeyCode::Esc, "close_explorer_help"),
             (KeyCode::Char('?'), "explorer_help"),
@@ -1334,7 +1334,11 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         assert!(manager.translate(event, &model).is_none());
 
-        model.context_stack.push(Context::ExplorerAdd);
+        assert!(
+            model
+                .modal
+                .replace(Context::ExplorerHelp, Context::ExplorerAdd)
+        );
         for (key, command) in [
             (KeyCode::Enter, "explorer_add_submit"),
             (KeyCode::Esc, "close_explorer_add"),
@@ -1356,7 +1360,11 @@ mod tests {
             Some(Message::TextInput(TextInputEvent::Insert('x')))
         ));
 
-        model.context_stack.push(Context::ExplorerDelete);
+        assert!(
+            model
+                .modal
+                .replace(Context::ExplorerAdd, Context::ExplorerDelete)
+        );
         for (key, command) in [
             (KeyCode::Char('y'), "explorer_delete_confirm"),
             (KeyCode::Esc, "close_explorer_delete"),
@@ -1370,7 +1378,11 @@ mod tests {
         let event = Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE));
         assert!(manager.translate(event, &model).is_none());
 
-        model.context_stack.push(Context::ExplorerTransfer);
+        assert!(
+            model
+                .modal
+                .replace(Context::ExplorerDelete, Context::ExplorerTransfer)
+        );
         for (key, command) in [
             (KeyCode::Enter, "explorer_transfer_submit"),
             (KeyCode::Esc, "close_explorer_transfer"),

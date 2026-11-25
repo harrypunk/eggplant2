@@ -116,15 +116,11 @@ fn start(model: &mut Model) {
     }
     model.status = None;
     model.buffer_jump.start(source);
-    model.context_stack.push(Context::BufferJump);
 }
 
 fn close(model: &mut Model) {
     model.buffer_jump.close();
     model.modal.close(Context::BufferJump);
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::BufferJump);
 }
 
 #[cfg(test)]
@@ -149,7 +145,11 @@ mod tests {
             manager.update(model, Message::CommandMenuKey(KeyCode::Char(key).into()));
         }
         assert!(model.buffer_jump.is_active());
-        assert_eq!(model.context_stack.last(), Some(&Context::BufferJump));
+        assert_eq!(
+            crate::test_utils::input_context(model),
+            Some(Context::BufferJump)
+        );
+        assert!(model.context_stack.is_empty());
     }
 
     #[test]
