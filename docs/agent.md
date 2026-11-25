@@ -120,6 +120,7 @@ The inline dialog requires an open project, not an active buffer. With an active
 #### Catalog and model activation
 
 - A successful OpenAI save fetches authenticated `GET {base_url}/models` through the injected `OpenAiProviderFactory`.
+- Successful responses are also normalized and upserted through `ModelCatalogStore` with `checked_at` and optional validators. Cache failures warn without blocking selection.
 - Explicit loading, selection, and activation pages replace boolean workflow flags.
 - Only model IDs returned by the endpoint are selectable. The list uses a bounded, selection-following viewport.
 - Enter persists the chosen model and then activates that provider. Activation failures leave the selection available and do not install a provider.

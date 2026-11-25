@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use eggplant_agent::AgentProvider;
-use eggplant_agent_storage::ProviderCredentialStore;
+use eggplant_agent_storage::{ModelCatalog, ModelCatalogStore, ProviderCredentialStore};
 
 use crate::{
     capabilities::openai::OpenAiProviderFactory,
@@ -22,7 +22,13 @@ pub fn after_save(model: &mut Model) -> OpenAiAfterSave {
         (Some(store), Some(factory)) => model
             .provider_login
             .begin_model_loading("openai")
-            .map(|()| OpenAiAfterSave::FetchModels(catalog_effect(store, factory)))
+            .map(|()| {
+                OpenAiAfterSave::FetchModels(catalog_effect(
+                    store,
+                    factory,
+                    model.model_catalogs.clone(),
+                ))
+            })
             .unwrap_or(OpenAiAfterSave::CloseWithoutCatalog),
         _ => OpenAiAfterSave::CloseWithoutCatalog,
     }
@@ -31,8 +37,13 @@ pub fn after_save(model: &mut Model) -> OpenAiAfterSave {
 fn catalog_effect(
     store: Arc<dyn ProviderCredentialStore>,
     factory: Arc<dyn OpenAiProviderFactory>,
+    catalogs: Option<Arc<dyn ModelCatalogStore>>,
 ) -> Effect {
-    Effect::feature(FetchModels { store, factory })
+    Effect::feature(FetchModels {
+        store,
+        factory,
+        catalogs,
+    })
 }
 
 pub fn activate_selected(model: &mut Model) -> Option<Effect> {
@@ -50,6 +61,7 @@ pub fn activate_selected(model: &mut Model) -> Option<Effect> {
 struct FetchModels {
     store: Arc<dyn ProviderCredentialStore>,
     factory: Arc<dyn OpenAiProviderFactory>,
+    catalogs: Option<Arc<dyn ModelCatalogStore>>,
 }
 
 impl FetchModels {
@@ -64,7 +76,24 @@ impl FetchModels {
             self.factory.list_models(credential).await
         }
         .await;
-        ModelCatalogCompletion { result }
+        let cache_warning = match (&result, self.catalogs) {
+            (Ok(models), Some(catalogs)) => {
+                let checked_at = chrono::Utc::now().timestamp_millis();
+                match ModelCatalog::new("openai", models.clone(), checked_at) {
+                    Ok(catalog) => catalogs
+                        .upsert(catalog)
+                        .await
+                        .err()
+                        .map(|error| error.to_string()),
+                    Err(error) => Some(error.to_string()),
+                }
+            }
+            _ => None,
+        };
+        ModelCatalogCompletion {
+            result,
+            cache_warning,
+        }
     }
 }
 
@@ -82,6 +111,7 @@ impl FeatureEffect for FetchModels {
 
 struct ModelCatalogCompletion {
     result: Result<Vec<String>, String>,
+    cache_warning: Option<String>,
 }
 
 impl ModelCatalogCompletion {
@@ -96,7 +126,13 @@ impl Completion for ModelCatalogCompletion {
             .provider_login
             .complete_model_loading("openai", self.result)
         {
-            Some(Ok(())) => None,
+            Some(Ok(())) => self.cache_warning.map(|warning| {
+                crate::notifications::publish_status(
+                    model,
+                    StatusMessage::info(format!("OpenAI catalog cache warning: {warning}")),
+                    Some("OpenAI"),
+                )
+            }),
             Some(Err(error)) => Some(crate::notifications::publish_status(
                 model,
                 StatusMessage::error(format!("OpenAI model fetch failed: {error}")),
@@ -301,6 +337,8 @@ mod tests {
     fn login_fetches_selects_persists_and_activates_an_available_model() {
         let (mut model, store, _directory, activated) =
             model_with_factory(Ok(vec!["gpt-a".to_string(), "gpt-b".to_string()]));
+        let (catalogs, _catalog_directory) = crate::test_utils::model_catalog_store();
+        model.model_catalogs = Some(catalogs.clone());
         open_form(&mut model);
         let save = work::handle_command(&mut model, CommandId("provider_login_activate")).unwrap();
         let fetch = perform(&mut model, save).expect("successful save should fetch models");
@@ -337,6 +375,15 @@ mod tests {
             credential.base_url.as_deref(),
             Some("https://api.openai.com/v1")
         );
+        let catalog = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(catalogs.get("openai"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(catalog.models, ["gpt-a", "gpt-b"]);
+        assert!(catalog.checked_at > 0);
     }
 
     #[test]

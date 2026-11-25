@@ -3,8 +3,10 @@ use std::sync::Arc;
 use color_eyre::eyre::{bail, eyre};
 use eggplant_agent::AgentProvider;
 use eggplant_agent_openai::{OpenAiConfig, OpenAiProvider};
-use eggplant_agent_storage::{ProviderCredentialStore, SessionStore};
-use eggplant_agent_storage_seaorm::{SeaOrmProviderCredentialStore, SeaOrmSessionStore};
+use eggplant_agent_storage::{ModelCatalogStore, ProviderCredentialStore, SessionStore};
+use eggplant_agent_storage_seaorm::{
+    SeaOrmModelCatalogStore, SeaOrmProviderCredentialStore, SeaOrmSessionStore,
+};
 
 use super::openai::OpenAiFactory;
 use crate::{
@@ -79,6 +81,7 @@ async fn configure_store_with_home(
     let store = connect_store(&path).await?;
     model.agent.set_session_store(store);
     model.provider_credentials = Some(connect_credential_store(&path).await?);
+    model.model_catalogs = Some(connect_model_catalog_store(&path).await?);
     Ok(())
 }
 
@@ -104,6 +107,15 @@ async fn connect_credential_store(
     path: &std::path::Path,
 ) -> color_eyre::Result<Arc<dyn ProviderCredentialStore>> {
     let store = SeaOrmProviderCredentialStore::connect(path)
+        .await
+        .map_err(|error| color_eyre::eyre::eyre!(error.to_string()))?;
+    Ok(Arc::new(store))
+}
+
+async fn connect_model_catalog_store(
+    path: &std::path::Path,
+) -> color_eyre::Result<Arc<dyn ModelCatalogStore>> {
+    let store = SeaOrmModelCatalogStore::connect(path)
         .await
         .map_err(|error| color_eyre::eyre::eyre!(error.to_string()))?;
     Ok(Arc::new(store))
@@ -180,6 +192,8 @@ mod tests {
         assert!(path.is_file());
         let credentials = model.provider_credentials.clone().unwrap();
         assert!(credentials.list().await.unwrap().is_empty());
+        let catalogs = model.model_catalogs.clone().unwrap();
+        assert!(catalogs.get("openai").await.unwrap().is_none());
         let store = SeaOrmSessionStore::connect(&path).await.unwrap();
         let recent = store
             .recent_sessions(eggplant_agent_storage::RecentQuery::default())

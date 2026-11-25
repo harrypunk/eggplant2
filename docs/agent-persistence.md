@@ -1,6 +1,6 @@
 # Agent persistence
 
-Status: implemented. Provider-neutral records, asynchronous `SessionStore`, finalized-run effects, and a SeaORM SQLite adapter with migrations, transactions, keyset reads, and search are complete. Provider credentials also have a backend-neutral `ProviderCredentialStore`, SeaORM SQLite migration/CRUD implementation, and masked multi-provider API-key save workflow. OpenAI-compatible catalog selection, activation, and restart restoration are implemented; interactive account login and non-OpenAI provider/model selection remain deferred. SQLite is always enabled and defaults to `~/.eggplant/ai/data.sqlite`; `session_db` can override that path. Cloud backends and backend-specific full-text search remain deferred.
+Status: implemented. Provider-neutral records, asynchronous `SessionStore`, finalized-run effects, and a SeaORM SQLite adapter with migrations, transactions, keyset reads, and search are complete. Provider credentials also have a backend-neutral `ProviderCredentialStore`, SeaORM SQLite migration/CRUD implementation, and masked multi-provider API-key save workflow. Provider model catalogs use the separate `ModelCatalogStore` and `agent_model_catalogs` table for cached, validator-aware refreshes. OpenAI-compatible catalog selection, activation, and restart restoration are implemented; interactive account login and non-OpenAI provider/model selection remain deferred. SQLite is always enabled and defaults to `~/.eggplant/ai/data.sqlite`; `session_db` can override that path. Cloud backends and backend-specific full-text search remain deferred.
 
 ## Recommendation
 
@@ -115,6 +115,15 @@ Append message/run/session updates in one transaction where the backend requires
 One provider has at most one stored credential. Upserting another authentication method replaces the old method and clears its inapplicable fields. `ProviderCredentialStore` is separate from `SessionStore`: credentials are per-user authentication state, not workspace transcript records. Metadata listing selects only provider ID and method, while reading a credential returns the secrets needed by provider authentication. API-key records require a nonempty key and no OAuth fields; OAuth records require a nonempty access token and no API key.
 
 This prototype stores local database secrets as plaintext, similar to a private credential file; encryption or OS keychain integration is not implemented. Keep the database in the per-user data directory with appropriate filesystem permissions, and never include credential values in debug output, notifications, or logs. API-key saves use the same per-user `session_db` connection policy and run asynchronously. OpenAI-compatible login then fetches `/models`; activation persists `selected_model` before installing the provider, and startup restores it unless explicit configuration takes precedence. Other providers remain storage-only. Account/OAuth login, token refresh orchestration, and non-OpenAI provider/model selection are separate later slices.
+
+### `agent_model_catalogs`
+
+- `provider_id` (primary key)
+- `models_json` (normalized, bounded array of model IDs)
+- `checked_at` (Unix milliseconds of the last completed remote check)
+- Optional `last_modified` and `etag` for future conditional refreshes
+
+Catalogs are independent of credential records and contain no authentication material. Successful OpenAI-compatible `/models` responses are upserted through `ModelCatalogStore`, then used by the model selector. A cache-write failure produces a warning without blocking selection. `selected_model` remains a separate user choice: refreshing a catalog does not change the active model.
 
 ## Search and scale
 

@@ -10,6 +10,7 @@ const INITIAL_MIGRATION: &str = "m20261121_000001_create_agent_storage";
 const PROVIDER_CREDENTIALS_MIGRATION: &str = "m20261124_000002_create_agent_provider_credentials";
 const PROVIDER_BASE_URL_MIGRATION: &str = "m20261124_000003_add_provider_base_url";
 const PROVIDER_SELECTED_MODEL_MIGRATION: &str = "m20261124_000004_add_provider_selected_model";
+const MODEL_CATALOGS_MIGRATION: &str = "m20261125_000005_create_agent_model_catalogs";
 
 type Migration = for<'a> fn(&'a DatabaseTransaction) -> BoxFuture<'a, Result<(), DbErr>>;
 
@@ -24,6 +25,7 @@ const MIGRATIONS: &[(&str, Migration)] = &[
         PROVIDER_SELECTED_MODEL_MIGRATION,
         provider_selected_model_migration,
     ),
+    (MODEL_CATALOGS_MIGRATION, model_catalogs_migration),
 ];
 
 pub async fn migrate(db: &DatabaseConnection) -> Result<(), DbErr> {
@@ -83,6 +85,10 @@ fn provider_selected_model_migration(
     transaction: &DatabaseTransaction,
 ) -> BoxFuture<'_, Result<(), DbErr>> {
     Box::pin(add_provider_selected_model(transaction))
+}
+
+fn model_catalogs_migration(transaction: &DatabaseTransaction) -> BoxFuture<'_, Result<(), DbErr>> {
+    Box::pin(create_model_catalogs(transaction))
 }
 
 async fn create_agent_storage<C: ConnectionTrait>(db: &C) -> Result<(), DbErr> {
@@ -279,6 +285,22 @@ async fn add_provider_selected_model<C: ConnectionTrait>(db: &C) -> Result<(), D
         Table::alter()
             .table("agent_provider_credentials")
             .add_column(text("selected_model").null())
+            .to_owned(),
+    )
+    .await
+}
+
+async fn create_model_catalogs<C: ConnectionTrait>(db: &C) -> Result<(), DbErr> {
+    execute(
+        db,
+        Table::create()
+            .table("agent_model_catalogs")
+            .if_not_exists()
+            .col(text("provider_id").primary_key())
+            .col(text("models_json"))
+            .col(big_integer("checked_at"))
+            .col(big_integer("last_modified").null())
+            .col(text("etag").null())
             .to_owned(),
     )
     .await

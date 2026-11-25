@@ -5,7 +5,9 @@ pub use example_feature::ExampleFeatureState;
 use std::{path::Path, sync::Arc};
 
 use editor::{BufferId, DocumentFactory};
-use eggplant_agent_storage_seaorm::{SeaOrmProviderCredentialStore, SeaOrmSessionStore};
+use eggplant_agent_storage_seaorm::{
+    SeaOrmModelCatalogStore, SeaOrmProviderCredentialStore, SeaOrmSessionStore,
+};
 
 use crate::data_object::Model;
 
@@ -33,6 +35,16 @@ pub fn provider_credential_store() -> (Arc<SeaOrmProviderCredentialStore>, tempf
     let directory = tempfile::tempdir().unwrap();
     let store = runtime()
         .block_on(SeaOrmProviderCredentialStore::connect(
+            directory.path().join("agent.sqlite"),
+        ))
+        .unwrap();
+    (Arc::new(store), directory)
+}
+
+pub fn model_catalog_store() -> (Arc<SeaOrmModelCatalogStore>, tempfile::TempDir) {
+    let directory = tempfile::tempdir().unwrap();
+    let store = runtime()
+        .block_on(SeaOrmModelCatalogStore::connect(
             directory.path().join("agent.sqlite"),
         ))
         .unwrap();

@@ -37,7 +37,7 @@ pub mod data_object {
 
     use app::language::{LanguageServerRegistry, LanguageServers};
     use editor::{BufferId, DocumentPosition, EditorSession};
-    use eggplant_agent_storage::ProviderCredentialStore;
+    use eggplant_agent_storage::{ModelCatalogStore, ProviderCredentialStore};
 
     use crate::manager::effect::FeatureCompletion;
 
@@ -175,6 +175,8 @@ pub mod data_object {
         pub provider_login: ProviderLoginState,
         /// Optional durable credential capability shared by login and later model selection.
         pub provider_credentials: Option<Arc<dyn ProviderCredentialStore>>,
+        /// Persistent provider model catalogs, independent of credential records.
+        pub model_catalogs: Option<Arc<dyn ModelCatalogStore>>,
         /// OpenAI-compatible catalog and provider construction used by login/model selection.
         pub openai_factory: Option<Arc<dyn OpenAiProviderFactory>>,
         pub deferred_action: Option<DeferredAction>,
@@ -226,6 +228,7 @@ pub mod data_object {
                 agent: AgentState::default(),
                 provider_login: ProviderLoginState::default(),
                 provider_credentials: None,
+                model_catalogs: None,
                 openai_factory: None,
                 deferred_action: None,
                 command_menu: CommandMenuState::default(),
