@@ -32,6 +32,18 @@ Available in Normal and Explorer contexts unless noted otherwise.
 | Search the project | `Space s p` |
 | Open full-screen Git status | `Space g g` |
 
+### Shared text inputs
+
+Available in full `TextInput` contexts unless a direct workflow binding takes precedence. Character-only prefix inputs do not receive these editing operations.
+
+| Action | Default binding |
+| --- | --- |
+| Move to line start | `Ctrl-A` |
+| Move to line end | `Ctrl-E` |
+| Delete from cursor to line start | `Ctrl-U` |
+| Move one scalar left/right | `Left` / `Right` |
+| Delete previous scalar | `Backspace` |
+
 ### Welcome command menu
 
 When the focused editor has no buffer, it shows the Eggplant logo and command buttons instead of an empty text area. Startup focuses Welcome when no file was opened, including project startup; opening a file focuses the normal editor instead. `Up`/`Down` or `Ctrl-N`/`Ctrl-P` select a button through the shared list-navigation policy, and `Enter` runs its existing command. The selected button uses the theme's focused selection style; it becomes dimmed when focus moves elsewhere. This is a view and selection state, not a document buffer. Welcome input context is derived from page, focus, and buffer state rather than synchronized into the context stack. Command identities are shared with the normal dispatcher so future mouse hit-testing can activate the same targets.
@@ -352,7 +364,7 @@ Shell contexts are derived, not pushed: `AppNormal`, `Welcome`, `Explorer`, `Age
 
 ## Design rules
 
-1. **Normalize once.** Convert terminal-specific events into application key chords at the input boundary. Sequence matching should use complete chords, not only `KeyCode`, so `Ctrl-X` and `x` remain distinct. Text inputs use semantic `Insert`, `DeleteBackward`, and `Cursor` events carried by `Message::TextInput`. `EventManager` translates unbound physical keys into these events; direct custom bindings take precedence. `TextInputRegistry::builtin` is the single checked registration table: character-only prefix parsers accept `Insert`, while editable components accept every event and react to the actual content-change result. Features do not register per-feature editing commands or character-message dispatcher arms.
+1. **Normalize once.** Convert terminal-specific events into application key chords at the input boundary. Sequence matching should use complete chords, not only `KeyCode`, so `Ctrl-X` and `x` remain distinct. Text inputs use semantic `Insert`, `DeleteBackward`, `DeleteToLineStart`, and `Cursor` events carried by `Message::TextInput`. `EventManager` composes the injectable `TextInputKeymap` with `TextInputRegistry`; direct custom bindings take precedence. `TextInputRegistry::builtin` is the single checked registration table: character-only prefix parsers accept `Insert`, while editable components accept every event and react to the actual content-change result. Features do not register per-feature editing commands or character-message dispatcher arms.
 2. **Keep pending input in `Model`.** A sequence in progress is application state. It must participate in update, cancellation, focus changes, and rendering like any other state.
 3. **Resolve to semantic messages.** Editing, explorer, and application updates should not know which physical keys triggered a command.
 4. **Compile bindings at startup.** Parse configured chords or sequences once and report invalid definitions before entering the terminal loop. Do not parse binding strings for every key event.

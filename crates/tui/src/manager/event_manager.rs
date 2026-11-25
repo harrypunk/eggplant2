@@ -1,15 +1,15 @@
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 
-use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{KeyEvent, KeyEventKind};
 use ratatui::crossterm::event::{self, Event};
 
-use crate::component::text_input::{TextCursorMovement, TextInputEvent};
 use crate::config::Config;
 use crate::data_object::{Context, Message, Model};
 use crate::manager::{
     context::{InputAction, KeyChord, LeaderInput, leader_input},
     input_context::input_context,
     keyboard_input_registry::Registry,
+    text_input_keymap::{TerminalTextInputKeymap, TextInputKeymap},
     text_input_registry::TextInputRegistry,
 };
 
@@ -19,6 +19,7 @@ pub struct EventManager {
     leader: KeyChord,
     keymap: Registry,
     text_input: TextInputRegistry,
+    text_keys: Arc<dyn TextInputKeymap>,
 }
 
 impl EventManager {
@@ -36,7 +37,13 @@ impl EventManager {
             leader,
             keymap,
             text_input,
+            text_keys: Arc::new(TerminalTextInputKeymap),
         })
+    }
+
+    pub fn with_text_input_keymap(mut self, text_keys: Arc<dyn TextInputKeymap>) -> Self {
+        self.text_keys = text_keys;
+        self
     }
 
     /// Wait for the next terminal event and translate it into a [`Message`].
@@ -84,17 +91,7 @@ impl EventManager {
     }
 
     fn unbound_key_message(&self, context: &Context, key: KeyChord) -> Option<Message> {
-        let event = match key.code {
-            KeyCode::Left => TextInputEvent::Cursor(TextCursorMovement::Left),
-            KeyCode::Right => TextInputEvent::Cursor(TextCursorMovement::Right),
-            KeyCode::Backspace => TextInputEvent::DeleteBackward,
-            KeyCode::Char(character)
-                if key.modifiers.is_empty() || key.modifiers == KeyModifiers::SHIFT =>
-            {
-                TextInputEvent::Insert(character)
-            }
-            _ => return None,
-        };
+        let event = self.text_keys.resolve(key)?;
         self.text_input
             .accepts(context, event)
             .then_some(Message::TextInput(event))
@@ -103,8 +100,11 @@ impl EventManager {
 
 #[cfg(test)]
 mod tests {
+    use crossterm::event::{KeyCode, KeyModifiers};
+
     use super::*;
     use crate::{
+        component::text_input::{TextCursorMovement, TextInputEvent},
         data_object::{AppPage, FocusTarget, GeneralAction},
         manager::command_registry::{CommandId, CommandRegistry},
     };
@@ -149,6 +149,36 @@ mod tests {
             manager.translate(event, &model),
             Some(Message::TextInput(TextInputEvent::Insert(' ')))
         ));
+    }
+
+    #[test]
+    fn terminal_line_editing_requires_full_text_input_capability() {
+        let manager = event_manager();
+        let mut picker = Model::default();
+        picker.context_stack.push(Context::FilePicker);
+        for (character, expected) in [
+            ('a', TextInputEvent::Cursor(TextCursorMovement::LineStart)),
+            ('e', TextInputEvent::Cursor(TextCursorMovement::LineEnd)),
+            ('u', TextInputEvent::DeleteToLineStart),
+        ] {
+            let event = Event::Key(KeyEvent::new(
+                KeyCode::Char(character),
+                KeyModifiers::CONTROL,
+            ));
+            assert!(matches!(
+                manager.translate(event, &picker),
+                Some(Message::TextInput(actual)) if actual == expected
+            ));
+        }
+
+        let prefix_input = model_with_buffer(Context::BufferJump);
+        for character in ['a', 'e', 'u'] {
+            let event = Event::Key(KeyEvent::new(
+                KeyCode::Char(character),
+                KeyModifiers::CONTROL,
+            ));
+            assert!(manager.translate(event, &prefix_input).is_none());
+        }
     }
 
     #[test]

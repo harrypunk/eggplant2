@@ -71,7 +71,17 @@ Backspace is deliberately excluded: it remains `TextInputEvent::DeleteBackward` 
 - Return an error status for an unexpected ID instead of silently ignoring it.
 - Let duplicate registrations and duplicate chords fail at startup.
 
-Compatibility `Message` handlers remain available for shell concerns, but new features should prefer feature handlers. For unbound text input, add the feature context and handler to the checked table in `TextInputRegistry::builtin`; consume the shared `Message::TextInput(TextInputEvent)` and do not add a feature-specific character message or dispatcher arm. Use `TextInputHandler::Insert` for a character-only prefix parser. For an editable single-line popup, store the shared `TextInput` component and use `TextInputHandler::Edit`: insertion, Backspace, and Left/Right then reach that local component through the same semantic event route. The feature should react only to `content_changed()`, never implement cursor arithmetic itself. Rendering defaults to one line with horizontal scrolling. A wrap-aware dialog should opt into `TextFlow::Wrapped`, use `TextInput::measure` for preferred height, and use the shared `AutoHeight` policy for size clamps and reserved content. Parents own rectangle placement; features do not duplicate wrap, cursor geometry, or auto-height formulas. The main editor's independent wrap toggle is `Space u w`; do not reuse it to change popup input policies.
+### Shared text-input capability
+
+Register unbound text input once in `TextInputRegistry::builtin` and consume `Message::TextInput(TextInputEvent)`; do not add feature-specific character messages or physical-key handlers.
+
+- `TextInputHandler::Insert` is for character-only prefix parsers. It accepts only `Insert(char)`.
+- `TextInputHandler::Edit` opts into the full semantic editor: insertion, Backspace, cursor movement, line-start/end movement, and delete-to-line-start.
+- `TextInputKeymap` translates physical chords independently of features. `TerminalTextInputKeymap` supplies arrows, Backspace, printable input, Ctrl-A (`LineStart`), Ctrl-E (`LineEnd`), and Ctrl-U (`DeleteToLineStart`).
+- `EventManager` composes the keymap with context acceptance. Direct feature bindings take precedence, so Normal-mode Ctrl-U can remain page-scroll.
+- Features react to `content_changed()` and never implement cursor arithmetic or terminal key matching themselves.
+
+For an editable popup, store the shared `TextInput` component. Rendering defaults to one line with horizontal scrolling. A wrap-aware dialog should opt into `TextFlow::Wrapped`, use `TextInput::measure` for preferred height, and use the shared `AutoHeight` policy for size clamps and reserved content. Parents own rectangle placement; features do not duplicate wrap, cursor geometry, or auto-height formulas. The main editor's independent wrap toggle is `Space u w`; do not reuse it to change popup input policies.
 
 ## 4. Keep updates pure
 
