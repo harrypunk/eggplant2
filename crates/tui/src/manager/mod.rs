@@ -9,5 +9,6 @@ pub mod input_resolver;
 pub mod keyboard_input_registry;
 pub mod message_manager;
 pub mod mouse_manager;
+pub mod routed_input;
 pub mod text_input_keymap;
 pub mod text_input_registry;

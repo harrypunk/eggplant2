@@ -4,12 +4,12 @@ use color_eyre::eyre::eyre;
 
 use crate::{
     data_object::{Context, GeneralAction, Model},
-    manager::{effect::Effect, input_context::input_context},
+    manager::effect::Effect,
 };
 
 /// Semantic action interface, independent of physical keys and feature command IDs.
 pub trait GeneralActionHandler: std::fmt::Debug + Send + Sync {
-    fn handle(&self, model: &mut Model, action: GeneralAction) -> Option<Effect>;
+    fn handle(&self, model: &mut Model, context: Context, action: GeneralAction) -> Option<Effect>;
 }
 
 pub type GeneralActionFn = fn(&mut Model, GeneralAction) -> Option<Effect>;
@@ -59,8 +59,7 @@ impl GeneralActionDispatcher {
 }
 
 impl GeneralActionHandler for GeneralActionDispatcher {
-    fn handle(&self, model: &mut Model, action: GeneralAction) -> Option<Effect> {
-        let context = input_context(model)?;
+    fn handle(&self, model: &mut Model, context: Context, action: GeneralAction) -> Option<Effect> {
         let handler = self.handlers.get(&context)?;
         handler(model, action)
     }
@@ -79,19 +78,19 @@ mod tests {
         let mut model = Model::default();
         crate::provider_login::open(&mut model);
 
-        handler.handle(&mut model, GeneralAction::Next);
+        handler.handle(&mut model, Context::ProviderLogin, GeneralAction::Next);
         assert_eq!(model.provider_login.selected(), Some(1));
-        handler.handle(&mut model, GeneralAction::Activate);
+        handler.handle(&mut model, Context::ProviderLogin, GeneralAction::Activate);
         assert_eq!(
             model.provider_login.page(),
             ProviderLoginPage::Providers(ProviderAuthMethod::ApiKey)
         );
-        handler.handle(&mut model, GeneralAction::Back);
+        handler.handle(&mut model, Context::ProviderLogin, GeneralAction::Back);
         assert_eq!(
             model.provider_login.page(),
             ProviderLoginPage::AuthenticationMethod
         );
-        handler.handle(&mut model, GeneralAction::Back);
+        handler.handle(&mut model, Context::ProviderLogin, GeneralAction::Back);
         assert!(!model.provider_login.is_open());
     }
 

@@ -11,6 +11,8 @@ use crate::{
         command_registry::{CommandHandler, CommandRegistry},
         effect::Effect,
         general_action::GeneralActionHandler,
+        input_context::input_context,
+        routed_input::RoutedInput,
         text_input_registry::TextInputRegistry,
     },
 };
@@ -47,6 +49,16 @@ impl MessageManager {
         self
     }
 
+    /// Dispatch input using the context captured during event translation.
+    pub fn update_input(&self, model: &mut Model, input: RoutedInput) -> Option<Effect> {
+        let RoutedInput { context, message } = input;
+        match message {
+            Message::GeneralAction(action) => self.general_actions.handle(model, context, action),
+            Message::TextInput(event) => self.text_input.handle(model, context, event),
+            message => self.update(model, message),
+        }
+    }
+
     pub fn update(&self, model: &mut Model, msg: Message) -> Option<Effect> {
         match msg {
             Message::CommandMenuStart => {
@@ -60,9 +72,13 @@ impl MessageManager {
                 };
             }
             Message::InvokeCommand(id) => return self.invoke_command(model, id),
-            Message::GeneralAction(action) => return self.general_actions.handle(model, action),
             Message::FeatureCompletion(completion) => return completion.update(model),
-            Message::TextInput(event) => return self.text_input.handle(model, event),
+            msg @ (Message::GeneralAction(_) | Message::TextInput(_)) => {
+                // Compatibility for direct semantic-message callers. Terminal input uses
+                // `update_input`, so its originally resolved context cannot change in flight.
+                let context = input_context(model)?;
+                return self.update_input(model, RoutedInput::new(context, msg));
+            }
             Message::FocusLost => return buffer::save_active(model),
             Message::ExternalFileChanged { path, kind } => {
                 return crate::external_sync::file_changed(model, &path, kind);
@@ -100,15 +116,59 @@ impl MessageManager {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Mutex;
+
     use crate::component::text_input::TextInputEvent;
     use editor::{EditMode, SaveRequest};
 
     use super::*;
     use crate::{
-        data_object::{CommandId, Context, FocusTarget, RunningState, StatusKind, Visibility},
+        data_object::{
+            CommandId, Context, FocusTarget, GeneralAction, RunningState, StatusKind, Visibility,
+        },
         startup::initial_model,
         test_utils::{create_buffer, open_file},
     };
+
+    #[derive(Debug)]
+    struct RecordingActions {
+        contexts: Arc<Mutex<Vec<Context>>>,
+    }
+
+    impl GeneralActionHandler for RecordingActions {
+        fn handle(
+            &self,
+            _model: &mut Model,
+            context: Context,
+            _action: GeneralAction,
+        ) -> Option<Effect> {
+            self.contexts.lock().unwrap().push(context);
+            None
+        }
+    }
+
+    #[test]
+    fn routed_input_dispatches_with_its_captured_context() {
+        let contexts = Arc::new(Mutex::new(Vec::new()));
+        let manager =
+            MessageManager::default().with_general_action_handler(Arc::new(RecordingActions {
+                contexts: contexts.clone(),
+            }));
+        let mut model = Model::default();
+
+        manager.update_input(
+            &mut model,
+            RoutedInput::new(
+                Context::ModelSelector,
+                Message::GeneralAction(GeneralAction::Next),
+            ),
+        );
+
+        assert_eq!(
+            contexts.lock().unwrap().as_slice(),
+            [Context::ModelSelector]
+        );
+    }
 
     fn expect_save(effect: Option<Effect>) -> SaveRequest {
         let Some(Effect::Save(request)) = effect else {

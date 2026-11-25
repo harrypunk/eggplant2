@@ -10,8 +10,16 @@ use crate::manager::{
     input_context::input_context,
     input_resolver::{InputResolver, InputResolverChain, default_input_resolvers},
     keyboard_input_registry::Registry,
+    routed_input::RoutedInput,
     text_input_registry::TextInputRegistry,
 };
+
+/// Translation result separating context-owned input from context-free system messages.
+#[derive(Debug)]
+pub enum TranslatedEvent {
+    Input(RoutedInput),
+    System(Message),
+}
 
 #[derive(Debug)]
 pub struct EventManager {
@@ -46,11 +54,11 @@ impl EventManager {
         self
     }
 
-    /// Wait for the next terminal event and translate it into a [`Message`].
-    pub fn next_message(&self, model: &Model) -> color_eyre::Result<Option<Message>> {
+    /// Wait for the next terminal event and translate it into routed input or a system message.
+    pub fn next_event(&self, model: &Model) -> color_eyre::Result<Option<TranslatedEvent>> {
         Ok(self
             .read_event()?
-            .and_then(|event| self.translate(event, model)))
+            .and_then(|event| self.translate_event(event, model)))
     }
 
     /// Raw I/O: poll crossterm for the next event.
@@ -61,26 +69,39 @@ impl EventManager {
         Ok(None)
     }
 
-    /// Pure routing: dispatch on the event kind.
-    fn translate(&self, event: Event, model: &Model) -> Option<Message> {
+    /// Pure routing: dispatch on the event kind and retain the resolved input context.
+    fn translate_event(&self, event: Event, model: &Model) -> Option<TranslatedEvent> {
         match event {
-            Event::Key(key) if key.kind == KeyEventKind::Press => self.translate_key(key, model),
-            Event::FocusLost => Some(Message::FocusLost),
-            Event::Resize(width, height) => Some(Message::Resize(width, height)),
+            Event::Key(key) if key.kind == KeyEventKind::Press => {
+                self.translate_key(key, model).map(TranslatedEvent::Input)
+            }
+            Event::FocusLost => Some(TranslatedEvent::System(Message::FocusLost)),
+            Event::Resize(width, height) => {
+                Some(TranslatedEvent::System(Message::Resize(width, height)))
+            }
             // Event::Mouse(mouse) => MouseManager.translate(mouse, model),
             _ => None,
         }
     }
 
-    fn translate_key(&self, key: KeyEvent, model: &Model) -> Option<Message> {
+    fn translate_key(&self, key: KeyEvent, model: &Model) -> Option<RoutedInput> {
         let context = input_context(model)?;
         let chord = KeyChord::from(key);
-        match leader_input(context, chord, self.leader, model.command_menu.is_active()) {
-            Some(LeaderInput::Start) => return Some(Message::CommandMenuStart),
-            Some(LeaderInput::Pending) => return Some(Message::CommandMenuKey(chord)),
-            None => {}
+        let message =
+            match leader_input(context, chord, self.leader, model.command_menu.is_active()) {
+                Some(LeaderInput::Start) => Message::CommandMenuStart,
+                Some(LeaderInput::Pending) => Message::CommandMenuKey(chord),
+                None => self.input.resolve(context, chord)?,
+            };
+        Some(RoutedInput::new(context, message))
+    }
+
+    #[cfg(test)]
+    fn translate(&self, event: Event, model: &Model) -> Option<Message> {
+        match self.translate_event(event, model)? {
+            TranslatedEvent::Input(input) => Some(input.message),
+            TranslatedEvent::System(message) => Some(message),
         }
-        self.input.resolve(context, chord)
     }
 }
 
@@ -113,6 +134,22 @@ mod tests {
             transient => model.context_stack.push(transient),
         }
         model
+    }
+
+    #[test]
+    fn translated_input_retains_the_context_that_resolved_the_key() {
+        let manager = event_manager();
+        let mut model = Model::default();
+        model.context_stack.push(Context::FilePicker);
+        let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
+
+        let Some(TranslatedEvent::Input(RoutedInput {
+            context: Context::FilePicker,
+            message: Message::TextInput(TextInputEvent::Insert('x')),
+        })) = manager.translate_event(event, &model)
+        else {
+            panic!("file-picker input must retain its resolved context");
+        };
     }
 
     #[test]

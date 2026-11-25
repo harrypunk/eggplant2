@@ -5,7 +5,7 @@ use color_eyre::eyre::eyre;
 use crate::{
     component::text_input::TextInputEvent,
     data_object::{Context, Model},
-    manager::{effect::Effect, input_context::input_context},
+    manager::effect::Effect,
 };
 
 pub type TextInsertHandler = fn(&mut Model, char) -> Option<Effect>;
@@ -104,8 +104,12 @@ impl TextInputRegistry {
         )
     }
 
-    pub fn handle(&self, model: &mut Model, event: TextInputEvent) -> Option<Effect> {
-        let context = input_context(model)?;
+    pub fn handle(
+        &self,
+        model: &mut Model,
+        context: Context,
+        event: TextInputEvent,
+    ) -> Option<Effect> {
         match (self.handlers.get(&context)?, event) {
             (TextInputHandler::Insert(handler), TextInputEvent::Insert(character)) => {
                 handler(model, character)
@@ -183,7 +187,7 @@ mod tests {
     }
 
     #[test]
-    fn dispatches_to_a_derived_agent_insert_context() {
+    fn dispatches_to_the_supplied_agent_insert_context() {
         let registry = TextInputRegistry::builtin();
         let mut model = Model {
             current_focus: crate::data_object::FocusTarget::ToolsPanel,
@@ -193,7 +197,11 @@ mod tests {
         model.tools.visibility = crate::data_object::Visibility::Displayed;
         model.agent.enter_insert_mode();
 
-        registry.handle(&mut model, TextInputEvent::Insert('x'));
+        registry.handle(
+            &mut model,
+            Context::AgentChatInsert,
+            TextInputEvent::Insert('x'),
+        );
         assert_eq!(model.agent.prompt(), "x");
         assert!(model.context_stack.is_empty());
     }

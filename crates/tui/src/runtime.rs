@@ -10,8 +10,11 @@ use crate::{
     data_object::{AppPage, Message, Model, RunningState},
     file_watcher,
     manager::{
-        command_registry::CommandRegistry, effect::Effect, event_manager::EventManager,
-        keyboard_input_registry::Registry, message_manager::MessageManager,
+        command_registry::CommandRegistry,
+        effect::Effect,
+        event_manager::{EventManager, TranslatedEvent},
+        keyboard_input_registry::Registry,
+        message_manager::MessageManager,
         text_input_registry::TextInputRegistry,
     },
     page::{editor::Editor, vcs::Vcs, vcs_commit::VcsCommit, vcs_history::VcsHistory},
@@ -75,8 +78,8 @@ pub fn run(
         let mode = crate::page::active_mode(&model);
         terminal.backend_mut().execute(cursor_style(mode))?;
 
-        if let Some(message) = event_manager.next_message(&model)? {
-            apply_message(&mut model, &message_manager, message, &message_sender);
+        if let Some(event) = event_manager.next_event(&model)? {
+            apply_translated_event(&mut model, &message_manager, event, &message_sender);
         }
     }
 
@@ -97,6 +100,21 @@ fn apply_message(
     sender: &tokio::sync::mpsc::UnboundedSender<Message>,
 ) {
     if let Some(effect) = manager.update(model, message) {
+        apply_effect(effect, sender);
+    }
+}
+
+fn apply_translated_event(
+    model: &mut Model,
+    manager: &MessageManager,
+    event: TranslatedEvent,
+    sender: &tokio::sync::mpsc::UnboundedSender<Message>,
+) {
+    let effect = match event {
+        TranslatedEvent::Input(input) => manager.update_input(model, input),
+        TranslatedEvent::System(message) => manager.update(model, message),
+    };
+    if let Some(effect) = effect {
         apply_effect(effect, sender);
     }
 }
