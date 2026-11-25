@@ -1,15 +1,15 @@
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 
 use crossterm::event::{KeyEvent, KeyEventKind};
 use ratatui::crossterm::event::{self, Event};
 
 use crate::config::Config;
-use crate::data_object::{Context, Message, Model};
+use crate::data_object::{Message, Model};
 use crate::manager::{
-    context::{InputAction, KeyChord, LeaderInput, leader_input},
+    context::{KeyChord, LeaderInput, leader_input},
     input_context::input_context,
+    input_resolver::{InputResolver, InputResolverChain, default_input_resolvers},
     keyboard_input_registry::Registry,
-    text_input_keymap::{TerminalTextInputKeymap, TextInputKeymap},
     text_input_registry::TextInputRegistry,
 };
 
@@ -17,9 +17,7 @@ use crate::manager::{
 pub struct EventManager {
     poll_timeout: Duration,
     leader: KeyChord,
-    keymap: Registry,
-    text_input: TextInputRegistry,
-    text_keys: Arc<dyn TextInputKeymap>,
+    input: InputResolverChain,
 }
 
 impl EventManager {
@@ -28,6 +26,10 @@ impl EventManager {
         keymap: Registry,
         text_input: TextInputRegistry,
     ) -> color_eyre::Result<Self> {
+        Self::from_resolver(config, default_input_resolvers(keymap, text_input))
+    }
+
+    pub fn from_resolver(config: &Config, input: InputResolverChain) -> color_eyre::Result<Self> {
         let leader = config
             .leader
             .parse::<KeyChord>()
@@ -35,14 +37,12 @@ impl EventManager {
         Ok(Self {
             poll_timeout: Duration::from_millis(config.event_poll_timeout),
             leader,
-            keymap,
-            text_input,
-            text_keys: Arc::new(TerminalTextInputKeymap),
+            input,
         })
     }
 
-    pub fn with_text_input_keymap(mut self, text_keys: Arc<dyn TextInputKeymap>) -> Self {
-        self.text_keys = text_keys;
+    pub fn with_input_resolver(mut self, input: InputResolverChain) -> Self {
+        self.input = input;
         self
     }
 
@@ -80,21 +80,7 @@ impl EventManager {
             Some(LeaderInput::Pending) => return Some(Message::CommandMenuKey(chord)),
             None => {}
         }
-        self.keymap
-            .get_binding(&context)
-            .and_then(|bindings| bindings.resolve_chord(chord))
-            .map(|action| match action {
-                InputAction::Command(id) => Message::InvokeCommand(id),
-                InputAction::General(action) => Message::GeneralAction(action),
-            })
-            .or_else(|| self.unbound_key_message(&context, chord))
-    }
-
-    fn unbound_key_message(&self, context: &Context, key: KeyChord) -> Option<Message> {
-        let event = self.text_keys.resolve(key)?;
-        self.text_input
-            .accepts(context, event)
-            .then_some(Message::TextInput(event))
+        self.input.resolve(context, chord)
     }
 }
 
@@ -105,7 +91,7 @@ mod tests {
     use super::*;
     use crate::{
         component::text_input::{TextCursorMovement, TextInputEvent},
-        data_object::{AppPage, FocusTarget, GeneralAction},
+        data_object::{AppPage, Context, FocusTarget, GeneralAction},
         manager::command_registry::{CommandId, CommandRegistry},
     };
 

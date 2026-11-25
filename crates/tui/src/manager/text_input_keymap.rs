@@ -1,8 +1,13 @@
+use std::sync::Arc;
+
 use crossterm::event::{KeyCode, KeyModifiers};
 
 use crate::{
     component::text_input::{TextCursorMovement, TextInputEvent},
-    manager::context::KeyChord,
+    data_object::{Context, Message},
+    manager::{
+        context::KeyChord, input_resolver::InputResolver, text_input_registry::TextInputRegistry,
+    },
 };
 
 /// Physical-key to semantic-text-event translation, independent of feature routing.
@@ -36,6 +41,36 @@ impl TextInputKeymap for TerminalTextInputKeymap {
             }
             _ => None,
         }
+    }
+}
+
+/// Combines physical text-key translation with context capability checks.
+#[derive(Debug)]
+pub struct TextInputResolver {
+    registry: TextInputRegistry,
+    keymap: Arc<dyn TextInputKeymap>,
+}
+
+impl TextInputResolver {
+    pub fn new(registry: TextInputRegistry) -> Self {
+        Self {
+            registry,
+            keymap: Arc::new(TerminalTextInputKeymap),
+        }
+    }
+
+    pub fn with_keymap(mut self, keymap: Arc<dyn TextInputKeymap>) -> Self {
+        self.keymap = keymap;
+        self
+    }
+}
+
+impl InputResolver for TextInputResolver {
+    fn resolve(&self, context: Context, key: KeyChord) -> Option<Message> {
+        let event = self.keymap.resolve(key)?;
+        self.registry
+            .accepts(&context, event)
+            .then_some(Message::TextInput(event))
     }
 }
 

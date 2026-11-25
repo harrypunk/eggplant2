@@ -78,7 +78,7 @@ Register unbound text input once in `TextInputRegistry::builtin` and consume `Me
 - `TextInputHandler::Insert` is for character-only prefix parsers. It accepts only `Insert(char)`.
 - `TextInputHandler::Edit` opts into the full semantic editor: insertion, Backspace, cursor movement, line-start/end movement, and delete-to-line-start.
 - `TextInputKeymap` translates physical chords independently of features. `TerminalTextInputKeymap` supplies arrows, Backspace, printable input, Ctrl-A (`LineStart`), Ctrl-E (`LineEnd`), and Ctrl-U (`DeleteToLineStart`).
-- `EventManager` composes the keymap with context acceptance. Direct feature bindings take precedence, so Normal-mode Ctrl-U can remain page-scroll.
+- `TextInputResolver` composes the keymap with context acceptance inside the ordered input-resolver chain. Direct bindings resolve first, so Normal-mode Ctrl-U can remain page-scroll.
 - Features react to `content_changed()` and never implement cursor arithmetic or terminal key matching themselves.
 
 For an editable popup, store the shared `TextInput` component. Rendering defaults to one line with horizontal scrolling. A wrap-aware dialog should opt into `TextFlow::Wrapped`, use `TextInput::measure` for preferred height, and use the shared `AutoHeight` policy for size clamps and reserved content. Parents own rectangle placement; features do not duplicate wrap, cursor geometry, or auto-height formulas. The main editor's independent wrap toggle is `Space u w`; do not reuse it to change popup input policies.
