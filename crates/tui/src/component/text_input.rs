@@ -11,6 +11,8 @@ use crate::theme::UiTheme;
 pub enum TextCursorMovement {
     Left,
     Right,
+    LineStart,
+    LineEnd,
 }
 
 /// Semantic text-editing operations, independent of physical key bindings.
@@ -18,6 +20,7 @@ pub enum TextCursorMovement {
 pub enum TextInputEvent {
     Insert(char),
     DeleteBackward,
+    DeleteToLineStart,
     Cursor(TextCursorMovement),
 }
 
@@ -62,6 +65,8 @@ impl TextCursor {
         let offset = match movement {
             TextCursorMovement::Left => offset.saturating_sub(1),
             TextCursorMovement::Right => (offset + 1).min(value.chars().count()),
+            TextCursorMovement::LineStart => 0,
+            TextCursorMovement::LineEnd => value.chars().count(),
         };
         Self { offset }
     }
@@ -80,6 +85,15 @@ impl TextCursor {
         let cursor = Self { offset: offset - 1 };
         value.remove(cursor.byte_index(value));
         Some(cursor)
+    }
+
+    fn delete_to_line_start(self, value: &mut String) -> Option<Self> {
+        let byte = self.byte_index(value);
+        if byte == 0 {
+            return None;
+        }
+        value.drain(..byte);
+        Some(Self { offset: 0 })
     }
 
     fn byte_index(self, value: &str) -> usize {
@@ -142,6 +156,16 @@ impl TextInput {
         }
     }
 
+    pub fn delete_to_line_start(&mut self) -> bool {
+        match self.cursor.delete_to_line_start(&mut self.value) {
+            Some(cursor) => {
+                self.cursor = cursor;
+                true
+            }
+            None => false,
+        }
+    }
+
     pub fn handle_event(&mut self, event: TextInputEvent) -> TextInputChange {
         match event {
             TextInputEvent::Insert(character) => {
@@ -153,6 +177,10 @@ impl TextInput {
                 TextInputChange::cursor_moved()
             }
             TextInputEvent::DeleteBackward => match self.backspace() {
+                true => TextInputChange::text_changed(),
+                false => TextInputChange::cursor_moved(),
+            },
+            TextInputEvent::DeleteToLineStart => match self.delete_to_line_start() {
                 true => TextInputChange::text_changed(),
                 false => TextInputChange::cursor_moved(),
             },
@@ -347,6 +375,30 @@ mod tests {
         input.handle_event(TextInputEvent::Cursor(TextCursorMovement::Right));
         input.handle_event(TextInputEvent::Cursor(TextCursorMovement::Right));
         assert_eq!(input.cursor, TextCursor::end(input.value()));
+    }
+
+    #[test]
+    fn line_navigation_and_delete_to_start_respect_unicode_boundaries() {
+        let mut input = TextInput::new("a界🙂b");
+        input.handle_event(TextInputEvent::Cursor(TextCursorMovement::Left));
+        input.handle_event(TextInputEvent::Cursor(TextCursorMovement::Left));
+        assert!(
+            input
+                .handle_event(TextInputEvent::DeleteToLineStart)
+                .content_changed()
+        );
+        assert_eq!(input.value(), "🙂b");
+        assert_eq!(input.cursor.byte_index(input.value()), 0);
+        assert!(
+            !input
+                .handle_event(TextInputEvent::DeleteToLineStart)
+                .content_changed()
+        );
+
+        input.handle_event(TextInputEvent::Cursor(TextCursorMovement::LineEnd));
+        assert_eq!(input.cursor.byte_index(input.value()), input.value().len());
+        input.handle_event(TextInputEvent::Cursor(TextCursorMovement::LineStart));
+        assert_eq!(input.cursor.byte_index(input.value()), 0);
     }
 
     #[test]
