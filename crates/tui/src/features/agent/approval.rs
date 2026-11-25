@@ -63,12 +63,7 @@ pub(crate) fn transition_to_chat(model: &mut Model) {
 }
 
 fn transition_modal(model: &mut Model, from: Context, to: Context) {
-    if !model.agent.dialog_open() || !model.modal.is_active(from) {
-        return;
-    }
-    model.modal.close(from);
-    model.context_stack.pop_if(|context| context == &from);
-    if model.modal.open(to) {
-        model.context_stack.push(to);
+    if model.agent.dialog_open() {
+        model.modal.replace(from, to);
     }
 }

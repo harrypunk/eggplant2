@@ -40,16 +40,12 @@ pub(crate) fn toggle_help(model: &mut Model) -> Option<Effect> {
         return None;
     }
     model.agent.toggle_help();
-    model.context_stack.push(Context::AgentChatHelp);
     None
 }
 
 pub(crate) fn close_help(model: &mut Model) -> Option<Effect> {
     model.agent.close_help();
     model.modal.close(Context::AgentChatHelp);
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::AgentChatHelp);
     None
 }
 

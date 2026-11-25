@@ -152,7 +152,7 @@ mod tests {
             Some(vec![crate::agent::PromptCommand::ProviderLogin])
         );
 
-        model.context_stack.push(Context::AgentChatDialog);
+        assert!(model.modal.open(Context::AgentChatDialog));
         assert_eq!(
             prompt_commands(&model),
             Some(vec![crate::agent::PromptCommand::ProviderLogin])

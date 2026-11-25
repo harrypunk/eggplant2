@@ -359,7 +359,7 @@ The configured leader (`Space` by default) opens a small data-driven sequence st
 
 `input_context` resolves input in three layers. The active `ModalController` session wins, followed by the top of `context_stack`; otherwise, a shell context is derived from source-of-truth page, focus, buffer, editor-mode, and tool state.
 
-A modal session owns both presentation and input identity through `ModalController::active_context`. FilePicker is the first workflow migrated to this single owner: opening it acquires the modal session without pushing `Context::FilePicker`, and closing releases that session before restoring focus. Other modal workflows temporarily retain compatibility stack entries until their own migrations.
+A modal session owns both presentation and input identity through `ModalController::active_context`. FilePicker and the Agent dialog/approval/help surfaces use this single owner without duplicating their contexts in the stack. Agent dialog ↔ approval uses `ModalController::replace` to change phases without releasing input ownership. Other modal workflows temporarily retain compatibility stack entries until their own migrations.
 
 The stack provides transient LIFO routing underneath the active modal, including pending operators and compatibility entries for unmigrated modal workflows. Push a stack-owned workflow's context on entry and pop that same context on exit. Features should query `input_context` when they need to know which surface currently owns input rather than inspecting raw stack entries. `ContextStack` owns the LIFO mechanics and `pop_if` removes only a matching top frame; it never removes an older workflow or synchronizes shell state.
 

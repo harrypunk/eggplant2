@@ -313,7 +313,8 @@ mod tests {
         toggle_help(&mut model);
         assert!(model.agent.help_visible());
         assert!(model.modal.is_active(Context::AgentChatHelp));
-        assert_eq!(model.context_stack.last(), Some(&Context::AgentChatHelp));
+        assert_eq!(input_context(&model), Some(Context::AgentChatHelp));
+        assert!(model.context_stack.is_empty());
         assert_eq!(
             model.current_focus,
             crate::data_object::FocusTarget::ToolsPanel
@@ -332,7 +333,7 @@ mod tests {
         close_panel_input(&mut model);
         assert!(!model.agent.help_visible());
         assert!(!model.modal.is_active(Context::AgentChatHelp));
-        assert_ne!(model.context_stack.last(), Some(&Context::AgentChatHelp));
+        assert!(model.context_stack.is_empty());
     }
 
     #[test]
@@ -442,6 +443,9 @@ mod tests {
         let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
         open_file(&mut model, &path);
         open(&mut model);
+        assert!(model.modal.is_active(Context::AgentChatDialog));
+        assert_eq!(input_context(&model), Some(Context::AgentChatDialog));
+        assert!(model.context_stack.is_empty());
         model.agent.prompt.set_value("/provider");
         handle_command(&mut model, CommandId("agent_command_quick_fill"));
 
@@ -453,6 +457,7 @@ mod tests {
         crate::provider_login::handle_command(&mut model, CommandId("provider_login_close"));
         assert!(model.agent.dialog_open());
         assert_eq!(input_context(&model), Some(Context::AgentChatDialog));
+        assert!(model.context_stack.is_empty());
     }
 
     #[test]

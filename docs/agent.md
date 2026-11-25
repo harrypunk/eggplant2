@@ -93,7 +93,7 @@ The panel and popup are two presentations of one Agent workflow. Both receive th
 
 The inline dialog requires an open project, not an active buffer. With an active workspace file, its prompt starts as editable `workspace/relative/path:line`; without an eligible buffer, it starts empty. External buffers do not supply prefill and do not prevent chatting. The project panel likewise starts with a freeform prompt and does not require an active buffer; `@path` references remain ordinary prompt text and do not implicitly attach file contents. The scripted provider used in this slice streams `Simulated response to: <prompt>`; `fail` simulates a provider failure.
 
-`AgentChatDialog` is the inline modal context. `AgentChat` and `AgentChatInsert` are derived from panel focus and `AgentInputMode`; they are not stored in the context stack. `AgentChatHelp` owns the stored modal help context. `ModalController` is authoritative for Agent, help, and provider-login overlay visibility as well as modal input ownership. `AgentDialogState` records only workflow lifecycle (`Closed`, `Open`, or `Suspended`) and is not a second visibility source.
+`AgentChatDialog`, `AgentApproval`, and `AgentChatHelp` are modal-session contexts, not context-stack entries. `AgentChat` and `AgentChatInsert` are derived from panel focus and `AgentInputMode`. `ModalController` is authoritative for Agent, help, and provider-login overlay visibility as well as modal input ownership. Dialog ↔ approval transitions replace the active modal phase atomically. `AgentDialogState` records only workflow lifecycle (`Closed`, `Open`, or `Suspended`) and is not a second visibility source.
 
 ### Provider-login UX shell
 
@@ -148,7 +148,7 @@ A leading `/` in the inline dialog or panel Insert input opens a live-filtered c
 
 #### Ownership and deferred work
 
-`provider_login` owns dialog state, commands, and modal registration. `component/agent/provider_login.rs` is a pure menu, form, and placeholder view. Opening provider login from the inline Agent dialog suspends and later restores `AgentChatDialog`; panel Insert state resumes automatically.
+`provider_login` owns dialog state, commands, and modal registration. `component/agent/provider_login.rs` is a pure menu, form, and placeholder view. Opening provider login from the inline Agent dialog suspends and later restores the `AgentChatDialog` modal session without duplicating it in the context stack; panel Insert state resumes automatically.
 
 Account/OAuth authentication, token refresh, and non-OpenAI provider/model selection remain deferred. OpenAI-compatible API-key login, catalog selection, activation, and restart restoration use the shared credential-store and factory interfaces.
 

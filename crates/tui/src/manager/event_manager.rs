@@ -529,7 +529,7 @@ mod tests {
             Some(Message::InvokeCommand(CommandId("agent_open")))
         ));
 
-        model.context_stack.push(Context::AgentChatDialog);
+        assert!(model.modal.open(Context::AgentChatDialog));
         for (key, modifiers, action) in [
             (KeyCode::Enter, KeyModifiers::NONE, GeneralAction::Activate),
             (KeyCode::Esc, KeyModifiers::NONE, GeneralAction::Back),
@@ -581,7 +581,11 @@ mod tests {
             Some(Message::TextInput(TextInputEvent::Insert('x')))
         ));
 
-        model.context_stack.push(Context::AgentApproval);
+        assert!(
+            model
+                .modal
+                .replace(Context::AgentChatDialog, Context::AgentApproval)
+        );
         for (key, modifiers, command) in [
             (KeyCode::Char('y'), KeyModifiers::NONE, "agent_approve"),
             (KeyCode::Char('n'), KeyModifiers::NONE, "agent_reject"),
@@ -762,7 +766,7 @@ mod tests {
         }
 
         model.agent.enter_normal_mode();
-        model.context_stack.push(Context::AgentChatHelp);
+        assert!(model.modal.open(Context::AgentChatHelp));
         for (key, command) in [
             (KeyCode::Char('?'), "agent_help"),
             (KeyCode::Esc, "agent_panel_normal"),

@@ -31,7 +31,6 @@ mod tests {
     #[test]
     fn selects_the_workflow_not_its_presentation_details() {
         let mut model = Model::default();
-        model.context_stack.push(Context::AgentChatDialog);
         model.agent.open_dialog(
             Some(crate::agent::EditorContext {
                 buffer: editor::BufferId::from_raw(1),
@@ -41,9 +40,10 @@ mod tests {
             }),
             "main.rs:1".to_string(),
         );
+        assert!(model.modal.open(Context::AgentChatDialog));
         assert_eq!(active(&model), Some(AgentSurface::Dialog));
 
-        model.context_stack.pop();
+        model.modal.close(Context::AgentChatDialog);
         model.current_focus = FocusTarget::ToolsPanel;
         model.tools.active_tool = Some(ToolKind::Agent);
         model.tools.visibility = Visibility::Displayed;

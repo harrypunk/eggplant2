@@ -476,7 +476,6 @@ mod tests {
             "main.rs:1".to_string(),
         );
         assert!(model.modal.open(Context::AgentChatDialog));
-        model.context_stack.push(Context::AgentChatDialog);
 
         open(&mut model);
         assert!(model.provider_login.is_open());
@@ -497,7 +496,8 @@ mod tests {
             crate::agent::AgentDialogState::Open
         );
         assert!(model.modal.is_active(Context::AgentChatDialog));
-        assert_eq!(model.context_stack.last(), Some(&Context::AgentChatDialog));
+        assert_eq!(input_context(&model), Some(Context::AgentChatDialog));
+        assert!(model.context_stack.is_empty());
     }
 
     #[test]

@@ -366,6 +366,17 @@ pub mod data_object {
             }
         }
 
+        /// Replace one modal phase without releasing input ownership between transitions.
+        pub fn replace(&mut self, from: Context, to: Context) -> bool {
+            match self.is_active(from) {
+                true => {
+                    self.active = Some(ModalSession { context: to });
+                    true
+                }
+                false => false,
+            }
+        }
+
         pub fn active_context(&self) -> Option<Context> {
             self.active.map(|active| active.context)
         }
@@ -390,6 +401,18 @@ pub mod data_object {
             modal.close(Context::FilePicker);
             assert_eq!(modal.active_context(), None);
             assert!(modal.open(Context::ThemePicker));
+        }
+
+        #[test]
+        fn modal_phase_replacement_preserves_ownership() {
+            let mut modal = ModalController::default();
+            assert!(!modal.replace(Context::AgentChatDialog, Context::AgentApproval));
+
+            assert!(modal.open(Context::AgentChatDialog));
+            assert!(modal.replace(Context::AgentChatDialog, Context::AgentApproval));
+            assert_eq!(modal.active_context(), Some(Context::AgentApproval));
+            assert!(!modal.replace(Context::AgentChatDialog, Context::AgentChatHelp));
+            assert_eq!(modal.active_context(), Some(Context::AgentApproval));
         }
     }
 
