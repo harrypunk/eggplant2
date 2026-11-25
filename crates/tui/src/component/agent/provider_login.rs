@@ -33,9 +33,11 @@ impl ProviderLogin {
             ProviderLoginPage::OpenAiInput(_) => openai_height(state, 62),
             ProviderLoginPage::OpenAiModelSelection(_) => model_height(state),
             ProviderLoginPage::OpenAiModelsLoading(_) | ProviderLoginPage::OpenAiActivating(_) => 8,
-            _ => u16::try_from(state.options().len())
-                .unwrap_or(u16::MAX)
-                .saturating_add(6),
+            ProviderLoginPage::AuthenticationMethod | ProviderLoginPage::Providers(_) => {
+                u16::try_from(state.options().len())
+                    .unwrap_or(u16::MAX)
+                    .saturating_add(6)
+            }
         };
         Size::new(64, height)
     }
@@ -114,48 +116,99 @@ impl Widget for ProviderLoginContent<'_> {
                     .style(self.styles.popup_surface())
                     .render(area, buffer)
             }
-            _ => Paragraph::new(menu_lines(self.state, self.styles))
-                .style(self.styles.popup_surface())
-                .render(area, buffer),
+            ProviderLoginPage::AuthenticationMethod => render_menu(
+                self.state,
+                MenuChrome::AUTHENTICATION,
+                self.styles,
+                area,
+                buffer,
+            ),
+            ProviderLoginPage::Providers(method) => render_menu(
+                self.state,
+                MenuChrome::providers(method),
+                self.styles,
+                area,
+                buffer,
+            ),
         }
     }
 }
 
-fn menu_lines(state: &ProviderLoginState, styles: &UiTheme) -> Vec<Line<'static>> {
-    let (heading, hint) = match state.page() {
-        ProviderLoginPage::AuthenticationMethod => {
-            ("Select authentication method:", "Enter select · Esc close")
-        }
-        ProviderLoginPage::Providers(method) => (method_label(method), "Enter select · Esc back"),
-        ProviderLoginPage::Placeholder(_)
-        | ProviderLoginPage::ApiKeyInput(_)
-        | ProviderLoginPage::OpenAiInput(_)
-        | ProviderLoginPage::OpenAiModelsLoading(_)
-        | ProviderLoginPage::OpenAiModelSelection(_)
-        | ProviderLoginPage::OpenAiActivating(_) => {
-            unreachable!("provider pages use separate content")
-        }
+#[derive(Clone, Copy)]
+struct MenuChrome {
+    heading: &'static str,
+    hint: &'static str,
+}
+
+impl MenuChrome {
+    const AUTHENTICATION: Self = Self {
+        heading: "Select authentication method:",
+        hint: "Enter select · Esc close",
     };
-    let mut lines = vec![Line::styled(heading, styles.action_hint), Line::raw("")];
-    lines.extend(state.options().iter().enumerate().map(|(index, option)| {
-        let selected = state.selected() == Some(index);
-        let label = match option {
-            ProviderLoginOption::Method(method) => method_label(*method),
-            ProviderLoginOption::Provider(provider) => provider.id(),
-        };
-        let prefix = if selected { "> " } else { "  " };
-        Line::styled(
-            format!("{prefix}{label}"),
-            if selected {
-                styles.selection
-            } else {
-                styles.base
-            },
-        )
-    }));
+
+    fn providers(method: ProviderAuthMethod) -> Self {
+        Self {
+            heading: method_label(method),
+            hint: "Enter select · Esc back",
+        }
+    }
+}
+
+fn render_menu(
+    state: &ProviderLoginState,
+    chrome: MenuChrome,
+    styles: &UiTheme,
+    area: Rect,
+    buffer: &mut Buffer,
+) {
+    let options =
+        state.options().iter().enumerate().map(|(index, option)| {
+            menu_option_line(option, state.selected() == Some(index), styles)
+        });
+    Paragraph::new(menu_lines(chrome, options, styles))
+        .style(styles.popup_surface())
+        .render(area, buffer);
+}
+
+fn menu_option_line(
+    option: &ProviderLoginOption,
+    selected: bool,
+    styles: &UiTheme,
+) -> Line<'static> {
+    selectable_line(option_label(option).to_string(), selected, styles)
+}
+
+fn option_label(option: &ProviderLoginOption) -> &'static str {
+    match option {
+        ProviderLoginOption::Method(method) => method_label(*method),
+        ProviderLoginOption::Provider(provider) => provider.id(),
+    }
+}
+
+fn menu_lines(
+    chrome: MenuChrome,
+    options: impl IntoIterator<Item = Line<'static>>,
+    styles: &UiTheme,
+) -> Vec<Line<'static>> {
+    let mut lines = vec![
+        Line::styled(chrome.heading, styles.action_hint),
+        Line::raw(""),
+    ];
+    lines.extend(options);
     lines.push(Line::raw(""));
-    lines.push(Line::styled(hint, styles.muted));
+    lines.push(Line::styled(chrome.hint, styles.muted));
     lines
+}
+
+fn selectable_line(label: String, selected: bool, styles: &UiTheme) -> Line<'static> {
+    Line::styled(
+        format!("{}{label}", if selected { "> " } else { "  " }),
+        if selected {
+            styles.selection
+        } else {
+            styles.base
+        },
+    )
 }
 
 fn placeholder_lines(provider: ProviderSpec, styles: &UiTheme) -> Vec<Line<'static>> {
@@ -185,15 +238,7 @@ fn model_lines(state: &ProviderLoginState, styles: &UiTheme, height: u16) -> Vec
         .iter()
         .enumerate()
         .map(|(index, model)| {
-            let selected = state.model_selected() == Some(index);
-            Line::styled(
-                format!("{} {model}", if selected { ">" } else { " " }),
-                if selected {
-                    styles.selection
-                } else {
-                    styles.base
-                },
-            )
+            selectable_line(model.clone(), state.model_selected() == Some(index), styles)
         })
         .collect();
     let options = picker::visible_lines(options, state.model_selected(), viewport);
