@@ -1,6 +1,5 @@
 use crate::{
-    composition::input::input_context,
-    data_object::{CommandId, Context, Model},
+    data_object::{CommandId, Model},
     manager::{command_registry::Command, effect::Effect},
 };
 
@@ -39,7 +38,9 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
 }
 
 fn available(model: &Model) -> bool {
-    input_context(model) == Some(Context::Welcome)
+    crate::page::editor::welcome_available(model)
+        && model.modal.active_context().is_none()
+        && model.context_stack.is_empty()
 }
 
 fn selected_command(model: &Model) -> Option<CommandId> {
@@ -50,7 +51,7 @@ fn selected_command(model: &Model) -> Option<CommandId> {
 mod tests {
     use super::*;
     use crate::{
-        data_object::{FocusTarget, Message, Visibility},
+        data_object::{Context, FocusTarget, Message, Visibility},
         manager::message_manager::MessageManager,
         startup::initial_model,
     };
@@ -87,7 +88,10 @@ mod tests {
             Message::InvokeCommand(CommandId("welcome_activate")),
         );
         assert_eq!(model.file_picker.visibility, Visibility::Displayed);
-        assert_eq!(input_context(&model), Some(Context::FilePicker));
+        assert_eq!(
+            crate::test_utils::input_context(&model),
+            Some(Context::FilePicker)
+        );
         assert!(model.modal.is_active(Context::FilePicker));
         assert!(model.context_stack.is_empty());
     }
@@ -104,11 +108,17 @@ mod tests {
     #[test]
     fn availability_is_derived_without_mutating_the_context_stack() {
         let mut model = welcome_model();
-        assert_eq!(input_context(&model), Some(Context::Welcome));
+        assert_eq!(
+            crate::test_utils::input_context(&model),
+            Some(Context::Welcome)
+        );
         assert!(model.context_stack.is_empty());
 
         crate::test_utils::create_buffer(&mut model, "text");
-        assert_eq!(input_context(&model), Some(Context::AppNormal));
+        assert_eq!(
+            crate::test_utils::input_context(&model),
+            Some(Context::AppNormal)
+        );
         assert!(model.context_stack.is_empty());
     }
 }

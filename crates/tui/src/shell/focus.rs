@@ -302,14 +302,14 @@ mod tests {
         handle_command(&mut model, CommandId("focus_right"));
         assert_eq!(model.current_focus, FocusTarget::ToolsPanel);
         assert_eq!(
-            crate::composition::input::input_context(&model),
+            crate::test_utils::input_context(&model),
             Some(Context::AgentChat)
         );
 
         handle_command(&mut model, CommandId("focus_left"));
         assert_eq!(model.current_focus, FocusTarget::Editor);
         assert_ne!(
-            crate::composition::input::input_context(&model),
+            crate::test_utils::input_context(&model),
             Some(Context::AgentChat)
         );
     }
@@ -325,7 +325,7 @@ mod tests {
         handle_command(&mut model, CommandId("focus_right"));
         assert_eq!(model.current_focus, FocusTarget::ToolsPanel);
         assert_eq!(
-            crate::composition::input::input_context(&model),
+            crate::test_utils::input_context(&model),
             Some(Context::AgentChat)
         );
         handle_command(&mut model, CommandId("focus_left"));

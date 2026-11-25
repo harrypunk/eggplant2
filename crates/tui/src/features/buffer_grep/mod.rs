@@ -9,7 +9,6 @@ pub use work::BufferGrepRequest;
 use crate::{
     command_menu::CommandMenuItem,
     component::text_input::TextInputEvent,
-    composition::input::input_context,
     data_object::{CommandId, Context, GeneralAction, Model, StatusMessage},
     focus,
     manager::{
@@ -125,10 +124,7 @@ pub fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> 
 
 fn open(model: &mut Model) {
     // Only Normal or Explorer may open grep; another modal keeps its input context.
-    if !matches!(
-        input_context(model),
-        Some(Context::AppNormal | Context::Explorer)
-    ) {
+    if !crate::page::editor::normal_or_explorer_input_available(model) {
         return;
     }
     let Some(source) = model.editor.active_text_snapshot() else {

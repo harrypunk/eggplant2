@@ -9,7 +9,14 @@ use eggplant_agent_storage_seaorm::{
     SeaOrmModelCatalogStore, SeaOrmProviderCredentialStore, SeaOrmSessionStore,
 };
 
-use crate::data_object::Model;
+use crate::{
+    data_object::{Context, Model},
+    manager::input_routing::InputRouting,
+};
+
+pub fn input_context(model: &Model) -> Option<Context> {
+    crate::composition::input::ApplicationInputRouting.context(model)
+}
 
 pub fn create_buffer(model: &mut Model, text: &str) -> BufferId {
     let document = DocumentFactory::new().create(text);

@@ -1,6 +1,5 @@
 use crate::{
     component::text_input::TextInputEvent,
-    composition::input::input_context,
     data_object::{CommandId, Context, GeneralAction, Model},
     manager::{
         command_registry::Command, effect::Effect, general_action::GeneralActionSubscription,
@@ -94,11 +93,14 @@ pub fn commands() -> Vec<Command> {
 }
 
 pub(crate) fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
-    let context = input_context(model)?;
-    if ![Context::AgentChatDialog, Context::AgentChatInsert].contains(&context) {
-        return None;
+    let available = match super::surface::active(model) {
+        Some(super::surface::AgentSurface::Dialog) => true,
+        Some(super::surface::AgentSurface::Panel) => super::panel::insert_input_available(model),
+        None => false,
+    };
+    if available {
+        model.agent.handle_input_event(event);
     }
-    model.agent.handle_input_event(event);
     None
 }
 
@@ -124,10 +126,10 @@ pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option
             None
         }
         GeneralAction::Activate => super::work::submit(model),
-        GeneralAction::Back => match input_context(model) {
-            Some(Context::AgentChatInsert) => super::panel::enter_normal_mode(model),
-            Some(Context::AgentChatDialog) => super::dialog::close(model),
-            _ => None,
+        GeneralAction::Back => match super::surface::active(model) {
+            Some(super::surface::AgentSurface::Panel) => super::panel::enter_normal_mode(model),
+            Some(super::surface::AgentSurface::Dialog) => super::dialog::close(model),
+            None => None,
         },
     }
 }

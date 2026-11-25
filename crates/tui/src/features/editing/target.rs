@@ -2,16 +2,14 @@ use editor::{EditMode, EditorSession};
 
 use crate::{
     buffer,
-    data_object::{AppPage, Context, Model},
+    data_object::{AppPage, Context, FocusTarget, Model},
     manager::effect::Effect,
 };
 
 /// Page-independent capabilities required by reusable editing commands.
 pub(crate) trait EditingTarget {
     fn session(&mut self) -> &mut EditorSession;
-    fn normal_context(&self) -> Context {
-        Context::AppNormal
-    }
+    fn normal_input_available(&self) -> bool;
 
     fn is_editing_enabled(&self) -> bool {
         true
@@ -67,6 +65,22 @@ pub(crate) fn mode_context(mode: EditMode, insert: Context) -> Option<Context> {
     }
 }
 
+pub(crate) fn main_normal_input_available(model: &Model) -> bool {
+    model.active_page == AppPage::Editor
+        && model.current_focus == FocusTarget::Editor
+        && model.editor.mode() == EditMode::Normal
+        && model.editor.active_buffer().is_some()
+        && model.modal.active_context().is_none()
+        && model.context_stack.is_empty()
+}
+
+fn commit_normal_input_available(model: &Model) -> bool {
+    model.active_page == AppPage::VcsCommit
+        && model.vcs.commit.editor.mode() == EditMode::Normal
+        && model.modal.active_context().is_none()
+        && model.context_stack.is_empty()
+}
+
 pub(crate) fn with_active<R>(
     model: &mut Model,
     operation: impl FnOnce(&mut dyn EditingTarget) -> R,
@@ -93,6 +107,10 @@ struct MainEditingTarget<'a> {
 impl EditingTarget for MainEditingTarget<'_> {
     fn session(&mut self) -> &mut EditorSession {
         &mut self.model.editor
+    }
+
+    fn normal_input_available(&self) -> bool {
+        main_normal_input_available(self.model)
     }
 
     fn is_read_only(&self) -> bool {
@@ -128,8 +146,8 @@ impl EditingTarget for CommitEditingTarget<'_> {
         &mut self.model.vcs.commit.editor
     }
 
-    fn normal_context(&self) -> Context {
-        Context::VcsCommit
+    fn normal_input_available(&self) -> bool {
+        commit_normal_input_available(self.model)
     }
 
     fn is_editing_enabled(&self) -> bool {

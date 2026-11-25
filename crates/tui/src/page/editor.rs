@@ -6,7 +6,7 @@ use ratatui::{
 
 use crate::{
     component::editor::{Editor as EditorComponent, EditorBuffer},
-    data_object::{Context, FocusState, FocusTarget, Model, Visibility},
+    data_object::{AppPage, Context, FocusState, FocusTarget, Model, Visibility},
     ui::{PanelSlot, StatusSlot, UiRegistry},
 };
 
@@ -34,11 +34,30 @@ pub fn input_context(model: &Model) -> Option<Context> {
     }
 }
 
+pub fn welcome_available(model: &Model) -> bool {
+    model.active_page == AppPage::Editor
+        && model.current_focus == FocusTarget::Editor
+        && model.editor.mode() == editor::EditMode::Normal
+        && model.editor.active_buffer().is_none()
+}
+
+pub fn normal_or_explorer_input_available(model: &Model) -> bool {
+    match model.current_focus {
+        FocusTarget::FileExplorer => {
+            model.active_page == AppPage::Editor
+                && model.modal.active_context().is_none()
+                && model.context_stack.is_empty()
+        }
+        FocusTarget::Editor => crate::editing::target::main_normal_input_available(model),
+        _ => false,
+    }
+}
+
 fn editor_input_context(model: &Model) -> Option<Context> {
     crate::editing::target::mode_context(model.editor.mode(), Context::EditorInput).or_else(|| {
-        match model.editor.active_buffer() {
-            Some(_) => Some(Context::AppNormal),
-            None => Some(Context::Welcome),
+        match welcome_available(model) {
+            true => Some(Context::Welcome),
+            false => Some(Context::AppNormal),
         }
     })
 }

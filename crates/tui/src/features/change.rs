@@ -1,5 +1,4 @@
 use crate::{
-    composition::input::input_context,
     data_object::{CommandId, Context, Model, PendingInput, StatusMessage},
     editing::{self, EditingTarget, target},
     manager::{command_registry::Command, effect::Effect},
@@ -141,12 +140,12 @@ pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
 
 fn start(model: &mut Model, pending: PendingChange) {
     // Normal d/c are prefixes; Visual d/c use direct selection commands instead.
-    let Some((normal_context, can_mutate)) = target::with_active(model, |target| {
-        (target.normal_context(), target.can_mutate())
+    let Some((normal_input_available, can_mutate)) = target::with_active(model, |target| {
+        (target.normal_input_available(), target.can_mutate())
     }) else {
         return;
     };
-    if !can_mutate || input_context(model) != Some(normal_context) {
+    if !can_mutate || !normal_input_available {
         return;
     }
     let pending = model.change.begin(pending);
@@ -449,7 +448,10 @@ mod tests {
         manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('c')));
         assert_eq!(commit_text(&model), "");
         assert_eq!(model.vcs.commit.editor.mode(), editor::EditMode::Insert);
-        assert_eq!(input_context(&model), Some(Context::VcsCommitInput));
+        assert_eq!(
+            crate::test_utils::input_context(&model),
+            Some(Context::VcsCommitInput)
+        );
         assert!(model.context_stack.is_empty());
 
         for character in "new line".chars() {

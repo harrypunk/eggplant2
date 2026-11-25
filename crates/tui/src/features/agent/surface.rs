@@ -1,8 +1,4 @@
-use crate::{
-    composition::input::input_context,
-    data_object::{Context, Model},
-    tools::ToolKind,
-};
+use crate::data_object::{Context, Model};
 
 /// Presentation-independent identity of the active Agent workflow.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -12,21 +8,23 @@ pub enum AgentSurface {
 }
 
 pub fn active(model: &Model) -> Option<AgentSurface> {
-    match input_context(model)? {
-        Context::AgentChatDialog if model.agent.dialog_open() => Some(AgentSurface::Dialog),
-        Context::AgentChat | Context::AgentChatInsert
-            if model.tools.active_tool == Some(ToolKind::Agent) =>
-        {
-            Some(AgentSurface::Panel)
-        }
-        _ => None,
+    match (
+        model.modal.is_active(Context::AgentChatDialog) && model.agent.dialog_open(),
+        super::panel::input_available(model),
+    ) {
+        (true, _) => Some(AgentSurface::Dialog),
+        (false, true) => Some(AgentSurface::Panel),
+        (false, false) => None,
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data_object::{FocusTarget, Visibility};
+    use crate::{
+        data_object::{FocusTarget, Visibility},
+        tools::ToolKind,
+    };
 
     #[test]
     fn selects_the_workflow_not_its_presentation_details() {

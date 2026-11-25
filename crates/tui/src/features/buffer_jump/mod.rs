@@ -6,7 +6,6 @@ pub use state::BufferJumpState;
 
 use crate::{
     command_menu::CommandMenuItem,
-    composition::input::input_context,
     data_object::{CommandId, Context, Model, StatusMessage},
     focus,
     manager::{command_registry::Command, effect::Effect},
@@ -105,10 +104,7 @@ fn refresh_matches(model: &mut Model) {
 }
 
 fn start(model: &mut Model) {
-    if !matches!(
-        input_context(model),
-        Some(Context::AppNormal | Context::Explorer)
-    ) {
+    if !crate::page::editor::normal_or_explorer_input_available(model) {
         return;
     }
     let Some(source) = model.editor.active_revision() else {

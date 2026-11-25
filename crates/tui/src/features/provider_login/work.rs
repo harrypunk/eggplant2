@@ -2,7 +2,6 @@ use eggplant_agent_storage::{ProviderAuthType, ProviderCredential, StorageError}
 
 use crate::{
     component::text_input::TextInputEvent,
-    composition::input::input_context,
     data_object::{CommandId, Context, GeneralAction, Model, StatusMessage},
     manager::{
         command_registry::Command, effect::Effect, general_action::GeneralActionSubscription,
@@ -102,7 +101,7 @@ pub fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> 
 }
 
 fn available(model: &Model) -> bool {
-    input_context(model) == Some(Context::ProviderLogin) && model.provider_login.is_open()
+    model.modal.is_active(Context::ProviderLogin) && model.provider_login.is_open()
 }
 
 fn activate(model: &mut Model) -> Option<Effect> {
@@ -496,7 +495,10 @@ mod tests {
             crate::agent::AgentDialogState::Open
         );
         assert!(model.modal.is_active(Context::AgentChatDialog));
-        assert_eq!(input_context(&model), Some(Context::AgentChatDialog));
+        assert_eq!(
+            crate::test_utils::input_context(&model),
+            Some(Context::AgentChatDialog)
+        );
         assert!(model.context_stack.is_empty());
     }
 

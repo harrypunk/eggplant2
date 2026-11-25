@@ -9,7 +9,10 @@ use crate::{
     buffer,
     data_object::{Context, Model, OpenLocation, StatusMessage, Visibility},
     file_picker, focus,
-    manager::effect::{Completion, Effect},
+    manager::{
+        effect::{Completion, Effect},
+        input_routing::InputRouting,
+    },
 };
 
 pub type DocumentCloseHandler = fn(&mut Model, PathBuf) -> Option<Effect>;
@@ -151,7 +154,7 @@ pub(crate) fn open_file_at_with_origin(
             position,
         },
         origin,
-        crate::composition::input::input_context(model),
+        crate::composition::input::ApplicationInputRouting.context(model),
     );
     Some(Effect::OpenDocument(OpenFileRequest {
         id,
@@ -162,7 +165,8 @@ pub(crate) fn open_file_at_with_origin(
 /// Apply the latest document-open result and reconcile the workflow that started it.
 fn complete_open(model: &mut Model, completion: OpenFileCompletion) -> Option<Effect> {
     let opened = finish_open_file(model, completion)?;
-    let reconcile = crate::composition::input::input_context(model) == opened.context
+    let reconcile = crate::composition::input::ApplicationInputRouting.context(model)
+        == opened.context
         && match opened.origin {
             OpenOrigin::FilePicker { session } => {
                 model.file_picker.visibility == Visibility::Displayed

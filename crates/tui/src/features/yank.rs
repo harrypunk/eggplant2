@@ -2,7 +2,6 @@ use editor::{BufferId, PastePosition};
 use helix_view::clipboard::{ClipboardProvider, ClipboardType};
 
 use crate::{
-    composition::input::input_context,
     data_object::{CommandId, Context, Message, Model, PendingInput, StatusMessage},
     editing::{EditingTarget, target},
     manager::{
@@ -287,10 +286,9 @@ fn paste_with(target: &mut dyn EditingTarget, position: PastePosition) -> Option
 
 fn start(model: &mut Model) {
     // Normal y waits for the second y; Visual y is a direct selection command.
-    let Some(normal_context) = target::with_active(model, |target| target.normal_context()) else {
-        return;
-    };
-    if input_context(model) != Some(normal_context) {
+    let normal_input_available =
+        target::with_active(model, |target| target.normal_input_available()).unwrap_or(false);
+    if !normal_input_available {
         return;
     }
     model.yank.begin_prefix();

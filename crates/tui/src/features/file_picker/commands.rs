@@ -99,12 +99,12 @@ fn open(model: &mut Model) -> Option<Effect> {
 mod tests {
     use super::*;
     use crate::{
-        composition::input::input_context,
         data_object::{Message, Visibility},
         explorer::ExpansionState,
         file_picker::PreviewState,
         manager::message_manager::MessageManager,
         startup::initial_model,
+        test_utils::input_context,
     };
 
     fn apply(model: &mut Model, manager: &MessageManager, effect: Effect) {

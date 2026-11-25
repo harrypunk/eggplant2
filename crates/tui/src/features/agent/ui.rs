@@ -7,7 +7,6 @@ use crate::{
     component::agent::{
         AgentDialog, AgentHelp, AgentPanel, AgentPanelProps, AgentPromptProps, AgentViewProps,
     },
-    composition::input::input_context,
     data_object::{Context, FocusState, FocusTarget, Model},
     ui::{OverlayContribution, OverlayKind, OverlayPlacement, UiRegistry},
 };
@@ -67,11 +66,17 @@ fn render_help(model: &Model, frame: &mut Frame, area: Rect) {
 }
 
 fn prompt_commands(model: &Model) -> Option<Vec<super::PromptCommand>> {
-    let context = input_context(model)?;
-    if ![Context::AgentChatDialog, Context::AgentChatInsert].contains(&context) {
-        return None;
+    match super::surface::active(model) {
+        Some(super::surface::AgentSurface::Dialog) => {
+            model.agent.command_state().commands(model.agent.prompt())
+        }
+        Some(super::surface::AgentSurface::Panel)
+            if super::panel::insert_input_available(model) =>
+        {
+            model.agent.command_state().commands(model.agent.prompt())
+        }
+        _ => None,
     }
-    model.agent.command_state().commands(model.agent.prompt())
 }
 
 pub(crate) fn render_panel(model: &Model, frame: &mut Frame, area: Rect) {
@@ -152,7 +157,9 @@ mod tests {
             Some(vec![crate::agent::PromptCommand::ProviderLogin])
         );
 
+        model.agent.open_dialog(None, String::new());
         assert!(model.modal.open(Context::AgentChatDialog));
+        model.agent.prompt.set_value("/p");
         assert_eq!(
             prompt_commands(&model),
             Some(vec![crate::agent::PromptCommand::ProviderLogin])

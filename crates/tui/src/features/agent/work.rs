@@ -181,10 +181,10 @@ mod tests {
             },
         },
         component::text_input::TextInputEvent,
-        composition::input::input_context,
         data_object::{CommandId, Context, Visibility},
         manager::message_manager::MessageManager,
         startup::initial_model,
+        test_utils::input_context,
         test_utils::open_file,
         tools::ToolKind,
     };

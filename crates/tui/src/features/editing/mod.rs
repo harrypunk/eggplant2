@@ -216,9 +216,9 @@ mod tests {
 
     use super::*;
     use crate::{
-        composition::input::input_context,
         data_object::{AppPage, Context, Message},
         manager::message_manager::MessageManager,
+        test_utils::input_context,
         test_utils::{create_buffer, open_file},
     };
 
@@ -238,6 +238,10 @@ mod tests {
     impl EditingTarget for TestTarget {
         fn session(&mut self) -> &mut EditorSession {
             &mut self.session
+        }
+
+        fn normal_input_available(&self) -> bool {
+            true
         }
 
         fn after_edit(&mut self) -> Option<Effect> {

@@ -41,10 +41,10 @@ mod tests {
 
     use super::*;
     use crate::{
-        composition::input::input_context,
         data_object::{Context, FocusTarget},
         file_picker::FileCollectionState,
         startup::StartupSource,
+        test_utils::input_context,
     };
 
     #[test]

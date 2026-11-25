@@ -1,6 +1,5 @@
 use crate::{
     buffer::{self, BufferMovement},
-    composition::input::input_context,
     data_object::{CommandId, Context, Model, PendingInput, StatusMessage},
     manager::{command_registry::Command, effect::Effect},
 };
@@ -74,7 +73,7 @@ pub fn handle_input(model: &mut Model, character: char) -> Option<Effect> {
 
 fn start(model: &mut Model, movement: BufferMovement) {
     // Only Normal mode starts these prefixes; the second key has its own context.
-    if input_context(model) != Some(Context::AppNormal) {
+    if !crate::editing::target::main_normal_input_available(model) {
         return;
     }
     let pending = model.buffer_navigation.begin(movement);

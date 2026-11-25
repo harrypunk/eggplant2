@@ -130,11 +130,11 @@ mod tests {
 
     use super::*;
     use crate::{
-        composition::input::input_context,
         data_object::{
             CommandId, Context, FocusTarget, GeneralAction, RunningState, StatusKind, Visibility,
         },
         startup::initial_model,
+        test_utils::input_context,
         test_utils::{create_buffer, open_file},
     };
 

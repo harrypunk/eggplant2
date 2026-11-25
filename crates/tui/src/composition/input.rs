@@ -24,12 +24,6 @@ pub fn routing() -> Arc<dyn InputRouting> {
     Arc::new(ApplicationInputRouting)
 }
 
-/// Compatibility boundary for feature adapters that still request the active context directly.
-/// New code should receive `InputRouting` or an explicit `RoutedInput` instead.
-pub fn input_context(model: &Model) -> Option<Context> {
-    ApplicationInputRouting.context(model)
-}
-
 fn page_context(model: &Model) -> Option<Context> {
     match model.active_page {
         AppPage::Editor => page::editor::input_context(model),
@@ -46,6 +40,10 @@ mod tests {
         data_object::{FocusTarget, Visibility},
         tools::ToolKind,
     };
+
+    fn input_context(model: &Model) -> Option<Context> {
+        ApplicationInputRouting.context(model)
+    }
 
     #[test]
     fn derives_welcome_only_for_the_focused_empty_editor() {

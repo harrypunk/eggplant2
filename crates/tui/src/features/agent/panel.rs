@@ -1,9 +1,24 @@
 use crate::{
-    composition::input::input_context,
-    data_object::{Context, FocusTarget, Model, Visibility},
+    data_object::{AppPage, Context, FocusTarget, Model, Visibility},
     manager::effect::Effect,
     tools::ToolKind,
 };
+
+pub(super) fn input_available(model: &Model) -> bool {
+    model.active_page == AppPage::Editor
+        && model.current_focus == FocusTarget::ToolsPanel
+        && model.modal.active_context().is_none()
+        && model.context_stack.is_empty()
+        && model.tools.input_context(&model.agent).is_some()
+}
+
+pub(super) fn insert_input_available(model: &Model) -> bool {
+    input_available(model) && model.agent.panel_mode() == super::AgentInputMode::Insert
+}
+
+fn normal_input_available(model: &Model) -> bool {
+    input_available(model) && model.agent.panel_mode() == super::AgentInputMode::Normal
+}
 
 pub(crate) fn focus_panel_input(model: &mut Model) -> Option<Effect> {
     if model.tools.visibility != Visibility::Displayed
@@ -21,7 +36,7 @@ pub(crate) fn focus_panel_input(model: &mut Model) -> Option<Effect> {
 }
 
 pub(crate) fn enter_insert_mode(model: &mut Model) -> Option<Effect> {
-    if input_context(model) == Some(Context::AgentChat) {
+    if normal_input_available(model) {
         model.agent.enter_insert_mode();
     }
     None
@@ -36,8 +51,7 @@ pub(crate) fn toggle_help(model: &mut Model) -> Option<Effect> {
     if model.agent.help_visible() {
         return close_help(model);
     }
-    if input_context(model) != Some(Context::AgentChat) || !model.modal.open(Context::AgentChatHelp)
-    {
+    if !normal_input_available(model) || !model.modal.open(Context::AgentChatHelp) {
         return None;
     }
     model.agent.toggle_help();
