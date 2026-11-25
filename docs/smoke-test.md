@@ -5,8 +5,8 @@ Run the automated checks first:
 ```sh
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
-cargo test -p tui --features agent-sqlite
-cargo clippy -p tui --features agent-sqlite --all-targets -- -D warnings
+cargo test -p tui
+cargo clippy -p tui --all-targets -- -D warnings
 ```
 
 The update/effect suite includes an explorer → open → edit → automatic save → switch → close → dirty quit workflow. The manual checks below cover the real terminal lifecycle, which `TestBackend` cannot verify.
@@ -54,7 +54,7 @@ cargo run -p tui -- "$workdir"
      - Press `Space a p` and navigate with Up/Down or Ctrl-N/Ctrl-P. Confirm account lists `openai`, `qwen.com`, and `kimi.com` as placeholders; API key lists `openai`, `kimi-for-coding`, `qwen-tokenplan-individual-cn`, and `deepseek`.
      - For OpenAI, confirm the default endpoint, long-endpoint wrapping, masked key, and Tab looping between Endpoint and API key.
      - Paste a custom endpoint and key with Ctrl-V. Confirm multiline input is rejected and a slow clipboard result never moves to another field after Tab or editing.
-     - With `agent-sqlite` and an absolute `session_db`, save disposable test keys for two providers. Confirm keys never appear in notifications and both credentials plus the OpenAI endpoint persist. Saving a non-OpenAI provider does not change the active provider/model.
+     - With the default SQLite storage, save disposable test keys for two providers. Confirm keys never appear in notifications and both credentials plus the OpenAI endpoint persist. Saving a non-OpenAI provider does not change the active provider/model.
      - After an OpenAI save, confirm the endpoint's `/models` response appears in a bounded list. Select an available model with Up/Down and Enter, verify activation and persisted selection, then restart and confirm the same model is restored.
      - Confirm catalog failures preserve the endpoint/key form for retry, and activation failures leave the model list available. Empty-key and missing-database errors preserve the draft; Escape steps back through the menus before closing.
      - In Agent panel Insert mode, type `/`, `/p`, and `/PRO` to filter `/provider`; `/unknown` should have no matches. Enter before selection does nothing.
@@ -63,7 +63,7 @@ cargo run -p tui -- "$workdir"
    - **Real provider:** configure `provider = "openai"`, model/base URL, and `OPENAI_API_KEY`. Verify streaming and cancellation without putting the key in TOML, prompts, or logs.
    - **Read/grep:** with a tool-capable model, read a file and search for a symbol. Confirm bounded calls, results, and follow-up history in the Agent panel.
    - **Approved writes:** confirm no edit occurs before approval. `Esc` preserves the request, `n` rejects without mutation, and `y` applies one undoable edit with explicit-ID save/language sync. A revision conflict preserves user text; `Ctrl-F7` cancels without applying or resuming. Success means an applied edit, not an unconditional save claim.
-   - **Persistence:** with `agent-sqlite`, set an absolute per-user `session_db` and confirm migration and completed-run storage. Startup database errors are clear; later lock/write failures are bounded warnings that do not break editing. Default startup uses no database.
+   - **Persistence:** confirm migration and completed-run storage at the default `~/.eggplant/ai/data.sqlite` location; set an absolute `session_db` to override it. Startup database errors are clear; later lock/write failures are bounded warnings that do not break editing.
 23. **Terminal restoration after normal exit:** confirm that the shell prompt returns to the original screen, raw-mode input is disabled, and the cursor/keyboard behave normally.
 
 ## Git status checklist

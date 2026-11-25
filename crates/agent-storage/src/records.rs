@@ -260,7 +260,3 @@ pub struct SearchPage {
     pub hits: Vec<SearchHit>,
     pub next: Option<SearchCursor>,
 }
-
-pub(crate) fn page_limit(limit: usize) -> usize {
-    limit.clamp(1, MAX_PAGE_LIMIT)
-}

@@ -148,9 +148,9 @@ fn save_api_key(
         return None;
     }
     let Some(store) = model.provider_credentials.clone() else {
-        model.provider_login.set_error(
-            "Durable login requires the agent-sqlite feature and an absolute session_db path",
-        );
+        model
+            .provider_login
+            .set_error("Durable login is unavailable until provider storage is configured");
         return None;
     };
     if !model.provider_login.begin_save(provider) {
@@ -273,9 +273,7 @@ fn resume_inline_agent(model: &mut Model, context: Option<Context>) {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
-    use eggplant_agent_storage::{InMemoryStore, ProviderCredentialStore};
+    use eggplant_agent_storage::ProviderCredentialStore;
 
     use super::{super::paste, *};
     use crate::{
@@ -379,7 +377,7 @@ mod tests {
 
     #[test]
     fn saves_multiple_providers_without_selecting_a_runtime_provider() {
-        let store = Arc::new(InMemoryStore::new());
+        let (store, _directory) = crate::test_utils::provider_credential_store();
         let mut model = Model {
             provider_credentials: Some(store.clone()),
             ..Model::default()
@@ -398,6 +396,7 @@ mod tests {
         assert!(model.agent.provider().is_none());
 
         let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
             .build()
             .unwrap();
         let openai = runtime.block_on(store.get("openai")).unwrap().unwrap();
@@ -477,7 +476,7 @@ mod tests {
                 .provider_login
                 .error()
                 .unwrap()
-                .contains("agent-sqlite")
+                .contains("storage is configured")
         );
         assert_eq!(
             model

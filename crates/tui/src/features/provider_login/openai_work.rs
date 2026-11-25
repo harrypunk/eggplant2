@@ -207,7 +207,7 @@ mod tests {
     use std::sync::Mutex;
 
     use eggplant_agent::{AgentEvent, AgentRequest};
-    use eggplant_agent_storage::InMemoryStore;
+    use eggplant_agent_storage_seaorm::SeaOrmProviderCredentialStore;
 
     use super::{super::work, *};
     use crate::{
@@ -261,8 +261,13 @@ mod tests {
 
     fn model_with_factory(
         models: Result<Vec<String>, String>,
-    ) -> (Model, Arc<InMemoryStore>, Arc<Mutex<Vec<String>>>) {
-        let store = Arc::new(InMemoryStore::new());
+    ) -> (
+        Model,
+        Arc<SeaOrmProviderCredentialStore>,
+        tempfile::TempDir,
+        Arc<Mutex<Vec<String>>>,
+    ) {
+        let (store, directory) = crate::test_utils::provider_credential_store();
         let activated = Arc::new(Mutex::new(Vec::new()));
         let factory = FakeFactory {
             models,
@@ -273,7 +278,7 @@ mod tests {
             openai_factory: Some(Arc::new(factory)),
             ..Model::default()
         };
-        (model, store, activated)
+        (model, store, directory, activated)
     }
 
     fn open_form(model: &mut Model) {
@@ -294,7 +299,7 @@ mod tests {
 
     #[test]
     fn login_fetches_selects_persists_and_activates_an_available_model() {
-        let (mut model, store, activated) =
+        let (mut model, store, _directory, activated) =
             model_with_factory(Ok(vec!["gpt-a".to_string(), "gpt-b".to_string()]));
         open_form(&mut model);
         let save = work::handle_command(&mut model, CommandId("provider_login_activate")).unwrap();
@@ -321,6 +326,7 @@ mod tests {
         assert_eq!(model.agent.model(), Some("gpt-b"));
         assert_eq!(activated.lock().unwrap().as_slice(), ["gpt-b"]);
         let credential = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
             .build()
             .unwrap()
             .block_on(store.get("openai"))
@@ -335,7 +341,7 @@ mod tests {
 
     #[test]
     fn catalog_failure_preserves_the_form_and_does_not_activate() {
-        let (mut model, _store, _activated) =
+        let (mut model, _store, _directory, _activated) =
             model_with_factory(Err("catalog unavailable".to_string()));
         open_form(&mut model);
         let save = work::handle_command(&mut model, CommandId("provider_login_activate")).unwrap();

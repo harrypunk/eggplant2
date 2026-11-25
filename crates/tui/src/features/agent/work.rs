@@ -239,8 +239,9 @@ mod tests {
 
         let effect = submit(&mut model).unwrap();
         let manager = MessageManager::default();
-        let storage = perform(&manager, &mut model, effect).unwrap();
-        perform(&manager, &mut model, storage);
+        if let Some(storage) = perform(&manager, &mut model, effect) {
+            perform(&manager, &mut model, storage);
+        }
 
         assert_eq!(
             model.agent.session().run().unwrap().status,
@@ -277,8 +278,9 @@ mod tests {
 
         let effect = submit(&mut model).unwrap();
         let manager = MessageManager::default();
-        let storage = perform(&manager, &mut model, effect).unwrap();
-        perform(&manager, &mut model, storage);
+        if let Some(storage) = perform(&manager, &mut model, effect) {
+            perform(&manager, &mut model, storage);
+        }
         assert_eq!(
             model.agent.session().run().unwrap().status,
             RunStatus::Complete
@@ -352,8 +354,9 @@ mod tests {
         }
         let effect = submit(&mut model).unwrap();
         let manager = MessageManager::default();
-        let storage = perform(&manager, &mut model, effect).unwrap();
-        perform(&manager, &mut model, storage);
+        if let Some(storage) = perform(&manager, &mut model, effect) {
+            perform(&manager, &mut model, storage);
+        }
 
         assert_eq!(
             model.agent.session().run().unwrap().status,
@@ -626,11 +629,11 @@ mod tests {
     }
 
     #[test]
-    fn finalized_fake_run_is_queryable_through_the_in_memory_store() {
+    fn finalized_fake_run_is_queryable_through_the_injected_store() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("main.rs");
         std::fs::write(&path, "fn main() {}\n").unwrap();
-        let store = Arc::new(eggplant_agent_storage::InMemoryStore::new());
+        let (store, _storage_directory) = crate::test_utils::session_store();
         let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
         model.agent.set_session_store(store.clone());
         open_file(&mut model, &path);
@@ -638,10 +641,12 @@ mod tests {
         open(&mut model);
         let effect = submit(&mut model).unwrap();
 
-        let storage = perform(&manager, &mut model, effect).unwrap();
-        perform(&manager, &mut model, storage);
+        if let Some(storage) = perform(&manager, &mut model, effect) {
+            perform(&manager, &mut model, storage);
+        }
 
         tokio::runtime::Builder::new_current_thread()
+            .enable_all()
             .build()
             .unwrap()
             .block_on(async {
@@ -736,8 +741,9 @@ mod tests {
         open(&mut model);
         let effect = submit(&mut model).unwrap();
 
-        let storage = perform(&manager, &mut model, effect).unwrap();
-        perform(&manager, &mut model, storage);
+        if let Some(storage) = perform(&manager, &mut model, effect) {
+            perform(&manager, &mut model, storage);
+        }
 
         assert_eq!(
             model.agent.session().run().unwrap().status,
@@ -1086,6 +1092,8 @@ mod tests {
         }));
 
         let mut cancelled = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let (session_store, _storage_directory) = crate::test_utils::session_store();
+        cancelled.agent.set_session_store(session_store);
         let buffer = open_file(&mut cancelled, &path);
         let (provider, _seen, requests) = WriteProvider::new(write_call(&cancelled, buffer), false);
         cancelled.agent.set_provider(Arc::new(provider));

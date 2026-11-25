@@ -4,14 +4,16 @@ version.workspace = true
 edition.workspace = true
 
 [features]
-agent-sqlite = ["dep:eggplant-agent-storage-seaorm"]
+# Storage adapters are selected in composition/agent.rs. Keep workflows dependent on
+# SessionStore and ProviderCredentialStore, not on a concrete database implementation.
+# Planned, not implemented: agent-mysql and agent-postgres adapter features.
 
 [dependencies]
 app.workspace = true
 eggplant-agent.workspace = true
 eggplant-agent-openai.workspace = true
 eggplant-agent-storage.workspace = true
-eggplant-agent-storage-seaorm = { path = "../agent-storage-seaorm", optional = true }
+eggplant-agent-storage-seaorm = { path = "../agent-storage-seaorm" }
 chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 color-eyre = "0.6.5"
 crossterm = "0.29.0"

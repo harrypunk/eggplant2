@@ -2,7 +2,15 @@ use eggplant_agent::{
     CancellationToken, MessageRole, RunId, RunStatus, SessionId, ToolResult, ToolResultStatus,
 };
 
-use crate::*;
+use super::*;
+
+async fn test_store() -> (SeaOrmSessionStore, tempfile::TempDir) {
+    let directory = tempfile::tempdir().unwrap();
+    let store = SeaOrmSessionStore::connect(directory.path().join("agent.sqlite"))
+        .await
+        .unwrap();
+    (store, directory)
+}
 
 fn finalized(id: &str, updated_at: i64) -> FinalizedRun {
     finalized_run(id, RunId(1), updated_at)
@@ -67,7 +75,7 @@ fn finalized_run(id: &str, run_id: RunId, updated_at: i64) -> FinalizedRun {
 
 #[tokio::test]
 async fn recent_transcript_and_search_share_deterministic_keysets() {
-    let store = InMemoryStore::new();
+    let (store, _directory) = test_store().await;
     store
         .finalize_run(finalized("session-1", 10), CancellationToken::default())
         .await
@@ -149,7 +157,7 @@ async fn recent_transcript_and_search_share_deterministic_keysets() {
 
 #[tokio::test]
 async fn recent_sessions_orders_timestamp_ties_and_filters_workspace() {
-    let store = InMemoryStore::new();
+    let (store, _directory) = test_store().await;
     store
         .finalize_run(finalized("session-b", 10), CancellationToken::default())
         .await
@@ -190,7 +198,7 @@ async fn recent_sessions_orders_timestamp_ties_and_filters_workspace() {
 
 #[tokio::test]
 async fn search_pages_continue_after_run_and_sequence() {
-    let store = InMemoryStore::new();
+    let (store, _directory) = test_store().await;
     store
         .finalize_run(finalized("session-1", 10), CancellationToken::default())
         .await
@@ -239,7 +247,7 @@ async fn search_pages_continue_after_run_and_sequence() {
 
 #[tokio::test]
 async fn bounds_identity_and_cancellation_are_enforced_before_writes() {
-    let store = InMemoryStore::new();
+    let (store, _directory) = test_store().await;
     let mut large = finalized("large", 10);
     large.messages[1].text = "é🙂".repeat(40_000);
     store

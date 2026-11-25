@@ -1,10 +1,10 @@
 # Agent persistence
 
-Status: implemented. Provider-neutral records, asynchronous `SessionStore`, in-memory storage, finalized-run effects, and a separate SeaORM SQLite adapter with migrations, transactions, keyset reads, and search are complete. Provider credentials also have a separate backend-neutral `ProviderCredentialStore`, in-memory implementation, SeaORM SQLite migration/CRUD implementation, and masked multi-provider API-key save workflow. OpenAI-compatible catalog selection, activation, and restart restoration are implemented; interactive account login and non-OpenAI provider/model selection remain deferred. In-memory session storage remains the default; `agent-sqlite` opts into durable local storage. Cloud backends and backend-specific full-text search remain deferred.
+Status: implemented. Provider-neutral records, asynchronous `SessionStore`, finalized-run effects, and a SeaORM SQLite adapter with migrations, transactions, keyset reads, and search are complete. Provider credentials also have a backend-neutral `ProviderCredentialStore`, SeaORM SQLite migration/CRUD implementation, and masked multi-provider API-key save workflow. OpenAI-compatible catalog selection, activation, and restart restoration are implemented; interactive account login and non-OpenAI provider/model selection remain deferred. SQLite is always enabled and defaults to `~/.eggplant/ai/data.sqlite`; `session_db` can override that path. Cloud backends and backend-specific full-text search remain deferred.
 
 ## Recommendation
 
-Use the repository/storage port with an **in-memory implementation by default** and a **replaceable SeaORM implementation for relational persistence**. SQLite is implemented; add MySQL/Postgres only for a concrete deployment requirement. The application depends on `SessionStore`, so changing the SeaORM-backed implementation does not change the TUI, editor, or provider dependencies.
+Use the repository/storage port with **replaceable relational adapters**. SQLite is the only bundled backend; add MySQL/Postgres only for a concrete deployment requirement. The application depends on `SessionStore`, so changing the adapter does not change the TUI, editor, or provider dependencies.
 
 SeaORM is a good fit when Eggplant benefits from typed entities, migrations, and one mostly portable relational model. It is not a search engine or a scaling guarantee. Query shape, indexes, pagination, transaction boundaries, output limits, and database-specific full-text behavior remain Eggplant's responsibility.
 
@@ -20,19 +20,17 @@ AgentSession / provider-neutral records
               ▼
         SessionStore port
               │
-       ┌──────┴────────┐
-       │               │
- InMemoryStore   SeaOrmSessionStore
-                       │
-                 SQLite now
-                 MySQL/Postgres later
+     SeaOrmSessionStore
+              │
+        SQLite now
+        MySQL/Postgres later
 ```
 
 The TUI/composition root selects the implementation. Provider code, popup/panel rendering, and editor mutation must not depend on SeaORM entities or SQL.
 
-The port and in-memory implementation live in `agent-storage`. Relational drivers belong in separate adapters; neither `eggplant-agent` nor editor code depends on them. The TUI depends only on `SessionStore`, never SeaORM entities, SQL, connection URLs, or backend query syntax.
+The port lives in `agent-storage`. Relational drivers belong in separate adapters; neither `eggplant-agent` nor editor code depends on them. The TUI depends only on `SessionStore`, never SeaORM entities, SQL, connection URLs, or backend query syntax.
 
-For a lightweight default binary, in-memory storage requires no database feature. Durable local storage is opt-in with `--features agent-sqlite` and an absolute per-user `session_db` path. Configuring that path without the feature is a startup error rather than an implicit fallback. MySQL/PostgreSQL drivers and cloud URLs are not included.
+The default application creates and migrates `~/.eggplant/ai/data.sqlite`; an absolute `session_db` overrides that location. There is no SQLite feature flag or in-memory production fallback. MySQL/PostgreSQL drivers and cloud URLs are not included.
 
 ## Storage port
 
@@ -161,11 +159,11 @@ Optional `sqlx-mysql` / `sqlx-postgres` features belong only to future deploymen
 
 ## Implementation sequence
 
-1. **Implemented:** provider-neutral finalized session/run/message records and an in-memory `SessionStore`.
+1. **Implemented:** provider-neutral finalized session/run/message records and storage ports.
 2. **Implemented:** fake-provider finalization flows through the existing update/effect path, with run-scoped storage warnings and no rendering barrier.
 3. **Implemented:** separate SeaORM SQLite adapter with migrations, transactions, and keyset reads.
 4. **Implemented:** filter/search and truncation tests plus corrupt, locked, overflow, migration-failure, and cancellation coverage.
 5. Deferred: add backend-specific full-text search only with measured requirements.
 6. Deferred: add cloud configuration, migrations policy, TLS/pool limits, and manual deployment smoke tests behind the same `SessionStore` boundary.
 
-Persistence must not delay M12.2's real provider. If no store is configured, the current in-memory session remains the default and hiding the popup/panel still preserves it.
+Persistence must not delay M12.2's real provider. Production startup always injects SQLite; tests may intentionally leave the store unconfigured to exercise other workflows. Hiding the popup/panel preserves the current in-progress session.

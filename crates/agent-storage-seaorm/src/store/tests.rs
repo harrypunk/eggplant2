@@ -2,8 +2,8 @@ use eggplant_agent::{
     CancellationToken, MessageRole, RunId, RunStatus, SessionId, ToolResult, ToolResultStatus,
 };
 use eggplant_agent_storage::{
-    FinalizedRun, InMemoryStore, MessageRecord, RecentQuery, RunRecord, SearchKind, SearchQuery,
-    SessionRecord, SessionStore, StorageError, ToolCallRecord, TranscriptPage, TranscriptQuery,
+    FinalizedRun, MessageRecord, RecentQuery, RunRecord, SearchKind, SearchQuery, SessionRecord,
+    SessionStore, StorageError, ToolCallRecord, TranscriptPage, TranscriptQuery,
 };
 use futures_util::{TryStreamExt, stream};
 use sea_orm::sqlx::{
@@ -108,43 +108,43 @@ async fn seed<S: SessionStore>(store: &S, runs: Vec<FinalizedRun>) -> Result<(),
 }
 
 async fn assert_recent_equal(
-    memory: &InMemoryStore,
+    reference: &SeaOrmSessionStore,
     sqlite: &SeaOrmSessionStore,
     query: RecentQuery,
 ) -> eggplant_agent_storage::RecentPage {
-    let (memory, sqlite) = tokio::join!(
-        memory.recent_sessions(query.clone()),
+    let (reference, sqlite) = tokio::join!(
+        reference.recent_sessions(query.clone()),
         sqlite.recent_sessions(query)
     );
-    let memory = memory.unwrap();
-    assert_eq!(memory, sqlite.unwrap());
-    memory
+    let reference = reference.unwrap();
+    assert_eq!(reference, sqlite.unwrap());
+    reference
 }
 
 async fn assert_transcript_equal(
-    memory: &InMemoryStore,
+    reference: &SeaOrmSessionStore,
     sqlite: &SeaOrmSessionStore,
     session_id: &str,
     query: TranscriptQuery,
 ) -> TranscriptPage {
-    let (memory, sqlite) = tokio::join!(
-        memory.transcript(SessionId::from(session_id), query.clone()),
+    let (reference, sqlite) = tokio::join!(
+        reference.transcript(SessionId::from(session_id), query.clone()),
         sqlite.transcript(SessionId::from(session_id), query)
     );
-    let memory = memory.unwrap();
-    assert_eq!(memory, sqlite.unwrap());
-    memory
+    let reference = reference.unwrap();
+    assert_eq!(reference, sqlite.unwrap());
+    reference
 }
 
 async fn assert_search_equal(
-    memory: &InMemoryStore,
+    reference: &SeaOrmSessionStore,
     sqlite: &SeaOrmSessionStore,
     query: SearchQuery,
 ) -> eggplant_agent_storage::SearchPage {
-    let (memory, sqlite) = tokio::join!(memory.search(query.clone()), sqlite.search(query));
-    let memory = memory.unwrap();
-    assert_eq!(memory, sqlite.unwrap());
-    memory
+    let (reference, sqlite) = tokio::join!(reference.search(query.clone()), sqlite.search(query));
+    let reference = reference.unwrap();
+    assert_eq!(reference, sqlite.unwrap());
+    reference
 }
 
 #[tokio::test]
@@ -236,10 +236,10 @@ async fn finalize_upserts_scoped_records_without_unique_call_ids() {
 }
 
 #[tokio::test]
-async fn recent_transcript_and_search_match_in_memory_keysets() {
+async fn recent_transcript_and_search_match_sqlite_keysets() {
     let temp = tempfile::tempdir().unwrap();
     let sqlite = store_at(&temp.path().join("parity.sqlite")).await;
-    let memory = InMemoryStore::new();
+    let reference = store_at(&temp.path().join("reference.sqlite")).await;
     let mut other_workspace = finalized("session-gamma", 1, 20);
     other_workspace.session.workspace = Some("/elsewhere".to_string());
     let runs = vec![
@@ -248,12 +248,13 @@ async fn recent_transcript_and_search_match_in_memory_keysets() {
         finalized("session-beta", 1, 30),
         other_workspace,
     ];
-    let (memory_seed, sqlite_seed) = tokio::join!(seed(&memory, runs.clone()), seed(&sqlite, runs));
-    memory_seed.unwrap();
+    let (reference_seed, sqlite_seed) =
+        tokio::join!(seed(&reference, runs.clone()), seed(&sqlite, runs));
+    reference_seed.unwrap();
     sqlite_seed.unwrap();
 
     let first = assert_recent_equal(
-        &memory,
+        &reference,
         &sqlite,
         RecentQuery {
             limit: 2,
@@ -264,7 +265,7 @@ async fn recent_transcript_and_search_match_in_memory_keysets() {
     assert_eq!(first.sessions.len(), 2);
     assert!(first.next.is_some());
     let second = assert_recent_equal(
-        &memory,
+        &reference,
         &sqlite,
         RecentQuery {
             before: first.next,
@@ -276,7 +277,7 @@ async fn recent_transcript_and_search_match_in_memory_keysets() {
     assert_eq!(second.sessions.len(), 1);
     assert_eq!(second.next, None);
     assert_recent_equal(
-        &memory,
+        &reference,
         &sqlite,
         RecentQuery {
             workspace: Some("/workspace".to_string()),
@@ -286,7 +287,7 @@ async fn recent_transcript_and_search_match_in_memory_keysets() {
     )
     .await;
     assert_recent_equal(
-        &memory,
+        &reference,
         &sqlite,
         RecentQuery {
             limit: usize::MAX,
@@ -296,7 +297,7 @@ async fn recent_transcript_and_search_match_in_memory_keysets() {
     .await;
 
     let transcript_first = assert_transcript_equal(
-        &memory,
+        &reference,
         &sqlite,
         "session-alpha",
         TranscriptQuery {
@@ -308,7 +309,7 @@ async fn recent_transcript_and_search_match_in_memory_keysets() {
     assert_eq!(transcript_first.runs.len(), 1);
     assert_eq!(transcript_first.tool_calls.len(), 2);
     let transcript_second = assert_transcript_equal(
-        &memory,
+        &reference,
         &sqlite,
         "session-alpha",
         TranscriptQuery {
@@ -320,7 +321,7 @@ async fn recent_transcript_and_search_match_in_memory_keysets() {
     assert_eq!(transcript_second.runs.len(), 2);
     assert_eq!(transcript_second.tool_calls.len(), 4);
     let transcript_third = assert_transcript_equal(
-        &memory,
+        &reference,
         &sqlite,
         "session-alpha",
         TranscriptQuery {
@@ -333,7 +334,7 @@ async fn recent_transcript_and_search_match_in_memory_keysets() {
     assert_eq!(transcript_third.next, None);
 
     let messages_first = assert_search_equal(
-        &memory,
+        &reference,
         &sqlite,
         SearchQuery {
             text: Some("Alpha".to_string()),
@@ -346,7 +347,7 @@ async fn recent_transcript_and_search_match_in_memory_keysets() {
     assert_eq!(messages_first.hits.len(), 1);
     assert!(messages_first.next.is_some());
     let messages_second = assert_search_equal(
-        &memory,
+        &reference,
         &sqlite,
         SearchQuery {
             text: Some("Alpha".to_string()),
@@ -359,7 +360,7 @@ async fn recent_transcript_and_search_match_in_memory_keysets() {
     .await;
     assert_eq!(messages_second.next, None);
     let uppercase = assert_search_equal(
-        &memory,
+        &reference,
         &sqlite,
         SearchQuery {
             text: Some("ALPHA".to_string()),
@@ -370,7 +371,7 @@ async fn recent_transcript_and_search_match_in_memory_keysets() {
     assert_eq!(uppercase.hits.len(), 4);
 
     let tools_first = assert_search_equal(
-        &memory,
+        &reference,
         &sqlite,
         SearchQuery {
             text: Some("Alpha".to_string()),
@@ -383,7 +384,7 @@ async fn recent_transcript_and_search_match_in_memory_keysets() {
     .await;
     assert!(tools_first.next.is_some());
     let tools_second = assert_search_equal(
-        &memory,
+        &reference,
         &sqlite,
         SearchQuery {
             text: Some("Alpha".to_string()),
@@ -397,7 +398,7 @@ async fn recent_transcript_and_search_match_in_memory_keysets() {
     .await;
     assert_eq!(tools_second.next, None);
     let repeated_ids = assert_search_equal(
-        &memory,
+        &reference,
         &sqlite,
         SearchQuery {
             kind: SearchKind::Tool,

@@ -24,15 +24,15 @@ cargo run -p tui -- [FILE_OR_FOLDER]
 
 Without a path, Eggplant opens the empty editor. A file opens a buffer; a folder opens a workspace explorer without implicitly opening a document.
 
-The application reads `~/.eggplant/config.toml` when present. See `config.example.toml` for options and `docs/key-input.md` for the complete keyboard reference. Agent storage is in-memory by default; durable local sessions require the opt-in `agent-sqlite` build feature and an absolute per-user `session_db` path. MySQL/PostgreSQL drivers are not bundled.
+The application reads `~/.eggplant/config.toml` when present. See `config.example.toml` for options and `docs/key-input.md` for the complete keyboard reference. Agent storage uses SQLite at `~/.eggplant/ai/data.sqlite`; set `session_db` to override it. MySQL/PostgreSQL drivers are not bundled.
 
 ## Architecture
 
 ```text
 crates/
 ├── agent-openai/ # OpenAI-compatible provider adapter with SSE decoding
-├── agent-storage/ # Provider-neutral storage port and in-memory implementation
-├── agent-storage-seaorm/ # Optional SeaORM SQLite adapter and migrations
+├── agent-storage/ # Provider-neutral session and credential storage ports
+├── agent-storage-seaorm/ # SeaORM SQLite adapter and migrations
 ├── agent/     # Independently publishable, provider-neutral agent session API
 ├── app/       # UI-neutral application capabilities and provider interfaces
 ├── editor/    # Documents, buffers, editing, viewport, and persistence
@@ -51,7 +51,7 @@ The VCS integration is an **addon**, not a requirement of the core editor. Editi
 - [Feature architecture](docs/feature-architecture.md) — extension ownership and dependency rules.
 - [AI agent architecture](docs/agent.md) — inline chat, shared session, streaming, and runtime boundaries.
 - [Agent tools](docs/agent-tools.md) — bounded read/grep and approved revision-safe write contracts.
-- [Agent persistence](docs/agent-persistence.md) — in-memory default, proposed SeaORM/SQLite adapter, search, and cloud rollout.
+- [Agent persistence](docs/agent-persistence.md) — SQLite storage, SeaORM adapter boundary, search, and cloud rollout.
 - [Language services](docs/lsp.md) — lightweight LSP navigation, diagnostics, and runtime ownership.
 - [External language-server configuration](docs/language-configuration.md) — user-configured external tools and provider-neutral interfaces.
 - [VCS addon](docs/vcs.md) — optional Git status, staging, and diff workflows.

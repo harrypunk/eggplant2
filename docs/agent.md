@@ -1,6 +1,6 @@
 # AI agent architecture
 
-Status: M12.1–M12.5 are implemented. Inline chat, OpenAI streaming, bounded tools, approved writes, and in-memory/opt-in SeaORM SQLite persistence are complete. Cloud backends and backend-specific full-text search remain deferred.
+Status: M12.1–M12.5 are implemented. Inline chat, OpenAI streaming, bounded tools, approved writes, and SeaORM SQLite persistence are complete. Cloud backends and backend-specific full-text search remain deferred.
 
 The agent is a primary Eggplant workflow, not a detached chat window or an excuse to bypass editor safety. It should make a small coding task feel like a natural extension of navigation, search, diagnostics, and editing.
 
@@ -114,7 +114,7 @@ The inline dialog requires an open project, not an active buffer. With an active
 - Both fields use wrappable `TextInput` views, and dialog height follows their measured content.
 - Tab loops focus through Endpoint and API key. No backward-focus binding is needed.
 - Ctrl-V reads through the `ClipboardReader` interface in a background effect. Focus/edit revisions discard stale clipboard completions instead of pasting into the wrong field.
-- Enter asynchronously saves the endpoint and key through `ProviderCredentialStore`. Durable saves require `agent-sqlite` and an absolute `session_db`.
+- Enter asynchronously saves the endpoint and key through `ProviderCredentialStore`. Durable saves use `~/.eggplant/ai/data.sqlite` by default; an absolute `session_db` can override it.
 - Providers have independent credentials, but saving does not select a provider or model or mutate the active provider configuration.
 
 #### Catalog and model activation
@@ -156,7 +156,7 @@ Every run has a `RunId`. Streaming events also have a monotonically increasing s
 
 Only one foreground run per session is required initially. A second submission while active is rejected or queued explicitly; it must not silently race the current run.
 
-Start with in-memory or linear append-only session storage. Persist finalized messages rather than every live delta if persistence is added. Pi's parent/leaf session tree, compaction, recovery, and branching machinery are not initial requirements. For SQLite/relational persistence and the proposed SeaORM boundary, see [Agent persistence](agent-persistence.md).
+Use SQLite persistence for finalized messages rather than every live delta. Pi's parent/leaf session tree, compaction, recovery, and branching machinery are not initial requirements. For relational persistence and the SeaORM boundary, see [Agent persistence](agent-persistence.md).
 
 ## Editor context
 
@@ -183,7 +183,7 @@ The intended ownership is:
 | --- | --- |
 | `eggplant-agent` | Standalone provider-neutral session, run/event identity, tool request/result values, and runtime ports; no editor/terminal/filesystem dependency. |
 | Agent runtime adapter | Provider streaming, bounded agent loop, cancellation, tool-call orchestration. |
-| `agent-storage` | `SessionStore` port, finalized records, and in-memory default; see [Agent persistence](agent-persistence.md). |
+| `agent-storage` | `SessionStore` port, finalized records, and provider credential persistence; see [Agent persistence](agent-persistence.md). |
 | `agent-storage-seaorm` | Opt-in SeaORM SQLite adapter, versioned migrations, transactions, keyset pagination, and search; no cloud drivers. |
 | `features/agent` | Session/update state, commands, typed effects/completions, popup/panel coordination. |
 | Agent components | Concrete popup and panel rendering from resolved props; no I/O or provider types. |
@@ -277,7 +277,7 @@ See [Agent tools](agent-tools.md) for path, result, revision, and approval contr
 - The first real provider and its minimal streaming/configuration interface.
 - Future tuning of the implemented byte/line/step limits, informed by provider behavior and terminal responsiveness.
 - Final keybindings after conflict and context tests.
-- Session persistence/resume format; the first useful workflow may remain in-memory.
+- Session persistence/resume format; the first useful workflow may use the default SQLite store directly.
 - Token accounting and context compaction after transcript/tool limits are measured.
 - Multi-file patch and session-review UX after one approved revision-safe write works.
 

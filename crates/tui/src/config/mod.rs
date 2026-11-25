@@ -10,6 +10,10 @@ const DEFAULT_FOLDER: &str = ".eggplant";
 const CONFIG_FILE: &str = "config.toml";
 const LANGUAGES_FILE: &str = "languages.toml";
 
+pub fn default_agent_database_path(home: PathBuf) -> PathBuf {
+    home.join(DEFAULT_FOLDER).join("ai").join("data.sqlite")
+}
+
 /// Raw keymap entries: context -> action -> key binding.
 ///
 /// Validation and conversion into runtime keybindings happen in the keymap registry.
@@ -67,6 +71,10 @@ pub struct AgentConfig {
     pub model: Option<String>,
     pub base_url: Option<String>,
     pub api_key_env: Option<String>,
+    /// Optional SQLite path override. The default build uses
+    /// `~/.eggplant/ai/data.sqlite` when this is absent.
+    /// Network backends will use a separate tagged configuration,
+    /// not an overloaded filesystem path or a SQL connection in feature workflows.
     pub session_db: Option<PathBuf>,
 }
 

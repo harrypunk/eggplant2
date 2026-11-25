@@ -2,7 +2,7 @@
 name = "eggplant-agent-storage"
 version.workspace = true
 edition.workspace = true
-description = "Provider-neutral persistence ports and in-memory storage for Eggplant agent sessions"
+description = "Provider-neutral persistence ports for Eggplant agent sessions and credentials"
 license = "MIT"
 
 [dependencies]
@@ -10,3 +10,4 @@ eggplant-agent.workspace = true
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+tempfile = "3"

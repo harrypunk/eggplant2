@@ -829,6 +829,7 @@ name = "eggplant-agent-storage"
 version = "0.1.0"
 dependencies = [
  "eggplant-agent",
+ "tempfile",
  "tokio",
 ]
 

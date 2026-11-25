@@ -1,7 +1,7 @@
 # Eggplant first-edition plan
 
 Last updated: 2026-11-21
-Current baseline: M10, M11.1/M11.2, and M12.1–M12.5 are complete; agent storage is in-memory by default with opt-in SeaORM SQLite persistence
+Current baseline: M10, M11.1/M11.2, and M12.1–M12.5 are complete; agent storage uses SeaORM SQLite at `~/.eggplant/ai/data.sqlite` by default
 
 ## Purpose
 
@@ -563,9 +563,9 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 #### M12.5 — Scalable session persistence
 
-**Status: complete. In-memory remains the default; `agent-sqlite` opts into the separate SeaORM adapter. Cloud backends and backend-specific full-text search remain deferred.** See [Agent persistence](docs/agent-persistence.md).
+**Status: complete. SeaORM SQLite is the only application storage backend. Cloud backends and backend-specific full-text search remain deferred.** See [Agent persistence](docs/agent-persistence.md).
 
-- [x] Define provider-neutral finalized session/run/message/tool records and a narrow `SessionStore` port with an in-memory default.
+- [x] Define provider-neutral finalized session/run/message/tool records and a narrow `SessionStore` port with startup injection before composition supplies the relational adapter.
 - [x] Persist finalized messages through the existing update/effect path with session/run identity; do not make rendering wait on storage I/O.
 - [x] Add a separate SeaORM SQLite adapter with versioned migrations, transactions, batched transcript reads, and keyset pagination; keep SeaORM out of `eggplant-agent`.
 - [x] Normalize filter/index fields and bound result text, diff previews, and tool artifacts. Use backend-specific full-text implementations only behind the storage port.

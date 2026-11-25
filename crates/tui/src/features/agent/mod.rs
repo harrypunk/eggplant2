@@ -71,7 +71,7 @@ pub struct AgentState {
     context: Option<EditorContext>,
     provider: Option<Arc<dyn AgentProvider>>,
     run: Option<run::AgentRunState>,
-    store: Arc<dyn SessionStore>,
+    store: Option<Arc<dyn SessionStore>>,
     storage_error: Option<String>,
     session_created_at: Option<i64>,
     provider_name: String,
@@ -89,7 +89,7 @@ impl Default for AgentState {
             context: None,
             provider: None,
             run: None,
-            store: Arc::new(eggplant_agent_storage::InMemoryStore::new()),
+            store: None,
             storage_error: None,
             session_created_at: None,
             provider_name: "fake".to_string(),
@@ -235,10 +235,10 @@ impl AgentState {
     }
 
     pub fn set_session_store(&mut self, store: Arc<dyn SessionStore>) {
-        self.store = store;
+        self.store = Some(store);
     }
 
-    fn session_store(&self) -> Arc<dyn SessionStore> {
+    fn session_store(&self) -> Option<Arc<dyn SessionStore>> {
         self.store.clone()
     }
 

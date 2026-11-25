@@ -12,9 +12,10 @@ use crate::{
 };
 
 pub fn persist_finalized(model: &mut Model) -> Option<Effect> {
+    let store = model.agent.session_store()?;
     let run = finalized_run(model, chrono::Utc::now().timestamp_millis())?;
     Some(Effect::feature(StorageEffect {
-        store: model.agent.session_store(),
+        store,
         session_id: run.session.id.clone(),
         run_id: run.run.id,
         run,

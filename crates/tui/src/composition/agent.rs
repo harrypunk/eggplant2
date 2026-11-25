@@ -1,14 +1,16 @@
 use std::sync::Arc;
 
-use color_eyre::eyre::bail;
+use color_eyre::eyre::{bail, eyre};
 use eggplant_agent::AgentProvider;
 use eggplant_agent_openai::{OpenAiConfig, OpenAiProvider};
 use eggplant_agent_storage::{ProviderCredentialStore, SessionStore};
-#[cfg(feature = "agent-sqlite")]
 use eggplant_agent_storage_seaorm::{SeaOrmProviderCredentialStore, SeaOrmSessionStore};
 
 use super::openai::OpenAiFactory;
-use crate::{config::Config, data_object::Model};
+use crate::{
+    config::{Config, default_agent_database_path},
+    data_object::Model,
+};
 
 /// Configure agent persistence and the statically selected provider before terminal startup.
 pub async fn configure(config: &Config, model: &mut Model) -> color_eyre::Result<()> {
@@ -62,18 +64,35 @@ fn install_provider(model: &mut Model, provider: Arc<dyn AgentProvider>, model_i
 }
 
 async fn configure_store(config: &Config, model: &mut Model) -> color_eyre::Result<()> {
-    if let Some(path) = &config.features.agent.session_db {
-        if !path.is_absolute() {
-            bail!("agent session_db must be an absolute per-user path");
-        }
-        let store = connect_store(path).await?;
-        model.agent.set_session_store(store);
-        model.provider_credentials = Some(connect_credential_store(path).await?);
+    configure_store_with_home(config, model, std::env::home_dir()).await
+}
+
+async fn configure_store_with_home(
+    config: &Config,
+    model: &mut Model,
+    home: Option<std::path::PathBuf>,
+) -> color_eyre::Result<()> {
+    let path = storage_path(config, home)?;
+    if !path.is_absolute() {
+        bail!("agent session_db must be an absolute per-user path");
     }
+    let store = connect_store(&path).await?;
+    model.agent.set_session_store(store);
+    model.provider_credentials = Some(connect_credential_store(&path).await?);
     Ok(())
 }
 
-#[cfg(feature = "agent-sqlite")]
+fn storage_path(
+    config: &Config,
+    home: Option<std::path::PathBuf>,
+) -> color_eyre::Result<std::path::PathBuf> {
+    if let Some(path) = &config.features.agent.session_db {
+        return Ok(path.clone());
+    }
+    home.map(default_agent_database_path)
+        .ok_or_else(|| eyre!("default agent SQLite path requires a home directory"))
+}
+
 async fn connect_store(path: &std::path::Path) -> color_eyre::Result<Arc<dyn SessionStore>> {
     let store = SeaOrmSessionStore::connect(path)
         .await
@@ -81,12 +100,6 @@ async fn connect_store(path: &std::path::Path) -> color_eyre::Result<Arc<dyn Ses
     Ok(Arc::new(store))
 }
 
-#[cfg(not(feature = "agent-sqlite"))]
-async fn connect_store(_path: &std::path::Path) -> color_eyre::Result<Arc<dyn SessionStore>> {
-    bail!("agent session_db requires the `agent-sqlite` build feature")
-}
-
-#[cfg(feature = "agent-sqlite")]
 async fn connect_credential_store(
     path: &std::path::Path,
 ) -> color_eyre::Result<Arc<dyn ProviderCredentialStore>> {
@@ -94,13 +107,6 @@ async fn connect_credential_store(
         .await
         .map_err(|error| color_eyre::eyre::eyre!(error.to_string()))?;
     Ok(Arc::new(store))
-}
-
-#[cfg(not(feature = "agent-sqlite"))]
-async fn connect_credential_store(
-    _path: &std::path::Path,
-) -> color_eyre::Result<Arc<dyn ProviderCredentialStore>> {
-    bail!("agent session_db requires the `agent-sqlite` build feature")
 }
 
 fn agent_provider(config: &Config) -> color_eyre::Result<Option<Arc<dyn AgentProvider>>> {
@@ -130,14 +136,26 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn no_database_path_keeps_the_default_store() {
+    async fn default_sqlite_path_uses_the_injected_ai_data_directory() {
+        let home = tempfile::tempdir().unwrap();
         let mut model = Model::default();
-        assert!(
-            configure_store(&Config::default(), &mut model)
-                .await
-                .is_ok()
-        );
-        assert!(model.provider_credentials.is_none());
+
+        configure_store_with_home(
+            &Config::default(),
+            &mut model,
+            Some(home.path().to_path_buf()),
+        )
+        .await
+        .unwrap();
+
+        assert!(home.path().join(".eggplant/ai/data.sqlite").is_file());
+        assert!(model.provider_credentials.is_some());
+    }
+
+    #[test]
+    fn default_sqlite_path_requires_a_home_directory() {
+        let error = storage_path(&Config::default(), None).unwrap_err();
+        assert!(error.to_string().contains("home directory"));
     }
 
     #[tokio::test]
@@ -149,9 +167,8 @@ mod tests {
         assert!(error.to_string().contains("absolute"));
     }
 
-    #[cfg(feature = "agent-sqlite")]
     #[tokio::test]
-    async fn sqlite_path_creates_and_migrates_the_opt_in_store() {
+    async fn sqlite_path_creates_and_migrates_the_configured_store() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("nested/agent.db");
         let mut config = Config::default();
@@ -171,7 +188,6 @@ mod tests {
         assert!(recent.sessions.is_empty());
     }
 
-    #[cfg(feature = "agent-sqlite")]
     #[tokio::test]
     async fn saved_openai_model_is_restored_without_overriding_explicit_configuration() {
         let directory = tempfile::tempdir().unwrap();
@@ -210,15 +226,5 @@ mod tests {
         let mut fake_model = Model::default();
         configure(&fake_config, &mut fake_model).await.unwrap();
         assert!(fake_model.agent.provider().is_none());
-    }
-
-    #[cfg(not(feature = "agent-sqlite"))]
-    #[tokio::test]
-    async fn database_path_requires_the_opt_in_feature() {
-        let mut config = Config::default();
-        config.features.agent.session_db = Some(std::path::PathBuf::from("/tmp/agent.db"));
-        let mut model = Model::default();
-        let error = configure_store(&config, &mut model).await.unwrap_err();
-        assert!(error.to_string().contains("agent-sqlite"));
     }
 }

@@ -851,4 +851,6 @@ fn backend(error: impl std::fmt::Display) -> StorageError {
 }
 
 #[cfg(test)]
+mod contract_tests;
+#[cfg(test)]
 mod tests;
