@@ -140,7 +140,7 @@ mod tests {
     fn translated_input_retains_the_context_that_resolved_the_key() {
         let manager = event_manager();
         let mut model = Model::default();
-        model.context_stack.push(Context::FilePicker);
+        assert!(model.modal.open(Context::FilePicker));
         let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
 
         let Some(TranslatedEvent::Input(RoutedInput {
@@ -179,7 +179,7 @@ mod tests {
     fn terminal_line_editing_requires_full_text_input_capability() {
         let manager = event_manager();
         let mut picker = Model::default();
-        picker.context_stack.push(Context::FilePicker);
+        assert!(picker.modal.open(Context::FilePicker));
         for (character, expected) in [
             ('a', TextInputEvent::Cursor(TextCursorMovement::LineStart)),
             ('e', TextInputEvent::Cursor(TextCursorMovement::LineEnd)),
@@ -209,7 +209,7 @@ mod tests {
     fn routes_picker_input_without_starting_the_leader() {
         let manager = event_manager();
         let mut model = Model::default();
-        model.context_stack.push(Context::FilePicker);
+        assert!(model.modal.open(Context::FilePicker));
 
         let event = Event::Key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
         assert!(matches!(
@@ -249,7 +249,7 @@ mod tests {
         let keymap = Registry::from_config(&config.keymap, &CommandRegistry::default()).unwrap();
         let manager = EventManager::new(&config, keymap, TextInputRegistry::builtin()).unwrap();
         let mut model = Model::default();
-        model.context_stack.push(Context::FilePicker);
+        assert!(model.modal.open(Context::FilePicker));
 
         let event = Event::Key(KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL));
         assert!(matches!(

@@ -35,20 +35,19 @@ const SHELL_RULES: &[ContextRule] = &[
     ContextRule::new(Context::AppNormal, |_| true),
 ];
 
-/// Resolve which context owns input, giving transient workflows precedence over the shell.
+/// Resolve which context owns input, giving modal and transient workflows precedence over the shell.
 ///
-/// The stack contains only transient workflows with an explicit lifetime: pickers, dialogs,
-/// pending operators, and similar states that are pushed on entry and popped on exit. It must
-/// not be used to synchronize shell state such as focus, the active page, editor mode, or Agent
-/// panel mode.
+/// The active modal session owns both presentation and input. The stack provides transient LIFO
+/// routing underneath it and must not synchronize focus, active page, editor mode, or Agent panel
+/// mode.
 ///
-/// When no transient workflow is active, the shell context is derived from source-of-truth UI
-/// state. This avoids stale stack entries when focus, buffers, pages, or panel modes change.
+/// When no modal or transient workflow is active, the shell context is derived from source-of-truth
+/// UI state. This avoids stale stack entries when focus, buffers, pages, or panel modes change.
 pub fn input_context(model: &Model) -> Option<Context> {
     model
-        .context_stack
-        .last()
-        .copied()
+        .modal
+        .active_context()
+        .or_else(|| model.context_stack.last().copied())
         .or_else(|| shell_context(model))
 }
 
@@ -159,14 +158,16 @@ mod tests {
     }
 
     #[test]
-    fn transient_workflows_take_precedence_until_popped() {
+    fn modal_sessions_and_transient_workflows_take_precedence_in_order() {
         let mut model = Model {
             current_focus: FocusTarget::FileExplorer,
             ..Model::default()
         };
         assert_eq!(input_context(&model), Some(Context::Explorer));
 
-        model.context_stack.push(Context::FilePicker);
+        model.context_stack.push(Context::EditorYank);
+        assert_eq!(input_context(&model), Some(Context::EditorYank));
+        assert!(model.modal.open(Context::FilePicker));
         assert_eq!(input_context(&model), Some(Context::FilePicker));
 
         model.current_focus = FocusTarget::ToolsPanel;
@@ -174,7 +175,9 @@ mod tests {
         model.tools.visibility = Visibility::Displayed;
         assert_eq!(input_context(&model), Some(Context::FilePicker));
 
-        model.context_stack.pop();
+        model.modal.close(Context::FilePicker);
+        assert_eq!(input_context(&model), Some(Context::EditorYank));
+        assert_eq!(model.context_stack.pop(), Some(Context::EditorYank));
         assert_eq!(input_context(&model), Some(Context::AgentChat));
     }
 

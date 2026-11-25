@@ -75,9 +75,6 @@ pub(crate) fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<E
 pub(crate) fn close(model: &mut Model) {
     let return_focus = model.file_picker.close();
     model.modal.close(Context::FilePicker);
-    model
-        .context_stack
-        .pop_if(|context| context == &Context::FilePicker);
     model.current_focus = return_focus;
 }
 
@@ -89,9 +86,6 @@ fn open(model: &mut Model) -> Option<Effect> {
     let root = workspace.root().to_path_buf();
     if !model.modal.open(Context::FilePicker) {
         return None;
-    }
-    if model.context_stack.last() != Some(&Context::FilePicker) {
-        model.context_stack.push(Context::FilePicker);
     }
     let return_focus = model.current_focus;
     model.current_focus = FocusTarget::FilePicker;
@@ -108,7 +102,7 @@ mod tests {
         data_object::{Message, Visibility},
         explorer::ExpansionState,
         file_picker::PreviewState,
-        manager::message_manager::MessageManager,
+        manager::{input_context::input_context, message_manager::MessageManager},
         startup::initial_model,
     };
 
@@ -152,6 +146,7 @@ mod tests {
         assert_eq!(model.file_picker.visibility, Visibility::Hidden);
         assert!(model.modal.is_active(Context::BufferGrep));
         assert_ne!(model.current_focus, FocusTarget::FilePicker);
+        assert!(model.context_stack.is_empty());
     }
 
     #[test]
@@ -184,7 +179,9 @@ mod tests {
 
         assert_eq!(model.file_picker.visibility, Visibility::Displayed);
         assert_eq!(model.current_focus, FocusTarget::FilePicker);
-        assert_eq!(model.context_stack.last(), Some(&Context::FilePicker));
+        assert_eq!(input_context(&model), Some(Context::FilePicker));
+        assert!(model.modal.is_active(Context::FilePicker));
+        assert!(model.context_stack.is_empty());
     }
 
     #[test]
@@ -231,7 +228,9 @@ mod tests {
         }
         assert!(effect.is_none());
         assert_eq!(model.current_focus, FocusTarget::FilePicker);
-        assert_eq!(model.context_stack.last(), Some(&Context::FilePicker));
+        assert_eq!(input_context(&model), Some(Context::FilePicker));
+        assert!(model.modal.is_active(Context::FilePicker));
+        assert!(model.context_stack.is_empty());
 
         let Some(Effect::Feature(request)) =
             manager.update(&mut model, Message::TextInput(TextInputEvent::Insert('m')))

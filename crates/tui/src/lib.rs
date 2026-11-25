@@ -161,7 +161,7 @@ pub mod data_object {
         // Focus/input routing. Panel visibility lives in each feature's state.
         pub current_focus: FocusTarget,
         pub window_area: ratatui::layout::Rect,
-        /// Transient workflows that own input; the shell context is derived when empty.
+        /// Transient input routing underneath the active modal session.
         pub context_stack: ContextStack,
         pub theme: Theme,
         pub theme_loading: ThemeLoadState,
@@ -340,28 +340,38 @@ pub mod data_object {
         }
     }
 
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    struct ModalSession {
+        context: Context,
+    }
+
+    /// Owns the active modal's presentation and input-routing identity.
     #[derive(Debug, Default)]
     pub struct ModalController {
-        active: Option<Context>,
+        active: Option<ModalSession>,
     }
 
     impl ModalController {
         pub fn open(&mut self, context: Context) -> bool {
-            if self.active.is_some_and(|active| active != context) {
+            if self.active.is_some_and(|active| active.context != context) {
                 return false;
             }
-            self.active = Some(context);
+            self.active = Some(ModalSession { context });
             true
         }
 
         pub fn close(&mut self, context: Context) {
-            if self.active == Some(context) {
+            if self.is_active(context) {
                 self.active = None;
             }
         }
 
+        pub fn active_context(&self) -> Option<Context> {
+            self.active.map(|active| active.context)
+        }
+
         pub fn is_active(&self, context: Context) -> bool {
-            self.active == Some(context)
+            self.active_context() == Some(context)
         }
     }
 
@@ -373,10 +383,12 @@ pub mod data_object {
         fn one_modal_owns_input_until_its_owner_closes() {
             let mut modal = ModalController::default();
             assert!(modal.open(Context::FilePicker));
+            assert_eq!(modal.active_context(), Some(Context::FilePicker));
             assert!(!modal.open(Context::ThemePicker));
             modal.close(Context::ThemePicker);
             assert!(modal.is_active(Context::FilePicker));
             modal.close(Context::FilePicker);
+            assert_eq!(modal.active_context(), None);
             assert!(modal.open(Context::ThemePicker));
         }
     }

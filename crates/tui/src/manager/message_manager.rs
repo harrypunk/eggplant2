@@ -207,7 +207,9 @@ mod tests {
 
         assert_eq!(model.file_picker.visibility, Visibility::Displayed);
         assert_eq!(model.current_focus, FocusTarget::FilePicker);
-        assert_eq!(model.context_stack.last(), Some(&Context::FilePicker));
+        assert_eq!(input_context(&model), Some(Context::FilePicker));
+        assert!(model.modal.is_active(Context::FilePicker));
+        assert!(model.context_stack.is_empty());
     }
 
     #[tokio::test]
