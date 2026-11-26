@@ -395,6 +395,9 @@ impl ProviderLoginState {
         provider_id: &str,
         result: Result<Vec<String>, String>,
     ) -> Option<Result<(), String>> {
+        if !self.open {
+            return None;
+        }
         let ProviderLoginPage::OpenAiModelsLoading(provider) = self.page else {
             return None;
         };
@@ -440,6 +443,9 @@ impl ProviderLoginState {
         provider_id: &str,
         error: Option<String>,
     ) -> Option<bool> {
+        if !self.open {
+            return None;
+        }
         let ProviderLoginPage::OpenAiActivating(provider) = self.page else {
             return None;
         };
@@ -487,7 +493,7 @@ impl ProviderLoginState {
                 ProviderLoginBack::Back
             }
             ProviderLoginPage::OpenAiModelsLoading(_) | ProviderLoginPage::OpenAiActivating(_) => {
-                ProviderLoginBack::Back
+                ProviderLoginBack::Close
             }
             ProviderLoginPage::Providers(_) => {
                 self.page = ProviderLoginPage::AuthenticationMethod;
@@ -623,6 +629,47 @@ mod tests {
         assert_eq!(state.back(), ProviderLoginBack::Back);
         assert_eq!(state.page(), ProviderLoginPage::AuthenticationMethod);
         assert_eq!(state.back(), ProviderLoginBack::Close);
+    }
+
+    fn open_openai(state: &mut ProviderLoginState) -> ProviderSpec {
+        state.open(None);
+        state.select_next();
+        state.activate();
+        state.activate();
+        let ProviderLoginPage::OpenAiInput(provider) = state.page() else {
+            panic!("OpenAI input should be selected");
+        };
+        provider
+    }
+
+    fn open_model_selection(state: &mut ProviderLoginState) -> ProviderSpec {
+        let provider = open_openai(state);
+        state.begin_model_loading(provider.id()).unwrap();
+        state
+            .complete_model_loading(provider.id(), Ok(vec!["gpt-test".to_string()]))
+            .unwrap()
+            .unwrap();
+        provider
+    }
+
+    #[test]
+    fn loading_and_activation_close_without_accepting_late_completions() {
+        let mut loading = ProviderLoginState::default();
+        let provider = open_openai(&mut loading);
+        loading.begin_model_loading(provider.id()).unwrap();
+        assert_eq!(loading.back(), ProviderLoginBack::Close);
+        loading.close();
+        assert_eq!(
+            loading.complete_model_loading(provider.id(), Ok(vec!["late".to_string()])),
+            None
+        );
+
+        let mut activation = ProviderLoginState::default();
+        let provider = open_model_selection(&mut activation);
+        activation.begin_activation(provider.id()).unwrap();
+        assert_eq!(activation.back(), ProviderLoginBack::Close);
+        activation.close();
+        assert_eq!(activation.complete_activation(provider.id(), None), None);
     }
 
     #[test]

@@ -111,7 +111,7 @@ The inline dialog requires an open project, not an active buffer. With an active
 - API-key providers: `openai`, `kimi-for-coding`, `qwen-tokenplan-individual-cn`, and `deepseek`.
 - Up/Down and Ctrl-N/Ctrl-P navigate menus.
 - Enter opens the selected submenu or provider page.
-- Escape steps back through provider pages before closing the dialog.
+- Escape steps back through provider pages before closing the dialog. During model loading or activation it closes the dialog immediately; late completions are ignored.
 
 #### OpenAI-compatible form
 
