@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
-use eggplant_agent_storage::{ModelCatalog, ModelCatalogStore, ProviderCredentialStore};
+use eggplant_agent_storage::{
+    ModelCatalog, ModelCatalogStore, ProviderCredential, ProviderCredentialStore,
+};
 
 use crate::{
     capabilities::openai::OpenAiProviderFactory,
@@ -10,6 +12,7 @@ use crate::{
         effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
         general_action::GeneralActionSubscription,
     },
+    model_selector::ProviderModel,
 };
 
 pub fn commands() -> Vec<Command> {
@@ -63,27 +66,20 @@ pub fn open(model: &mut Model) -> Option<Effect> {
             Some("Provider"),
         ));
     };
-    if model.agent.provider_name() == "fake" {
-        return Some(crate::notifications::publish_status(
-            model,
-            StatusMessage::info("No active provider; use /provider first".to_string()),
-            Some("Provider"),
-        ));
-    }
-    let provider_id = model.agent.provider_name().to_string();
+    let active_model = model
+        .agent
+        .model()
+        .map(|model_id| ProviderModel::new(model.agent.provider_name().to_string(), model_id));
     let return_context = crate::agent::suspend_for_overlay(model);
     if !model.modal.open(Context::ModelSelector) {
         crate::agent::resume_overlay(model, return_context);
         return None;
     }
-    let active_model = model.agent.model().map(str::to_string);
-    model
-        .model_selector
-        .open(return_context, provider_id.clone(), active_model);
+    model.model_selector.open(return_context, active_model);
     let generation = model.model_selector.generation();
-    Some(Effect::feature(LoadCatalog {
+    Some(Effect::feature(LoadCatalogs {
+        store: model.provider_credentials.clone(),
         catalogs,
-        provider_id,
         generation,
     }))
 }
@@ -95,158 +91,205 @@ pub fn close(model: &mut Model) -> Option<Effect> {
     None
 }
 
-fn refresh(model: &mut Model) -> Option<Effect> {
+struct ProviderCatalog {
+    credential: ProviderCredential,
+    cached: Option<ModelCatalog>,
+}
+
+struct LoadCatalogs {
+    store: Option<Arc<dyn ProviderCredentialStore>>,
+    catalogs: Arc<dyn ModelCatalogStore>,
+    generation: u64,
+}
+
+impl LoadCatalogs {
+    async fn perform_async(self) -> LoadCatalogsCompletion {
+        let mut providers = Vec::new();
+        if let Some(store) = self.store {
+            let infos = store.list().await.unwrap_or_default();
+            for info in infos {
+                let credential = match store.get(&info.provider_id).await {
+                    Ok(Some(credential)) if credential.base_url.is_some() => credential,
+                    _ => continue,
+                };
+                let cached = self
+                    .catalogs
+                    .get(&credential.provider_id)
+                    .await
+                    .ok()
+                    .flatten();
+                providers.push(ProviderCatalog { credential, cached });
+            }
+        }
+        LoadCatalogsCompletion {
+            providers,
+            generation: self.generation,
+        }
+    }
+}
+
+impl FeatureEffect for LoadCatalogs {
+    fn perform(self: Box<Self>) -> Message {
+        runtime().block_on(self.perform_async()).into_message()
+    }
+
+    fn execute(self: Box<Self>, sender: tokio::sync::mpsc::UnboundedSender<Message>) {
+        tokio::spawn(async move {
+            let _ = sender.send(self.perform_async().await.into_message());
+        });
+    }
+}
+
+struct LoadCatalogsCompletion {
+    providers: Vec<ProviderCatalog>,
+    generation: u64,
+}
+
+impl LoadCatalogsCompletion {
+    fn into_message(self) -> Message {
+        Message::FeatureCompletion(FeatureCompletion::new(self))
+    }
+}
+
+impl Completion for LoadCatalogsCompletion {
+    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
+        if !model.model_selector.is_current(self.generation) {
+            return None;
+        }
+        let cached = self
+            .providers
+            .iter()
+            .filter_map(|provider| provider.cached.clone())
+            .collect();
+        model.model_selector.apply_cached(cached);
+        refresh(model, self.providers)
+    }
+}
+
+fn refresh(model: &mut Model, providers: Vec<ProviderCatalog>) -> Option<Effect> {
+    if providers.is_empty() {
+        model
+            .model_selector
+            .fail_refresh("No OpenAI-compatible credentials; use /provider first".to_string());
+        return None;
+    }
+    let Some(factory) = model.openai_factory.clone() else {
+        model
+            .model_selector
+            .fail_refresh("Model provider factory is not configured".to_string());
+        return None;
+    };
     let catalogs = model.model_catalogs.clone()?;
-    let store = model.provider_credentials.clone()?;
-    let factory = model.openai_factory.clone()?;
-    let provider_id = model.model_selector.provider_id()?.to_string();
     let generation = model.model_selector.generation();
-    Some(Effect::feature(RefreshCatalog {
+    Some(Effect::feature(RefreshCatalogs {
         catalogs,
-        store,
         factory,
-        provider_id,
+        providers,
         generation,
     }))
+}
+
+struct RefreshCatalogs {
+    catalogs: Arc<dyn ModelCatalogStore>,
+    factory: Arc<dyn OpenAiProviderFactory>,
+    providers: Vec<ProviderCatalog>,
+    generation: u64,
+}
+
+impl RefreshCatalogs {
+    async fn perform_async(self) -> RefreshCatalogsCompletion {
+        let mut tasks = tokio::task::JoinSet::new();
+        for provider in self.providers {
+            let factory = self.factory.clone();
+            let catalogs = self.catalogs.clone();
+            tasks.spawn(refresh_catalog(provider, factory, catalogs));
+        }
+        let mut catalogs = Vec::new();
+        let mut errors = Vec::new();
+        while let Some(result) = tasks.join_next().await {
+            match result {
+                Ok(Ok(catalog)) => catalogs.push(catalog),
+                Ok(Err(error)) => errors.push(error),
+                Err(error) => errors.push(format!("catalog refresh task failed: {error}")),
+            }
+        }
+        RefreshCatalogsCompletion {
+            catalogs,
+            errors,
+            generation: self.generation,
+        }
+    }
+}
+
+async fn refresh_catalog(
+    provider: ProviderCatalog,
+    factory: Arc<dyn OpenAiProviderFactory>,
+    catalogs: Arc<dyn ModelCatalogStore>,
+) -> Result<ModelCatalog, String> {
+    let provider_id = provider.credential.provider_id.clone();
+    async {
+        let models = factory.list_models(provider.credential).await?;
+        let checked_at = chrono::Utc::now().timestamp_millis();
+        let catalog = ModelCatalog::new(&provider_id, models, checked_at)
+            .map_err(|error| error.to_string())?;
+        catalogs
+            .upsert(catalog.clone())
+            .await
+            .map_err(|error| error.to_string())?;
+        Ok(catalog)
+    }
+    .await
+    .map_err(|error: String| format!("{provider_id}: {error}"))
+}
+
+impl FeatureEffect for RefreshCatalogs {
+    fn perform(self: Box<Self>) -> Message {
+        runtime().block_on(self.perform_async()).into_message()
+    }
+
+    fn execute(self: Box<Self>, sender: tokio::sync::mpsc::UnboundedSender<Message>) {
+        tokio::spawn(async move {
+            let _ = sender.send(self.perform_async().await.into_message());
+        });
+    }
+}
+
+struct RefreshCatalogsCompletion {
+    catalogs: Vec<ModelCatalog>,
+    errors: Vec<String>,
+    generation: u64,
+}
+
+impl RefreshCatalogsCompletion {
+    fn into_message(self) -> Message {
+        Message::FeatureCompletion(FeatureCompletion::new(self))
+    }
+}
+
+impl Completion for RefreshCatalogsCompletion {
+    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
+        if !model.model_selector.is_current(self.generation) {
+            return None;
+        }
+        model
+            .model_selector
+            .apply_refresh(self.catalogs, self.errors);
+        None
+    }
 }
 
 fn activate_selected(model: &mut Model) -> Option<Effect> {
     let store = model.provider_credentials.clone()?;
     let factory = model.openai_factory.clone()?;
-    let provider_id = model.model_selector.provider_id()?.to_string();
-    let (model_id, generation) = model.model_selector.begin_activation()?;
+    let (selected, generation) = model.model_selector.begin_activation()?;
     Some(Effect::feature(ActivateModel {
         store,
         factory,
-        provider_id,
-        model_id,
+        provider_id: selected.provider_id().to_string(),
+        model_id: selected.model_id().to_string(),
         generation,
         updated_at: chrono::Utc::now().timestamp_millis(),
     }))
-}
-
-struct LoadCatalog {
-    catalogs: Arc<dyn ModelCatalogStore>,
-    provider_id: String,
-    generation: u64,
-}
-
-impl LoadCatalog {
-    async fn perform_async(self) -> LoadCatalogCompletion {
-        let catalog = self.catalogs.get(&self.provider_id).await.ok().flatten();
-        LoadCatalogCompletion {
-            catalog,
-            generation: self.generation,
-        }
-    }
-}
-
-impl FeatureEffect for LoadCatalog {
-    fn perform(self: Box<Self>) -> Message {
-        runtime().block_on(self.perform_async()).into_message()
-    }
-
-    fn execute(self: Box<Self>, sender: tokio::sync::mpsc::UnboundedSender<Message>) {
-        tokio::spawn(async move {
-            let _ = sender.send(self.perform_async().await.into_message());
-        });
-    }
-}
-
-struct LoadCatalogCompletion {
-    catalog: Option<ModelCatalog>,
-    generation: u64,
-}
-
-impl LoadCatalogCompletion {
-    fn into_message(self) -> Message {
-        Message::FeatureCompletion(FeatureCompletion::new(self))
-    }
-}
-
-impl Completion for LoadCatalogCompletion {
-    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        if !model.model_selector.is_current(self.generation) {
-            return None;
-        }
-        if let Some(catalog) = self.catalog {
-            model.model_selector.apply_cached(catalog);
-        }
-        refresh(model)
-    }
-}
-
-struct RefreshCatalog {
-    catalogs: Arc<dyn ModelCatalogStore>,
-    store: Arc<dyn ProviderCredentialStore>,
-    factory: Arc<dyn OpenAiProviderFactory>,
-    provider_id: String,
-    generation: u64,
-}
-
-impl RefreshCatalog {
-    async fn perform_async(self) -> RefreshCatalogCompletion {
-        let result = async {
-            let credential = self
-                .store
-                .get(&self.provider_id)
-                .await
-                .map_err(|error| error.to_string())?
-                .ok_or_else(|| {
-                    format!("No {} credential; use /provider first", self.provider_id)
-                })?;
-            let models = self.factory.list_models(credential).await?;
-            let checked_at = chrono::Utc::now().timestamp_millis();
-            let catalog = ModelCatalog::new(&self.provider_id, models, checked_at)
-                .map_err(|error| error.to_string())?;
-            self.catalogs
-                .upsert(catalog.clone())
-                .await
-                .map_err(|error| error.to_string())?;
-            Ok(catalog)
-        }
-        .await;
-        RefreshCatalogCompletion {
-            result,
-            generation: self.generation,
-        }
-    }
-}
-
-impl FeatureEffect for RefreshCatalog {
-    fn perform(self: Box<Self>) -> Message {
-        runtime().block_on(self.perform_async()).into_message()
-    }
-
-    fn execute(self: Box<Self>, sender: tokio::sync::mpsc::UnboundedSender<Message>) {
-        tokio::spawn(async move {
-            let _ = sender.send(self.perform_async().await.into_message());
-        });
-    }
-}
-
-struct RefreshCatalogCompletion {
-    result: Result<ModelCatalog, String>,
-    generation: u64,
-}
-
-impl RefreshCatalogCompletion {
-    fn into_message(self) -> Message {
-        Message::FeatureCompletion(FeatureCompletion::new(self))
-    }
-}
-
-impl Completion for RefreshCatalogCompletion {
-    fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        if !model.model_selector.is_current(self.generation) {
-            return None;
-        }
-        match self.result {
-            Ok(catalog) => model.model_selector.apply_refresh(catalog),
-            Err(error) => model.model_selector.fail_refresh(error),
-        }
-        None
-    }
 }
 
 struct ActivateModel {
@@ -477,6 +520,10 @@ mod tests {
         crate::manager::message_manager::MessageManager::default().update(model, request.perform())
     }
 
+    fn model_ids(models: &[ProviderModel]) -> Vec<&str> {
+        models.iter().map(ProviderModel::model_id).collect()
+    }
+
     fn event_manager() -> EventManager {
         let config = Config::default();
         let keymap = Registry::from_config(
@@ -528,13 +575,22 @@ mod tests {
         );
         let load = open(&mut model).unwrap();
         let refresh = perform(&mut model, load).unwrap();
-        assert_eq!(model.model_selector.models(), ["gpt-b", "gpt-old"]);
+        assert_eq!(
+            model_ids(model.model_selector.models()),
+            ["gpt-b", "gpt-old"]
+        );
 
         perform(&mut model, refresh);
-        assert_eq!(model.model_selector.models(), ["gpt-a", "gpt-b"]);
+        assert_eq!(model_ids(model.model_selector.models()), ["gpt-a", "gpt-b"]);
         let refreshed = runtime().block_on(catalogs.get("openai")).unwrap().unwrap();
         assert_eq!(refreshed.models, ["gpt-a", "gpt-b"]);
-        assert_eq!(model.model_selector.selected_model(), Some("gpt-b"));
+        assert_eq!(
+            model
+                .model_selector
+                .selected_model()
+                .map(ProviderModel::model_id),
+            Some("gpt-b")
+        );
 
         let activation = activate_selected(&mut model).unwrap();
         perform(&mut model, activation);
@@ -565,10 +621,22 @@ mod tests {
         perform(&mut model, refresh);
         let events = event_manager();
         let messages = MessageManager::default();
-        assert_eq!(model.model_selector.selected_model(), Some("gpt-a"));
+        assert_eq!(
+            model
+                .model_selector
+                .selected_model()
+                .map(ProviderModel::model_id),
+            Some("gpt-a")
+        );
 
         send_key(&events, &messages, &mut model, KeyCode::Down);
-        assert_eq!(model.model_selector.selected_model(), Some("gpt-b"));
+        assert_eq!(
+            model
+                .model_selector
+                .selected_model()
+                .map(ProviderModel::model_id),
+            Some("gpt-b")
+        );
 
         let activation = send_key(&events, &messages, &mut model, KeyCode::Enter)
             .expect("Enter should start model activation");
@@ -621,8 +689,23 @@ mod tests {
         let refresh = perform(&mut model, load).unwrap();
         perform(&mut model, refresh);
         assert_eq!(
-            model.model_selector.models(),
-            ["k3-256k", "kimi-for-coding-highspeed"]
+            model_ids(model.model_selector.models()),
+            [
+                "k3-256k",
+                "kimi-for-coding-highspeed",
+                "k3-256k",
+                "kimi-for-coding-highspeed"
+            ]
+        );
+        let providers = model
+            .model_selector
+            .models()
+            .iter()
+            .map(ProviderModel::provider_id)
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(
+            providers,
+            std::collections::BTreeSet::from(["kimi-for-coding", "openai"])
         );
 
         let activation = activate_selected(&mut model).unwrap();
@@ -638,11 +721,10 @@ mod tests {
         assert_eq!(kimi.selected_model.as_deref(), Some("k3-256k"));
         let openai = runtime().block_on(store.get("openai")).unwrap().unwrap();
         assert_eq!(openai.selected_model, None);
-        assert!(
-            runtime()
-                .block_on(catalogs.get("openai"))
-                .unwrap()
-                .is_none()
+        let openai_catalog = runtime().block_on(catalogs.get("openai")).unwrap().unwrap();
+        assert_eq!(
+            openai_catalog.models,
+            ["k3-256k", "kimi-for-coding-highspeed"]
         );
         assert!(
             runtime()
@@ -668,10 +750,10 @@ mod tests {
         let refresh = perform(&mut model, load).unwrap();
         perform(&mut model, refresh);
 
-        assert_eq!(model.model_selector.models(), ["gpt-old"]);
+        assert_eq!(model_ids(model.model_selector.models()), ["gpt-old"]);
         assert_eq!(
             model.model_selector.notice(),
-            Some(&ModelSelectorNotice::Warning("offline".to_string()))
+            Some(&ModelSelectorNotice::Warning("openai: offline".to_string()))
         );
         assert!(model.agent.provider().is_none());
     }

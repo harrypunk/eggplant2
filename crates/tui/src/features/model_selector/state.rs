@@ -1,6 +1,37 @@
+use std::{collections::BTreeSet, fmt};
+
 use eggplant_agent_storage::ModelCatalog;
 
 use crate::{component::list::ListState, data_object::Context};
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct ProviderModel {
+    provider_id: String,
+    model_id: String,
+}
+
+impl ProviderModel {
+    pub fn new(provider_id: impl Into<String>, model_id: impl Into<String>) -> Self {
+        Self {
+            provider_id: provider_id.into(),
+            model_id: model_id.into(),
+        }
+    }
+
+    pub fn provider_id(&self) -> &str {
+        &self.provider_id
+    }
+
+    pub fn model_id(&self) -> &str {
+        &self.model_id
+    }
+}
+
+impl fmt::Display for ProviderModel {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}/{}", self.provider_id, self.model_id)
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ModelSelectorPage {
@@ -21,9 +52,8 @@ pub enum ModelSelectorNotice {
 pub struct ModelSelectorState {
     page: ModelSelectorPage,
     return_context: Option<Context>,
-    provider_id: Option<String>,
-    models: ListState<String>,
-    active_model: Option<String>,
+    models: ListState<ProviderModel>,
+    active_model: Option<ProviderModel>,
     notice: Option<ModelSelectorNotice>,
     generation: u64,
 }
@@ -33,7 +63,6 @@ impl Default for ModelSelectorState {
         Self {
             page: ModelSelectorPage::Closed,
             return_context: None,
-            provider_id: None,
             models: ListState::default(),
             active_model: None,
             notice: None,
@@ -43,15 +72,9 @@ impl Default for ModelSelectorState {
 }
 
 impl ModelSelectorState {
-    pub fn open(
-        &mut self,
-        return_context: Option<Context>,
-        provider_id: String,
-        active_model: Option<String>,
-    ) {
+    pub fn open(&mut self, return_context: Option<Context>, active_model: Option<ProviderModel>) {
         self.page = ModelSelectorPage::Loading;
         self.return_context = return_context;
-        self.provider_id = Some(provider_id);
         self.active_model = active_model;
         self.models = ListState::default();
         self.notice = None;
@@ -60,7 +83,6 @@ impl ModelSelectorState {
 
     pub fn close(&mut self) -> Option<Context> {
         self.page = ModelSelectorPage::Closed;
-        self.provider_id = None;
         self.models = ListState::default();
         self.notice = None;
         self.generation = self.generation.wrapping_add(1);
@@ -71,11 +93,7 @@ impl ModelSelectorState {
         self.page
     }
 
-    pub fn provider_id(&self) -> Option<&str> {
-        self.provider_id.as_deref()
-    }
-
-    pub fn models(&self) -> &[String] {
+    pub fn models(&self) -> &[ProviderModel] {
         self.models.items()
     }
 
@@ -83,12 +101,12 @@ impl ModelSelectorState {
         self.models.selected()
     }
 
-    pub fn selected_model(&self) -> Option<&str> {
-        self.models.selected_item().map(String::as_str)
+    pub fn selected_model(&self) -> Option<&ProviderModel> {
+        self.models.selected_item()
     }
 
-    pub fn active_model(&self) -> Option<&str> {
-        self.active_model.as_deref()
+    pub fn active_model(&self) -> Option<&ProviderModel> {
+        self.active_model.as_ref()
     }
 
     pub fn notice(&self) -> Option<&ModelSelectorNotice> {
@@ -121,15 +139,30 @@ impl ModelSelectorState {
         }
     }
 
-    pub fn apply_cached(&mut self, catalog: ModelCatalog) {
-        self.set_models(catalog.models);
+    pub fn apply_cached(&mut self, catalogs: Vec<ModelCatalog>) {
+        self.replace_models(flatten(catalogs));
         self.page = ModelSelectorPage::Refreshing;
     }
 
-    pub fn apply_refresh(&mut self, catalog: ModelCatalog) {
-        self.set_models(catalog.models);
-        self.notice = None;
+    /// Merge fresh provider catalogs while retaining cached sections that failed to refresh.
+    pub fn apply_refresh(&mut self, catalogs: Vec<ModelCatalog>, errors: Vec<String>) {
+        let refreshed = catalogs
+            .iter()
+            .map(|catalog| catalog.provider_id.as_str())
+            .collect::<BTreeSet<_>>();
+        let mut models = self
+            .models
+            .items()
+            .iter()
+            .filter(|model| !refreshed.contains(model.provider_id()))
+            .cloned()
+            .collect::<Vec<_>>();
+        models.extend(flatten(catalogs));
+        models.sort();
+        models.dedup();
+        self.replace_models(models);
         self.page = ModelSelectorPage::Ready;
+        self.notice = notice_for_errors(errors, self.models.items().is_empty());
     }
 
     pub fn fail_refresh(&mut self, error: String) {
@@ -141,11 +174,11 @@ impl ModelSelectorState {
         });
     }
 
-    pub fn begin_activation(&mut self) -> Option<(String, u64)> {
+    pub fn begin_activation(&mut self) -> Option<(ProviderModel, u64)> {
         if self.page != ModelSelectorPage::Ready && self.page != ModelSelectorPage::Refreshing {
             return None;
         }
-        let model = self.selected_model()?.to_string();
+        let model = self.selected_model()?.clone();
         self.page = ModelSelectorPage::Switching;
         self.notice = None;
         Some((model, self.generation))
@@ -163,10 +196,10 @@ impl ModelSelectorState {
         Some(succeeded)
     }
 
-    fn set_models(&mut self, models: Vec<String>) {
+    fn replace_models(&mut self, models: Vec<ProviderModel>) {
         let selection = match self.page {
             ModelSelectorPage::Loading => self.active_model.clone(),
-            _ => self.selected_model().map(str::to_string),
+            _ => self.selected_model().cloned(),
         };
         self.models = ListState::new(models);
         if let Some(index) = selection.and_then(|selected| {
@@ -183,13 +216,41 @@ impl ModelSelectorState {
     }
 }
 
+fn flatten(catalogs: Vec<ModelCatalog>) -> Vec<ProviderModel> {
+    let mut models = catalogs
+        .into_iter()
+        .flat_map(|catalog| {
+            let provider_id = catalog.provider_id;
+            catalog
+                .models
+                .into_iter()
+                .map(move |model_id| ProviderModel::new(provider_id.clone(), model_id))
+        })
+        .collect::<Vec<_>>();
+    models.sort();
+    models.dedup();
+    models
+}
+
+fn notice_for_errors(errors: Vec<String>, empty: bool) -> Option<ModelSelectorNotice> {
+    if errors.is_empty() {
+        return None;
+    }
+    let error = errors.join("; ");
+    Some(if empty {
+        ModelSelectorNotice::Error(error)
+    } else {
+        ModelSelectorNotice::Warning(error)
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn catalog(models: &[&str]) -> ModelCatalog {
+    fn catalog(provider_id: &str, models: &[&str]) -> ModelCatalog {
         ModelCatalog::new(
-            "openai",
+            provider_id,
             models.iter().map(|model| model.to_string()).collect(),
             1,
         )
@@ -197,36 +258,63 @@ mod tests {
     }
 
     #[test]
-    fn cached_selection_tracks_active_model_and_refresh_preserves_it() {
+    fn grouped_selection_uses_full_identity_and_failed_sections_stay_cached() {
         let mut state = ModelSelectorState::default();
-        state.open(None, "openai".to_string(), Some("gpt-b".to_string()));
-        state.apply_cached(catalog(&["gpt-a", "gpt-b", "gpt-c"]));
-        assert_eq!(state.selected_model(), Some("gpt-b"));
-        state.select_next();
-        assert_eq!(state.selected_model(), Some("gpt-c"));
+        state.open(None, Some(ProviderModel::new("openai", "gpt-b")));
+        state.apply_cached(vec![
+            catalog("openai", &["gpt-a", "gpt-b"]),
+            catalog("qwen-tokenplan-individual-cn", &["qwen-a"]),
+        ]);
+        assert_eq!(
+            state.selected_model(),
+            Some(&ProviderModel::new("openai", "gpt-b"))
+        );
 
-        state.apply_refresh(catalog(&["gpt-b", "gpt-c", "gpt-d"]));
-        assert_eq!(state.selected_model(), Some("gpt-c"));
-        state.fail_refresh("offline".to_string());
+        state.select_next();
+        assert_eq!(
+            state.selected_model(),
+            Some(&ProviderModel::new(
+                "qwen-tokenplan-individual-cn",
+                "qwen-a"
+            ))
+        );
+        state.apply_refresh(
+            vec![catalog("openai", &["gpt-c"])],
+            vec!["qwen refresh failed".to_string()],
+        );
+
+        assert_eq!(state.models().len(), 2);
+        assert!(
+            state
+                .models()
+                .iter()
+                .any(|model| model.provider_id() == "qwen-tokenplan-individual-cn")
+        );
+        assert_eq!(
+            state.selected_model().map(ToString::to_string),
+            Some("qwen-tokenplan-individual-cn/qwen-a".to_string())
+        );
         assert!(matches!(
             state.notice(),
             Some(ModelSelectorNotice::Warning(_))
         ));
-        assert_eq!(state.models().len(), 3);
+        let (selected, _) = state.begin_activation().unwrap();
+        assert_eq!(selected.provider_id(), "qwen-tokenplan-individual-cn");
+        assert_eq!(selected.model_id(), "qwen-a");
     }
 
     #[test]
     fn activation_and_late_completions_are_scoped() {
         let mut state = ModelSelectorState::default();
-        state.open(None, "openai".to_string(), None);
-        state.apply_cached(catalog(&["gpt-a"]));
+        state.open(None, None);
+        state.apply_cached(vec![catalog("openai", &["gpt-a"])]);
         let (model, generation) = state.begin_activation().unwrap();
-        assert_eq!(model, "gpt-a");
+        assert_eq!(model, ProviderModel::new("openai", "gpt-a"));
         assert_eq!(state.complete_activation(generation + 1, None), None);
         assert_eq!(state.complete_activation(generation, None), Some(true));
         state.close();
-        state.open(None, "openai".to_string(), None);
-        state.apply_cached(catalog(&["gpt-a"]));
+        state.open(None, None);
+        state.apply_cached(vec![catalog("openai", &["gpt-a"])]);
         let (_, generation) = state.begin_activation().unwrap();
         assert_eq!(
             state.complete_activation(generation, Some("failed".to_string())),

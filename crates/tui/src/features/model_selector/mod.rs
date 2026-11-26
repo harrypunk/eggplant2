@@ -15,6 +15,6 @@ pub const KEYMAPS: &[ContextKeymap] =
         ]),
     ];
 
-pub use state::{ModelSelectorNotice, ModelSelectorPage, ModelSelectorState};
+pub use state::{ModelSelectorNotice, ModelSelectorPage, ModelSelectorState, ProviderModel};
 pub use ui::register_ui;
 pub use work::{close, commands, general_action_subscriptions, handle_command, open};

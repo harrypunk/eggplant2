@@ -150,10 +150,11 @@ The shared form and workflow apply to every table row:
 
 #### `/model` selector
 
-- `/model` captures the active provider, loads that provider's cached catalog first, then refreshes it in the background with authenticated `GET {base_url}/models` and persists the fresh result under the same provider ID.
-- Cached rows remain navigable during `Refreshing`. Selection is preserved by model ID; a missing selected ID falls back to the first model without retaining its old numeric index.
-- Refresh failures keep cached models with a warning. Empty results or missing credentials produce an error.
-- Enter activates the selected available model, persists `selected_model`, and restores it on restart. Activation failures leave the selector open without changing the active provider.
+- `/model` loads cached catalogs for every stored OpenAI-compatible credential, then refreshes each provider independently in the background with authenticated `GET {base_url}/models` and persists fresh results under the same provider IDs.
+- The view groups models into provider sections with indented model rows. Selection uses a typed `ProviderModel { provider_id, model_id }` identity rather than a model-name string, and only that one identity is activated.
+- Cached sections remain navigable during `Refreshing`. Selection is preserved by full provider/model identity; a missing selection falls back to the first model without retaining its old numeric index.
+- Successful refreshes merge into the grouped list while failed providers retain their cached sections with a warning. Empty results or missing compatible credentials produce an error.
+- Enter activates the selected available provider/model, persists `selected_model` on that credential, and restores the latest activation on restart. Activation failures leave the selector open without changing the active provider.
 - The selector shares the general modal actions: Up/Down and Ctrl-N/Ctrl-P navigate, Enter selects, and Escape closes while restoring the originating Agent surface.
 
 #### Agent slash commands
