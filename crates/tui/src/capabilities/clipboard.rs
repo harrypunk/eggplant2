@@ -1,23 +1,42 @@
+use std::fmt;
+
 use helix_view::clipboard::{ClipboardProvider, ClipboardType};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ClipboardError {
+    Unavailable,
+    Backend(String),
+}
+
+impl fmt::Display for ClipboardError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Unavailable => formatter.write_str("no system clipboard provider is available"),
+            Self::Backend(error) => formatter.write_str(error),
+        }
+    }
+}
+
+impl std::error::Error for ClipboardError {}
 
 /// Minimal text-input port used by paste-oriented capabilities.
 pub trait ClipboardReader {
-    fn read_text(&self) -> Result<String, String>;
+    fn read_text(&self) -> Result<String, ClipboardError>;
 }
 
 impl<C: ClipboardReader + ?Sized> ClipboardReader for &C {
-    fn read_text(&self) -> Result<String, String> {
+    fn read_text(&self) -> Result<String, ClipboardError> {
         (*self).read_text()
     }
 }
 
 impl ClipboardReader for ClipboardProvider {
-    fn read_text(&self) -> Result<String, String> {
+    fn read_text(&self) -> Result<String, ClipboardError> {
         if let ClipboardProvider::None = self {
-            return Err("no system clipboard provider is available".to_string());
+            return Err(ClipboardError::Unavailable);
         }
         self.get_contents(&ClipboardType::Clipboard)
-            .map_err(|error| error.to_string())
+            .map_err(|error| ClipboardError::Backend(error.to_string()))
     }
 }
 

@@ -8,6 +8,7 @@ pub use app::language;
 pub mod notification;
 pub mod openai;
 pub mod page_scroll;
+pub mod paste;
 pub mod readonly;
 pub mod register;
 pub mod search;

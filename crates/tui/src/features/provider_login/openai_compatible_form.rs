@@ -1,8 +1,11 @@
 use std::fmt;
 
-use crate::component::{
-    form::FormFocus,
-    text_input::{TextInput, TextInputEvent},
+use crate::{
+    capabilities::{clipboard::ClipboardError, paste::PasteError},
+    component::{
+        form::FormFocus,
+        text_input::{TextInput, TextInputEvent},
+    },
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -107,21 +110,21 @@ impl OpenAiForm {
     pub fn complete_paste(
         &mut self,
         revision: u64,
-        text: Result<String, String>,
-    ) -> Option<Result<(), String>> {
+        text: Result<String, ClipboardError>,
+    ) -> Option<Result<(), PasteError>> {
         if revision != self.revision {
             return None;
         }
         let text = match text {
             Ok(text) => text,
-            Err(error) => return Some(Err(error)),
+            Err(error) => return Some(Err(PasteError::from(error))),
         };
         let text = text.trim();
         if text.is_empty() {
-            return Some(Err("Clipboard is empty".to_string()));
+            return Some(Err(PasteError::EmptyClipboard));
         }
         if text.contains(['\n', '\r']) {
-            return Some(Err("Pasted text must be single-line".to_string()));
+            return Some(Err(PasteError::Multiline));
         }
         self.focused_input().insert_str(text);
         self.invalidate();
@@ -187,10 +190,14 @@ mod tests {
 
         form.focus_next();
         let invalid = form.begin_paste();
-        assert!(
-            form.complete_paste(invalid, Ok("two\nlines".to_string()))
-                .unwrap()
-                .is_err()
+        assert_eq!(
+            form.complete_paste(invalid, Ok("two\nlines".to_string())),
+            Some(Err(PasteError::Multiline))
+        );
+        let unavailable = form.begin_paste();
+        assert_eq!(
+            form.complete_paste(unavailable, Err(ClipboardError::Unavailable)),
+            Some(Err(PasteError::Clipboard(ClipboardError::Unavailable)))
         );
         assert!(form.input(OpenAiField::ApiKey).value().is_empty());
     }

@@ -1,56 +1,46 @@
 use crate::{
-    capabilities::clipboard::ClipboardReader,
+    capabilities::{
+        clipboard::ClipboardReader,
+        paste::{self, PasteCompletion, PasteRequest},
+    },
     data_object::{Message, Model, StatusMessage},
     manager::effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
 };
 
 pub fn paste(model: &mut Model) -> Option<Effect> {
-    paste_with_reader(model, model.register.provider())
+    let clipboard = model.register.provider();
+    paste_with_reader(model, clipboard)
 }
 
 pub fn paste_with_reader<C>(model: &mut Model, clipboard: C) -> Option<Effect>
 where
     C: ClipboardReader + Send + 'static,
 {
-    let revision = model.provider_login.begin_openai_paste()?;
-    Some(Effect::feature(PasteRequest {
-        clipboard,
-        revision,
-    }))
+    let request = paste::paste_with_reader(&mut model.provider_login, clipboard)?;
+    Some(Effect::feature(ProviderLoginPasteRequest(request)))
 }
 
-struct PasteRequest<C> {
-    clipboard: C,
-    revision: u64,
-}
+struct ProviderLoginPasteRequest<C>(PasteRequest<C, u64>);
 
-impl<C> FeatureEffect for PasteRequest<C>
+impl<C> FeatureEffect for ProviderLoginPasteRequest<C>
 where
     C: ClipboardReader + Send + 'static,
 {
     fn perform(self: Box<Self>) -> Message {
-        let result = self.clipboard.read_text();
-        Message::FeatureCompletion(FeatureCompletion::new(PasteCompletion {
-            revision: self.revision,
-            result,
-        }))
+        Message::FeatureCompletion(FeatureCompletion::new(ProviderLoginPasteCompletion(
+            self.0.perform(),
+        )))
     }
 }
 
-struct PasteCompletion {
-    revision: u64,
-    result: Result<String, String>,
-}
+struct ProviderLoginPasteCompletion(PasteCompletion<u64>);
 
-impl Completion for PasteCompletion {
+impl Completion for ProviderLoginPasteCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        match model
-            .provider_login
-            .complete_openai_paste(self.revision, self.result)
-        {
+        match self.0.apply(&mut model.provider_login) {
             Some(Ok(())) => None,
             Some(Err(error)) => {
-                model.provider_login.set_error(error.clone());
+                model.provider_login.set_error(error.to_string());
                 Some(crate::notifications::publish_status(
                     model,
                     StatusMessage::error(format!("Paste failed: {error}")),

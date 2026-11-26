@@ -162,6 +162,8 @@ A save-dependent workflow must use an explicit completion state machine, as the 
 
 For source-independent transient feedback, `NotificationSink` and the application notification adapter follow the same owned-request/generation-checked pattern. See [Transient notifications](notifications.md).
 
+Revision-checked clipboard reads use `capabilities/paste.rs`. Its component-local `PasteTarget` interface supplies an owned revision and associated error type without depending on the application model or effects. `PasteRequest` and `PasteCompletion` contain only owned data; a feature adapter wraps them in `Effect`/`Completion`, selects its component from the application root, and applies notification policy. ProviderLogin implements the target directly on its state, preserving form revisions and typed clipboard/paste errors. Other form or editor components can reuse the request without depending on ProviderLogin or the global model.
+
 ## 4. Keep ownership boundaries clear
 
 - `editor` owns document text, cursor, revisions, view geometry, and persistence invariants.

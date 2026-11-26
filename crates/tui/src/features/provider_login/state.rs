@@ -5,6 +5,10 @@ use super::{
     providers::{ProviderAuthMethod, ProviderSpec},
 };
 use crate::{
+    capabilities::{
+        clipboard::ClipboardError,
+        paste::{PasteError, PasteTarget},
+    },
     component::{
         list::ListState,
         text_input::{TextInput, TextInputEvent},
@@ -306,8 +310,8 @@ impl ProviderLoginState {
     pub fn complete_openai_paste(
         &mut self,
         revision: u64,
-        text: Result<String, String>,
-    ) -> Option<Result<(), String>> {
+        text: Result<String, ClipboardError>,
+    ) -> Option<Result<(), PasteError>> {
         if !self.page.is_openai_input() {
             return None;
         }
@@ -481,6 +485,23 @@ impl ProviderLoginState {
             }
             ProviderLoginPage::AuthenticationMethod => ProviderLoginBack::Close,
         }
+    }
+}
+
+impl PasteTarget for ProviderLoginState {
+    type Revision = u64;
+    type Error = PasteError;
+
+    fn begin_paste(&mut self) -> Option<Self::Revision> {
+        self.begin_openai_paste()
+    }
+
+    fn complete_paste(
+        &mut self,
+        revision: Self::Revision,
+        result: Result<String, ClipboardError>,
+    ) -> Option<Result<(), Self::Error>> {
+        self.complete_openai_paste(revision, result)
     }
 }
 

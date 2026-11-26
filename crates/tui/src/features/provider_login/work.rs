@@ -240,13 +240,14 @@ mod tests {
 
     use super::{super::paste, *};
     use crate::{
-        capabilities::clipboard::ClipboardReader, manager::message_manager::MessageManager,
+        capabilities::clipboard::{ClipboardError, ClipboardReader},
+        manager::message_manager::MessageManager,
     };
 
-    struct TestClipboard(Result<String, String>);
+    struct TestClipboard(Result<String, ClipboardError>);
 
     impl ClipboardReader for TestClipboard {
-        fn read_text(&self) -> Result<String, String> {
+        fn read_text(&self) -> Result<String, ClipboardError> {
             self.0.clone()
         }
     }
