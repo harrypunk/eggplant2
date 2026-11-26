@@ -11,6 +11,7 @@ use serde_json::Value;
 
 const MAX_MODELS: usize = 256;
 const MAX_MODEL_ID_BYTES: usize = 256;
+const USER_AGENT: &str = concat!("eggplant-editor/", env!("CARGO_PKG_VERSION"));
 
 /// API key that is redacted from configuration and provider debug output.
 #[derive(Clone, PartialEq, Eq)]
@@ -93,6 +94,7 @@ impl OpenAiProvider {
             return Err(AgentError("OpenAI API key must not be empty".to_string()));
         }
         let client = reqwest::Client::builder()
+            .user_agent(USER_AGENT)
             .timeout(Duration::from_secs(60))
             .build()
             .map_err(|_| AgentError("failed to initialize OpenAI client".to_string()))?;
@@ -616,6 +618,7 @@ mod tests {
         let request = server.join().unwrap().to_lowercase();
         assert!(request.contains("post /v1/chat/completions"));
         assert!(request.contains("authorization: bearer test-key"));
+        assert!(request.contains("user-agent: eggplant-editor/2.0.0"));
         assert!(request.contains("gpt-test"));
         assert!(request.contains("\"stream_options\":{\"include_usage\":true}"));
         assert!(request.contains("hello"));
@@ -645,6 +648,7 @@ mod tests {
         let request = server.join().unwrap().to_lowercase();
         assert!(request.contains("get /v1/models"));
         assert!(request.contains("authorization: bearer stored-secret"));
+        assert!(request.contains("user-agent: eggplant-editor/2.0.0"));
         assert!(!request.contains("chat/completions"));
     }
 

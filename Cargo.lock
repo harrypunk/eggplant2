@@ -62,7 +62,7 @@ checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
 
 [[package]]
 name = "app"
-version = "0.1.0"
+version = "2.0.0"
 dependencies = [
  "editor",
  "serde",
@@ -792,7 +792,7 @@ checksum = "92773504d58c093f6de2459af4af33faa518c13451eb8f2b5698ed3d36e7c813"
 
 [[package]]
 name = "editor"
-version = "0.1.0"
+version = "2.0.0"
 dependencies = [
  "anyhow",
  "arc-swap",
@@ -807,14 +807,14 @@ dependencies = [
 
 [[package]]
 name = "eggplant-agent"
-version = "0.1.0"
+version = "2.0.0"
 dependencies = [
  "uuid",
 ]
 
 [[package]]
 name = "eggplant-agent-openai"
-version = "0.1.0"
+version = "2.0.0"
 dependencies = [
  "eggplant-agent",
  "futures-util",
@@ -826,7 +826,7 @@ dependencies = [
 
 [[package]]
 name = "eggplant-agent-storage"
-version = "0.1.0"
+version = "2.0.0"
 dependencies = [
  "eggplant-agent",
  "tempfile",
@@ -835,7 +835,7 @@ dependencies = [
 
 [[package]]
 name = "eggplant-agent-storage-seaorm"
-version = "0.1.0"
+version = "2.0.0"
 dependencies = [
  "eggplant-agent",
  "eggplant-agent-storage",
@@ -5058,7 +5058,7 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tui"
-version = "0.1.0"
+version = "2.0.0"
 dependencies = [
  "app",
  "chrono",
@@ -5235,7 +5235,7 @@ checksum = "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426"
 
 [[package]]
 name = "vcs"
-version = "0.1.0"
+version = "2.0.0"
 dependencies = [
  "anyhow",
  "gix",
