@@ -2,6 +2,7 @@ mod kimi_for_coding;
 mod openai;
 mod openai_compatible_work;
 mod paste;
+mod qwen_tokenplan_individual_cn;
 mod state;
 mod storage;
 mod ui;
@@ -25,6 +26,7 @@ pub const KEYMAPS: &[ContextKeymap] =
 
 pub use kimi_for_coding::DEFAULT_ENDPOINT as DEFAULT_KIMI_FOR_CODING_ENDPOINT;
 pub use openai::{DEFAULT_OPENAI_ENDPOINT, OpenAiField};
+pub use qwen_tokenplan_individual_cn::DEFAULT_ENDPOINT as DEFAULT_QWEN_TOKENPLAN_INDIVIDUAL_CN_ENDPOINT;
 pub use state::{
     ProviderAuthMethod, ProviderLoginBack, ProviderLoginOption, ProviderLoginPage,
     ProviderLoginState, ProviderLoginSubmission, ProviderSpec,

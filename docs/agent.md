@@ -108,15 +108,29 @@ The inline dialog requires an open project, not an active buffer. With an active
 #### Menus and navigation
 
 - Account providers: `openai`, `qwen.com`, and `kimi.com`. These remain placeholders.
-- API-key providers: `openai`, `kimi-for-coding`, `qwen-tokenplan-individual-cn`, and `deepseek`.
+- The API-key menu contains the compatible providers listed below and generic key-only entries.
 - Up/Down and Ctrl-N/Ctrl-P navigate menus.
 - Enter opens the selected submenu or provider page.
 - Escape steps back through provider pages before closing the dialog. During model loading or activation it closes the dialog immediately; late completions are ignored.
 
 #### OpenAI-compatible forms
 
-- OpenAI and Kimi-for-Coding are separate provider specifications that share the OpenAI-compatible form and workflow. OpenAI defaults to `https://api.openai.com/v1`; Kimi-for-Coding defaults to `https://api.kimi.com/coding/v1`. The endpoint remains editable for custom compatible endpoints.
-- Pi uses Kimi's Anthropic Messages API at `https://api.kimi.com/coding`; this Eggplant slice deliberately uses Kimi's OpenAI-compatible `/coding/v1` API to reuse the existing provider-neutral streaming adapter rather than adding a second transport stack.
+Each compatible provider has an independent descriptor and default endpoint. Add new providers to this table rather than expanding provider lists in the shared behavior below.
+
+| Provider ID | Default endpoint |
+| --- | --- |
+| `openai` | `https://api.openai.com/v1` |
+| `kimi-for-coding` | `https://api.kimi.com/coding/v1` |
+| `qwen-tokenplan-individual-cn` | `https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1` |
+
+Protocol-specific notes:
+
+- Kimi: Pi uses Anthropic Messages at `https://api.kimi.com/coding`. Eggplant deliberately uses Kimi's OpenAI-compatible `/coding/v1` API to reuse the existing provider-neutral streaming adapter rather than adding a second transport stack.
+- Qwen TokenPlan Individual CN: Pi separates Individual (Singapore) from CN (Beijing). Eggplant's explicitly CN-scoped provider uses Pi's Beijing endpoint and OpenAI Completions protocol.
+
+The shared form and workflow apply to every table row:
+
+- Endpoints remain editable for custom compatible endpoints, and model choices always come from the authenticated catalog rather than an embedded list.
 - The API-key field is masked through an injected `TextInputViewStyle`; neither field exposes the key in debug output.
 - Both fields use wrappable `TextInput` views, and dialog height follows their measured content.
 - Tab loops focus through Endpoint and API key. No backward-focus binding is needed.
@@ -126,7 +140,7 @@ The inline dialog requires an open project, not an active buffer. With an active
 
 #### Catalog and model activation
 
-- A successful OpenAI or Kimi-for-Coding save fetches authenticated `GET {base_url}/models` through the injected `OpenAiProviderFactory`, using the selected provider's own stored credential.
+- A successful compatible-provider save fetches authenticated `GET {base_url}/models` through the injected `OpenAiProviderFactory`, using the selected provider's own stored credential.
 - Successful responses are also normalized and upserted under that provider ID through `ModelCatalogStore` with `checked_at` and optional validators. Cache failures warn without blocking selection.
 - Explicit loading, selection, and activation pages replace boolean workflow flags.
 - Only model IDs returned by the endpoint are selectable. The list uses a bounded, selection-following viewport.
@@ -157,9 +171,9 @@ A leading `/` in the inline dialog or panel Insert input opens a live-filtered c
 
 #### Ownership and deferred work
 
-`provider_login` owns dialog state, commands, and modal registration. OpenAI and Kimi-for-Coding own separate provider descriptors; `openai_compatible_work.rs` contains only their shared protocol workflow and accepts the selected provider ID dynamically. Adding another compatible provider does not modify either provider's descriptor or add a provider-specific workflow branch. `component/agent/provider_login.rs` is a pure menu, form, and placeholder view. Provider login and model selection own modal sessions rather than context-stack entries. Opening either from the inline Agent dialog suspends and later restores the `AgentChatDialog` modal session without duplicating it in the context stack; panel Insert state resumes automatically.
+`provider_login` owns dialog state, commands, and modal registration. Each provider owns a separate descriptor; `openai_compatible_work.rs` contains only the shared protocol workflow and accepts the selected provider ID dynamically. Adding another compatible provider does not modify existing provider descriptors or add a provider-specific workflow branch. `component/agent/provider_login.rs` is a pure menu, form, and placeholder view. Provider login and model selection own modal sessions rather than context-stack entries. Opening either from the inline Agent dialog suspends and later restores the `AgentChatDialog` modal session without duplicating it in the context stack; panel Insert state resumes automatically.
 
-Account/OAuth authentication, token refresh, and providers requiring other wire protocols remain deferred. OpenAI and Kimi-for-Coding API-key login, catalog selection, activation, `/model` refresh, and restart restoration use the shared credential-store and OpenAI-compatible factory interfaces.
+Account/OAuth authentication, token refresh, and providers requiring other wire protocols remain deferred. Every compatible provider in the table supports API-key login, catalog selection, activation, `/model` refresh, and restart restoration through the shared credential-store and OpenAI-compatible factory interfaces.
 
 ## Session and run state
 

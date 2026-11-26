@@ -530,7 +530,7 @@ const ACCOUNT_PROVIDERS: &[ProviderSpec] = &[
 const API_KEY_PROVIDERS: &[ProviderSpec] = &[
     super::openai::PROVIDER,
     super::kimi_for_coding::PROVIDER,
-    ProviderSpec::new("qwen-tokenplan-individual-cn", ProviderAuthMethod::ApiKey),
+    super::qwen_tokenplan_individual_cn::PROVIDER,
     ProviderSpec::new("deepseek", ProviderAuthMethod::ApiKey),
 ];
 

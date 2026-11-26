@@ -483,6 +483,54 @@ mod tests {
     }
 
     #[test]
+    fn qwen_cn_login_uses_its_regional_endpoint_and_catalog() {
+        let (mut model, store, _directory, activated) =
+            model_with_factory(Ok(vec!["qwen3.7-max".to_string()]));
+        let (catalogs, _catalog_directory) = crate::test_utils::model_catalog_store();
+        model.model_catalogs = Some(catalogs.clone());
+        open_form_at(&mut model, 2);
+        assert_eq!(
+            model
+                .provider_login
+                .openai_input(crate::provider_login::OpenAiField::Endpoint)
+                .value(),
+            crate::provider_login::DEFAULT_QWEN_TOKENPLAN_INDIVIDUAL_CN_ENDPOINT
+        );
+
+        let save = work::handle_command(&mut model, CommandId("provider_login_activate")).unwrap();
+        let fetch = perform(&mut model, save).expect("Qwen save should fetch its catalog");
+        perform(&mut model, fetch);
+        assert_eq!(model.provider_login.models(), ["qwen3.7-max"]);
+        let activation =
+            work::handle_command(&mut model, CommandId("provider_login_activate")).unwrap();
+        perform(&mut model, activation);
+
+        assert!(!model.provider_login.is_open());
+        assert_eq!(model.agent.provider_name(), "qwen-tokenplan-individual-cn");
+        assert_eq!(model.agent.model(), Some("qwen3.7-max"));
+        assert_eq!(activated.lock().unwrap().as_slice(), ["qwen3.7-max"]);
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let credential = runtime
+            .block_on(store.get("qwen-tokenplan-individual-cn"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            credential.base_url.as_deref(),
+            Some(crate::provider_login::DEFAULT_QWEN_TOKENPLAN_INDIVIDUAL_CN_ENDPOINT)
+        );
+        assert_eq!(credential.selected_model.as_deref(), Some("qwen3.7-max"));
+        assert!(
+            runtime
+                .block_on(catalogs.get("qwen-tokenplan-individual-cn"))
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    #[test]
     fn catalog_failure_preserves_the_form_and_does_not_activate() {
         let (mut model, _store, _directory, _activated) =
             model_with_factory(Err("catalog unavailable".to_string()));
