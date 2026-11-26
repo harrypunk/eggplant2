@@ -1,6 +1,9 @@
 use std::fmt;
 
-use super::openai::{OpenAiField, OpenAiForm};
+use super::{
+    openai_compatible_form::{OpenAiField, OpenAiForm},
+    providers::{ProviderAuthMethod, ProviderSpec},
+};
 use crate::{
     component::{
         list::ListState,
@@ -8,46 +11,6 @@ use crate::{
     },
     data_object::Context,
 };
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ProviderAuthMethod {
-    Account,
-    ApiKey,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ProviderSpec {
-    id: &'static str,
-    method: ProviderAuthMethod,
-    openai_compatible_endpoint: Option<&'static str>,
-}
-
-impl ProviderSpec {
-    pub(super) const fn new(id: &'static str, method: ProviderAuthMethod) -> Self {
-        Self {
-            id,
-            method,
-            openai_compatible_endpoint: None,
-        }
-    }
-
-    pub(super) const fn with_openai_compatible_endpoint(mut self, endpoint: &'static str) -> Self {
-        self.openai_compatible_endpoint = Some(endpoint);
-        self
-    }
-
-    pub fn id(self) -> &'static str {
-        self.id
-    }
-
-    pub fn method(self) -> ProviderAuthMethod {
-        self.method
-    }
-
-    pub fn openai_compatible_endpoint(self) -> Option<&'static str> {
-        self.openai_compatible_endpoint
-    }
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ProviderLoginOption {
@@ -521,19 +484,6 @@ impl ProviderLoginState {
     }
 }
 
-const ACCOUNT_PROVIDERS: &[ProviderSpec] = &[
-    ProviderSpec::new("openai", ProviderAuthMethod::Account),
-    ProviderSpec::new("qwen.com", ProviderAuthMethod::Account),
-    ProviderSpec::new("kimi.com", ProviderAuthMethod::Account),
-];
-
-const API_KEY_PROVIDERS: &[ProviderSpec] = &[
-    super::openai::PROVIDER,
-    super::kimi_for_coding::PROVIDER,
-    super::qwen_tokenplan_individual_cn::PROVIDER,
-    ProviderSpec::new("deepseek", ProviderAuthMethod::ApiKey),
-];
-
 fn authentication_options() -> ListState<ProviderLoginOption> {
     selected_list(vec![
         ProviderLoginOption::Method(ProviderAuthMethod::Account),
@@ -543,8 +493,8 @@ fn authentication_options() -> ListState<ProviderLoginOption> {
 
 fn provider_options(method: ProviderAuthMethod) -> ListState<ProviderLoginOption> {
     let providers = match method {
-        ProviderAuthMethod::Account => ACCOUNT_PROVIDERS,
-        ProviderAuthMethod::ApiKey => API_KEY_PROVIDERS,
+        ProviderAuthMethod::Account => super::providers::ACCOUNT_PROVIDERS,
+        ProviderAuthMethod::ApiKey => super::providers::API_KEY_PROVIDERS,
     };
     selected_list(
         providers

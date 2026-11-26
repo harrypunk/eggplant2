@@ -1,4 +1,4 @@
-use super::state::{ProviderAuthMethod, ProviderSpec};
+use super::{ProviderAuthMethod, ProviderSpec};
 
 pub const DEFAULT_ENDPOINT: &str =
     "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1";

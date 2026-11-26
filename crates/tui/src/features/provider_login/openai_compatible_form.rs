@@ -5,18 +5,13 @@ use crate::component::{
     text_input::{TextInput, TextInputEvent},
 };
 
-use super::state::{ProviderAuthMethod, ProviderSpec};
-
-pub const DEFAULT_OPENAI_ENDPOINT: &str = "https://api.openai.com/v1";
-pub const PROVIDER: ProviderSpec = ProviderSpec::new("openai", ProviderAuthMethod::ApiKey)
-    .with_openai_compatible_endpoint(DEFAULT_OPENAI_ENDPOINT);
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OpenAiField {
     Endpoint,
     ApiKey,
 }
 
+/// Provider-neutral OpenAI-compatible endpoint and API-key draft.
 #[derive(Clone, PartialEq, Eq)]
 pub struct OpenAiForm {
     endpoint: TextInput,
@@ -42,18 +37,22 @@ impl fmt::Debug for OpenAiForm {
 
 impl Default for OpenAiForm {
     fn default() -> Self {
+        Self::new("")
+    }
+}
+
+impl OpenAiForm {
+    pub fn new(endpoint: &str) -> Self {
         Self {
-            endpoint: TextInput::new(DEFAULT_OPENAI_ENDPOINT),
+            endpoint: TextInput::new(endpoint),
             api_key: TextInput::default(),
             focus: FormFocus::new(2),
             revision: 0,
         }
     }
-}
 
-impl OpenAiForm {
     pub fn reset(&mut self) {
-        self.reset_to(DEFAULT_OPENAI_ENDPOINT);
+        self.reset_to("");
     }
 
     pub fn reset_to(&mut self, endpoint: &str) {
@@ -137,10 +136,11 @@ impl OpenAiForm {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::provider_login::DEFAULT_OPENAI_ENDPOINT;
 
     #[test]
     fn focus_navigation_and_editing_are_field_local() {
-        let mut form = OpenAiForm::default();
+        let mut form = OpenAiForm::new(DEFAULT_OPENAI_ENDPOINT);
         assert_eq!(
             form.input(OpenAiField::Endpoint).value(),
             DEFAULT_OPENAI_ENDPOINT
@@ -163,7 +163,7 @@ mod tests {
 
     #[test]
     fn paste_is_trimmed_and_stale_revisions_are_ignored() {
-        let mut form = OpenAiForm::default();
+        let mut form = OpenAiForm::new(DEFAULT_OPENAI_ENDPOINT);
         form.endpoint.clear();
         let revision = form.begin_paste();
         assert!(
