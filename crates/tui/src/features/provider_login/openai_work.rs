@@ -47,6 +47,7 @@ fn catalog_effect(
 }
 
 pub fn activate_selected(model: &mut Model) -> Option<Effect> {
+    crate::capabilities::diagnostics::log(format_args!("provider-login activation requested"));
     let store = model.provider_credentials.clone()?;
     let factory = model.openai_factory.clone()?;
     let model_id = model.provider_login.begin_activation("openai")?;
@@ -172,8 +173,18 @@ impl FeatureEffect for ActivateModel {
     }
 
     fn execute(self: Box<Self>, sender: tokio::sync::mpsc::UnboundedSender<Message>) {
+        crate::capabilities::diagnostics::log(format_args!(
+            "provider-login activation task scheduled"
+        ));
         tokio::spawn(async move {
-            let _ = sender.send(self.perform_async().await.into_message());
+            crate::capabilities::diagnostics::log(format_args!(
+                "provider-login activation task started"
+            ));
+            let completion = self.perform_async().await.into_message();
+            crate::capabilities::diagnostics::log(format_args!(
+                "provider-login activation task completed"
+            ));
+            let _ = sender.send(completion);
         });
     }
 }
@@ -191,6 +202,9 @@ impl ModelActivationCompletion {
 
 impl Completion for ModelActivationCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
+        crate::capabilities::diagnostics::log(format_args!(
+            "applying provider-login activation completion"
+        ));
         let error = self.result.as_ref().err().cloned();
         let outcome = model
             .provider_login

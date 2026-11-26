@@ -158,6 +158,8 @@ A leading `/` in the inline dialog or panel Insert input opens a live-filtered c
 
 Account/OAuth authentication, token refresh, and non-OpenAI provider/model selection remain deferred. OpenAI-compatible API-key login, catalog selection, activation, and restart restoration use the shared credential-store and factory interfaces.
 
+Model-activation diagnostics append timestamped stage markers to `~/.eggplant/log/app.log`; stdout is never used while the alternate screen is active. Messages contain workflow stages, model IDs, and user-visible errors, not API keys.
+
 ## Session and run state
 
 A provider-neutral session owns ordered conversation entries:

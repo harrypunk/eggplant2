@@ -29,21 +29,43 @@ pub async fn activate(
     model_id: String,
     updated_at: i64,
 ) -> OpenAiActivationResult {
+    crate::capabilities::diagnostics::log(format_args!("model activation started: {model_id}"));
     let result = async {
+        crate::capabilities::diagnostics::log(format_args!("model activation: reading credential"));
         let mut credential = store
             .get("openai")
             .await
             .map_err(|error| error.to_string())?
             .ok_or_else(|| "OpenAI credential was not found".to_string())?;
+        crate::capabilities::diagnostics::log(format_args!(
+            "model activation: constructing provider"
+        ));
         let provider = factory.provider(credential.clone(), model_id.clone())?;
+        crate::capabilities::diagnostics::log(format_args!(
+            "model activation: provider constructed"
+        ));
         credential.selected_model = Some(model_id.clone());
         credential.updated_at = updated_at;
+        crate::capabilities::diagnostics::log(format_args!(
+            "model activation: persisting selected model"
+        ));
         store
             .upsert(credential)
             .await
             .map_err(|error| error.to_string())?;
+        crate::capabilities::diagnostics::log(format_args!(
+            "model activation: selected model persisted"
+        ));
         Ok(provider)
     }
     .await;
+    match &result {
+        Ok(_) => crate::capabilities::diagnostics::log(format_args!(
+            "model activation succeeded: {model_id}"
+        )),
+        Err(error) => crate::capabilities::diagnostics::log(format_args!(
+            "model activation failed: {model_id}: {error}"
+        )),
+    }
     OpenAiActivationResult { model_id, result }
 }
