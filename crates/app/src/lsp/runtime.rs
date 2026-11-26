@@ -3,6 +3,7 @@ use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex, mpsc},
     thread::JoinHandle,
+    time::{Duration, Instant},
 };
 
 use serde_json::Value;
@@ -27,6 +28,8 @@ use crate::language::{
 
 type Documents = Arc<Mutex<HashMap<PathBuf, String>>>;
 type EventHandler = dyn Fn(Result<LanguageEvent, LanguageError>) + Send + 'static;
+
+const NAVIGATION_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// Split process ownership for concurrent diagnostics reads and navigation writes.
 pub struct LspRuntime {
@@ -111,13 +114,20 @@ impl LspRuntime {
         }
     }
 
-    fn receive(&mut self) -> Result<ServerMessage, LanguageError> {
+    fn receive(&mut self, timeout: Duration) -> Result<ServerMessage, LanguageError> {
         match self.pending.pop_front() {
             Some(message) => Ok(message),
-            None => Ok(self
+            None => self
                 .incoming
-                .recv()
-                .map_err(|_| LanguageError("language server reader stopped".to_string()))?),
+                .recv_timeout(timeout)
+                .map_err(|error| match error {
+                    mpsc::RecvTimeoutError::Timeout => {
+                        LanguageError("language server navigation timed out".to_string())
+                    }
+                    mpsc::RecvTimeoutError::Disconnected => {
+                        LanguageError("language server reader stopped".to_string())
+                    }
+                }),
         }
     }
 
@@ -224,8 +234,10 @@ impl LanguageService for LspRuntime {
         self.next_request_id = self.next_request_id.wrapping_add(1);
         self.write(request_message(id, navigation_method(request.kind), params))?;
 
+        let deadline = Instant::now() + NAVIGATION_TIMEOUT;
         loop {
-            match self.receive()? {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            match self.receive(remaining)? {
                 ServerMessage::Response {
                     id: response_id,
                     result,
@@ -305,14 +317,33 @@ fn route_message(
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
     use editor::DocumentPosition;
 
     use super::*;
     use crate::language::{
         LanguageMessageKind, LanguageServerSpec, NavigationKind, NavigationRequestId,
     };
+
+    const IDLE_SERVER: &str = r#"
+read_frame() {
+  local length=0 line
+  while IFS= read -r line; do
+    line=${line%$'\r'}
+    if [[ -z $line ]]; then
+      break
+    fi
+    if [[ $line == Content-Length:* ]]; then
+      length=${line#Content-Length: }
+      length=${length//[[:space:]]/}
+    fi
+  done
+  frame=$(dd if=/dev/stdin bs=1 count="$length" status=none)
+}
+read_frame
+body='{"jsonrpc":"2.0","id":1,"result":{"capabilities":{}}}'
+printf 'Content-Length: %s\r\n\r\n%s' "${#body}" "$body"
+sleep 2
+"#;
 
     const SERVER: &str = r#"
 read_frame() {
@@ -360,6 +391,18 @@ printf 'Content-Length: %s\r\n\r\n%s' "${#body}" "$body"
             .recv_timeout(Duration::from_secs(2))
             .unwrap()
             .unwrap()
+    }
+
+    #[test]
+    fn navigation_receive_times_out_without_server_output() {
+        let workspace = tempfile::tempdir().unwrap();
+        let spec = LanguageServerSpec::new("test", "bash", ["-c", IDLE_SERVER]);
+        let process = LspProcess::spawn(&spec, workspace.path()).unwrap();
+        let mut runtime = LspRuntime::start(process, |_| {});
+
+        let error = runtime.receive(Duration::from_millis(50)).unwrap_err();
+
+        assert!(error.0.contains("timed out"));
     }
 
     #[test]

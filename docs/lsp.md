@@ -39,7 +39,7 @@ Server-initiated requests receive minimal responses rather than being dropped: c
 | Implementation | `Space c i` |
 | Diagnostics panel | `Space c l` |
 
-Navigation uses the first configured provider, so primary navigation servers should precede lint-only providers. Navigation results behave as follows:
+Navigation uses the first configured provider, so primary navigation servers should precede lint-only providers. Starting definition/reference/implementation work publishes a non-modal `Finding …` notification without changing focus or input ownership. A navigation response must arrive within ten seconds; otherwise the request ends with an `LSP` timeout notification instead of waiting indefinitely. Navigation results behave as follows:
 
 - No locations: a transient notification.
 - One location: open it through the existing document capability.
@@ -63,7 +63,7 @@ Transient server information, missing results, startup failures, and protocol fa
 - Terminal reader/transport failures invalidate only that provider and clear its old diagnostics; the next edit or navigation starts a replacement. Failures from older generations are ignored, while malformed individual notifications report an error without invalidating a live service.
 - LSP positions are converted between UTF-16 code units and editor character offsets, including non-ASCII text.
 
-There is no application-level request cancellation yet. Stale results are discarded rather than cancelled on the server.
+There is no application-level request cancellation yet. Stale results and responses arriving after a timeout are discarded rather than cancelled on the server.
 
 ## Validation
 

@@ -75,6 +75,7 @@ Current integrations include:
 - Merge clean-status rejection and successful merge feedback.
 - Successful branch switching/creation.
 - Commit-hash copy success and failure.
+- LSP navigation-start feedback and response timeouts.
 
 Progress notices and errors owned by an open modal remain in that workflow. Additional sources should use the same publisher rather than adding source-specific variants to the notification center.
 

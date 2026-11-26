@@ -101,11 +101,19 @@ fn start(model: &mut Model, kind: NavigationKind) -> Option<Effect> {
         document.revision,
         position,
     );
-    language_work(
+    let notification = crate::notifications::publish_status(
         model,
-        spec.clone(),
-        document.event(&spec),
-        LanguageAction::Navigate(request),
+        StatusMessage::info(format!("Finding {}…", navigation_label(kind))),
+        Some("LSP"),
+    );
+    Effect::combine(
+        Some(notification),
+        language_work(
+            model,
+            spec.clone(),
+            document.event(&spec),
+            LanguageAction::Navigate(request),
+        ),
     )
 }
 
@@ -609,10 +617,13 @@ mod tests {
     }
 
     fn run_feature(manager: &MessageManager, model: &mut Model, effect: Effect) -> Option<Effect> {
-        let Effect::Feature(request) = effect else {
-            panic!("expected navigation effect");
-        };
-        manager.update(model, request.perform())
+        match effect {
+            Effect::Feature(request) => manager.update(model, request.perform()),
+            Effect::Batch(effects) => effects
+                .into_iter()
+                .fold(None, |_, effect| run_feature(manager, model, effect)),
+            _ => panic!("expected navigation effect"),
+        }
     }
 
     #[test]
@@ -799,6 +810,10 @@ language-servers = ["ts"]
                 Message::InvokeCommand(CommandId("code_definition")),
             )
             .unwrap();
+        assert_eq!(
+            model.notifications.current().unwrap().message(),
+            "Finding definition…"
+        );
         let open = run_feature(&manager, &mut model, effect);
         let Some(Effect::OpenDocument(request)) = open else {
             panic!("expected document-open effect");
