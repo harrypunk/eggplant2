@@ -9,6 +9,8 @@ pub enum KeymapCapability {
     ModalActions,
     /// Permission to open the configured leader menu; the chord is resolved at runtime.
     LeaderMenu,
+    /// Shared form focus and clipboard actions.
+    FormActions,
 }
 
 /// A feature-owned keymap declaration using its stable configuration name and typed context.

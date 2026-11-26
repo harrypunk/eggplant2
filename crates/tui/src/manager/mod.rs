@@ -3,6 +3,7 @@ pub mod context;
 pub mod context_stack;
 pub mod effect;
 pub mod event_manager;
+pub mod form_input;
 pub mod general_action;
 pub mod input_resolver;
 pub mod input_routing;

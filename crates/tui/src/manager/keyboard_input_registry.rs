@@ -9,6 +9,7 @@ use crate::{
     manager::{
         command_registry::CommandRegistry,
         context::{ContextBindings, KeyChord},
+        form_input::FORM_GENERAL_ACTIONS,
         keymap_contribution::{KeymapCapability, KeymapCatalog},
     },
 };
@@ -94,6 +95,7 @@ fn apply_capability(bindings: ContextBindings, capability: KeymapCapability) -> 
             MODAL_GENERAL_ACTIONS.map(|(key, action)| (KeyChord::from(key), action)),
         ),
         KeymapCapability::LeaderMenu => bindings,
+        KeymapCapability::FormActions => bindings.with_general_actions(FORM_GENERAL_ACTIONS),
     }
 }
 

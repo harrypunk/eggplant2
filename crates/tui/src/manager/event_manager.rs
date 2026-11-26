@@ -719,22 +719,18 @@ mod tests {
                 Some(Message::GeneralAction(actual)) if actual == action
             ));
         }
-        for (key, modifiers, command) in [
-            (
-                KeyCode::Tab,
-                KeyModifiers::NONE,
-                "provider_login_focus_next",
-            ),
+        for (key, modifiers, action) in [
+            (KeyCode::Tab, KeyModifiers::NONE, GeneralAction::FocusNext),
             (
                 KeyCode::Char('v'),
                 KeyModifiers::CONTROL,
-                "provider_login_paste",
+                GeneralAction::Paste,
             ),
         ] {
             let event = Event::Key(KeyEvent::new(key, modifiers));
             assert!(matches!(
                 manager.translate(event, &model),
-                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+                Some(Message::GeneralAction(actual)) if actual == action
             ));
         }
     }

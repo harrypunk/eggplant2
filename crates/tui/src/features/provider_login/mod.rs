@@ -14,15 +14,13 @@ use crate::{
 };
 
 pub const KEYMAPS: &[ContextKeymap] =
-    &[ContextKeymap::new("provider_login", Context::ProviderLogin)
-        .with_commands(&[
-            ("provider_login_focus_next", "tab"),
-            ("provider_login_paste", "ctrl-v"),
-        ])
-        .with_capabilities(&[
+    &[
+        ContextKeymap::new("provider_login", Context::ProviderLogin).with_capabilities(&[
             KeymapCapability::ListNavigation,
             KeymapCapability::ModalActions,
-        ])];
+            KeymapCapability::FormActions,
+        ]),
+    ];
 
 pub use kimi_for_coding::DEFAULT_ENDPOINT as DEFAULT_KIMI_FOR_CODING_ENDPOINT;
 pub use openai::{DEFAULT_OPENAI_ENDPOINT, OpenAiField};

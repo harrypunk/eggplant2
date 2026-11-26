@@ -152,6 +152,7 @@ pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option
             close_theme_picker(model);
             None
         }
+        GeneralAction::FocusNext | GeneralAction::Paste => None,
     }
 }
 

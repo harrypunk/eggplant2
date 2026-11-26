@@ -79,6 +79,8 @@ pub mod data_object {
         Previous,
         Activate,
         Back,
+        FocusNext,
+        Paste,
     }
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

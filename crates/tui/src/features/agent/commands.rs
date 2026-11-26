@@ -131,6 +131,7 @@ pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option
             Some(super::surface::AgentSurface::Dialog) => super::dialog::close(model),
             None => None,
         },
+        GeneralAction::FocusNext | GeneralAction::Paste => None,
     }
 }
 

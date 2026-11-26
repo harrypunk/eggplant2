@@ -31,16 +31,6 @@ pub fn commands() -> Vec<Command> {
             handle_command,
         ),
         Command::feature(
-            CommandId("provider_login_focus_next"),
-            "focus next provider login field",
-            handle_command,
-        ),
-        Command::feature(
-            CommandId("provider_login_paste"),
-            "paste into the focused provider login field",
-            handle_command,
-        ),
-        Command::feature(
             CommandId("provider_login_close"),
             "go back or close provider login",
             handle_command,
@@ -61,8 +51,6 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         "provider_login_next" => model.provider_login.select_next(),
         "provider_login_previous" => model.provider_login.select_previous(),
         "provider_login_activate" => return activate(model),
-        "provider_login_focus_next" => model.provider_login.focus_next(),
-        "provider_login_paste" => return super::paste::paste(model),
         "provider_login_close" => return back(model),
         _ => {}
     }
@@ -82,6 +70,8 @@ pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option
         GeneralAction::Previous => model.provider_login.select_previous(),
         GeneralAction::Activate => return activate(model),
         GeneralAction::Back => return back(model),
+        GeneralAction::FocusNext => model.provider_login.focus_next(),
+        GeneralAction::Paste => return super::paste::paste(model),
     }
     None
 }
@@ -275,7 +265,7 @@ mod tests {
         if let crate::provider_login::ProviderLoginPage::OpenAiInput(_) =
             model.provider_login.page()
         {
-            handle_command(model, CommandId("provider_login_focus_next"));
+            handle_general_action(model, GeneralAction::FocusNext);
         }
         key.chars().for_each(|character| {
             handle_input(model, TextInputEvent::Insert(character));
@@ -416,7 +406,7 @@ mod tests {
             "https://localhost:1234/v1"
         );
 
-        handle_command(&mut model, CommandId("provider_login_focus_next"));
+        handle_general_action(&mut model, GeneralAction::FocusNext);
         let effect =
             paste::paste_with_reader(&mut model, TestClipboard(Ok("key-secret".to_string())))
                 .unwrap();
@@ -432,7 +422,7 @@ mod tests {
         let stale =
             paste::paste_with_reader(&mut model, TestClipboard(Ok("must-not-paste".to_string())))
                 .unwrap();
-        handle_command(&mut model, CommandId("provider_login_focus_next"));
+        handle_general_action(&mut model, GeneralAction::FocusNext);
         complete_effect(&mut model, stale);
         assert_eq!(
             model

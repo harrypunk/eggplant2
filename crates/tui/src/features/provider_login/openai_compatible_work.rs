@@ -263,8 +263,10 @@ mod tests {
 
     use super::{super::work, *};
     use crate::{
-        component::text_input::TextInputEvent, data_object::CommandId,
-        manager::message_manager::MessageManager, provider_login::ProviderLoginPage,
+        component::text_input::TextInputEvent,
+        data_object::{CommandId, GeneralAction},
+        manager::message_manager::MessageManager,
+        provider_login::ProviderLoginPage,
     };
 
     #[derive(Debug)]
@@ -341,7 +343,7 @@ mod tests {
             work::handle_command(model, CommandId("provider_login_next"));
         }
         work::handle_command(model, CommandId("provider_login_activate"));
-        work::handle_command(model, CommandId("provider_login_focus_next"));
+        work::handle_general_action(model, GeneralAction::FocusNext);
         work::handle_input(model, TextInputEvent::Insert('k'));
     }
 

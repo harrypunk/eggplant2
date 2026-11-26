@@ -85,6 +85,7 @@ pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option
         }
         GeneralAction::Activate => accept(model),
         GeneralAction::Back => close(model),
+        GeneralAction::FocusNext | GeneralAction::Paste => {}
     }
     None
 }

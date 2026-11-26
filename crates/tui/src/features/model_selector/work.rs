@@ -42,6 +42,7 @@ pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option
         GeneralAction::Previous => model.model_selector.select_previous(),
         GeneralAction::Activate => return activate_selected(model),
         GeneralAction::Back => return close(model),
+        GeneralAction::FocusNext | GeneralAction::Paste => {}
     }
     None
 }
