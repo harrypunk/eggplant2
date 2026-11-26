@@ -88,6 +88,14 @@ impl PromptCommand {
         }
     }
 
+    /// Resolve a complete typed command independently of menu selection.
+    pub fn from_input(input: &str) -> Option<Self> {
+        let input = input.trim();
+        Self::ALL
+            .into_iter()
+            .find(|command| command.name() == input)
+    }
+
     fn matches(self, query: &str) -> bool {
         self.name()[1..].contains(query)
     }
@@ -116,6 +124,21 @@ mod tests {
         assert_eq!(filter("/unknown"), Some(Vec::new()));
         assert!(filter(" /p").is_none());
         assert!(filter("explain /provider").is_none());
+    }
+
+    #[test]
+    fn complete_typed_commands_trim_whitespace_without_loosening_name_matching() {
+        for command in PromptCommand::ALL {
+            assert_eq!(PromptCommand::from_input(command.name()), Some(command));
+            assert_eq!(
+                PromptCommand::from_input(&format!("  {}\t", command.name())),
+                Some(command)
+            );
+        }
+        assert_eq!(PromptCommand::from_input("/provide"), None);
+        assert_eq!(PromptCommand::from_input("/PROVIDER"), None);
+        assert_eq!(PromptCommand::from_input("/provider extra"), None);
+        assert_eq!(PromptCommand::from_input("provider"), None);
     }
 
     #[test]

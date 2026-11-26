@@ -146,10 +146,10 @@ The inline dialog requires an open project, not an active buffer. With an active
 A leading `/` in the inline dialog or panel Insert input opens a live-filtered command menu above the prompt. The menu derives candidates from the shared prompt state and catalog: `/provider`, `/model`, `/thinking`, and `/logout`.
 
 - Command state remains shared, but view composition projects candidates only to the prompt-active `AgentSurface`. When both presentations are visible, the modal dialog takes precedence; otherwise only the focused panel in Insert mode can show the menu. The inactive presentation retains the shared text without rendering a second menu.
-- Opening or changing the filter selects nothing, so Enter does nothing.
+- Opening or changing the filter selects nothing; Enter preserves incomplete or unknown slash text without executing it.
 - Tab quick-fills the first match.
 - Ctrl-N/Ctrl-P quick-fill and move selection with wrapping while retaining the original query's candidates.
-- Enter executes only an explicitly selected command and never submits slash text as a provider message.
+- Enter executes an explicitly selected command or an exact typed command after trimming surrounding whitespace, matching Pi's submission behavior. Editing away a selection therefore does not prevent a complete command from running; slash text is never submitted as a provider message.
 - Executing a command clears the composer and command selection before opening its follow-up UI, matching Pi's accepted-command behavior. Unselected or unknown slash text remains editable.
 - The menu height follows content within the available layout. Its selection-following viewport keeps the selected row visible.
 - `/model` opens the cached model selector; `/thinking` and `/logout` currently publish placeholder notifications.

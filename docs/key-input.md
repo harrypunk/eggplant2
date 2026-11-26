@@ -167,8 +167,8 @@ Panel input starts in Normal mode: `i` enters Insert, `?` opens a modal help pop
 
 Agent slash commands:
 
-- A leading `/` opens the filtered command list above either Agent input.
-- Enter does nothing until a command is selected.
+- A leading `/` opens the filtered command list above the prompt-active Agent input.
+- Enter executes a selected command or an exact typed command after trimming whitespace; incomplete and unknown commands remain unchanged.
 - Tab quick-fills the first match; Ctrl-N/Ctrl-P move selection with wrapping and quick-fill each command.
 - `/provider` opens provider login and restores the originating Agent input when closed.
 - `/model` opens the cached model selector; `/thinking` and `/logout` remain placeholders.

@@ -64,14 +64,15 @@ impl Submission {
         if !context.submission_active() {
             return Self::Inactive;
         }
-        if context.agent().prompt().starts_with('/') {
+        let prompt = context.agent().prompt().trim();
+        if prompt.starts_with('/') {
             return context
                 .agent()
                 .command_state()
                 .selected()
+                .or_else(|| super::PromptCommand::from_input(prompt))
                 .map_or(Self::Inactive, Self::Command);
         }
-        let prompt = context.agent().prompt().trim();
         if let Some(rejection) = rejection(context, prompt) {
             return Self::Rejected(rejection);
         }
@@ -308,13 +309,29 @@ mod tests {
             project: true,
             ..FakeWork::default()
         };
-        context.agent.prompt.set_value("/");
+        context.agent.prompt.set_value("/provider ");
+        assert_eq!(context.agent.command_state().selected(), None);
+
+        assert!(submit(&mut context).is_none());
+        assert_eq!(
+            context.opened,
+            Some(crate::agent::PromptCommand::ProviderLogin)
+        );
+        assert_eq!(context.agent.prompt(), "");
+
+        context.agent.prompt.set_value("/provider");
         assert!(
             context
                 .agent
-                .quick_fill_prompt_command(crate::agent::PromptCommandMovement::Next)
+                .quick_fill_prompt_command(crate::agent::PromptCommandMovement::Current)
         );
-
+        context
+            .agent
+            .handle_input_event(TextInputEvent::Insert(' '));
+        assert_eq!(context.agent.command_state().selected(), None);
+        context.agent.backspace();
+        assert_eq!(context.agent.prompt(), "/provider");
+        context.opened = None;
         assert!(submit(&mut context).is_none());
         assert_eq!(
             context.opened,
@@ -521,11 +538,11 @@ mod tests {
         model.tools.visibility = Visibility::Displayed;
         focus_panel_input(&mut model);
         enter_insert_mode(&mut model);
-        model.agent.prompt.set_value("/provider");
+        model.agent.prompt.set_value("/provide");
 
         submit(&mut model);
         assert!(!model.provider_login.is_open());
-        assert_eq!(model.agent.prompt(), "/provider");
+        assert_eq!(model.agent.prompt(), "/provide");
         assert!(model.agent.session().run().is_none());
 
         handle_command(&mut model, CommandId("agent_command_quick_fill"));
