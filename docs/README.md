@@ -30,3 +30,4 @@ Start with the [project overview](../README.md), then use the focused document f
 ## Planning
 
 - [Roadmap](../PLAN.md) — current state and upcoming reviewable milestones.
+- [Binary size plan](binary-size.md) — deferred measurement, diagnostics, compiler, and dependency-growth policy.
