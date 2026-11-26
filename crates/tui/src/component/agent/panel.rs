@@ -6,7 +6,12 @@ use ratatui::{
     widgets::{Block, BorderType, Paragraph, Widget, Wrap},
 };
 
-use super::{prompt::AgentPromptView, props::AgentViewProps, transcript::transcript_lines};
+use super::{
+    footer::{AgentFooter, footer_layout},
+    prompt::AgentPromptView,
+    props::AgentViewProps,
+    transcript::transcript_lines,
+};
 use crate::{
     agent::AgentInputMode,
     component::{auto_height::AutoHeight, text_layout::TextFlow},
@@ -30,14 +35,19 @@ impl AgentPanel {
         if inner.width == 0 || inner.height == 0 {
             return;
         }
-        let input_height = input_height(props, inner);
-        let command_height = AgentPromptView::command_height(&props.shared.prompt)
-            .min(inner.height.saturating_sub(input_height.saturating_add(1)));
+        let [content, footer] = footer_layout(inner);
+        let input_height = input_height(props, content);
+        let command_height = AgentPromptView::command_height(&props.shared.prompt).min(
+            content
+                .height
+                .saturating_sub(input_height.saturating_add(1)),
+        );
         let prompt_height = command_height + input_height;
-        let [status, transcript, prompt] = panel_layout(inner, prompt_height);
+        let [status, transcript, prompt] = panel_layout(content, prompt_height);
         render_status(props, status, frame);
         render_transcript(props, transcript, frame);
         render_prompt(props, prompt, input_height, frame);
+        AgentFooter::render(&props.shared, footer, frame.buffer_mut());
     }
 }
 
@@ -171,6 +181,7 @@ mod tests {
                 session,
                 prompt: AgentPromptProps::new(prompt).with_commands(commands, None),
                 storage_error: None,
+                footer: Default::default(),
                 styles,
             },
             mode,
@@ -217,6 +228,11 @@ mod tests {
             .unwrap();
         let prompt_row = rows.iter().rposition(|row| row.contains('x')).unwrap();
         assert!(answer_row < prompt_row);
+        let footer_row = rows
+            .iter()
+            .rposition(|row| row.contains("unknown · no model"))
+            .unwrap();
+        assert_eq!(footer_row, rows.len() - 2);
     }
 
     #[test]

@@ -32,6 +32,8 @@ impl fmt::Debug for OpenAiApiKey {
 pub struct OpenAiConfig {
     pub base_url: String,
     pub model: Option<String>,
+    /// Optional capacity of the active model, used for context-occupancy reporting.
+    pub context_window: Option<u64>,
     pub api_key_env: String,
     pub api_key: Option<OpenAiApiKey>,
 }
@@ -41,6 +43,7 @@ impl Default for OpenAiConfig {
         Self {
             base_url: "https://api.openai.com/v1".to_string(),
             model: Some("gpt-4o-mini".to_string()),
+            context_window: None,
             api_key_env: "OPENAI_API_KEY".to_string(),
             api_key: None,
         }
@@ -167,6 +170,10 @@ struct OpenAiModel {
 }
 
 impl AgentProvider for OpenAiProvider {
+    fn context_window(&self) -> Option<u64> {
+        self.config.context_window
+    }
+
     fn stream<'a>(
         &'a self,
         request: AgentRequest,
@@ -587,6 +594,7 @@ mod tests {
             model: Some("gpt-test".to_string()),
             api_key_env: key_env.to_string(),
             api_key: None,
+            context_window: None,
         })
         .unwrap();
         let events = Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -670,6 +678,7 @@ mod tests {
             model: Some("gpt-test".to_string()),
             api_key_env: key_env.to_string(),
             api_key: None,
+            context_window: None,
         })
         .unwrap();
         let result = provider

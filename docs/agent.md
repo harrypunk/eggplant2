@@ -78,6 +78,12 @@ The existing tools panel gains an Agent view. It is non-modal and shows:
 
 The panel and popup are two presentations of one Agent workflow. Both receive the same `AgentViewProps` from one adapter: session, prompt, command candidates, storage warning, and theme. `AgentSurface` selects the active workflow for shared submission and commands. `AgentPrompt` owns text editing, draft origin, and selection transitions; `AgentPromptView` owns the shared menu-above-input layout and cursor geometry, so presentation changes do not require parallel prompt implementations. The dialog uses shared props directly and fills the available main panel within symmetric margins instead of using fixed dimensions; its assistant area flexes with the remaining height while the prompt retains its measured height. The panel adds only focus and `AgentInputMode`. Neither presentation owns a separate provider connection, session, command catalog, or agent loop. Only dialog `path:line` prefill, panel Normal/Insert modes, focus presentation, and layout differ. Opening the Agent panel focuses its input. Panel Normal supports `i`, `?` help, and `Ctrl-H`/`Ctrl-L` navigation; Insert accepts text, submits with Enter, and returns to Normal with `Esc` without losing panel focus. Help is a separate modal popup, closed with `?` or `Esc`, rather than content in the conversation layout. A focused panel uses a double border and an explicit mode title. Mouse or other future input sources can still request focus directly through the geometry-only focus controller.
 
+### Shared usage footer
+
+The inline dialog and tool panel reserve one bottom row for the same pure `AgentFooter`. The left side shows cumulative `↑input ↓output` tokens for the current in-memory session and the latest provider round's context occupancy; the right side shows `provider · model`. OpenAI-compatible streaming requests use `stream_options.include_usage`, and usage events are accepted only for their matching run. Multiple tool rounds accumulate independently while the latest round supplies the context sample.
+
+Set `features.agent.context_window` to the active model's token capacity to display `NN.N%/capacity`. OpenAI-compatible `/models` responses do not standardize this value, so the footer deliberately shows `context ?` without a capacity and `?/capacity` before the first usage report. It never guesses a capacity from a model name. Context occupancy uses warning styling above 70% and error styling above 90%.
+
 ### Current keybindings
 
 | Action | Binding |
@@ -252,7 +258,7 @@ base_url = "https://api.openai.com/v1"
 api_key_env = "OPENAI_API_KEY"
 ```
 
-`base_url`, `model`, and `api_key_env` default to the values shown. Omit `provider` to retain the offline fake provider. The adapter reads the key only when a run starts; it does not store it in TOML, transcripts, notifications, logs, or tool output. Request/transport/status errors are redacted and bounded.
+`base_url`, `model`, and `api_key_env` default to the values shown. `context_window` is optional and affects only footer occupancy reporting. Omit `provider` to retain the offline fake provider. The adapter reads the key only when a run starts; it does not store it in TOML, transcripts, notifications, logs, or tool output. Request/transport/status errors are redacted and bounded.
 
 Streaming responses use incremental UTF-8-safe SSE decoding. Deltas arrive through the same session as the fake provider, with an authoritative completion or failure. A response stopped for length fails rather than executing tool calls. The localhost test suite verifies actual HTTP request shape, streaming events, Unicode fragmentation, status errors, and API-key redaction without external network access.
 

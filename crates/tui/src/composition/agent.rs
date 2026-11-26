@@ -16,7 +16,9 @@ use crate::{
 
 /// Configure agent persistence and the statically selected provider before terminal startup.
 pub async fn configure(config: &Config, model: &mut Model) -> color_eyre::Result<()> {
-    model.openai_factory = Some(Arc::new(OpenAiFactory));
+    model.openai_factory = Some(Arc::new(OpenAiFactory::new(
+        config.features.agent.context_window,
+    )));
     configure_store(config, model).await?;
     if let Some(provider) = agent_provider(config)? {
         let model_id = config
@@ -125,7 +127,10 @@ fn agent_provider(config: &Config) -> color_eyre::Result<Option<Arc<dyn AgentPro
     match config.features.agent.provider.as_deref() {
         None | Some("fake") => Ok(None),
         Some("openai") => {
-            let mut provider_config = OpenAiConfig::default();
+            let mut provider_config = OpenAiConfig {
+                context_window: config.features.agent.context_window,
+                ..OpenAiConfig::default()
+            };
             if let Some(model) = &config.features.agent.model {
                 provider_config.model = Some(model.clone());
             }
@@ -202,6 +207,17 @@ mod tests {
         assert!(recent.sessions.is_empty());
     }
 
+    #[test]
+    fn explicit_openai_configuration_supplies_context_capacity() {
+        let mut config = Config::default();
+        config.features.agent.provider = Some("openai".to_string());
+        config.features.agent.context_window = Some(64_000);
+
+        let provider = agent_provider(&config).unwrap().unwrap();
+
+        assert_eq!(provider.context_window(), Some(64_000));
+    }
+
     #[tokio::test]
     async fn saved_openai_model_is_restored_without_overriding_explicit_configuration() {
         let directory = tempfile::tempdir().unwrap();
@@ -226,11 +242,16 @@ mod tests {
         drop(store);
         let mut config = Config::default();
         config.features.agent.session_db = Some(path);
+        config.features.agent.context_window = Some(128_000);
         let mut model = Model::default();
 
         configure(&config, &mut model).await.unwrap();
 
         assert!(model.agent.provider().is_some());
+        assert_eq!(
+            model.agent.provider().unwrap().context_window(),
+            Some(128_000)
+        );
         assert_eq!(model.agent.provider_name(), "openai");
         assert_eq!(model.agent.model(), Some("gpt-test"));
 

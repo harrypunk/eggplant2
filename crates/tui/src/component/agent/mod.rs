@@ -1,5 +1,6 @@
 mod command_menu;
 mod dialog;
+mod footer;
 mod help;
 mod model_selector;
 mod panel;
@@ -10,9 +11,10 @@ mod transcript;
 
 pub use command_menu::AgentCommandMenu;
 pub use dialog::{AgentDialog, AgentDialogProps};
+pub use footer::AgentFooter;
 pub use help::AgentHelp;
 pub use model_selector::ModelSelector;
 pub use panel::{AgentPanel, AgentPanelProps};
 pub use prompt::{AgentPromptProps, AgentPromptView};
-pub use props::AgentViewProps;
+pub use props::{AgentFooterProps, AgentViewProps};
 pub use provider_login::ProviderLogin;

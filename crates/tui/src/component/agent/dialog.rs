@@ -6,7 +6,12 @@ use ratatui::{
     widgets::{Paragraph, Widget, Wrap},
 };
 
-use super::{prompt::AgentPromptView, props::AgentViewProps, transcript::diff_lines};
+use super::{
+    footer::{AgentFooter, footer_layout},
+    prompt::AgentPromptView,
+    props::AgentViewProps,
+    transcript::diff_lines,
+};
 use crate::component::{
     popup::{Popup, content_area},
     text_input::TextInput,
@@ -111,10 +116,12 @@ impl AgentDialogContent<'_> {
 
 impl Widget for AgentDialogContent<'_> {
     fn render(self, area: Rect, buffer: &mut Buffer) {
+        let [content, footer] = footer_layout(area);
         match self.props.session.pending_approval() {
-            Some(approval) => self.render_approval(approval, area, buffer),
-            None => self.render_prompt(area, buffer),
+            Some(approval) => self.render_approval(approval, content, buffer),
+            None => self.render_prompt(content, buffer),
         }
+        AgentFooter::render(self.props, footer, buffer);
     }
 }
 
@@ -151,7 +158,7 @@ fn prompt_area(props: &AgentDialogProps<'_>, area: Rect) -> Rect {
 }
 
 fn input_area(props: &AgentDialogProps<'_>, area: Rect) -> Rect {
-    let content = content_area(area);
+    let [content, _] = footer_layout(content_area(area));
     let (input, _) = prompt_heights(props, content);
     AgentPromptView::layout(&props.prompt, prompt_area(props, content), input)[1]
 }
@@ -189,12 +196,14 @@ mod tests {
             session: &session,
             prompt: AgentPromptProps::new(&prompt),
             storage_error: None,
+            footer: Default::default(),
             styles: theme.ui(),
         };
         let content = render(&props, 70, 12);
         assert!(content.contains("main.rs:1"));
         assert!(content.contains("Streaming"));
         assert!(content.contains("answer"));
+        assert!(content.contains("context ?"));
     }
 
     #[test]
@@ -222,6 +231,7 @@ mod tests {
             session: &session,
             prompt: AgentPromptProps::new(&prompt),
             storage_error: None,
+            footer: Default::default(),
             styles: theme.ui(),
         };
         let area = Rect::new(0, 0, 90, 24);
@@ -229,6 +239,7 @@ mod tests {
         assert!(content.contains("Waiting for write approval"));
         assert!(content.contains("before"));
         assert!(content.contains("after"));
+        assert!(content.contains("unknown · no model"));
         assert!(AgentDialog::cursor(&props, area).is_none());
     }
 
@@ -244,15 +255,14 @@ mod tests {
                 Some(PromptCommand::Logout),
             ),
             storage_error: None,
+            footer: Default::default(),
             styles: theme.ui(),
         };
         let area = Rect::new(0, 0, 90, 24);
         let input = input_area(&props, area);
-        let [commands, laid_out_input] = AgentPromptView::layout(
-            &props.prompt,
-            prompt_area(&props, content_area(area)),
-            input.height,
-        );
+        let [content, _] = footer_layout(content_area(area));
+        let [commands, laid_out_input] =
+            AgentPromptView::layout(&props.prompt, prompt_area(&props, content), input.height);
 
         assert_eq!(commands.height, PromptCommand::ALL.len() as u16);
         assert_eq!(commands.y + commands.height, laid_out_input.y);
@@ -283,6 +293,7 @@ mod tests {
             session: &session,
             prompt: AgentPromptProps::new(&prompt),
             storage_error: None,
+            footer: Default::default(),
             styles: theme.ui(),
         };
         let area = Rect::new(0, 0, 90, 24);

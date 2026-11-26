@@ -23,6 +23,11 @@ impl std::error::Error for AgentError {}
 
 /// Object-safe provider port for ordered assistant events.
 pub trait AgentProvider: std::fmt::Debug + Send + Sync {
+    /// Active model context capacity when the frontend configuration supplies it.
+    fn context_window(&self) -> Option<u64> {
+        None
+    }
+
     fn stream<'a>(
         &'a self,
         request: AgentRequest,

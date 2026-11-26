@@ -5,7 +5,8 @@ use ratatui::{
 
 use crate::{
     component::agent::{
-        AgentDialog, AgentHelp, AgentPanel, AgentPanelProps, AgentPromptProps, AgentViewProps,
+        AgentDialog, AgentFooterProps, AgentHelp, AgentPanel, AgentPanelProps, AgentPromptProps,
+        AgentViewProps,
     },
     data_object::{Context, FocusState, FocusTarget, Model},
     ui::{OverlayContribution, OverlayKind, OverlayPlacement, UiRegistry},
@@ -38,6 +39,14 @@ fn view_props(model: &Model) -> AgentViewProps<'_> {
             model.agent.command_state().selected(),
         ),
         storage_error: model.agent.storage_error(),
+        footer: AgentFooterProps::new(
+            model.agent.provider_name(),
+            model.agent.model(),
+            model
+                .agent
+                .provider()
+                .and_then(|provider| provider.context_window()),
+        ),
         styles: model.theme.ui(),
     }
 }
