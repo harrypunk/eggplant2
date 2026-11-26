@@ -10,6 +10,26 @@ mod state;
 mod transfer;
 mod work;
 
+use crate::{data_object::Context, manager::keymap_contribution::ContextKeymap};
+
+pub const KEYMAPS: &[ContextKeymap] = &[
+    ContextKeymap::new("explorer", Context::Explorer).with_commands(&[("open_selected", "enter")]),
+    ContextKeymap::new("explorer_help", Context::ExplorerHelp)
+        .with_commands(&[("close_explorer_help", "esc"), ("explorer_help", "?")]),
+    ContextKeymap::new("explorer_add", Context::ExplorerAdd).with_commands(&[
+        ("explorer_add_submit", "enter"),
+        ("close_explorer_add", "esc"),
+    ]),
+    ContextKeymap::new("explorer_delete", Context::ExplorerDelete).with_commands(&[
+        ("explorer_delete_confirm", "y"),
+        ("close_explorer_delete", "esc"),
+    ]),
+    ContextKeymap::new("explorer_transfer", Context::ExplorerTransfer).with_commands(&[
+        ("explorer_transfer_submit", "enter"),
+        ("close_explorer_transfer", "esc"),
+    ]),
+];
+
 pub(crate) use add::{handle_input as handle_add_input, overlay as add_overlay};
 pub use commands::handle_command;
 pub(crate) use commands::{open_selected, refresh_changed};

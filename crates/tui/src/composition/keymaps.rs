@@ -25,6 +25,9 @@ pub fn catalog() -> KeymapCatalog {
         .extend(crate::yank::KEYMAPS.iter().copied())
         .extend(crate::buffer_jump::KEYMAPS.iter().copied())
         .extend(crate::buffer_navigation::KEYMAPS.iter().copied())
+        .extend(crate::shell::KEYMAPS.iter().copied())
+        .extend(crate::explorer::KEYMAPS.iter().copied())
+        .extend(crate::vcs::KEYMAPS.iter().copied())
 }
 
 pub fn from_config(
@@ -36,8 +39,22 @@ pub fn from_config(
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
     use super::*;
     use crate::{data_object::Context, manager::keymap_contribution::ContextKeymap};
+
+    #[test]
+    fn catalog_covers_every_current_context_exactly_once() {
+        let contexts = catalog()
+            .iter()
+            .map(|entry| entry.context)
+            .collect::<Vec<_>>();
+        let unique = contexts.iter().collect::<HashSet<_>>();
+
+        assert_eq!(contexts.len(), 36);
+        assert_eq!(unique.len(), 36);
+    }
 
     #[test]
     fn duplicate_feature_contexts_are_rejected() {

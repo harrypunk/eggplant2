@@ -4,7 +4,7 @@ use color_eyre::eyre::eyre;
 use crossterm::event::KeyCode;
 
 use crate::{
-    config::{KeymapConfig, keymap_context},
+    config::KeymapConfig,
     data_object::{CommandId, Context, GeneralAction},
     manager::{
         command_registry::CommandRegistry,
@@ -47,14 +47,7 @@ impl Registry {
         let mut merged = config
             .iter()
             .map(|(context, bindings)| (context.clone(), bindings.clone()))
-            .chain(common_bindings())
-            .fold(
-                HashMap::<String, HashMap<String, String>>::new(),
-                |mut merged, (context, bindings)| {
-                    merged.entry(context).or_default().extend(bindings);
-                    merged
-                },
-            );
+            .collect::<HashMap<_, _>>();
         for entry in catalog.iter() {
             merged.entry(entry.name.to_string()).or_default().extend(
                 entry
@@ -69,14 +62,10 @@ impl Registry {
                 let declaration = declarations.get(context_name.as_str());
                 let context = declaration
                     .map(|(context, _)| *context)
-                    .or_else(|| parse_context(context_name))
                     .ok_or_else(|| eyre!("unknown keymap context `{context_name}`"))?;
                 let capabilities = declaration.map_or(&[][..], |(_, capabilities)| *capabilities);
                 let mut bindings =
                     parse_context_bindings(context, context_name, bindings, commands)?;
-                if list_navigation_contexts().contains(&context_name.as_str()) {
-                    bindings = bindings.with_list_navigation();
-                }
                 for capability in capabilities {
                     bindings = apply_capability(bindings, *capability);
                 }
@@ -89,11 +78,6 @@ impl Registry {
     pub fn get_binding(&self, context: &Context) -> Option<&ContextBindings> {
         self.bindings.get(context)
     }
-}
-
-/// Contexts that compose the shared Ctrl-N/P aliases through Down/Up.
-fn list_navigation_contexts() -> &'static [&'static str] {
-    &["welcome", "vcs_branch", "vcs_merge", "vcs_reset"]
 }
 
 const MODAL_GENERAL_ACTIONS: [(KeyCode, GeneralAction); 4] = [
@@ -110,89 +94,6 @@ fn apply_capability(bindings: ContextBindings, capability: KeymapCapability) -> 
             MODAL_GENERAL_ACTIONS.map(|(key, action)| (KeyChord::from(key), action)),
         ),
     }
-}
-
-fn common_bindings() -> KeymapConfig {
-    HashMap::from([
-        keymap_context("explorer", [("open_selected", "enter")]),
-        keymap_context(
-            "explorer_add",
-            [
-                ("explorer_add_submit", "enter"),
-                ("close_explorer_add", "esc"),
-            ],
-        ),
-        keymap_context(
-            "explorer_delete",
-            [
-                ("explorer_delete_confirm", "y"),
-                ("close_explorer_delete", "esc"),
-            ],
-        ),
-        keymap_context(
-            "explorer_transfer",
-            [
-                ("explorer_transfer_submit", "enter"),
-                ("close_explorer_transfer", "esc"),
-            ],
-        ),
-        keymap_context(
-            "explorer_help",
-            [("close_explorer_help", "esc"), ("explorer_help", "?")],
-        ),
-        keymap_context(
-            "vcs_commit_input",
-            [
-                ("exit_insert_mode", "esc"),
-                ("backspace", "backspace"),
-                ("insert_newline", "enter"),
-                ("move_left", "left"),
-                ("move_right", "right"),
-                ("move_up", "up"),
-                ("move_down", "down"),
-            ],
-        ),
-        keymap_context(
-            "vcs_history",
-            [
-                ("open_vcs_commit_detail", "enter"),
-                ("close_vcs_history", "esc"),
-            ],
-        ),
-        keymap_context(
-            "vcs_merge",
-            [
-                ("vcs_merge_submit", "enter"),
-                ("vcs_merge_next", "down"),
-                ("vcs_merge_previous", "up"),
-                ("vcs_merge_cancel", "esc"),
-            ],
-        ),
-        keymap_context(
-            "vcs_reset",
-            [
-                ("vcs_reset_submit", "enter"),
-                ("vcs_reset_next", "down"),
-                ("vcs_reset_previous", "up"),
-                ("vcs_reset_cancel", "esc"),
-            ],
-        ),
-        keymap_context("vcs_reset_menu", [("vcs_reset_menu_close", "esc")]),
-        keymap_context("vcs_branch_menu", [("vcs_branch_menu_close", "esc")]),
-        keymap_context(
-            "vcs_branch",
-            [
-                ("vcs_branch_submit", "enter"),
-                ("vcs_branch_next", "down"),
-                ("vcs_branch_previous", "up"),
-                ("vcs_branch_cancel", "esc"),
-            ],
-        ),
-        keymap_context(
-            "vcs",
-            [("open_vcs_change", "enter"), ("close_vcs_page", "esc")],
-        ),
-    ])
 }
 
 fn parse_context_bindings(
@@ -244,33 +145,15 @@ fn parse_binding(
     Ok((key, command))
 }
 
-fn parse_context(value: &str) -> Option<Context> {
-    match value {
-        "normal" => Some(Context::AppNormal),
-        "vcs" => Some(Context::VCS),
-        "vcs_history" => Some(Context::VcsHistory),
-        "vcs_commit" => Some(Context::VcsCommit),
-        "vcs_commit_input" => Some(Context::VcsCommitInput),
-        "vcs_merge" => Some(Context::VcsMerge),
-        "vcs_reset_menu" => Some(Context::VcsResetMenu),
-        "vcs_reset" => Some(Context::VcsReset),
-        "vcs_branch_menu" => Some(Context::VcsBranchMenu),
-        "vcs_branch" => Some(Context::VcsBranch),
-        "explorer" => Some(Context::Explorer),
-        "explorer_help" => Some(Context::ExplorerHelp),
-        "explorer_add" => Some(Context::ExplorerAdd),
-        "explorer_delete" => Some(Context::ExplorerDelete),
-        "explorer_transfer" => Some(Context::ExplorerTransfer),
-        _ => None,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crossterm::event::{KeyCode, KeyModifiers};
 
     use super::*;
-    use crate::{config::Config, manager::context::InputAction};
+    use crate::{
+        config::{Config, keymap_context},
+        manager::context::InputAction,
+    };
 
     #[test]
     fn removed_backspace_actions_do_not_break_existing_config() {
