@@ -27,24 +27,39 @@ pub async fn configure(config: &Config, model: &mut Model) -> color_eyre::Result
             .model
             .clone()
             .unwrap_or_else(|| "gpt-4o-mini".to_string());
-        install_provider(model, provider, model_id);
+        install_provider(model, provider, "openai".to_string(), model_id);
         return Ok(());
     }
     if config.features.agent.provider.is_some() {
         return Ok(());
     }
-    restore_openai(model).await
+    restore_saved_provider(model).await
 }
 
-async fn restore_openai(model: &mut Model) -> color_eyre::Result<()> {
+async fn restore_saved_provider(model: &mut Model) -> color_eyre::Result<()> {
     let Some(store) = model.provider_credentials.clone() else {
         return Ok(());
     };
-    let Some(credential) = store
-        .get("openai")
+    let providers = store
+        .list()
         .await
-        .map_err(|error| color_eyre::eyre::eyre!(error.to_string()))?
-    else {
+        .map_err(|error| color_eyre::eyre::eyre!(error.to_string()))?;
+    let mut selected = Vec::new();
+    for provider in providers {
+        if let Some(credential) = store
+            .get(&provider.provider_id)
+            .await
+            .map_err(|error| color_eyre::eyre::eyre!(error.to_string()))?
+            && credential.selected_model.is_some()
+        {
+            selected.push(credential);
+        }
+    }
+    let Some(credential) = selected.into_iter().max_by(|left, right| {
+        left.updated_at
+            .cmp(&right.updated_at)
+            .then_with(|| left.provider_id.cmp(&right.provider_id))
+    }) else {
         return Ok(());
     };
     let Some(model_id) = credential.selected_model.clone() else {
@@ -53,18 +68,24 @@ async fn restore_openai(model: &mut Model) -> color_eyre::Result<()> {
     let Some(factory) = model.openai_factory.clone() else {
         return Ok(());
     };
+    let provider_id = credential.provider_id.clone();
     let provider = factory
         .provider(credential, model_id.clone())
         .map_err(|error| color_eyre::eyre::eyre!(error))?;
-    install_provider(model, provider, model_id);
+    install_provider(model, provider, provider_id, model_id);
     Ok(())
 }
 
-fn install_provider(model: &mut Model, provider: Arc<dyn AgentProvider>, model_id: String) {
+fn install_provider(
+    model: &mut Model,
+    provider: Arc<dyn AgentProvider>,
+    provider_id: String,
+    model_id: String,
+) {
     model.agent.set_provider(provider);
     model
         .agent
-        .set_provider_metadata("openai".to_string(), Some(model_id));
+        .set_provider_metadata(provider_id, Some(model_id));
 }
 
 async fn configure_store(config: &Config, model: &mut Model) -> color_eyre::Result<()> {
@@ -205,6 +226,58 @@ mod tests {
             .await
             .unwrap();
         assert!(recent.sessions.is_empty());
+    }
+
+    #[tokio::test]
+    async fn most_recently_activated_compatible_provider_is_restored() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("agent.db");
+        let store = SeaOrmProviderCredentialStore::connect(&path).await.unwrap();
+        for (provider_id, base_url, model, updated_at) in [
+            ("openai", "https://api.openai.com/v1", "gpt-test", 10),
+            (
+                "kimi-for-coding",
+                crate::provider_login::DEFAULT_KIMI_FOR_CODING_ENDPOINT,
+                "k3-256k",
+                20,
+            ),
+        ] {
+            store
+                .upsert(eggplant_agent_storage::ProviderCredential {
+                    provider_id: provider_id.to_string(),
+                    auth_type: eggplant_agent_storage::ProviderAuthType::ApiKey,
+                    base_url: Some(base_url.to_string()),
+                    selected_model: Some(model.to_string()),
+                    api_key: Some("stored-secret".to_string()),
+                    access_token: None,
+                    refresh_token: None,
+                    expires_at: None,
+                    account_id: None,
+                    created_at: 1,
+                    updated_at,
+                })
+                .await
+                .unwrap();
+        }
+        drop(store);
+        let mut config = Config::default();
+        config.features.agent.session_db = Some(path);
+        let mut model = Model::default();
+
+        configure(&config, &mut model).await.unwrap();
+
+        assert_eq!(model.agent.provider_name(), "kimi-for-coding");
+        assert_eq!(model.agent.model(), Some("k3-256k"));
+        assert_eq!(
+            model
+                .provider_credentials
+                .unwrap()
+                .list()
+                .await
+                .unwrap()
+                .len(),
+            2
+        );
     }
 
     #[test]

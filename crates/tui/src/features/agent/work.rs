@@ -572,6 +572,9 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
         model.model_catalogs = Some(crate::test_utils::model_catalog_store().0);
+        model
+            .agent
+            .set_provider_metadata("openai".to_string(), None);
         model.tools.active_tool = Some(ToolKind::Agent);
         model.tools.visibility = Visibility::Displayed;
         focus_panel_input(&mut model);

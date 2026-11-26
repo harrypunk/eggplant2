@@ -179,10 +179,10 @@ Provider login:
 - Account lists `openai`, `qwen.com`, and `kimi.com` as placeholders.
 - API key lists `openai`, `kimi-for-coding`, `qwen-tokenplan-individual-cn`, and `deepseek`.
 - API-key drafts use Backspace and Left/Right editing; Enter saves through the configured credential store.
-- OpenAI has wrappable Endpoint and API-key fields. Tab loops between them, and Ctrl-V pastes through `ClipboardReader`.
+- OpenAI and Kimi-for-Coding have wrappable Endpoint and API-key fields. Kimi defaults to `https://api.kimi.com/coding/v1`. Tab loops between fields, and Ctrl-V pastes through `ClipboardReader`.
 - Clipboard completions are discarded after focus or edits change, preventing stale pastes.
 - Durable saves use the default SQLite database at `~/.eggplant/ai/data.sqlite`; an absolute `session_db` can override it.
-- `/model` opens the cached selector and refreshes in the background; Up/Down or Ctrl-N/Ctrl-P navigate and Enter activates the selected model.
+- `/model` opens the active provider's cached selector and refreshes in the background; Up/Down or Ctrl-N/Ctrl-P navigate and Enter activates the selected model.
 - After an OpenAI save, the endpoint returns available models. Up/Down or Ctrl-N/Ctrl-P navigate the catalog and Enter activates the selected model.
 - Catalog failures preserve the form for retry. Activation persists the selected model and restores it on the next startup.
 - Other providers can store keys independently without changing the active provider or model.

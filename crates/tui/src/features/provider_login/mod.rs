@@ -1,5 +1,6 @@
+mod kimi_for_coding;
 mod openai;
-mod openai_work;
+mod openai_compatible_work;
 mod paste;
 mod state;
 mod storage;
@@ -22,6 +23,7 @@ pub const KEYMAPS: &[ContextKeymap] =
             KeymapCapability::ModalActions,
         ])];
 
+pub use kimi_for_coding::DEFAULT_ENDPOINT as DEFAULT_KIMI_FOR_CODING_ENDPOINT;
 pub use openai::{DEFAULT_OPENAI_ENDPOINT, OpenAiField};
 pub use state::{
     ProviderAuthMethod, ProviderLoginBack, ProviderLoginOption, ProviderLoginPage,

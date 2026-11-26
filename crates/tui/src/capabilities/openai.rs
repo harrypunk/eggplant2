@@ -18,6 +18,7 @@ pub trait OpenAiProviderFactory: std::fmt::Debug + Send + Sync {
 }
 
 pub struct OpenAiActivationResult {
+    pub provider_id: String,
     pub model_id: String,
     pub result: Result<Arc<dyn AgentProvider>, String>,
 }
@@ -26,15 +27,16 @@ pub struct OpenAiActivationResult {
 pub async fn activate(
     store: Arc<dyn ProviderCredentialStore>,
     factory: Arc<dyn OpenAiProviderFactory>,
+    provider_id: String,
     model_id: String,
     updated_at: i64,
 ) -> OpenAiActivationResult {
     let result = async {
         let mut credential = store
-            .get("openai")
+            .get(&provider_id)
             .await
             .map_err(|error| error.to_string())?
-            .ok_or_else(|| "OpenAI credential was not found".to_string())?;
+            .ok_or_else(|| format!("{provider_id} credential was not found"))?;
         let provider = factory.provider(credential.clone(), model_id.clone())?;
         credential.selected_model = Some(model_id.clone());
         credential.updated_at = updated_at;
@@ -45,5 +47,9 @@ pub async fn activate(
         Ok(provider)
     }
     .await;
-    OpenAiActivationResult { model_id, result }
+    OpenAiActivationResult {
+        provider_id,
+        model_id,
+        result,
+    }
 }

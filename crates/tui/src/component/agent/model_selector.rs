@@ -121,7 +121,7 @@ mod tests {
     fn catalog_rows_stay_visible_and_show_refresh_status() {
         let theme = Theme::default();
         let mut state = ModelSelectorState::default();
-        state.open(None, Some("model-19".to_string()));
+        state.open(None, "openai".to_string(), Some("model-19".to_string()));
         state.apply_cached(
             ModelCatalog::new(
                 "openai",

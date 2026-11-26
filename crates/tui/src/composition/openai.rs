@@ -45,22 +45,20 @@ fn openai_config(
     model: Option<String>,
     context_window: Option<u64>,
 ) -> Result<OpenAiConfig, String> {
-    if credential.provider_id != "openai" {
-        return Err("provider is not OpenAI-compatible".to_string());
-    }
     if credential.auth_type != ProviderAuthType::ApiKey {
         return Err("OpenAI-compatible login requires an API key".to_string());
     }
     let api_key = credential
         .api_key
-        .ok_or_else(|| "OpenAI API key is missing".to_string())?;
-    let mut config = OpenAiConfig {
+        .ok_or_else(|| "OpenAI-compatible API key is missing".to_string())?;
+    let base_url = credential
+        .base_url
+        .ok_or_else(|| "OpenAI-compatible endpoint is missing".to_string())?;
+    let config = OpenAiConfig {
+        base_url,
         model,
         context_window,
         ..OpenAiConfig::default()
     };
-    if let Some(base_url) = credential.base_url {
-        config.base_url = base_url;
-    }
     Ok(config.with_api_key(api_key))
 }

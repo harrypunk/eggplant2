@@ -107,7 +107,7 @@ fn available(model: &Model) -> bool {
 fn activate(model: &mut Model) -> Option<Effect> {
     match model.provider_login.page() {
         super::ProviderLoginPage::OpenAiModelSelection(_) => {
-            return super::openai_work::activate_selected(model);
+            return super::openai_compatible_work::activate_selected(model);
         }
         super::ProviderLoginPage::OpenAiModelsLoading(_)
         | super::ProviderLoginPage::OpenAiActivating(_) => return None,
@@ -200,13 +200,17 @@ pub(super) fn complete_save(
 }
 
 fn complete_save_success(model: &mut Model, provider_id: &str) -> Option<Effect> {
-    match provider_id {
-        "openai" => match super::openai_work::after_save(model) {
-            super::openai_work::OpenAiAfterSave::FetchModels(effect) => Some(effect),
-            super::openai_work::OpenAiAfterSave::CloseWithoutCatalog => {
-                close_with_saved_notice(model, provider_id)
+    match model.provider_login.page() {
+        super::ProviderLoginPage::OpenAiInput(provider) => {
+            match super::openai_compatible_work::after_save(model, provider.id()) {
+                super::openai_compatible_work::OpenAiCompatibleAfterSave::FetchModels(effect) => {
+                    Some(effect)
+                }
+                super::openai_compatible_work::OpenAiCompatibleAfterSave::CloseWithoutCatalog => {
+                    close_with_saved_notice(model, provider_id)
+                }
             }
-        },
+        }
         _ => close_with_saved_notice(model, provider_id),
     }
 }
@@ -332,10 +336,17 @@ mod tests {
         handle_command(&mut model, CommandId("provider_login_activate"));
         handle_command(&mut model, CommandId("provider_login_next"));
         handle_command(&mut model, CommandId("provider_login_activate"));
-        let ProviderLoginPage::ApiKeyInput(provider) = model.provider_login.page() else {
-            panic!("provider selection should open its API-key input");
+        let ProviderLoginPage::OpenAiInput(provider) = model.provider_login.page() else {
+            panic!("provider selection should open its OpenAI-compatible input");
         };
         assert_eq!(provider.id(), "kimi-for-coding");
+        assert_eq!(
+            model
+                .provider_login
+                .openai_input(crate::provider_login::OpenAiField::Endpoint)
+                .value(),
+            crate::provider_login::DEFAULT_KIMI_FOR_CODING_ENDPOINT
+        );
 
         handle_command(&mut model, CommandId("provider_login_close"));
         assert_eq!(

@@ -19,11 +19,21 @@ pub enum ProviderAuthMethod {
 pub struct ProviderSpec {
     id: &'static str,
     method: ProviderAuthMethod,
+    openai_compatible_endpoint: Option<&'static str>,
 }
 
 impl ProviderSpec {
-    const fn new(id: &'static str, method: ProviderAuthMethod) -> Self {
-        Self { id, method }
+    pub(super) const fn new(id: &'static str, method: ProviderAuthMethod) -> Self {
+        Self {
+            id,
+            method,
+            openai_compatible_endpoint: None,
+        }
+    }
+
+    pub(super) const fn with_openai_compatible_endpoint(mut self, endpoint: &'static str) -> Self {
+        self.openai_compatible_endpoint = Some(endpoint);
+        self
     }
 
     pub fn id(self) -> &'static str {
@@ -32,6 +42,10 @@ impl ProviderSpec {
 
     pub fn method(self) -> ProviderAuthMethod {
         self.method
+    }
+
+    pub fn openai_compatible_endpoint(self) -> Option<&'static str> {
+        self.openai_compatible_endpoint
     }
 }
 
@@ -261,11 +275,13 @@ impl ProviderLoginState {
             (ProviderLoginPage::Providers(_), ProviderLoginOption::Provider(provider)) => {
                 self.page = match provider.method() {
                     ProviderAuthMethod::Account => ProviderLoginPage::Placeholder(provider),
-                    ProviderAuthMethod::ApiKey if provider.id() == "openai" => {
-                        self.openai.reset();
-                        ProviderLoginPage::OpenAiInput(provider)
-                    }
-                    ProviderAuthMethod::ApiKey => ProviderLoginPage::ApiKeyInput(provider),
+                    ProviderAuthMethod::ApiKey => match provider.openai_compatible_endpoint() {
+                        Some(endpoint) => {
+                            self.openai.reset_to(endpoint);
+                            ProviderLoginPage::OpenAiInput(provider)
+                        }
+                        None => ProviderLoginPage::ApiKeyInput(provider),
+                    },
                 };
                 self.api_key_input.clear();
                 self.error = None;
@@ -412,7 +428,7 @@ impl ProviderLoginState {
                 Some(Ok(()))
             }
             Ok(_) => {
-                let error = "OpenAI model catalog contained no models".to_string();
+                let error = format!("{} model catalog contained no models", provider.id());
                 self.page = ProviderLoginPage::OpenAiInput(provider);
                 self.error = Some(error.clone());
                 Some(Err(error))
@@ -512,8 +528,8 @@ const ACCOUNT_PROVIDERS: &[ProviderSpec] = &[
 ];
 
 const API_KEY_PROVIDERS: &[ProviderSpec] = &[
-    ProviderSpec::new("openai", ProviderAuthMethod::ApiKey),
-    ProviderSpec::new("kimi-for-coding", ProviderAuthMethod::ApiKey),
+    super::openai::PROVIDER,
+    super::kimi_for_coding::PROVIDER,
     ProviderSpec::new("qwen-tokenplan-individual-cn", ProviderAuthMethod::ApiKey),
     ProviderSpec::new("deepseek", ProviderAuthMethod::ApiKey),
 ];
@@ -614,8 +630,14 @@ mod tests {
         state.select_next();
         state.activate();
         match state.page() {
-            ProviderLoginPage::ApiKeyInput(_) => {}
-            other => panic!("expected generic API-key input, got {other:?}"),
+            ProviderLoginPage::OpenAiInput(provider) => {
+                assert_eq!(provider.id(), "kimi-for-coding");
+                assert_eq!(
+                    state.openai_input(OpenAiField::Endpoint).value(),
+                    crate::provider_login::DEFAULT_KIMI_FOR_CODING_ENDPOINT
+                );
+            }
+            other => panic!("expected Kimi's OpenAI-compatible input, got {other:?}"),
         }
         let selected = state.selected();
         state.select_next();

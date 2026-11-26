@@ -21,6 +21,7 @@ pub enum ModelSelectorNotice {
 pub struct ModelSelectorState {
     page: ModelSelectorPage,
     return_context: Option<Context>,
+    provider_id: Option<String>,
     models: ListState<String>,
     active_model: Option<String>,
     notice: Option<ModelSelectorNotice>,
@@ -32,6 +33,7 @@ impl Default for ModelSelectorState {
         Self {
             page: ModelSelectorPage::Closed,
             return_context: None,
+            provider_id: None,
             models: ListState::default(),
             active_model: None,
             notice: None,
@@ -41,9 +43,15 @@ impl Default for ModelSelectorState {
 }
 
 impl ModelSelectorState {
-    pub fn open(&mut self, return_context: Option<Context>, active_model: Option<String>) {
+    pub fn open(
+        &mut self,
+        return_context: Option<Context>,
+        provider_id: String,
+        active_model: Option<String>,
+    ) {
         self.page = ModelSelectorPage::Loading;
         self.return_context = return_context;
+        self.provider_id = Some(provider_id);
         self.active_model = active_model;
         self.models = ListState::default();
         self.notice = None;
@@ -52,6 +60,7 @@ impl ModelSelectorState {
 
     pub fn close(&mut self) -> Option<Context> {
         self.page = ModelSelectorPage::Closed;
+        self.provider_id = None;
         self.models = ListState::default();
         self.notice = None;
         self.generation = self.generation.wrapping_add(1);
@@ -60,6 +69,10 @@ impl ModelSelectorState {
 
     pub fn page(&self) -> ModelSelectorPage {
         self.page
+    }
+
+    pub fn provider_id(&self) -> Option<&str> {
+        self.provider_id.as_deref()
     }
 
     pub fn models(&self) -> &[String] {
@@ -186,7 +199,7 @@ mod tests {
     #[test]
     fn cached_selection_tracks_active_model_and_refresh_preserves_it() {
         let mut state = ModelSelectorState::default();
-        state.open(None, Some("gpt-b".to_string()));
+        state.open(None, "openai".to_string(), Some("gpt-b".to_string()));
         state.apply_cached(catalog(&["gpt-a", "gpt-b", "gpt-c"]));
         assert_eq!(state.selected_model(), Some("gpt-b"));
         state.select_next();
@@ -205,14 +218,14 @@ mod tests {
     #[test]
     fn activation_and_late_completions_are_scoped() {
         let mut state = ModelSelectorState::default();
-        state.open(None, None);
+        state.open(None, "openai".to_string(), None);
         state.apply_cached(catalog(&["gpt-a"]));
         let (model, generation) = state.begin_activation().unwrap();
         assert_eq!(model, "gpt-a");
         assert_eq!(state.complete_activation(generation + 1, None), None);
         assert_eq!(state.complete_activation(generation, None), Some(true));
         state.close();
-        state.open(None, None);
+        state.open(None, "openai".to_string(), None);
         state.apply_cached(catalog(&["gpt-a"]));
         let (_, generation) = state.begin_activation().unwrap();
         assert_eq!(

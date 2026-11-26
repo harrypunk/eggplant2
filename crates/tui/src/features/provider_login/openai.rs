@@ -5,7 +5,11 @@ use crate::component::{
     text_input::{TextInput, TextInputEvent},
 };
 
+use super::state::{ProviderAuthMethod, ProviderSpec};
+
 pub const DEFAULT_OPENAI_ENDPOINT: &str = "https://api.openai.com/v1";
+pub const PROVIDER: ProviderSpec = ProviderSpec::new("openai", ProviderAuthMethod::ApiKey)
+    .with_openai_compatible_endpoint(DEFAULT_OPENAI_ENDPOINT);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OpenAiField {
@@ -49,7 +53,11 @@ impl Default for OpenAiForm {
 
 impl OpenAiForm {
     pub fn reset(&mut self) {
-        self.endpoint.set_value(DEFAULT_OPENAI_ENDPOINT);
+        self.reset_to(DEFAULT_OPENAI_ENDPOINT);
+    }
+
+    pub fn reset_to(&mut self, endpoint: &str) {
+        self.endpoint.set_value(endpoint);
         self.api_key.clear();
         self.focus.reset();
         self.invalidate();

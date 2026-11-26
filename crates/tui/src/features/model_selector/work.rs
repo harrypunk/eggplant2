@@ -59,19 +59,30 @@ pub fn open(model: &mut Model) -> Option<Effect> {
         return Some(crate::notifications::publish_status(
             model,
             StatusMessage::info("Model storage is not configured".to_string()),
-            Some("OpenAI"),
+            Some("Provider"),
         ));
     };
+    if model.agent.provider_name() == "fake" {
+        return Some(crate::notifications::publish_status(
+            model,
+            StatusMessage::info("No active provider; use /provider first".to_string()),
+            Some("Provider"),
+        ));
+    }
+    let provider_id = model.agent.provider_name().to_string();
     let return_context = crate::agent::suspend_for_overlay(model);
     if !model.modal.open(Context::ModelSelector) {
         crate::agent::resume_overlay(model, return_context);
         return None;
     }
     let active_model = model.agent.model().map(str::to_string);
-    model.model_selector.open(return_context, active_model);
+    model
+        .model_selector
+        .open(return_context, provider_id.clone(), active_model);
     let generation = model.model_selector.generation();
     Some(Effect::feature(LoadCatalog {
         catalogs,
+        provider_id,
         generation,
     }))
 }
@@ -87,11 +98,13 @@ fn refresh(model: &mut Model) -> Option<Effect> {
     let catalogs = model.model_catalogs.clone()?;
     let store = model.provider_credentials.clone()?;
     let factory = model.openai_factory.clone()?;
+    let provider_id = model.model_selector.provider_id()?.to_string();
     let generation = model.model_selector.generation();
     Some(Effect::feature(RefreshCatalog {
         catalogs,
         store,
         factory,
+        provider_id,
         generation,
     }))
 }
@@ -99,10 +112,12 @@ fn refresh(model: &mut Model) -> Option<Effect> {
 fn activate_selected(model: &mut Model) -> Option<Effect> {
     let store = model.provider_credentials.clone()?;
     let factory = model.openai_factory.clone()?;
+    let provider_id = model.model_selector.provider_id()?.to_string();
     let (model_id, generation) = model.model_selector.begin_activation()?;
     Some(Effect::feature(ActivateModel {
         store,
         factory,
+        provider_id,
         model_id,
         generation,
         updated_at: chrono::Utc::now().timestamp_millis(),
@@ -111,12 +126,13 @@ fn activate_selected(model: &mut Model) -> Option<Effect> {
 
 struct LoadCatalog {
     catalogs: Arc<dyn ModelCatalogStore>,
+    provider_id: String,
     generation: u64,
 }
 
 impl LoadCatalog {
     async fn perform_async(self) -> LoadCatalogCompletion {
-        let catalog = self.catalogs.get("openai").await.ok().flatten();
+        let catalog = self.catalogs.get(&self.provider_id).await.ok().flatten();
         LoadCatalogCompletion {
             catalog,
             generation: self.generation,
@@ -163,6 +179,7 @@ struct RefreshCatalog {
     catalogs: Arc<dyn ModelCatalogStore>,
     store: Arc<dyn ProviderCredentialStore>,
     factory: Arc<dyn OpenAiProviderFactory>,
+    provider_id: String,
     generation: u64,
 }
 
@@ -171,13 +188,15 @@ impl RefreshCatalog {
         let result = async {
             let credential = self
                 .store
-                .get("openai")
+                .get(&self.provider_id)
                 .await
                 .map_err(|error| error.to_string())?
-                .ok_or_else(|| "No OpenAI credential; use /provider first".to_string())?;
+                .ok_or_else(|| {
+                    format!("No {} credential; use /provider first", self.provider_id)
+                })?;
             let models = self.factory.list_models(credential).await?;
             let checked_at = chrono::Utc::now().timestamp_millis();
-            let catalog = ModelCatalog::new("openai", models, checked_at)
+            let catalog = ModelCatalog::new(&self.provider_id, models, checked_at)
                 .map_err(|error| error.to_string())?;
             self.catalogs
                 .upsert(catalog.clone())
@@ -232,6 +251,7 @@ impl Completion for RefreshCatalogCompletion {
 struct ActivateModel {
     store: Arc<dyn ProviderCredentialStore>,
     factory: Arc<dyn OpenAiProviderFactory>,
+    provider_id: String,
     model_id: String,
     generation: u64,
     updated_at: i64,
@@ -243,6 +263,7 @@ impl ActivateModel {
         let activation = crate::capabilities::openai::activate(
             self.store,
             self.factory,
+            self.provider_id,
             self.model_id,
             self.updated_at,
         )
@@ -287,14 +308,17 @@ impl Completion for ActivateModelCompletion {
             (Some(true), Ok(provider)) => {
                 model.agent.set_provider(provider);
                 model.agent.set_provider_metadata(
-                    "openai".to_string(),
+                    self.activation.provider_id.clone(),
                     Some(self.activation.model_id.clone()),
                 );
                 close(model);
                 Some(crate::notifications::publish_status(
                     model,
-                    StatusMessage::info(format!("Model: openai/{}", self.activation.model_id)),
-                    Some("OpenAI"),
+                    StatusMessage::info(format!(
+                        "Model: {}/{}",
+                        self.activation.provider_id, self.activation.model_id
+                    )),
+                    Some(&self.activation.provider_id),
                 ))
             }
             (Some(false), _) => Some(crate::notifications::publish_status(
@@ -303,7 +327,7 @@ impl Completion for ActivateModelCompletion {
                     "Model activation failed: {}",
                     error.unwrap_or_else(|| "unknown error".to_string())
                 )),
-                Some("OpenAI"),
+                Some("Provider"),
             )),
             _ => None,
         }
@@ -427,12 +451,15 @@ mod tests {
             updated_at: 1,
         };
         runtime().block_on(store.upsert(credential)).unwrap();
-        let model = Model {
+        let mut model = Model {
             provider_credentials: Some(store.clone()),
             model_catalogs: Some(catalogs.clone()),
             openai_factory: Some(Arc::new(factory)),
             ..Model::default()
         };
+        model
+            .agent
+            .set_provider_metadata("openai".to_string(), None);
         TestContext {
             model,
             store,
@@ -553,6 +580,75 @@ mod tests {
         assert_eq!(model.model_selector.page(), ModelSelectorPage::Closed);
         assert_eq!(model.agent.model(), Some("gpt-b"));
         assert_eq!(activated.lock().unwrap().as_slice(), ["gpt-b"]);
+    }
+
+    #[test]
+    fn model_selection_uses_the_active_kimi_credential_and_catalog() {
+        let TestContext {
+            mut model,
+            store,
+            catalogs,
+            _directory,
+            activated,
+        } = model_with(
+            Ok(vec![
+                "k3-256k".to_string(),
+                "kimi-for-coding-highspeed".to_string(),
+            ]),
+            None,
+        );
+        runtime()
+            .block_on(store.upsert(ProviderCredential {
+                provider_id: "kimi-for-coding".to_string(),
+                auth_type: ProviderAuthType::ApiKey,
+                base_url: Some(crate::provider_login::DEFAULT_KIMI_FOR_CODING_ENDPOINT.to_string()),
+                selected_model: None,
+                api_key: Some("kimi-secret".to_string()),
+                access_token: None,
+                refresh_token: None,
+                expires_at: None,
+                account_id: None,
+                created_at: 1,
+                updated_at: 1,
+            }))
+            .unwrap();
+        model
+            .agent
+            .set_provider_metadata("kimi-for-coding".to_string(), None);
+
+        let load = open(&mut model).unwrap();
+        let refresh = perform(&mut model, load).unwrap();
+        perform(&mut model, refresh);
+        assert_eq!(
+            model.model_selector.models(),
+            ["k3-256k", "kimi-for-coding-highspeed"]
+        );
+
+        let activation = activate_selected(&mut model).unwrap();
+        perform(&mut model, activation);
+
+        assert_eq!(model.agent.provider_name(), "kimi-for-coding");
+        assert_eq!(model.agent.model(), Some("k3-256k"));
+        assert_eq!(activated.lock().unwrap().as_slice(), ["k3-256k"]);
+        let kimi = runtime()
+            .block_on(store.get("kimi-for-coding"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(kimi.selected_model.as_deref(), Some("k3-256k"));
+        let openai = runtime().block_on(store.get("openai")).unwrap().unwrap();
+        assert_eq!(openai.selected_model, None);
+        assert!(
+            runtime()
+                .block_on(catalogs.get("openai"))
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            runtime()
+                .block_on(catalogs.get("kimi-for-coding"))
+                .unwrap()
+                .is_some()
+        );
     }
 
     #[test]
