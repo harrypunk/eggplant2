@@ -18,6 +18,14 @@ pub fn active(model: &Model) -> Option<AgentSurface> {
     }
 }
 
+/// Select the one surface whose editable prompt may present command candidates.
+pub fn prompt_active(model: &Model) -> Option<AgentSurface> {
+    active(model).filter(|surface| match surface {
+        AgentSurface::Dialog => true,
+        AgentSurface::Panel => super::panel::insert_input_available(model),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
