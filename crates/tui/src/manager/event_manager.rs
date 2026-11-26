@@ -878,6 +878,24 @@ mod tests {
     }
 
     #[test]
+    fn leader_ai_logout_opens_the_provider_logout_workflow() {
+        let events = event_manager();
+        let messages = MessageManager::default();
+        let (store, _directory) = crate::test_utils::provider_credential_store();
+        let mut model = Model {
+            provider_credentials: Some(store),
+            ..Model::default()
+        };
+
+        for key in [KeyCode::Char(' '), KeyCode::Char('a'), KeyCode::Char('o')] {
+            dispatch_key(&events, &messages, &mut model, key);
+        }
+
+        assert!(model.modal.is_active(Context::ProviderLogout));
+        assert!(!model.command_menu.is_active());
+    }
+
+    #[test]
     fn routes_vcs_reset_menu_and_popup_keys() {
         let manager = event_manager();
         let mut model = Model::default();

@@ -21,6 +21,7 @@ Available in Normal and Explorer contexts unless noted otherwise.
 | Toggle cursor-line background | `Space u c` |
 | Toggle agent tool panel | `Space a t` |
 | Open provider login | `Space a i` (`Space a p` alias) |
+| Open provider logout | `Space a o` |
 | Focus Agent panel input | `Ctrl-L` |
 | Return from Agent panel to editor | `Ctrl-H` |
 | Go to definition | `Space c d` |
@@ -171,7 +172,7 @@ Agent slash commands:
 - Enter executes a selected command or an exact typed command after trimming whitespace; incomplete and unknown commands remain unchanged.
 - Tab quick-fills the first match; Ctrl-N/Ctrl-P move selection with wrapping and quick-fill each command.
 - `/provider` opens provider login and restores the originating Agent input when closed.
-- `/model` opens the cached model selector; `/thinking` and `/logout` remain placeholders.
+- `/model` opens the grouped model selector; `/logout` opens provider logout; `/thinking` remains a placeholder.
 
 Provider login:
 
@@ -186,6 +187,12 @@ Provider login:
 - After a compatible-provider save, its endpoint returns available models. Up/Down or Ctrl-N/Ctrl-P navigate the catalog and Enter activates the selected model.
 - Catalog failures preserve the form for retry. Activation persists the selected model and restores it on the next startup.
 - Other providers can store keys independently without changing the active provider or model.
+
+Provider logout:
+
+- `Space a o` or `/logout` lists stored providers; empty storage produces a notice instead of a blank menu.
+- Up/Down and Ctrl-N/Ctrl-P navigate; Enter deletes the selected credential; Escape closes and ignores late completions.
+- Removing the active provider clears the runtime selection without switching implicitly. Other credentials remain unchanged.
 
 The focus controller itself remains geometry-only; keyboard maps decide which mode emits focus commands.
 
@@ -349,7 +356,7 @@ Input translation is pure. It does not change the model, execute commands, sleep
 
 Direct bindings and leader targets share `CommandRegistry`: each stable command ID has metadata and a handler. Resolved keyboard input produces a `RoutedInput { context, message }`, preserving the context that selected the binding. `TranslatedEvent` keeps this context-owned input separate from system messages such as resize and focus loss. Resolved commands emit `InvokeCommand(CommandId)`; unmigrated commands use compatibility messages, while the theme picker, file picker, buffer switching, editing commands, explorer state commands, lifecycle commands, and focus commands already use feature-owned handlers. Duplicate command registrations and duplicate chords in one input context are startup errors. Later feature migrations replace compatibility handlers without changing keybindings.
 
-All 36 input contexts use feature-owned `ContextKeymap` values assembled into a `KeymapCatalog` at `composition/keymaps.rs`. Each declaration owns its stable configuration name, typed `Context`, direct commands, and semantic capabilities such as `ListNavigation`, `ModalActions`, `LeaderMenu`, or `FormActions`. The legacy `common_bindings`, central membership lists, and string-to-context parser are gone. `Registry` validates merges and uses a runtime hash map for lookup, but does not own catalog membership. Duplicate feature contexts are startup errors, and custom commands merge without losing direct-binding precedence. The shell-owned Normal declaration remains empty because its direct defaults already come from `Config::default()`; VCS and Explorer declarations likewise merge with their configured defaults.
+All 37 input contexts use feature-owned `ContextKeymap` values assembled into a `KeymapCatalog` at `composition/keymaps.rs`. Each declaration owns its stable configuration name, typed `Context`, direct commands, and semantic capabilities such as `ListNavigation`, `ModalActions`, `LeaderMenu`, or `FormActions`. The legacy `common_bindings`, central membership lists, and string-to-context parser are gone. `Registry` validates merges and uses a runtime hash map for lookup, but does not own catalog membership. Duplicate feature contexts are startup errors, and custom commands merge without losing direct-binding precedence. The shell-owned Normal declaration remains empty because its direct defaults already come from `Config::default()`; VCS and Explorer declarations likewise merge with their configured defaults.
 
 Common modal keys follow a separate publish/subscribe path. `GeneralAction::{Next, Previous, Activate, Back}` carries semantic behavior without a feature prefix. `GeneralActionDispatcher` selects a registered subscription from `RoutedInput.context`, and that subscriber operates directly on its workflow instead of translating the action back into a feature command ID or rediscovering the context through `Model`. Features own their subscriptions; `composition/actions.rs` assembles them without giving the dispatcher concrete feature dependencies. This lets file picker, theme picker, grep, Agent, and provider-login workflows share Down/Up, Ctrl-N/P, Enter, and Escape without adding `yet_another_next` bindings. Custom direct commands retain their own command IDs and bindings.
 

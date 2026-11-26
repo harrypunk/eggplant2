@@ -10,6 +10,7 @@ use crate::{
 pub fn catalog() -> KeymapCatalog {
     KeymapCatalog::default()
         .extend(crate::provider_login::KEYMAPS.iter().copied())
+        .extend(crate::provider_logout::KEYMAPS.iter().copied())
         .extend(crate::model_selector::KEYMAPS.iter().copied())
         .extend(crate::agent::KEYMAPS.iter().copied())
         .extend(crate::welcome::KEYMAPS.iter().copied())
@@ -55,8 +56,8 @@ mod tests {
             .collect::<Vec<_>>();
         let unique = contexts.iter().collect::<HashSet<_>>();
 
-        assert_eq!(contexts.len(), 36);
-        assert_eq!(unique.len(), 36);
+        assert_eq!(contexts.len(), 37);
+        assert_eq!(unique.len(), 37);
     }
 
     #[test]

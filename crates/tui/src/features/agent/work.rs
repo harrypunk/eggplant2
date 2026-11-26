@@ -14,6 +14,7 @@ pub(crate) trait SubmissionContext {
     fn project_available(&self) -> bool;
     fn tool_context(&self) -> Option<ToolContext>;
     fn open_provider_login(&mut self) -> Option<Effect>;
+    fn open_provider_logout(&mut self) -> Option<Effect>;
     fn open_model_selector(&mut self) -> Option<Effect>;
     fn notify(&mut self, message: String) -> Option<Effect>;
 }
@@ -136,8 +137,9 @@ fn execute_prompt_command(
     context.agent_mut().complete_prompt_command();
     match command {
         super::PromptCommand::ProviderLogin => context.open_provider_login(),
+        super::PromptCommand::Logout => context.open_provider_logout(),
         super::PromptCommand::Model => context.open_model_selector(),
-        super::PromptCommand::Thinking | super::PromptCommand::Logout => {
+        super::PromptCommand::Thinking => {
             context.notify(format!("{} is not implemented yet", command.description()))
         }
     }
@@ -248,6 +250,11 @@ mod tests {
 
         fn open_provider_login(&mut self) -> Option<Effect> {
             self.opened = Some(crate::agent::PromptCommand::ProviderLogin);
+            None
+        }
+
+        fn open_provider_logout(&mut self) -> Option<Effect> {
+            self.opened = Some(crate::agent::PromptCommand::Logout);
             None
         }
 
@@ -596,6 +603,27 @@ mod tests {
         assert_eq!(model.agent.command_state().selected(), None);
         assert!(model.context_stack.is_empty());
         assert!(model.notifications.current().is_none());
+    }
+
+    #[test]
+    fn slash_logout_opens_provider_logout_without_starting_a_run() {
+        let directory = tempfile::tempdir().unwrap();
+        let (store, _storage_directory) = crate::test_utils::provider_credential_store();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        model.provider_credentials = Some(store);
+        model.tools.active_tool = Some(ToolKind::Agent);
+        model.tools.visibility = Visibility::Displayed;
+        focus_panel_input(&mut model);
+        enter_insert_mode(&mut model);
+        model.agent.prompt.set_value("/logout");
+
+        submit(&mut model);
+
+        assert!(model.agent.session().run().is_none());
+        assert!(model.modal.is_active(Context::ProviderLogout));
+        assert_eq!(input_context(&model), Some(Context::ProviderLogout));
+        assert_eq!(model.agent.prompt(), "");
+        assert!(model.context_stack.is_empty());
     }
 
     #[test]

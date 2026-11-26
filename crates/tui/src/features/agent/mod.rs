@@ -278,6 +278,12 @@ impl AgentState {
         self.model = model;
     }
 
+    pub fn clear_provider(&mut self) {
+        self.provider = None;
+        self.provider_name = "fake".to_string();
+        self.model = None;
+    }
+
     pub fn provider(&self) -> Option<Arc<dyn AgentProvider>> {
         self.provider.clone()
     }

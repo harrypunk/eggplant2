@@ -34,6 +34,10 @@ impl SubmissionContext for Model {
         crate::provider_login::open(self)
     }
 
+    fn open_provider_logout(&mut self) -> Option<Effect> {
+        crate::provider_logout::open(self)
+    }
+
     fn open_model_selector(&mut self) -> Option<Effect> {
         crate::model_selector::open(self)
     }

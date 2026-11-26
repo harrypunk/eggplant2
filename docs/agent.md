@@ -94,6 +94,7 @@ Set `features.agent.context_window` to the active model's token capacity to disp
 | Interrupt active run | `Ctrl-F7` |
 | Toggle shared Agent tool panel | `Space a t` |
 | Open provider login | `Space a i` (`Space a p` alias) |
+| Open provider logout | `Space a o` |
 | Focus Agent panel input | `Ctrl-L` |
 | Return from Agent panel to editor | `Ctrl-H` |
 
@@ -157,6 +158,12 @@ The shared form and workflow apply to every table row:
 - Enter activates the selected available provider/model, persists `selected_model` on that credential, and restores the latest activation on restart. Activation failures leave the selector open without changing the active provider.
 - The selector shares the general modal actions: Up/Down and Ctrl-N/Ctrl-P navigate, Enter selects, and Escape closes while restoring the originating Agent surface.
 
+#### Provider logout
+
+- `Space a o` and `/logout` open the same provider-logout workflow. It loads only secret-free `ProviderCredentialInfo` entries from the configured credential store; an empty store closes with a notice instead of showing a blank selector.
+- Up/Down and Ctrl-N/Ctrl-P use the shared `ListNavigation` capability. Enter deletes only the selected credential through `ProviderCredentialStore::delete`; Escape closes during loading or deletion, and late completions are ignored by generation checks.
+- Deleting the active provider clears its runtime provider and model rather than silently activating another credential. Other stored credentials and cached model catalogs are untouched; `/model` can be used to choose the next provider explicitly.
+
 #### Agent slash commands
 
 A leading `/` in the inline dialog or panel Insert input opens a live-filtered command menu above the prompt. The menu derives candidates from the shared prompt state and catalog: `/provider`, `/model`, `/thinking`, and `/logout`.
@@ -168,7 +175,7 @@ A leading `/` in the inline dialog or panel Insert input opens a live-filtered c
 - Enter executes an explicitly selected command or an exact typed command after trimming surrounding whitespace, matching Pi's submission behavior. Editing away a selection therefore does not prevent a complete command from running; slash text is never submitted as a provider message.
 - Executing a command clears the composer and command selection before opening its follow-up UI, matching Pi's accepted-command behavior. Unselected or unknown slash text remains editable.
 - The menu height follows content within the available layout. Its selection-following viewport keeps the selected row visible.
-- `/model` opens the cached model selector; `/thinking` and `/logout` currently publish placeholder notifications.
+- `/model` opens the grouped model selector; `/logout` opens provider logout; `/thinking` currently publishes a placeholder notification.
 
 #### Ownership and deferred work
 

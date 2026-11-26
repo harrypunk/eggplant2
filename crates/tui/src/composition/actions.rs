@@ -10,6 +10,7 @@ const PROVIDERS: &[SubscriptionProvider] = &[
     crate::agent::general_action_subscriptions,
     crate::model_selector::general_action_subscriptions,
     crate::provider_login::general_action_subscriptions,
+    crate::provider_logout::general_action_subscriptions,
 ];
 
 /// Assemble feature-owned general-action subscriptions at the composition root.

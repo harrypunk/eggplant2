@@ -119,6 +119,7 @@ impl CommandRegistry {
             crate::diagnostics::commands,
             crate::agent::commands,
             crate::provider_login::commands,
+            crate::provider_logout::commands,
             crate::welcome::commands,
         ];
 
