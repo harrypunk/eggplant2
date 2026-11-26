@@ -206,6 +206,7 @@ fn common_bindings() -> KeymapConfig {
                 ("provider_login_paste", "ctrl-v"),
             ],
         ),
+        keymap_context("model_selector", []),
         keymap_context("buffer_grep", []),
         keymap_context("project_grep", []),
         keymap_context("line_jump", [("line_jump_cancel", "esc")]),

@@ -321,12 +321,23 @@ fn runtime() -> tokio::runtime::Runtime {
 mod tests {
     use std::sync::Mutex;
 
+    use crossterm::event::{Event, KeyCode, KeyEvent, KeyModifiers};
     use eggplant_agent::{AgentEvent, AgentProvider, AgentRequest};
     use eggplant_agent_storage::{ProviderAuthType, ProviderCredential};
     use eggplant_agent_storage_seaorm::{SeaOrmModelCatalogStore, SeaOrmProviderCredentialStore};
 
     use super::*;
-    use crate::model_selector::{ModelSelectorNotice, ModelSelectorPage};
+    use crate::{
+        config::Config,
+        manager::{
+            command_registry::CommandRegistry,
+            event_manager::{EventManager, TranslatedEvent},
+            keyboard_input_registry::Registry,
+            message_manager::MessageManager,
+            text_input_registry::TextInputRegistry,
+        },
+        model_selector::{ModelSelectorNotice, ModelSelectorPage},
+    };
 
     #[derive(Debug)]
     struct FakeFactory {
@@ -438,6 +449,38 @@ mod tests {
         crate::manager::message_manager::MessageManager::default().update(model, request.perform())
     }
 
+    fn event_manager() -> EventManager {
+        let config = Config::default();
+        let keymap = Registry::from_config(&config.keymap, &CommandRegistry::default()).unwrap();
+        EventManager::new(&config, keymap, TextInputRegistry::builtin()).unwrap()
+    }
+
+    fn send_key(
+        events: &EventManager,
+        messages: &MessageManager,
+        model: &mut Model,
+        key: KeyCode,
+    ) -> Option<Effect> {
+        let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+        match events.translate_event(event, model).unwrap() {
+            TranslatedEvent::Input(input) => messages.update_input(model, input),
+            TranslatedEvent::System(message) => messages.update(model, message),
+        }
+    }
+
+    async fn complete_async(messages: &MessageManager, model: &mut Model, effect: Effect) {
+        let Effect::Feature(work) = effect else {
+            panic!("expected asynchronous model activation");
+        };
+        let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+        work.execute(sender);
+        let message = tokio::time::timeout(std::time::Duration::from_secs(2), receiver.recv())
+            .await
+            .expect("model activation should complete without stalling")
+            .expect("activation channel should remain open");
+        messages.update(model, message);
+    }
+
     #[test]
     fn cached_catalog_refreshes_persists_and_switches_the_active_model() {
         let TestContext {
@@ -470,6 +513,41 @@ mod tests {
         assert_eq!(activated.lock().unwrap().as_slice(), ["gpt-b"]);
         let credential = runtime().block_on(store.get("openai")).unwrap().unwrap();
         assert_eq!(credential.selected_model.as_deref(), Some("gpt-b"));
+    }
+
+    #[test]
+    fn real_key_dispatch_navigates_and_completes_activation_without_stalling() {
+        let TestContext {
+            mut model,
+            store: _,
+            catalogs: _,
+            _directory,
+            activated,
+        } = model_with(
+            Ok(vec!["gpt-a".to_string(), "gpt-b".to_string()]),
+            Some(vec!["gpt-a".to_string(), "gpt-b".to_string()]),
+        );
+        let load = open(&mut model).unwrap();
+        let refresh = perform(&mut model, load).unwrap();
+        perform(&mut model, refresh);
+        let events = event_manager();
+        let messages = MessageManager::default();
+        assert_eq!(model.model_selector.selected_model(), Some("gpt-a"));
+
+        send_key(&events, &messages, &mut model, KeyCode::Down);
+        assert_eq!(model.model_selector.selected_model(), Some("gpt-b"));
+
+        let activation = send_key(&events, &messages, &mut model, KeyCode::Enter)
+            .expect("Enter should start model activation");
+        tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(complete_async(&messages, &mut model, activation));
+
+        assert_eq!(model.model_selector.page(), ModelSelectorPage::Closed);
+        assert_eq!(model.agent.model(), Some("gpt-b"));
+        assert_eq!(activated.lock().unwrap().as_slice(), ["gpt-b"]);
     }
 
     #[test]

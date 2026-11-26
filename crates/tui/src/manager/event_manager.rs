@@ -77,7 +77,7 @@ impl EventManager {
     }
 
     /// Pure routing: dispatch on the event kind and retain the resolved input context.
-    fn translate_event(&self, event: Event, model: &Model) -> Option<TranslatedEvent> {
+    pub(crate) fn translate_event(&self, event: Event, model: &Model) -> Option<TranslatedEvent> {
         match event {
             Event::Key(key) if key.kind == KeyEventKind::Press => {
                 self.translate_key(key, model).map(TranslatedEvent::Input)
