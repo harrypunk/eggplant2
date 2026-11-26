@@ -67,8 +67,13 @@ impl AgentDialogContent<'_> {
 
     fn status_text(&self) -> String {
         self.props
-            .storage_error
-            .map(|error| format!("Storage warning: {error}"))
+            .model_notice
+            .map(|notice| notice.text().to_string())
+            .or_else(|| {
+                self.props
+                    .storage_error
+                    .map(|error| format!("Storage warning: {error}"))
+            })
             .or_else(|| {
                 self.props
                     .session
@@ -168,7 +173,11 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend};
 
     use super::*;
-    use crate::{agent::PromptCommand, component::agent::AgentPromptProps, theme::Theme};
+    use crate::{
+        agent::PromptCommand,
+        component::agent::{AgentModelNotice, AgentPromptProps},
+        theme::Theme,
+    };
     use eggplant_agent::AgentSession;
 
     fn render(props: &AgentDialogProps<'_>, width: u16, height: u16) -> String {
@@ -196,6 +205,7 @@ mod tests {
             session: &session,
             prompt: AgentPromptProps::new(&prompt),
             storage_error: None,
+            model_notice: None,
             footer: Default::default(),
             styles: theme.ui(),
         };
@@ -204,6 +214,27 @@ mod tests {
         assert!(content.contains("Streaming"));
         assert!(content.contains("answer"));
         assert!(content.contains("context ?"));
+    }
+
+    #[test]
+    fn no_model_hint_is_rendered_with_login_guidance() {
+        let theme = Theme::default();
+        let session = AgentSession::default();
+        let prompt = TextInput::default();
+        let props = AgentDialogProps {
+            session: &session,
+            prompt: AgentPromptProps::new(&prompt),
+            storage_error: None,
+            model_notice: Some(AgentModelNotice::Unavailable),
+            footer: Default::default(),
+            styles: theme.ui(),
+        };
+
+        let content = render(&props, 70, 12);
+
+        assert!(content.contains("No model available"));
+        assert!(content.contains("/provider"));
+        assert!(content.contains("Space a i"));
     }
 
     #[test]
@@ -231,6 +262,7 @@ mod tests {
             session: &session,
             prompt: AgentPromptProps::new(&prompt),
             storage_error: None,
+            model_notice: None,
             footer: Default::default(),
             styles: theme.ui(),
         };
@@ -255,6 +287,7 @@ mod tests {
                 Some(PromptCommand::Logout),
             ),
             storage_error: None,
+            model_notice: None,
             footer: Default::default(),
             styles: theme.ui(),
         };
@@ -293,6 +326,7 @@ mod tests {
             session: &session,
             prompt: AgentPromptProps::new(&prompt),
             storage_error: None,
+            model_notice: None,
             footer: Default::default(),
             styles: theme.ui(),
         };

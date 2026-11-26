@@ -68,24 +68,6 @@ impl AgentRunState {
     }
 }
 
-pub(crate) struct FakeAgentRun {
-    pub(crate) run_id: RunId,
-    pub(crate) prompt: String,
-}
-
-impl FakeAgentRun {
-    fn events(&self) -> Vec<AgentEvent> {
-        if self.prompt.eq_ignore_ascii_case("fail") {
-            return vec![AgentEvent::Failed("simulated provider failure".to_string())];
-        }
-        vec![
-            AgentEvent::TextDelta("Simulated response to: ".to_string()),
-            AgentEvent::TextDelta(self.prompt.clone()),
-            AgentEvent::Complete,
-        ]
-    }
-}
-
 const MAX_TOOL_STEPS: usize = 3;
 const MAX_TOOL_CALLS: usize = 8;
 pub(crate) const MAX_TOOL_OUTPUT: usize = 100 * 1024;
@@ -456,37 +438,4 @@ impl FeatureEffect for ProviderAgentRun {
 pub(crate) struct AgentCompletion {
     pub(crate) run_id: RunId,
     pub(crate) events: Vec<AgentEvent>,
-}
-
-impl FeatureEffect for FakeAgentRun {
-    fn perform(self: Box<Self>) -> crate::data_object::Message {
-        crate::data_object::Message::FeatureCompletion(FeatureCompletion::new(AgentCompletion {
-            run_id: self.run_id,
-            events: self.events(),
-        }))
-    }
-
-    fn execute(
-        self: Box<Self>,
-        sender: tokio::sync::mpsc::UnboundedSender<crate::data_object::Message>,
-    ) {
-        tokio::spawn(async move {
-            for event in self.events() {
-                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-                let run_id = self.run_id;
-                let completion = AgentCompletion {
-                    run_id,
-                    events: vec![event],
-                };
-                if sender
-                    .send(crate::data_object::Message::FeatureCompletion(
-                        FeatureCompletion::new(completion),
-                    ))
-                    .is_err()
-                {
-                    break;
-                }
-            }
-        });
-    }
 }

@@ -1,6 +1,4 @@
-use std::sync::Arc;
-
-use eggplant_agent::{AgentProvider, ToolResult, ToolResultStatus};
+use eggplant_agent::{ToolResult, ToolResultStatus};
 
 use crate::manager::effect::Effect;
 
@@ -38,6 +36,7 @@ enum SubmissionRejection {
     EmptyPrompt,
     AlreadyRunning,
     MissingProject,
+    MissingProvider,
 }
 
 impl SubmissionRejection {
@@ -46,18 +45,13 @@ impl SubmissionRejection {
             Self::EmptyPrompt => "Enter a prompt",
             Self::AlreadyRunning => "Agent is already running",
             Self::MissingProject => "Open a project to use the agent",
+            Self::MissingProvider => "No model available; use /provider or Space a i to log in",
         }
     }
 }
 
 struct AcceptedSubmission {
     prompt: String,
-    driver: RunDriver,
-}
-
-enum RunDriver {
-    Fake,
-    Provider(Arc<dyn AgentProvider>),
 }
 
 impl Submission {
@@ -79,10 +73,6 @@ impl Submission {
         }
         Self::Accepted(AcceptedSubmission {
             prompt: prompt.to_string(),
-            driver: context
-                .agent()
-                .provider()
-                .map_or(RunDriver::Fake, RunDriver::Provider),
         })
     }
 }
@@ -96,6 +86,9 @@ fn rejection(context: &impl SubmissionContext, prompt: &str) -> Option<Submissio
     }
     if !context.project_available() {
         return Some(SubmissionRejection::MissingProject);
+    }
+    if context.agent().provider().is_none() {
+        return Some(SubmissionRejection::MissingProvider);
     }
     None
 }
@@ -111,23 +104,16 @@ pub(crate) fn submit(context: &mut impl SubmissionContext) -> Option<Effect> {
 
 fn start_run(context: &mut impl SubmissionContext, accepted: AcceptedSubmission) -> Option<Effect> {
     let run_id = context.agent_mut().begin_prompt()?;
-    match accepted.driver {
-        RunDriver::Fake => Some(Effect::feature(FakeAgentRun {
-            run_id,
-            prompt: accepted.prompt,
-        })),
-        RunDriver::Provider(provider) => {
-            let cancellation = context.agent_mut().begin_cancellation();
-            Some(Effect::feature(ProviderAgentRun {
-                run_id,
-                prompt: accepted.prompt,
-                cancellation,
-                provider,
-                context: context.tool_context()?,
-                progress: RunProgress::default(),
-            }))
-        }
-    }
+    let provider = context.agent().provider()?;
+    let cancellation = context.agent_mut().begin_cancellation();
+    Some(Effect::feature(ProviderAgentRun {
+        run_id,
+        prompt: accepted.prompt,
+        cancellation,
+        provider,
+        context: context.tool_context()?,
+        progress: RunProgress::default(),
+    }))
 }
 
 fn execute_prompt_command(
@@ -175,9 +161,9 @@ pub(crate) fn interrupt(context: &mut impl InterruptionContext) -> Option<Effect
     context.persist_finalized()
 }
 
-pub(crate) use super::run::{FakeAgentRun, ProviderAgentRun, RunProgress};
 #[cfg(test)]
 pub(crate) use super::run::{MAX_TOOL_OUTPUT, ProviderRound, RoundAction};
+pub(crate) use super::run::{ProviderAgentRun, RunProgress};
 
 #[cfg(test)]
 mod tests {
@@ -203,7 +189,7 @@ mod tests {
         component::text_input::TextInputEvent,
         data_object::{CommandId, Context, Model, Visibility},
         manager::message_manager::MessageManager,
-        startup::initial_model,
+        startup::initial_model as build_model,
         test_utils::input_context,
         test_utils::open_file,
         tools::ToolKind,
@@ -214,6 +200,39 @@ mod tests {
             panic!("expected agent effect");
         };
         manager.update(model, request.perform())
+    }
+
+    #[derive(Debug)]
+    struct TestProvider;
+
+    impl AgentProvider for TestProvider {
+        fn stream<'a>(
+            &'a self,
+            request: AgentRequest,
+            mut on_event: Box<dyn FnMut(AgentEvent) + Send + 'a>,
+        ) -> std::pin::Pin<
+            Box<dyn Future<Output = Result<(), eggplant_agent::AgentError>> + Send + 'a>,
+        > {
+            Box::pin(async move {
+                if request.prompt.eq_ignore_ascii_case("fail") {
+                    on_event(AgentEvent::Failed("injected provider failure".to_string()));
+                } else {
+                    on_event(AgentEvent::TextDelta("Test response to: ".to_string()));
+                    on_event(AgentEvent::TextDelta(request.prompt));
+                }
+                on_event(AgentEvent::Complete);
+                Ok(())
+            })
+        }
+    }
+
+    fn initial_model(path: Option<std::path::PathBuf>) -> color_eyre::Result<Model> {
+        let mut model = build_model(path)?;
+        model.agent.set_provider(Arc::new(TestProvider));
+        model
+            .agent
+            .set_provider_metadata("test".to_string(), Some("echo".to_string()));
+        Ok(model)
     }
 
     #[derive(Default)]
@@ -245,7 +264,7 @@ mod tests {
         }
 
         fn tool_context(&self) -> Option<ToolContext> {
-            None
+            Some(ToolContext::default())
         }
 
         fn open_provider_login(&mut self) -> Option<Effect> {
@@ -304,9 +323,29 @@ mod tests {
         assert!(context.agent.session().run().is_none());
 
         context.project = true;
+        context.agent.set_provider(Arc::new(TestProvider));
         assert!(submit(&mut context).is_some());
         assert_eq!(context.agent.prompt(), "");
         assert!(context.agent.session().is_running());
+    }
+
+    #[test]
+    fn missing_provider_preserves_the_prompt_and_suggests_login() {
+        let mut context = FakeWork {
+            active: true,
+            project: true,
+            ..FakeWork::default()
+        };
+        context.agent.prompt.set_value("hello");
+
+        assert!(submit(&mut context).is_none());
+
+        assert_eq!(
+            context.notifications,
+            ["No model available; use /provider or Space a i to log in"]
+        );
+        assert_eq!(context.agent.prompt(), "hello");
+        assert!(context.agent.session().run().is_none());
     }
 
     #[test]
@@ -411,7 +450,7 @@ mod tests {
         assert!(
             model.agent.session().messages()[1]
                 .text
-                .contains("Simulated response to: hello")
+                .contains("Test response to: hello")
         );
     }
 
@@ -449,7 +488,7 @@ mod tests {
         assert!(
             model.agent.session().messages()[1]
                 .text
-                .contains("Simulated response to: ?")
+                .contains("Test response to: ?")
         );
 
         enter_normal_mode(&mut model);
@@ -776,7 +815,7 @@ mod tests {
         assert_eq!(model.agent.session().messages().len(), 2);
         assert_eq!(
             model.agent.session().messages()[1].text,
-            "Simulated response to: main.rs:1"
+            "Test response to: main.rs:1"
         );
         toggle_panel(&mut model);
         assert_eq!(model.tools.active_tool, Some(ToolKind::Agent));
@@ -816,13 +855,13 @@ mod tests {
 
         assert_eq!(
             model.agent.session().run().unwrap().status,
-            RunStatus::Failed("simulated provider failure".to_string())
+            RunStatus::Failed("injected provider failure".to_string())
         );
         assert_eq!(model.agent.session().messages().len(), 1);
     }
 
     #[test]
-    fn finalized_fake_run_is_queryable_through_the_injected_store() {
+    fn finalized_test_run_is_queryable_through_the_injected_store() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("main.rs");
         std::fs::write(&path, "fn main() {}\n").unwrap();
@@ -859,8 +898,8 @@ mod tests {
                 assert_eq!(transcript.messages.len(), 2);
                 assert_eq!(transcript.messages[0].role, MessageRole::User);
                 assert_eq!(transcript.messages[1].role, MessageRole::Assistant);
-                assert!(transcript.messages[1].text.contains("Simulated response"));
-                assert_eq!(transcript.runs[0].provider, "fake");
+                assert!(transcript.messages[1].text.contains("Test response"));
+                assert_eq!(transcript.runs[0].provider, "test");
                 assert!(
                     transcript.runs[0]
                         .editor_context

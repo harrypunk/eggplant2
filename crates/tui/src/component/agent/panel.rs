@@ -109,8 +109,14 @@ fn render_status(props: &AgentPanelProps<'_>, area: Rect, frame: &mut Frame) {
 fn status_text(props: &AgentPanelProps<'_>) -> String {
     let status = props
         .shared
-        .storage_error
-        .map(|error| format!("Storage warning: {error}"))
+        .model_notice
+        .map(|notice| notice.text().to_string())
+        .or_else(|| {
+            props
+                .shared
+                .storage_error
+                .map(|error| format!("Storage warning: {error}"))
+        })
         .or_else(|| {
             props.shared.session.run().map(|run| match &run.status {
                 RunStatus::Failed(error) => format!("Failed: {error}"),
@@ -161,7 +167,10 @@ mod tests {
     use ratatui::{Terminal, backend::TestBackend};
 
     use super::*;
-    use crate::component::{agent::AgentPromptProps, text_input::TextInput};
+    use crate::component::{
+        agent::{AgentModelNotice, AgentPromptProps},
+        text_input::TextInput,
+    };
     use crate::{
         agent::PromptCommand,
         theme::{Theme, UiTheme},
@@ -181,6 +190,7 @@ mod tests {
                 session,
                 prompt: AgentPromptProps::new(prompt).with_commands(commands, None),
                 storage_error: None,
+                model_notice: None,
                 footer: Default::default(),
                 styles,
             },
@@ -233,6 +243,28 @@ mod tests {
             .rposition(|row| row.contains("unknown · no model"))
             .unwrap();
         assert_eq!(footer_row, rows.len() - 2);
+    }
+
+    #[test]
+    fn no_model_hint_is_rendered_with_login_guidance() {
+        let theme = Theme::default();
+        let session = AgentSession::default();
+        let prompt = TextInput::default();
+        let mut props = panel_props(
+            &session,
+            &prompt,
+            None,
+            AgentInputMode::Normal,
+            FocusState::Focused,
+            theme.ui(),
+        );
+        props.shared.model_notice = Some(AgentModelNotice::Unavailable);
+
+        let content = render(&props, 70, 12).join("\n");
+
+        assert!(content.contains("No model available"));
+        assert!(content.contains("/provider"));
+        assert!(content.contains("Space a i"));
     }
 
     #[test]

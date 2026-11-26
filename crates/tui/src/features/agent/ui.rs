@@ -5,8 +5,8 @@ use ratatui::{
 
 use crate::{
     component::agent::{
-        AgentDialog, AgentFooterProps, AgentHelp, AgentPanel, AgentPanelProps, AgentPromptProps,
-        AgentViewProps,
+        AgentDialog, AgentFooterProps, AgentHelp, AgentModelNotice, AgentPanel, AgentPanelProps,
+        AgentPromptProps, AgentViewProps,
     },
     data_object::{Context, FocusState, FocusTarget, Model},
     ui::{OverlayContribution, OverlayKind, OverlayPlacement, UiRegistry},
@@ -43,6 +43,11 @@ fn view_props(model: &Model, surface: AgentSurface) -> AgentViewProps<'_> {
         prompt: AgentPromptProps::new(model.agent.prompt_state())
             .with_commands(commands, selected_command),
         storage_error: model.agent.storage_error(),
+        model_notice: model
+            .agent
+            .provider()
+            .is_none()
+            .then_some(AgentModelNotice::Unavailable),
         footer: AgentFooterProps::new(
             model.agent.provider_name(),
             model.agent.model(),
@@ -141,6 +146,17 @@ mod tests {
         assert!(help_overlay(&model).is_some());
         model.modal.close(Context::AgentChatHelp);
         assert!(help_overlay(&model).is_none());
+    }
+
+    #[test]
+    fn missing_provider_maps_the_shared_notice_to_both_surfaces() {
+        let model = Model::default();
+
+        for surface in [AgentSurface::Dialog, AgentSurface::Panel] {
+            let props = view_props(&model, surface);
+            assert_eq!(props.model_notice, Some(AgentModelNotice::Unavailable));
+            assert!(props.model_notice.unwrap().text().contains("/provider"));
+        }
     }
 
     #[test]

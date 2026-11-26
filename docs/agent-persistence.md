@@ -169,7 +169,7 @@ Optional `sqlx-mysql` / `sqlx-postgres` features belong only to future deploymen
 ## Implementation sequence
 
 1. **Implemented:** provider-neutral finalized session/run/message records and storage ports.
-2. **Implemented:** fake-provider finalization flows through the existing update/effect path, with run-scoped storage warnings and no rendering barrier.
+2. **Implemented:** injected-provider finalization flows through the existing update/effect path, with run-scoped storage warnings and no rendering barrier.
 3. **Implemented:** separate SeaORM SQLite adapter with migrations, transactions, and keyset reads.
 4. **Implemented:** filter/search and truncation tests plus corrupt, locked, overflow, migration-failure, and cancellation coverage.
 5. Deferred: add backend-specific full-text search only with measured requirements.

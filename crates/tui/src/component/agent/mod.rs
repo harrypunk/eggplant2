@@ -16,5 +16,5 @@ pub use help::AgentHelp;
 pub use model_selector::ModelSelector;
 pub use panel::{AgentPanel, AgentPanelProps};
 pub use prompt::{AgentPromptProps, AgentPromptView};
-pub use props::{AgentFooterProps, AgentViewProps};
+pub use props::{AgentFooterProps, AgentModelNotice, AgentViewProps};
 pub use provider_login::ProviderLogin;

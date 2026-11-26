@@ -134,6 +134,7 @@ mod tests {
             session: &session,
             prompt: AgentPromptProps::new(&prompt),
             storage_error: None,
+            model_notice: None,
             footer: AgentFooterProps::new("openai", Some("gpt-test"), Some(10_000)),
             styles: theme.ui(),
         };
@@ -165,6 +166,7 @@ mod tests {
             session: &session,
             prompt: AgentPromptProps::new(&prompt),
             storage_error: None,
+            model_notice: None,
             footer: AgentFooterProps::new("fake", None, None),
             styles: theme.ui(),
         };
