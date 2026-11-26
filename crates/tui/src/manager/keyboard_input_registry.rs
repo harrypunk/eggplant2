@@ -93,6 +93,7 @@ fn apply_capability(bindings: ContextBindings, capability: KeymapCapability) -> 
         KeymapCapability::ModalActions => bindings.with_general_actions(
             MODAL_GENERAL_ACTIONS.map(|(key, action)| (KeyChord::from(key), action)),
         ),
+        KeymapCapability::LeaderMenu => bindings,
     }
 }
 

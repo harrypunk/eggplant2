@@ -1,15 +1,16 @@
-use std::{sync::Arc, time::Duration};
+use std::{collections::HashSet, sync::Arc, time::Duration};
 
 use crossterm::event::{KeyEvent, KeyEventKind};
 use ratatui::crossterm::event::{self, Event};
 
 use crate::config::Config;
-use crate::data_object::{Message, Model};
+use crate::data_object::{Context, Message, Model};
 use crate::manager::{
     context::{KeyChord, LeaderInput, leader_input},
     input_resolver::{InputResolver, InputResolverChain, default_input_resolvers},
     input_routing::InputRouting,
     keyboard_input_registry::Registry,
+    keymap_contribution::KeymapCapability,
     routed_input::RoutedInput,
     text_input_registry::TextInputRegistry,
 };
@@ -25,6 +26,7 @@ pub enum TranslatedEvent {
 pub struct EventManager {
     poll_timeout: Duration,
     leader: KeyChord,
+    leader_contexts: HashSet<Context>,
     input: InputResolverChain,
     routing: Arc<dyn InputRouting>,
 }
@@ -43,9 +45,13 @@ impl EventManager {
             .leader
             .parse::<KeyChord>()
             .map_err(|error| color_eyre::eyre::eyre!(error))?;
+        let leader_contexts = crate::composition::keymaps::catalog()
+            .contexts_with(KeymapCapability::LeaderMenu)
+            .collect();
         Ok(Self {
             poll_timeout: Duration::from_millis(config.event_poll_timeout),
             leader,
+            leader_contexts,
             input,
             routing: crate::composition::input::routing(),
         })
@@ -94,12 +100,16 @@ impl EventManager {
     fn translate_key(&self, key: KeyEvent, model: &Model) -> Option<RoutedInput> {
         let context = self.routing.context(model)?;
         let chord = KeyChord::from(key);
-        let message =
-            match leader_input(context, chord, self.leader, model.command_menu.is_active()) {
-                Some(LeaderInput::Start) => Message::CommandMenuStart,
-                Some(LeaderInput::Pending) => Message::CommandMenuKey(chord),
-                None => self.input.resolve(context, chord)?,
-            };
+        let message = match leader_input(
+            chord,
+            self.leader,
+            model.command_menu.is_active(),
+            self.leader_contexts.contains(&context),
+        ) {
+            Some(LeaderInput::Start) => Message::CommandMenuStart,
+            Some(LeaderInput::Pending) => Message::CommandMenuKey(chord),
+            None => self.input.resolve(context, chord)?,
+        };
         Some(RoutedInput::new(context, message))
     }
 
@@ -120,7 +130,10 @@ mod tests {
     use crate::{
         component::text_input::{TextCursorMovement, TextInputEvent},
         data_object::{AppPage, Context, FocusTarget, GeneralAction},
-        manager::command_registry::{CommandId, CommandRegistry},
+        manager::{
+            command_registry::{CommandId, CommandRegistry},
+            message_manager::MessageManager,
+        },
     };
 
     fn event_manager() -> EventManager {
@@ -132,6 +145,19 @@ mod tests {
         )
         .unwrap();
         EventManager::new(&config, keymap, TextInputRegistry::builtin()).unwrap()
+    }
+
+    fn dispatch_key(
+        events: &EventManager,
+        messages: &MessageManager,
+        model: &mut Model,
+        key: KeyCode,
+    ) {
+        let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+        let Some(TranslatedEvent::Input(input)) = events.translate_event(event, model) else {
+            panic!("expected routable input");
+        };
+        let _ = messages.update_input(model, input);
     }
 
     fn model_with_buffer(context: Context) -> Model {
@@ -746,6 +772,11 @@ mod tests {
         }
 
         model.agent.enter_insert_mode();
+        let event = Event::Key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
+        assert!(matches!(
+            manager.translate(event, &model),
+            Some(Message::TextInput(TextInputEvent::Insert(' ')))
+        ));
         for (key, modifiers, action) in [
             (KeyCode::Enter, KeyModifiers::NONE, GeneralAction::Activate),
             (KeyCode::Esc, KeyModifiers::NONE, GeneralAction::Back),
@@ -807,6 +838,32 @@ mod tests {
         }
         let event = Event::Key(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE));
         assert!(manager.translate(event, &model).is_none());
+    }
+
+    #[test]
+    fn agent_normal_mode_routes_leader_commands_without_changing_focus_first() {
+        let events = event_manager();
+        let messages = MessageManager::default();
+        let mut model = Model {
+            current_focus: FocusTarget::ToolsPanel,
+            ..Model::default()
+        };
+        model.tools.active_tool = Some(crate::tools::ToolKind::Agent);
+        model.tools.visibility = crate::data_object::Visibility::Displayed;
+
+        dispatch_key(&events, &messages, &mut model, KeyCode::Char(' '));
+        assert!(model.command_menu.is_active());
+        assert_eq!(model.current_focus, FocusTarget::ToolsPanel);
+
+        for key in [KeyCode::Char('a'), KeyCode::Char('t')] {
+            dispatch_key(&events, &messages, &mut model, key);
+        }
+        assert!(!model.command_menu.is_active());
+        assert_eq!(
+            model.tools.visibility,
+            crate::data_object::Visibility::Hidden
+        );
+        assert_eq!(model.current_focus, FocusTarget::Editor);
     }
 
     #[test]

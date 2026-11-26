@@ -60,19 +60,16 @@ pub enum LeaderInput {
 
 /// Decide whether a chord starts or continues the configured leader workflow.
 pub fn leader_input(
-    context: Context,
     key: KeyChord,
     leader: KeyChord,
     active: bool,
+    enabled: bool,
 ) -> Option<LeaderInput> {
-    if active {
-        return Some(LeaderInput::Pending);
+    match (active, key == leader && enabled) {
+        (true, _) => Some(LeaderInput::Pending),
+        (false, true) => Some(LeaderInput::Start),
+        (false, false) => None,
     }
-    const LEADER_CONTEXTS: [Context; 3] = [Context::AppNormal, Context::Welcome, Context::Explorer];
-    if key == leader && LEADER_CONTEXTS.contains(&context) {
-        return Some(LeaderInput::Start);
-    }
-    None
 }
 
 impl FromStr for KeyChord {
@@ -289,36 +286,19 @@ mod tests {
     }
 
     #[test]
-    fn leader_routing_uses_the_configured_chord_and_pending_state() {
+    fn leader_routing_uses_the_configured_chord_capability_and_pending_state() {
         let leader = KeyChord::from(KeyCode::Char(','));
         assert_eq!(
-            leader_input(Context::AppNormal, leader, leader, false),
+            leader_input(leader, leader, false, true),
             Some(LeaderInput::Start)
         );
+        assert_eq!(leader_input(leader, leader, false, false), None);
         assert_eq!(
-            leader_input(Context::Welcome, leader, leader, false),
-            Some(LeaderInput::Start)
-        );
-        assert_eq!(
-            leader_input(Context::FilePicker, leader, leader, false),
-            None
-        );
-        assert_eq!(
-            leader_input(
-                Context::FilePicker,
-                KeyChord::from(KeyCode::Esc),
-                leader,
-                true
-            ),
+            leader_input(KeyChord::from(KeyCode::Esc), leader, true, false),
             Some(LeaderInput::Pending)
         );
         assert_eq!(
-            leader_input(
-                Context::AppNormal,
-                KeyChord::from(KeyCode::Char(' ')),
-                leader,
-                false
-            ),
+            leader_input(KeyChord::from(KeyCode::Char(' ')), leader, false, true),
             None
         );
     }

@@ -42,7 +42,10 @@ mod tests {
     use std::collections::HashSet;
 
     use super::*;
-    use crate::{data_object::Context, manager::keymap_contribution::ContextKeymap};
+    use crate::{
+        data_object::Context,
+        manager::keymap_contribution::{ContextKeymap, KeymapCapability},
+    };
 
     #[test]
     fn catalog_covers_every_current_context_exactly_once() {
@@ -54,6 +57,23 @@ mod tests {
 
         assert_eq!(contexts.len(), 36);
         assert_eq!(unique.len(), 36);
+    }
+
+    #[test]
+    fn leader_menu_is_enabled_only_by_explicit_context_capabilities() {
+        let contexts = catalog()
+            .contexts_with(KeymapCapability::LeaderMenu)
+            .collect::<HashSet<_>>();
+
+        assert_eq!(
+            contexts,
+            HashSet::from([
+                Context::AppNormal,
+                Context::Welcome,
+                Context::Explorer,
+                Context::AgentChat,
+            ])
+        );
     }
 
     #[test]

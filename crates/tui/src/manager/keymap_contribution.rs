@@ -7,6 +7,8 @@ pub type CommandBinding = (&'static str, &'static str);
 pub enum KeymapCapability {
     ListNavigation,
     ModalActions,
+    /// Permission to open the configured leader menu; the chord is resolved at runtime.
+    LeaderMenu,
 }
 
 /// A feature-owned keymap declaration using its stable configuration name and typed context.
@@ -53,5 +55,15 @@ impl KeymapCatalog {
 
     pub fn iter(&self) -> impl Iterator<Item = &ContextKeymap> {
         self.entries.iter()
+    }
+
+    pub fn contexts_with(
+        &self,
+        capability: KeymapCapability,
+    ) -> impl Iterator<Item = Context> + '_ {
+        self.entries
+            .iter()
+            .filter(move |entry| entry.capabilities.contains(&capability))
+            .map(|entry| entry.context)
     }
 }

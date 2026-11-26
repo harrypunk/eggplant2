@@ -33,14 +33,16 @@ pub const KEYMAPS: &[ContextKeymap] = &[
             KeymapCapability::ListNavigation,
             KeymapCapability::ModalActions,
         ]),
-    ContextKeymap::new("agent_chat", Context::AgentChat).with_commands(&[
-        ("agent_panel_normal", "esc"),
-        ("agent_insert", "i"),
-        ("agent_help", "?"),
-        ("focus_left", "ctrl-h"),
-        ("focus_right", "ctrl-l"),
-        ("agent_interrupt", "ctrl-f7"),
-    ]),
+    ContextKeymap::new("agent_chat", Context::AgentChat)
+        .with_commands(&[
+            ("agent_panel_normal", "esc"),
+            ("agent_insert", "i"),
+            ("agent_help", "?"),
+            ("focus_left", "ctrl-h"),
+            ("focus_right", "ctrl-l"),
+            ("agent_interrupt", "ctrl-f7"),
+        ])
+        .with_capabilities(&[KeymapCapability::LeaderMenu]),
     ContextKeymap::new("agent_chat_insert", Context::AgentChatInsert)
         .with_commands(&[
             ("agent_interrupt", "ctrl-f7"),

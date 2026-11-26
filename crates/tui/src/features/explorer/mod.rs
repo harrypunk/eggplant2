@@ -10,10 +10,15 @@ mod state;
 mod transfer;
 mod work;
 
-use crate::{data_object::Context, manager::keymap_contribution::ContextKeymap};
+use crate::{
+    data_object::Context,
+    manager::keymap_contribution::{ContextKeymap, KeymapCapability},
+};
 
 pub const KEYMAPS: &[ContextKeymap] = &[
-    ContextKeymap::new("explorer", Context::Explorer).with_commands(&[("open_selected", "enter")]),
+    ContextKeymap::new("explorer", Context::Explorer)
+        .with_commands(&[("open_selected", "enter")])
+        .with_capabilities(&[KeymapCapability::LeaderMenu]),
     ContextKeymap::new("explorer_help", Context::ExplorerHelp)
         .with_commands(&[("close_explorer_help", "esc"), ("explorer_help", "?")]),
     ContextKeymap::new("explorer_add", Context::ExplorerAdd).with_commands(&[

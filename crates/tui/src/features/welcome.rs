@@ -15,7 +15,10 @@ pub const KEYMAPS: &[ContextKeymap] = &[ContextKeymap::new("welcome", Context::W
         ("focus_left", "ctrl-h"),
         ("focus_right", "ctrl-l"),
     ])
-    .with_capabilities(&[KeymapCapability::ListNavigation])];
+    .with_capabilities(&[
+        KeymapCapability::ListNavigation,
+        KeymapCapability::LeaderMenu,
+    ])];
 
 pub fn commands() -> Vec<Command> {
     [
