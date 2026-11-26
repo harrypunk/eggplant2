@@ -142,6 +142,7 @@ const GIT_CONTEXT: CommandMenuContext = CommandMenuContext {
 static AI_CONTEXT: CommandMenuContext = CommandMenuContext::new(
     "ai",
     &[
+        CommandMenuItem::action('i', "login", CommandId("provider_login_open")),
         CommandMenuItem::action('p', "provider login", CommandId("provider_login_open")),
         CommandMenuItem::action('t', "toggle agent panel", CommandId("agent_toggle_panel")),
     ],

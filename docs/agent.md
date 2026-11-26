@@ -93,7 +93,7 @@ Set `features.agent.context_window` to the active model's token capacity to disp
 | Submit prompt | `Enter` |
 | Interrupt active run | `Ctrl-F7` |
 | Toggle shared Agent tool panel | `Space a t` |
-| Open provider-login placeholder | `Space a p` |
+| Open provider login | `Space a i` (`Space a p` alias) |
 | Focus Agent panel input | `Ctrl-L` |
 | Return from Agent panel to editor | `Ctrl-H` |
 
@@ -103,7 +103,7 @@ The inline dialog requires an open project, not an active buffer. With an active
 
 ### Provider-login UX shell
 
-`Space a p` opens provider login. The workflow has separate authentication, provider, and form pages.
+`Space a i` opens provider login (`Space a p` remains an alias). The workflow has separate authentication, provider, and form pages.
 
 #### Menus and navigation
 

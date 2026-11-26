@@ -863,6 +863,21 @@ mod tests {
     }
 
     #[test]
+    fn leader_ai_login_opens_the_existing_provider_workflow() {
+        let events = event_manager();
+        let messages = MessageManager::default();
+        let mut model = Model::default();
+
+        for key in [KeyCode::Char(' '), KeyCode::Char('a'), KeyCode::Char('i')] {
+            dispatch_key(&events, &messages, &mut model, key);
+        }
+
+        assert!(model.provider_login.is_open());
+        assert!(model.modal.is_active(Context::ProviderLogin));
+        assert!(!model.command_menu.is_active());
+    }
+
+    #[test]
     fn routes_vcs_reset_menu_and_popup_keys() {
         let manager = event_manager();
         let mut model = Model::default();

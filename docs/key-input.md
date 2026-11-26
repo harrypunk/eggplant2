@@ -20,7 +20,7 @@ Available in Normal and Explorer contexts unless noted otherwise.
 | Toggle editor text wrapping | `Space u w` |
 | Toggle cursor-line background | `Space u c` |
 | Toggle agent tool panel | `Space a t` |
-| Open provider login | `Space a p` |
+| Open provider login | `Space a i` (`Space a p` alias) |
 | Focus Agent panel input | `Ctrl-L` |
 | Return from Agent panel to editor | `Ctrl-H` |
 | Go to definition | `Space c d` |
