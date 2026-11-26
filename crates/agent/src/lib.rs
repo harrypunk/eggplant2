@@ -12,6 +12,7 @@ mod request;
 mod run;
 mod session;
 mod tool;
+mod usage;
 
 pub use cancellation::CancellationToken;
 pub use event::AgentEvent;
@@ -21,3 +22,4 @@ pub use request::AgentRequest;
 pub use run::{AgentContinuation, AgentRun, RunId, RunStatus, SessionId};
 pub use session::AgentSession;
 pub use tool::{ToolApproval, ToolCall, ToolEvent, ToolResult, ToolResultStatus};
+pub use usage::TokenUsage;

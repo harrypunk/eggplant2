@@ -148,6 +148,7 @@ impl ProviderRound {
                     },
                     None,
                 ),
+                AgentEvent::Usage(usage) => (self, Some(AgentEvent::Usage(usage))),
                 AgentEvent::Complete => (
                     Self {
                         terminal: Some(RoundTerminal::Complete),

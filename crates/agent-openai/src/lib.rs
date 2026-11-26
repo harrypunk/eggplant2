@@ -3,7 +3,7 @@
 use std::{collections::BTreeSet, fmt, time::Duration};
 
 use eggplant_agent::{
-    AgentError, AgentEvent, AgentProvider, AgentRequest, ProviderMessageRole, ToolCall,
+    AgentError, AgentEvent, AgentProvider, AgentRequest, ProviderMessageRole, TokenUsage, ToolCall,
 };
 use futures_util::StreamExt as _;
 use serde::Deserialize;
@@ -190,6 +190,7 @@ impl AgentProvider for OpenAiProvider {
                     "messages": request_messages(&request),
                     "tools": tool_declarations(),
                     "stream": true,
+                    "stream_options": {"include_usage": true},
                 }))
                 .send()
                 .await
@@ -355,6 +356,9 @@ fn decode_event(decoder: &mut SseDecoder, data: &[u8]) -> Option<AgentEvent> {
     if let Some(message) = value["error"]["message"].as_str() {
         return Some(AgentEvent::Failed(bounded(message)));
     }
+    if let Some(usage) = decode_usage(&value) {
+        return Some(AgentEvent::Usage(usage));
+    }
     let choice = &value["choices"][0];
     if choice["finish_reason"].as_str() == Some("length") {
         std::mem::take(&mut decoder.pending);
@@ -389,6 +393,26 @@ fn decode_event(decoder: &mut SseDecoder, data: &[u8]) -> Option<AgentEvent> {
         .map(|content| AgentEvent::TextDelta(content.to_string()))
 }
 
+fn decode_usage(value: &Value) -> Option<TokenUsage> {
+    let value = &value["usage"];
+    if !value.is_object() {
+        return None;
+    }
+    let input = value["prompt_tokens"].as_u64();
+    let output = value["completion_tokens"].as_u64();
+    let total = value["total_tokens"].as_u64();
+    if input.is_none() && output.is_none() && total.is_none() {
+        return None;
+    }
+    let input = input.unwrap_or(0);
+    let output = output.unwrap_or(0);
+    Some(TokenUsage {
+        input,
+        output,
+        total: total.unwrap_or_else(|| input.saturating_add(output)),
+    })
+}
+
 fn bounded(message: &str) -> String {
     message.chars().take(256).collect()
 }
@@ -415,6 +439,30 @@ mod tests {
         assert_eq!(events.len(), 2);
         assert_eq!(events[0], AgentEvent::TextDelta("Hello 界🙂".to_string()));
         assert_eq!(events[1], AgentEvent::Complete);
+    }
+
+    #[test]
+    fn decodes_usage_only_chunks() {
+        let body = concat!(
+            "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":40,\"completion_tokens\":2}}\n\n",
+            "data: [DONE]\n\n"
+        );
+        let mut decoder = SseDecoder::default();
+        let mut events = Vec::new();
+
+        decoder.push(body.as_bytes(), &mut |event| events.push(event));
+
+        assert_eq!(
+            events,
+            vec![
+                AgentEvent::Usage(TokenUsage {
+                    input: 40,
+                    output: 2,
+                    total: 42,
+                }),
+                AgentEvent::Complete,
+            ]
+        );
     }
 
     #[test]
@@ -561,6 +609,7 @@ mod tests {
         assert!(request.contains("post /v1/chat/completions"));
         assert!(request.contains("authorization: bearer test-key"));
         assert!(request.contains("gpt-test"));
+        assert!(request.contains("\"stream_options\":{\"include_usage\":true}"));
         assert!(request.contains("hello"));
         assert!(request.contains("write"));
         unsafe { std::env::remove_var(key_env) };

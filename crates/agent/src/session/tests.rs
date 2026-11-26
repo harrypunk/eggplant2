@@ -108,3 +108,32 @@ fn cancellation_discards_pending_approval() {
     assert!(session.pending_approval().is_none());
     assert_eq!(session.run().unwrap().status, RunStatus::Cancelled);
 }
+
+#[test]
+fn accumulates_usage_but_rejects_a_different_run() {
+    let mut session = AgentSession::default();
+    let run = session.begin("question".to_string()).unwrap();
+    let first = TokenUsage {
+        input: 120,
+        output: 30,
+        total: 150,
+    };
+    let second = TokenUsage {
+        input: 80,
+        output: 20,
+        total: 100,
+    };
+
+    assert!(session.record_usage(run, first));
+    assert!(session.record_usage(run, second));
+    assert!(!session.record_usage(RunId(run.0 + 1), first));
+    assert_eq!(
+        session.usage(),
+        TokenUsage {
+            input: 200,
+            output: 50,
+            total: 250,
+        }
+    );
+    assert_eq!(session.latest_usage(), Some(second));
+}

@@ -1,6 +1,6 @@
 use crate::{
-    AgentRun, ChatMessage, MessageRole, RunId, RunStatus, SessionId, ToolApproval, ToolCall,
-    ToolEvent, ToolResult,
+    AgentRun, ChatMessage, MessageRole, RunId, RunStatus, SessionId, TokenUsage, ToolApproval,
+    ToolCall, ToolEvent, ToolResult,
 };
 
 const MAX_MESSAGES: usize = 100;
@@ -14,6 +14,8 @@ pub struct AgentSession {
     messages: Vec<ChatMessage>,
     tool_events: Vec<ToolEvent>,
     pending_approval: Option<ToolApproval>,
+    usage: TokenUsage,
+    latest_usage: Option<TokenUsage>,
 }
 
 impl AgentSession {
@@ -110,6 +112,26 @@ impl AgentSession {
 
     pub fn run(&self) -> Option<&AgentRun> {
         self.run.as_ref()
+    }
+
+    /// Record one provider round. Cumulative totals and the latest context sample are distinct.
+    pub fn record_usage(&mut self, run_id: RunId, usage: TokenUsage) -> bool {
+        match self.run.as_ref() {
+            Some(run) if run.id == run_id => {
+                self.usage.accumulate(usage);
+                self.latest_usage = Some(usage);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    pub fn usage(&self) -> TokenUsage {
+        self.usage
+    }
+
+    pub fn latest_usage(&self) -> Option<TokenUsage> {
+        self.latest_usage
     }
 
     pub fn is_running(&self) -> bool {

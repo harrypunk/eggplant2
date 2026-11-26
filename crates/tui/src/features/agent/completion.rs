@@ -19,6 +19,10 @@ impl AgentState {
                 self.session_mut().append_delta(run_id, &delta);
                 AgentApplyOutcome::None
             }
+            AgentEvent::Usage(usage) => {
+                self.session_mut().record_usage(run_id, usage);
+                AgentApplyOutcome::None
+            }
             AgentEvent::Complete => {
                 self.session_mut().complete(run_id);
                 AgentApplyOutcome::None
