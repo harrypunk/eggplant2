@@ -18,8 +18,10 @@ use crate::{
     ui::{OverlayContribution, OverlayKind, OverlayPlacement},
 };
 
-const MAX_WIDTH: u16 = 64;
-const MAX_HEIGHT: u16 = 20;
+const PICKER_SIZE: Size = Size {
+    width: 64,
+    height: 20,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct ThemePicker<'a> {
@@ -32,31 +34,6 @@ impl<'a> ThemePicker<'a> {
         Self { state, theme }
     }
 
-    pub fn size(&self) -> Size {
-        let sections = self.state.visible_sections();
-        let content_width = sections
-            .iter()
-            .flat_map(|section| &section.entries)
-            .map(|(_, entry)| entry.name().len() + 2)
-            .max()
-            .unwrap_or(0);
-        let content_rows = sections
-            .iter()
-            .map(|section| section.entries.len())
-            .sum::<usize>()
-            + sections.len()
-            + usize::from(self.state.is_discovering())
-            + usize::from(sections.is_empty());
-        Size {
-            width: u16::try_from(content_width + 2)
-                .unwrap_or(u16::MAX)
-                .min(MAX_WIDTH),
-            height: u16::try_from(content_rows + 5)
-                .unwrap_or(u16::MAX)
-                .min(MAX_HEIGHT),
-        }
-    }
-
     pub fn cursor_position(self, area: Rect) -> Option<Position> {
         let (input, _) = content_areas(popup::content_area(area));
         QueryInput::new(self.state.query_state(), self.theme.ui()).cursor_position(input)
@@ -67,12 +44,11 @@ pub fn overlay(model: &Model) -> Option<OverlayContribution> {
     if !model.theme_picker.is_open() {
         return None;
     }
-    let picker = ThemePicker::new(&model.theme_picker, &model.theme);
     Some(
         OverlayContribution::new(
             "theme_picker",
             OverlayKind::Modal,
-            OverlayPlacement::Centered(picker.size()),
+            OverlayPlacement::Centered(PICKER_SIZE),
             render_overlay,
         )
         .with_cursor(cursor_overlay),
@@ -369,6 +345,36 @@ mod tests {
         assert!(content.contains("LoC"));
         assert!(content.contains("local-theme"));
         assert!(!content.contains("catppuccin_mocha"));
+    }
+
+    #[test]
+    fn empty_filter_keeps_the_query_and_empty_state_readable() {
+        let mut state = ThemePickerState::default();
+        state.open(Some(ThemeName::Default), "default");
+        for character in "no-such-theme".chars() {
+            state.push_query(character);
+        }
+        assert!(state.visible_entries().is_empty());
+        let theme = Theme::default();
+        let picker = ThemePicker::new(&state, &theme);
+        let size = PICKER_SIZE;
+        let backend = TestBackend::new(size.width, size.height);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal
+            .draw(|frame| frame.render_widget(picker, frame.area()))
+            .unwrap();
+
+        let content = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(content.contains("Theme"));
+        assert!(content.contains("no-such-theme"));
+        assert!(content.contains("No matches"));
     }
 
     #[test]
