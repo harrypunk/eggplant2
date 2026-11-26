@@ -97,7 +97,6 @@ fn refresh(model: &mut Model) -> Option<Effect> {
 }
 
 fn activate_selected(model: &mut Model) -> Option<Effect> {
-    crate::capabilities::diagnostics::log(format_args!("model selector activation requested"));
     let store = model.provider_credentials.clone()?;
     let factory = model.openai_factory.clone()?;
     let (model_id, generation) = model.model_selector.begin_activation()?;
@@ -261,18 +260,8 @@ impl FeatureEffect for ActivateModel {
     }
 
     fn execute(self: Box<Self>, sender: tokio::sync::mpsc::UnboundedSender<Message>) {
-        crate::capabilities::diagnostics::log(format_args!(
-            "model selector activation task scheduled"
-        ));
         tokio::spawn(async move {
-            crate::capabilities::diagnostics::log(format_args!(
-                "model selector activation task started"
-            ));
-            let completion = self.perform_async().await.into_message();
-            crate::capabilities::diagnostics::log(format_args!(
-                "model selector activation task completed"
-            ));
-            let _ = sender.send(completion);
+            let _ = sender.send(self.perform_async().await.into_message());
         });
     }
 }
@@ -290,9 +279,6 @@ impl ActivateModelCompletion {
 
 impl Completion for ActivateModelCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
-        crate::capabilities::diagnostics::log(format_args!(
-            "applying model selector activation completion"
-        ));
         let error = self.activation.result.as_ref().err().cloned();
         let outcome = model
             .model_selector
