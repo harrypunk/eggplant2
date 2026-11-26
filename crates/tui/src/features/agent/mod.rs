@@ -261,6 +261,10 @@ impl AgentState {
         Some(run_id)
     }
 
+    pub fn complete_prompt_command(&mut self) {
+        self.prompt.complete_submission();
+    }
+
     pub fn set_provider(&mut self, provider: Arc<dyn AgentProvider>) {
         self.provider_name = "custom".to_string();
         self.provider = Some(provider);

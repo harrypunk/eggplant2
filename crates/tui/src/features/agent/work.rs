@@ -110,6 +110,7 @@ fn start_run(model: &mut Model, accepted: AcceptedSubmission) -> Option<Effect> 
 }
 
 fn execute_prompt_command(model: &mut Model, command: super::PromptCommand) -> Option<Effect> {
+    model.agent.complete_prompt_command();
     match command {
         super::PromptCommand::ProviderLogin => crate::provider_login::open(model),
         super::PromptCommand::Model => crate::model_selector::open(model),
@@ -388,6 +389,7 @@ mod tests {
 
         submit(&mut model);
         assert!(!model.provider_login.is_open());
+        assert_eq!(model.agent.prompt(), "/provider");
         assert!(model.agent.session().run().is_none());
 
         handle_command(&mut model, CommandId("agent_command_quick_fill"));
@@ -395,15 +397,19 @@ mod tests {
         submit(&mut model);
         assert!(model.provider_login.is_open());
         assert_eq!(input_context(&model), Some(Context::ProviderLogin));
+        assert_eq!(model.agent.prompt(), "");
+        assert_eq!(model.agent.command_state().selected(), None);
         assert!(model.context_stack.is_empty());
         assert!(model.agent.session().run().is_none());
 
         crate::provider_login::handle_command(&mut model, CommandId("provider_login_close"));
         assert_eq!(input_context(&model), Some(Context::AgentChatInsert));
+        assert_eq!(model.agent.prompt(), "");
 
         model.agent.prompt.set_value("/unknown");
         handle_input(&mut model, TextInputEvent::DeleteBackward);
         submit(&mut model);
+        assert_eq!(model.agent.prompt(), "/unknow");
         assert!(model.agent.session().run().is_none());
         assert!(model.notifications.current().is_none());
     }
@@ -430,13 +436,10 @@ mod tests {
         assert!(model.agent.session().run().is_none());
         assert!(model.modal.is_active(Context::ModelSelector));
         assert_eq!(input_context(&model), Some(Context::ModelSelector));
+        assert_eq!(model.agent.prompt(), "");
+        assert_eq!(model.agent.command_state().selected(), None);
         assert!(model.context_stack.is_empty());
         assert!(model.notifications.current().is_none());
-
-        handle_command(&mut model, CommandId("agent_command_previous"));
-        assert_eq!(model.agent.prompt(), "/provider");
-        handle_command(&mut model, CommandId("agent_command_previous"));
-        assert_eq!(model.agent.prompt(), "/logout");
     }
 
     #[test]
@@ -456,6 +459,7 @@ mod tests {
         submit(&mut model);
         assert!(model.provider_login.is_open());
         assert_eq!(input_context(&model), Some(Context::ProviderLogin));
+        assert_eq!(model.agent.prompt(), "");
         assert!(model.context_stack.is_empty());
         assert!(model.agent.session().run().is_none());
 

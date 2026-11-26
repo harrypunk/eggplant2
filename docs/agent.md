@@ -149,6 +149,7 @@ A leading `/` in the inline dialog or panel Insert input opens a live-filtered c
 - Tab quick-fills the first match.
 - Ctrl-N/Ctrl-P quick-fill and move selection with wrapping while retaining the original query's candidates.
 - Enter executes only an explicitly selected command and never submits slash text as a provider message.
+- Executing a command clears the composer and command selection before opening its follow-up UI, matching Pi's accepted-command behavior. Unselected or unknown slash text remains editable.
 - The menu height follows content within the available layout. Its selection-following viewport keeps the selected row visible.
 - `/model` opens the cached model selector; `/thinking` and `/logout` currently publish placeholder notifications.
 
