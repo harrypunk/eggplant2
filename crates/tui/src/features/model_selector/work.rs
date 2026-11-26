@@ -451,7 +451,12 @@ mod tests {
 
     fn event_manager() -> EventManager {
         let config = Config::default();
-        let keymap = Registry::from_config(&config.keymap, &CommandRegistry::default()).unwrap();
+        let keymap = Registry::from_config(
+            &config.keymap,
+            &CommandRegistry::default(),
+            &crate::composition::keymaps::catalog(),
+        )
+        .unwrap();
         EventManager::new(&config, keymap, TextInputRegistry::builtin()).unwrap()
     }
 

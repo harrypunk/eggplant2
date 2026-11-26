@@ -7,6 +7,7 @@ pub mod general_action;
 pub mod input_resolver;
 pub mod input_routing;
 pub mod keyboard_input_registry;
+pub mod keymap_contribution;
 pub mod message_manager;
 pub mod mouse_manager;
 pub mod routed_input;

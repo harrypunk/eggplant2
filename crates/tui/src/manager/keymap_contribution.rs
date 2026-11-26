@@ -1,0 +1,57 @@
+use crate::data_object::Context;
+
+pub type CommandBinding = (&'static str, &'static str);
+
+/// Shared behavior composed into a context without central feature-membership lists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeymapCapability {
+    ListNavigation,
+    ModalActions,
+}
+
+/// A feature-owned keymap declaration using its stable configuration name and typed context.
+#[derive(Debug, Clone, Copy)]
+pub struct ContextKeymap {
+    pub name: &'static str,
+    pub context: Context,
+    pub commands: &'static [CommandBinding],
+    pub capabilities: &'static [KeymapCapability],
+}
+
+impl ContextKeymap {
+    pub const fn new(name: &'static str, context: Context) -> Self {
+        Self {
+            name,
+            context,
+            commands: &[],
+            capabilities: &[],
+        }
+    }
+
+    pub const fn with_commands(mut self, commands: &'static [CommandBinding]) -> Self {
+        self.commands = commands;
+        self
+    }
+
+    pub const fn with_capabilities(mut self, capabilities: &'static [KeymapCapability]) -> Self {
+        self.capabilities = capabilities;
+        self
+    }
+}
+
+/// Static feature declarations assembled into one explicit input-composition container.
+#[derive(Debug, Default, Clone)]
+pub struct KeymapCatalog {
+    entries: Vec<ContextKeymap>,
+}
+
+impl KeymapCatalog {
+    pub fn extend(mut self, entries: impl IntoIterator<Item = ContextKeymap>) -> Self {
+        self.entries.extend(entries);
+        self
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &ContextKeymap> {
+        self.entries.iter()
+    }
+}

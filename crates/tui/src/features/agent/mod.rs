@@ -22,7 +22,48 @@ pub(crate) use prompt_command::{PromptCommand, PromptCommandMovement, PromptComm
 pub use ui::register_ui;
 pub(crate) use ui::render_panel;
 
-use crate::component::text_input::{TextInput, TextInputEvent};
+pub const KEYMAPS: &[ContextKeymap] = &[
+    ContextKeymap::new("agent_chat_dialog", Context::AgentChatDialog)
+        .with_commands(&[
+            ("agent_interrupt", "ctrl-f7"),
+            ("agent_command_quick_fill", "tab"),
+        ])
+        .with_capabilities(&[
+            KeymapCapability::ListNavigation,
+            KeymapCapability::ModalActions,
+        ]),
+    ContextKeymap::new("agent_chat", Context::AgentChat).with_commands(&[
+        ("agent_panel_normal", "esc"),
+        ("agent_insert", "i"),
+        ("agent_help", "?"),
+        ("focus_left", "ctrl-h"),
+        ("focus_right", "ctrl-l"),
+        ("agent_interrupt", "ctrl-f7"),
+    ]),
+    ContextKeymap::new("agent_chat_insert", Context::AgentChatInsert)
+        .with_commands(&[
+            ("agent_interrupt", "ctrl-f7"),
+            ("agent_command_quick_fill", "tab"),
+        ])
+        .with_capabilities(&[
+            KeymapCapability::ListNavigation,
+            KeymapCapability::ModalActions,
+        ]),
+    ContextKeymap::new("agent_chat_help", Context::AgentChatHelp)
+        .with_commands(&[("agent_help", "?"), ("agent_panel_normal", "esc")]),
+    ContextKeymap::new("agent_approval", Context::AgentApproval).with_commands(&[
+        ("agent_close", "esc"),
+        ("agent_approve", "y"),
+        ("agent_reject", "n"),
+        ("agent_interrupt", "ctrl-f7"),
+    ]),
+];
+
+use crate::{
+    component::text_input::{TextInput, TextInputEvent},
+    data_object::Context,
+    manager::keymap_contribution::{ContextKeymap, KeymapCapability},
+};
 use editor::BufferId;
 use eggplant_agent::{
     AgentContinuation, AgentProvider, AgentSession, CancellationToken, RunId, SessionId,

@@ -4,10 +4,7 @@ use tui::{
     capabilities::page_scroll::PageScroll,
     composition::agent::configure as configure_agent,
     config::{Config, load_language_servers},
-    manager::{
-        command_registry::CommandRegistry, keyboard_input_registry::Registry,
-        text_input_registry::TextInputRegistry,
-    },
+    manager::{command_registry::CommandRegistry, text_input_registry::TextInputRegistry},
     runtime,
     startup::{initial_model_with_languages, startup_path_from},
     terminal,
@@ -26,7 +23,7 @@ async fn main() -> color_eyre::Result<()> {
     let commands = CommandRegistry::builtin();
     let text_input = TextInputRegistry::builtin();
     let ui = UiRegistry::builtin();
-    let keymap = Registry::from_config(&config.keymap, &commands)?;
+    let keymap = tui::composition::keymaps::from_config(&config.keymap, &commands)?;
     terminal::install_panic_hook();
     let mut terminal = terminal::init_terminal()?;
     let result = runtime::run(

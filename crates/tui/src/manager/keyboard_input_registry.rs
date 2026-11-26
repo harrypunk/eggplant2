@@ -9,6 +9,7 @@ use crate::{
     manager::{
         command_registry::CommandRegistry,
         context::{ContextBindings, KeyChord},
+        keymap_contribution::{KeymapCapability, KeymapCatalog},
     },
 };
 
@@ -25,32 +26,62 @@ impl Registry {
     pub fn from_config(
         config: &KeymapConfig,
         commands: &CommandRegistry,
+        catalog: &KeymapCatalog,
     ) -> color_eyre::Result<Self> {
-        let config = config
+        let mut declarations = HashMap::new();
+        let mut contexts = HashMap::new();
+        for entry in catalog.iter() {
+            if contexts.insert(entry.context, entry.name).is_some() {
+                return Err(eyre!(
+                    "duplicate keymap declaration for `{:?}`",
+                    entry.context
+                ));
+            }
+            if declarations
+                .insert(entry.name, (entry.context, entry.capabilities))
+                .is_some()
+            {
+                return Err(eyre!("duplicate keymap declaration for `{}`", entry.name));
+            }
+        }
+        let mut merged = config
             .iter()
             .map(|(context, bindings)| (context.clone(), bindings.clone()))
-            .chain(common_bindings());
-        config
-            .into_iter()
+            .chain(common_bindings())
             .fold(
                 HashMap::<String, HashMap<String, String>>::new(),
                 |mut merged, (context, bindings)| {
                     merged.entry(context).or_default().extend(bindings);
                     merged
                 },
-            )
+            );
+        for entry in catalog.iter() {
+            merged.entry(entry.name.to_string()).or_default().extend(
+                entry
+                    .commands
+                    .iter()
+                    .map(|(action, key)| (action.to_string(), key.to_string())),
+            );
+        }
+        merged
             .iter()
             .map(|(context_name, bindings)| {
-                parse_context_bindings(context_name, bindings, commands)
-                    .map(|bindings| {
-                        if list_navigation_contexts().contains(&context_name.as_str()) {
-                            bindings.with_list_navigation()
-                        } else {
-                            bindings
-                        }
-                    })
-                    .map(|bindings| with_common_actions(context_name, bindings))
-                    .map(|bindings| (bindings.context, bindings))
+                let declaration = declarations.get(context_name.as_str());
+                let context = declaration
+                    .map(|(context, _)| *context)
+                    .or_else(|| parse_context(context_name))
+                    .ok_or_else(|| eyre!("unknown keymap context `{context_name}`"))?;
+                let capabilities = declaration.map_or(&[][..], |(_, capabilities)| *capabilities);
+                let mut bindings =
+                    parse_context_bindings(context, context_name, bindings, commands)?;
+                if list_navigation_contexts().contains(&context_name.as_str()) {
+                    bindings = bindings.with_list_navigation();
+                }
+                bindings = with_common_actions(context_name, bindings);
+                for capability in capabilities {
+                    bindings = apply_capability(bindings, *capability);
+                }
+                Ok((bindings.context, bindings))
             })
             .collect::<color_eyre::Result<ContextBindingMap>>()
             .map(|bindings| Self { bindings })
@@ -72,10 +103,6 @@ fn list_navigation_contexts() -> &'static [&'static str] {
         "vcs_branch",
         "vcs_merge",
         "vcs_reset",
-        "agent_chat_dialog",
-        "agent_chat_insert",
-        "provider_login",
-        "model_selector",
     ]
 }
 
@@ -88,12 +115,20 @@ const MODAL_GENERAL_ACTIONS: [(KeyCode, GeneralAction); 4] = [
 
 fn with_common_actions(context_name: &str, bindings: ContextBindings) -> ContextBindings {
     match context_name {
-        "provider_login" | "file_picker" | "theme_picker" | "buffer_grep" | "project_grep"
-        | "model_selector" | "agent_chat_dialog" | "agent_chat_insert" => bindings
+        "file_picker" | "theme_picker" | "buffer_grep" | "project_grep" => bindings
             .with_general_actions(
                 MODAL_GENERAL_ACTIONS.map(|(key, action)| (KeyChord::from(key), action)),
             ),
         _ => bindings,
+    }
+}
+
+fn apply_capability(bindings: ContextBindings, capability: KeymapCapability) -> ContextBindings {
+    match capability {
+        KeymapCapability::ListNavigation => bindings.with_list_navigation(),
+        KeymapCapability::ModalActions => bindings.with_general_actions(
+            MODAL_GENERAL_ACTIONS.map(|(key, action)| (KeyChord::from(key), action)),
+        ),
     }
 }
 
@@ -161,52 +196,6 @@ fn common_bindings() -> KeymapConfig {
         keymap_context("theme_picker", []),
         keymap_context("buffer_jump", [("buffer_jump_cancel", "esc")]),
         keymap_context("buffer_navigation", [("buffer_navigation_cancel", "esc")]),
-        keymap_context(
-            "agent_chat_dialog",
-            [
-                ("agent_interrupt", "ctrl-f7"),
-                ("agent_command_quick_fill", "tab"),
-            ],
-        ),
-        keymap_context(
-            "agent_chat",
-            [
-                ("agent_panel_normal", "esc"),
-                ("agent_insert", "i"),
-                ("agent_help", "?"),
-                ("focus_left", "ctrl-h"),
-                ("focus_right", "ctrl-l"),
-                ("agent_interrupt", "ctrl-f7"),
-            ],
-        ),
-        keymap_context(
-            "agent_chat_insert",
-            [
-                ("agent_interrupt", "ctrl-f7"),
-                ("agent_command_quick_fill", "tab"),
-            ],
-        ),
-        keymap_context(
-            "agent_chat_help",
-            [("agent_help", "?"), ("agent_panel_normal", "esc")],
-        ),
-        keymap_context(
-            "agent_approval",
-            [
-                ("agent_close", "esc"),
-                ("agent_approve", "y"),
-                ("agent_reject", "n"),
-                ("agent_interrupt", "ctrl-f7"),
-            ],
-        ),
-        keymap_context(
-            "provider_login",
-            [
-                ("provider_login_focus_next", "tab"),
-                ("provider_login_paste", "ctrl-v"),
-            ],
-        ),
-        keymap_context("model_selector", []),
         keymap_context("buffer_grep", []),
         keymap_context("project_grep", []),
         keymap_context("line_jump", [("line_jump_cancel", "esc")]),
@@ -269,13 +258,11 @@ fn common_bindings() -> KeymapConfig {
 }
 
 fn parse_context_bindings(
+    context: Context,
     context_name: &str,
     bindings: &HashMap<String, String>,
     commands: &CommandRegistry,
 ) -> color_eyre::Result<ContextBindings> {
-    let context = parse_context(context_name)
-        .ok_or_else(|| eyre!("unknown keymap context `{context_name}`"))?;
-
     let parsed = bindings.iter().try_fold(
         HashMap::<KeyChord, (&str, CommandId)>::new(),
         |mut parsed, (action_name, key_name)| -> color_eyre::Result<_> {
@@ -323,13 +310,6 @@ fn parse_context(value: &str) -> Option<Context> {
     match value {
         "normal" => Some(Context::AppNormal),
         "welcome" => Some(Context::Welcome),
-        "agent_chat" => Some(Context::AgentChat),
-        "agent_chat_insert" => Some(Context::AgentChatInsert),
-        "agent_chat_help" => Some(Context::AgentChatHelp),
-        "agent_chat_dialog" => Some(Context::AgentChatDialog),
-        "agent_approval" => Some(Context::AgentApproval),
-        "provider_login" => Some(Context::ProviderLogin),
-        "model_selector" => Some(Context::ModelSelector),
         "vcs" => Some(Context::VCS),
         "vcs_history" => Some(Context::VcsHistory),
         "vcs_commit" => Some(Context::VcsCommit),
@@ -376,7 +356,12 @@ mod tests {
             "file_picker",
             [("file_picker_backspace", "backspace")],
         )]);
-        let registry = Registry::from_config(&config, &CommandRegistry::default()).unwrap();
+        let registry = Registry::from_config(
+            &config,
+            &CommandRegistry::default(),
+            &crate::composition::keymaps::catalog(),
+        )
+        .unwrap();
         assert!(
             registry
                 .get_binding(&Context::FilePicker)
@@ -388,8 +373,12 @@ mod tests {
 
     #[test]
     fn loads_default_bindings() {
-        let registry =
-            Registry::from_config(&Config::default().keymap, &CommandRegistry::default()).unwrap();
+        let registry = Registry::from_config(
+            &Config::default().keymap,
+            &CommandRegistry::default(),
+            &crate::composition::keymaps::catalog(),
+        )
+        .unwrap();
 
         assert!(
             registry
@@ -413,7 +402,12 @@ mod tests {
             "normal".to_string(),
             HashMap::from([("quit".to_string(), "ctrl-q".to_string())]),
         )]);
-        let registry = Registry::from_config(&config, &CommandRegistry::default()).unwrap();
+        let registry = Registry::from_config(
+            &config,
+            &CommandRegistry::default(),
+            &crate::composition::keymaps::catalog(),
+        )
+        .unwrap();
 
         assert!(matches!(
             registry
@@ -445,8 +439,17 @@ mod tests {
                 "explorer_delete".to_string(),
                 HashMap::from([("explorer_delete_confirm".to_string(), "n".to_string())]),
             ),
+            (
+                "model_selector".to_string(),
+                HashMap::from([("agent_interrupt".to_string(), "ctrl-x".to_string())]),
+            ),
         ]);
-        let registry = Registry::from_config(&config, &CommandRegistry::default()).unwrap();
+        let registry = Registry::from_config(
+            &config,
+            &CommandRegistry::default(),
+            &crate::composition::keymaps::catalog(),
+        )
+        .unwrap();
 
         let picker = registry.get_binding(&Context::FilePicker).unwrap();
         assert_eq!(
@@ -466,6 +469,20 @@ mod tests {
             Some(InputAction::Command(CommandId("file_picker_next")))
         );
 
+        let selector = registry.get_binding(&Context::ModelSelector).unwrap();
+        assert_eq!(
+            selector.resolve(KeyChord::new(KeyCode::Char('x'), KeyModifiers::CONTROL)),
+            Some(InputAction::Command(CommandId("agent_interrupt")))
+        );
+        assert_eq!(
+            selector.resolve(KeyChord::new(KeyCode::Down, KeyModifiers::NONE)),
+            Some(InputAction::General(GeneralAction::Next))
+        );
+        assert_eq!(
+            selector.resolve(KeyChord::new(KeyCode::Enter, KeyModifiers::NONE)),
+            Some(InputAction::General(GeneralAction::Activate))
+        );
+
         let delete = registry.get_binding(&Context::ExplorerDelete).unwrap();
         assert_eq!(
             delete.resolve(KeyChord::new(KeyCode::Char('y'), KeyModifiers::NONE)),
@@ -480,7 +497,12 @@ mod tests {
     #[test]
     fn rejects_unknown_context() {
         let config = HashMap::from([("unknown".to_string(), HashMap::new())]);
-        let error = Registry::from_config(&config, &CommandRegistry::default()).unwrap_err();
+        let error = Registry::from_config(
+            &config,
+            &CommandRegistry::default(),
+            &crate::composition::keymaps::catalog(),
+        )
+        .unwrap_err();
 
         assert!(error.to_string().contains("unknown keymap context"));
     }
@@ -491,7 +513,12 @@ mod tests {
             "normal".to_string(),
             HashMap::from([("unknown".to_string(), "q".to_string())]),
         )]);
-        let error = Registry::from_config(&config, &CommandRegistry::default()).unwrap_err();
+        let error = Registry::from_config(
+            &config,
+            &CommandRegistry::default(),
+            &crate::composition::keymaps::catalog(),
+        )
+        .unwrap_err();
 
         assert!(error.to_string().contains("unknown action `unknown`"));
     }
@@ -506,7 +533,12 @@ mod tests {
             ]),
         )]);
 
-        let error = Registry::from_config(&config, &CommandRegistry::default()).unwrap_err();
+        let error = Registry::from_config(
+            &config,
+            &CommandRegistry::default(),
+            &crate::composition::keymaps::catalog(),
+        )
+        .unwrap_err();
         assert!(error.to_string().contains("duplicate key binding `u`"));
         assert!(error.to_string().contains("normal"));
         assert!(error.to_string().contains("undo"));
@@ -519,7 +551,12 @@ mod tests {
             "normal".to_string(),
             HashMap::from([("quit".to_string(), "ctrl-".to_string())]),
         )]);
-        let error = Registry::from_config(&config, &CommandRegistry::default()).unwrap_err();
+        let error = Registry::from_config(
+            &config,
+            &CommandRegistry::default(),
+            &crate::composition::keymaps::catalog(),
+        )
+        .unwrap_err();
 
         assert!(error.to_string().contains("normal.quit"));
     }

@@ -125,7 +125,12 @@ mod tests {
 
     fn event_manager() -> EventManager {
         let config = Config::default();
-        let keymap = Registry::from_config(&config.keymap, &CommandRegistry::default()).unwrap();
+        let keymap = Registry::from_config(
+            &config.keymap,
+            &CommandRegistry::default(),
+            &crate::composition::keymaps::catalog(),
+        )
+        .unwrap();
         EventManager::new(&config, keymap, TextInputRegistry::builtin()).unwrap()
     }
 
@@ -254,7 +259,12 @@ mod tests {
             .entry("file_picker".to_string())
             .or_default()
             .insert("toggle_file_explorer".to_string(), "ctrl-n".to_string());
-        let keymap = Registry::from_config(&config.keymap, &CommandRegistry::default()).unwrap();
+        let keymap = Registry::from_config(
+            &config.keymap,
+            &CommandRegistry::default(),
+            &crate::composition::keymaps::catalog(),
+        )
+        .unwrap();
         let manager = EventManager::new(&config, keymap, TextInputRegistry::builtin()).unwrap();
         let mut model = Model::default();
         assert!(model.modal.open(Context::FilePicker));
@@ -269,7 +279,12 @@ mod tests {
     #[test]
     fn configured_leader_starts_and_continues_the_command_menu() {
         let config = Config::parse("leader = \",\"").unwrap();
-        let keymap = Registry::from_config(&config.keymap, &CommandRegistry::default()).unwrap();
+        let keymap = Registry::from_config(
+            &config.keymap,
+            &CommandRegistry::default(),
+            &crate::composition::keymaps::catalog(),
+        )
+        .unwrap();
         let manager = EventManager::new(&config, keymap, TextInputRegistry::builtin()).unwrap();
         let mut model = model_with_buffer(Context::AppNormal);
 
@@ -296,7 +311,12 @@ mod tests {
             leader: "not-a-key".to_string(),
             ..Config::default()
         };
-        let keymap = Registry::from_config(&config.keymap, &CommandRegistry::default()).unwrap();
+        let keymap = Registry::from_config(
+            &config.keymap,
+            &CommandRegistry::default(),
+            &crate::composition::keymaps::catalog(),
+        )
+        .unwrap();
         assert!(EventManager::new(&config, keymap, TextInputRegistry::builtin()).is_err());
     }
 
