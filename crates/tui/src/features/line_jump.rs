@@ -3,10 +3,13 @@ use editor::EditorSession;
 use crate::{
     data_object::{AppPage, CommandId, Context, FocusTarget, Model, PendingInput, StatusMessage},
     explorer::ExplorerState,
-    manager::{command_registry::Command, effect::Effect},
+    manager::{command_registry::Command, effect::Effect, keymap_contribution::ContextKeymap},
     navigation::VerticalNavigation,
     vcs::navigation::HistoryNavigation,
 };
+
+pub const KEYMAPS: &[ContextKeymap] = &[ContextKeymap::new("line_jump", Context::LineJump)
+    .with_commands(&[("line_jump_cancel", "esc")])];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum VerticalDestination {

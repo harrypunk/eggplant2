@@ -1,8 +1,14 @@
 use crate::{
     buffer::{self, BufferMovement},
     data_object::{CommandId, Context, Model, PendingInput, StatusMessage},
-    manager::{command_registry::Command, effect::Effect},
+    manager::{command_registry::Command, effect::Effect, keymap_contribution::ContextKeymap},
 };
+
+pub const KEYMAPS: &[ContextKeymap] =
+    &[
+        ContextKeymap::new("buffer_navigation", Context::BufferNavigation)
+            .with_commands(&[("buffer_navigation_cancel", "esc")]),
+    ];
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct BufferNavigationState {

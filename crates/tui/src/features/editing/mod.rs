@@ -3,9 +3,23 @@ pub(crate) mod target;
 use editor::{CursorMovement, InsertPosition, LineBoundary, OpenLineDirection, WordMovement};
 
 use crate::{
-    data_object::{CommandId, Model, StatusMessage},
-    manager::effect::Effect,
+    data_object::{CommandId, Context, Model, StatusMessage},
+    manager::{effect::Effect, keymap_contribution::ContextKeymap},
 };
+
+pub const KEYMAPS: &[ContextKeymap] = &[
+    ContextKeymap::new("editor_input", Context::EditorInput).with_commands(&[
+        ("exit_insert_mode", "esc"),
+        ("backspace", "backspace"),
+        ("insert_newline", "enter"),
+        ("move_left", "left"),
+        ("move_right", "right"),
+        ("move_up", "up"),
+        ("move_down", "down"),
+    ]),
+    ContextKeymap::new("visual", Context::EditorVisual)
+        .with_commands(&[("exit_visual_mode", "esc")]),
+];
 
 pub(crate) use self::target::EditingTarget;
 

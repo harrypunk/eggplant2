@@ -20,8 +20,11 @@ impl ViewAlignSession {
 
 use crate::{
     data_object::{CommandId, Context, Model, PendingInput, StatusMessage},
-    manager::{command_registry::Command, effect::Effect},
+    manager::{command_registry::Command, effect::Effect, keymap_contribution::ContextKeymap},
 };
+
+pub const KEYMAPS: &[ContextKeymap] = &[ContextKeymap::new("view_align", Context::ViewAlign)
+    .with_commands(&[("view_align_cancel", "esc")])];
 
 pub fn commands() -> Vec<Command> {
     [

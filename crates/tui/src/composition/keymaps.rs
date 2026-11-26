@@ -18,6 +18,13 @@ pub fn catalog() -> KeymapCatalog {
         .extend(crate::buffer_grep::KEYMAPS.iter().copied())
         .extend(crate::project_grep::KEYMAPS.iter().copied())
         .extend(crate::code_navigation::KEYMAPS.iter().copied())
+        .extend(crate::editing::KEYMAPS.iter().copied())
+        .extend(crate::line_jump::KEYMAPS.iter().copied())
+        .extend(crate::view_align::KEYMAPS.iter().copied())
+        .extend(crate::change::KEYMAPS.iter().copied())
+        .extend(crate::yank::KEYMAPS.iter().copied())
+        .extend(crate::buffer_jump::KEYMAPS.iter().copied())
+        .extend(crate::buffer_navigation::KEYMAPS.iter().copied())
 }
 
 pub fn from_config(

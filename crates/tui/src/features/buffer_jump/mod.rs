@@ -8,9 +8,12 @@ use crate::{
     command_menu::CommandMenuItem,
     data_object::{CommandId, Context, Model, StatusMessage},
     focus,
-    manager::{command_registry::Command, effect::Effect},
+    manager::{command_registry::Command, effect::Effect, keymap_contribution::ContextKeymap},
     ui::UiRegistry,
 };
+
+pub const KEYMAPS: &[ContextKeymap] = &[ContextKeymap::new("buffer_jump", Context::BufferJump)
+    .with_commands(&[("buffer_jump_cancel", "esc")])];
 
 pub const SEARCH_MENU_ITEM: CommandMenuItem = CommandMenuItem::action(
     'j',

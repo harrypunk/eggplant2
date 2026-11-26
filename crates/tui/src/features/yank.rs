@@ -7,8 +7,12 @@ use crate::{
     manager::{
         command_registry::Command,
         effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
+        keymap_contribution::ContextKeymap,
     },
 };
+
+pub const KEYMAPS: &[ContextKeymap] =
+    &[ContextKeymap::new("yank", Context::EditorYank).with_commands(&[("yank_cancel", "esc")])];
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct YankState {

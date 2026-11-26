@@ -114,19 +114,6 @@ fn apply_capability(bindings: ContextBindings, capability: KeymapCapability) -> 
 
 fn common_bindings() -> KeymapConfig {
     HashMap::from([
-        keymap_context(
-            "editor_input",
-            [
-                ("exit_insert_mode", "esc"),
-                ("backspace", "backspace"),
-                ("insert_newline", "enter"),
-                ("move_left", "left"),
-                ("move_right", "right"),
-                ("move_up", "up"),
-                ("move_down", "down"),
-            ],
-        ),
-        keymap_context("visual", [("exit_visual_mode", "esc")]),
         keymap_context("explorer", [("open_selected", "enter")]),
         keymap_context(
             "explorer_add",
@@ -153,12 +140,6 @@ fn common_bindings() -> KeymapConfig {
             "explorer_help",
             [("close_explorer_help", "esc"), ("explorer_help", "?")],
         ),
-        keymap_context("buffer_jump", [("buffer_jump_cancel", "esc")]),
-        keymap_context("buffer_navigation", [("buffer_navigation_cancel", "esc")]),
-        keymap_context("line_jump", [("line_jump_cancel", "esc")]),
-        keymap_context("view_align", [("view_align_cancel", "esc")]),
-        keymap_context("change", [("change_cancel", "esc")]),
-        keymap_context("yank", [("yank_cancel", "esc")]),
         keymap_context(
             "vcs_commit_input",
             [
@@ -275,19 +256,11 @@ fn parse_context(value: &str) -> Option<Context> {
         "vcs_reset" => Some(Context::VcsReset),
         "vcs_branch_menu" => Some(Context::VcsBranchMenu),
         "vcs_branch" => Some(Context::VcsBranch),
-        "editor_input" => Some(Context::EditorInput),
-        "visual" => Some(Context::EditorVisual),
         "explorer" => Some(Context::Explorer),
         "explorer_help" => Some(Context::ExplorerHelp),
         "explorer_add" => Some(Context::ExplorerAdd),
         "explorer_delete" => Some(Context::ExplorerDelete),
         "explorer_transfer" => Some(Context::ExplorerTransfer),
-        "buffer_jump" => Some(Context::BufferJump),
-        "buffer_navigation" => Some(Context::BufferNavigation),
-        "line_jump" => Some(Context::LineJump),
-        "view_align" => Some(Context::ViewAlign),
-        "change" => Some(Context::EditorChange),
-        "yank" => Some(Context::EditorYank),
         _ => None,
     }
 }

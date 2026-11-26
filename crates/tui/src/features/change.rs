@@ -1,8 +1,12 @@
 use crate::{
     data_object::{CommandId, Context, Model, PendingInput, StatusMessage},
     editing::{self, EditingTarget, target},
-    manager::{command_registry::Command, effect::Effect},
+    manager::{command_registry::Command, effect::Effect, keymap_contribution::ContextKeymap},
 };
+
+pub const KEYMAPS: &[ContextKeymap] =
+    &[ContextKeymap::new("change", Context::EditorChange)
+        .with_commands(&[("change_cancel", "esc")])];
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct ChangeState {
