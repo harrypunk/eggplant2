@@ -44,7 +44,7 @@ pub(crate) fn open(model: &mut Model) -> Option<Effect> {
     match DialogOpenPlan::evaluate(model) {
         DialogOpenPlan::AlreadyOpen => None,
         DialogOpenPlan::ProjectRequired => {
-            super::work::notify(model, "Open a project to use the agent".to_string())
+            super::adapter::notify(model, "Open a project to use the agent".to_string())
         }
         DialogOpenPlan::Ready {
             context,

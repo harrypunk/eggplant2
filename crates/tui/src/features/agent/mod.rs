@@ -1,3 +1,4 @@
+mod adapter;
 mod approval;
 mod commands;
 mod completion;

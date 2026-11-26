@@ -191,7 +191,7 @@ Context is a point-in-time snapshot, not authority to edit. A later mutation mus
 
 ## Runtime boundaries
 
-`commands.rs` owns the typed `AgentCommand` catalog, registration, and dispatch. `dialog.rs` owns inline open/close and `path:line` prefill; `panel.rs` owns focus, Normal/Insert, and help. `context.rs` captures editor/workspace inputs, `approval.rs` owns write resolution, and `run.rs` owns provider/tool execution without `Model`. `work.rs` retains submission, interruption, and completion application rather than becoming a second command registry.
+`commands.rs` owns the typed `AgentCommand` catalog, registration, and dispatch; `adapter.rs` is the small `Model`-aware composition adapter. `dialog.rs` owns inline open/close and `path:line` prefill; `panel.rs` owns focus, Normal/Insert, and help. `context.rs` captures editor/workspace inputs, `approval.rs` owns write resolution, and `run.rs` owns provider/tool execution without `Model`. `work.rs` retains submission and interruption policy through consumer-sized `SubmissionContext` and `InterruptionContext` interfaces rather than receiving the global `Model`; only `adapter.rs` supplies concrete surface, workspace, modal, notification, and persistence coordination. Unit tests use a local fake context, while integration tests retain real-adapter coverage.
 
 The intended ownership is:
 

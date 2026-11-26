@@ -2,10 +2,29 @@ use std::sync::Arc;
 
 use eggplant_agent::{AgentProvider, ToolResult, ToolResultStatus};
 
-use crate::{
-    data_object::{Model, StatusMessage},
-    manager::effect::Effect,
-};
+use crate::manager::effect::Effect;
+
+use super::{AgentState, tools::ToolContext};
+
+/// Root-supplied capabilities needed to accept and dispatch an Agent submission.
+pub(crate) trait SubmissionContext {
+    fn agent(&self) -> &AgentState;
+    fn agent_mut(&mut self) -> &mut AgentState;
+    fn submission_active(&self) -> bool;
+    fn project_available(&self) -> bool;
+    fn tool_context(&self) -> Option<ToolContext>;
+    fn open_provider_login(&mut self) -> Option<Effect>;
+    fn open_model_selector(&mut self) -> Option<Effect>;
+    fn notify(&mut self, message: String) -> Option<Effect>;
+}
+
+/// Root coordination required after interrupting the active Agent run.
+pub(crate) trait InterruptionContext {
+    fn agent(&self) -> &AgentState;
+    fn agent_mut(&mut self) -> &mut AgentState;
+    fn transition_to_chat(&mut self);
+    fn persist_finalized(&mut self) -> Option<Effect>;
+}
 
 enum Submission {
     Inactive,
@@ -41,91 +60,93 @@ enum RunDriver {
 }
 
 impl Submission {
-    fn evaluate(model: &Model) -> Self {
-        if super::surface::active(model).is_none() {
+    fn evaluate(context: &impl SubmissionContext) -> Self {
+        if !context.submission_active() {
             return Self::Inactive;
         }
-        if model.agent.prompt().starts_with('/') {
-            return model
-                .agent
+        if context.agent().prompt().starts_with('/') {
+            return context
+                .agent()
                 .command_state()
                 .selected()
                 .map_or(Self::Inactive, Self::Command);
         }
-        let prompt = model.agent.prompt().trim();
-        if let Some(rejection) = rejection(model, prompt) {
+        let prompt = context.agent().prompt().trim();
+        if let Some(rejection) = rejection(context, prompt) {
             return Self::Rejected(rejection);
         }
         Self::Accepted(AcceptedSubmission {
             prompt: prompt.to_string(),
-            driver: model
-                .agent
+            driver: context
+                .agent()
                 .provider()
                 .map_or(RunDriver::Fake, RunDriver::Provider),
         })
     }
 }
 
-fn rejection(model: &Model, prompt: &str) -> Option<SubmissionRejection> {
+fn rejection(context: &impl SubmissionContext, prompt: &str) -> Option<SubmissionRejection> {
     if prompt.is_empty() {
         return Some(SubmissionRejection::EmptyPrompt);
     }
-    if model.agent.session().is_running() {
+    if context.agent().session().is_running() {
         return Some(SubmissionRejection::AlreadyRunning);
     }
-    if model.workspace.is_none() {
+    if !context.project_available() {
         return Some(SubmissionRejection::MissingProject);
     }
     None
 }
 
-pub(crate) fn submit(model: &mut Model) -> Option<Effect> {
-    match Submission::evaluate(model) {
+pub(crate) fn submit(context: &mut impl SubmissionContext) -> Option<Effect> {
+    match Submission::evaluate(context) {
         Submission::Inactive => None,
-        Submission::Command(command) => execute_prompt_command(model, command),
-        Submission::Rejected(rejection) => notify(model, rejection.message().to_string()),
-        Submission::Accepted(accepted) => start_run(model, accepted),
+        Submission::Command(command) => execute_prompt_command(context, command),
+        Submission::Rejected(rejection) => context.notify(rejection.message().to_string()),
+        Submission::Accepted(accepted) => start_run(context, accepted),
     }
 }
 
-fn start_run(model: &mut Model, accepted: AcceptedSubmission) -> Option<Effect> {
-    let run_id = model.agent.begin_prompt()?;
+fn start_run(context: &mut impl SubmissionContext, accepted: AcceptedSubmission) -> Option<Effect> {
+    let run_id = context.agent_mut().begin_prompt()?;
     match accepted.driver {
         RunDriver::Fake => Some(Effect::feature(FakeAgentRun {
             run_id,
             prompt: accepted.prompt,
         })),
         RunDriver::Provider(provider) => {
-            let cancellation = model.agent.begin_cancellation();
+            let cancellation = context.agent_mut().begin_cancellation();
             Some(Effect::feature(ProviderAgentRun {
                 run_id,
                 prompt: accepted.prompt,
                 cancellation,
                 provider,
-                context: super::context::tool_context(model)?,
+                context: context.tool_context()?,
                 progress: RunProgress::default(),
             }))
         }
     }
 }
 
-fn execute_prompt_command(model: &mut Model, command: super::PromptCommand) -> Option<Effect> {
-    model.agent.complete_prompt_command();
+fn execute_prompt_command(
+    context: &mut impl SubmissionContext,
+    command: super::PromptCommand,
+) -> Option<Effect> {
+    context.agent_mut().complete_prompt_command();
     match command {
-        super::PromptCommand::ProviderLogin => crate::provider_login::open(model),
-        super::PromptCommand::Model => crate::model_selector::open(model),
-        super::PromptCommand::Thinking | super::PromptCommand::Logout => notify(
-            model,
-            format!("{} is not implemented yet", command.description()),
-        ),
+        super::PromptCommand::ProviderLogin => context.open_provider_login(),
+        super::PromptCommand::Model => context.open_model_selector(),
+        super::PromptCommand::Thinking | super::PromptCommand::Logout => {
+            context.notify(format!("{} is not implemented yet", command.description()))
+        }
     }
 }
 
-pub(crate) fn interrupt(model: &mut Model) -> Option<Effect> {
-    let pending = model.agent.session().pending_approval().cloned();
-    let run_id = model.agent.session().run().map(|run| run.id);
-    model.agent.cancel_active();
-    model.agent.session_mut().cancel();
+pub(crate) fn interrupt(context: &mut impl InterruptionContext) -> Option<Effect> {
+    let pending = context.agent().session().pending_approval().cloned();
+    let run_id = context.agent().session().run().map(|run| run.id);
+    context.agent().cancel_active();
+    context.agent_mut().session_mut().cancel();
     run_id
         .zip(pending)
         .map(|(run_id, approval)| {
@@ -141,19 +162,14 @@ pub(crate) fn interrupt(model: &mut Model) -> Option<Effect> {
         })
         .into_iter()
         .for_each(|(run_id, result)| {
-            model.agent.session_mut().complete_tool_call(run_id, result);
+            context
+                .agent_mut()
+                .session_mut()
+                .complete_tool_call(run_id, result);
         });
-    model.agent.clear_suspension();
-    super::approval::transition_to_chat(model);
-    super::storage::persist_finalized(model)
-}
-
-pub(crate) fn notify(model: &mut Model, message: String) -> Option<Effect> {
-    Some(crate::notifications::publish_status(
-        model,
-        StatusMessage::info(message),
-        Some("Agent"),
-    ))
+    context.agent_mut().clear_suspension();
+    context.transition_to_chat();
+    context.persist_finalized()
 }
 
 pub(crate) use super::run::{FakeAgentRun, ProviderAgentRun, RunProgress};
@@ -182,7 +198,7 @@ mod tests {
             },
         },
         component::text_input::TextInputEvent,
-        data_object::{CommandId, Context, Visibility},
+        data_object::{CommandId, Context, Model, Visibility},
         manager::message_manager::MessageManager,
         startup::initial_model,
         test_utils::input_context,
@@ -195,6 +211,126 @@ mod tests {
             panic!("expected agent effect");
         };
         manager.update(model, request.perform())
+    }
+
+    #[derive(Default)]
+    struct FakeWork {
+        agent: AgentState,
+        active: bool,
+        project: bool,
+        opened: Option<crate::agent::PromptCommand>,
+        notifications: Vec<String>,
+        chat_restored: bool,
+        finalized: bool,
+    }
+
+    impl SubmissionContext for FakeWork {
+        fn agent(&self) -> &AgentState {
+            &self.agent
+        }
+
+        fn agent_mut(&mut self) -> &mut AgentState {
+            &mut self.agent
+        }
+
+        fn submission_active(&self) -> bool {
+            self.active
+        }
+
+        fn project_available(&self) -> bool {
+            self.project
+        }
+
+        fn tool_context(&self) -> Option<ToolContext> {
+            None
+        }
+
+        fn open_provider_login(&mut self) -> Option<Effect> {
+            self.opened = Some(crate::agent::PromptCommand::ProviderLogin);
+            None
+        }
+
+        fn open_model_selector(&mut self) -> Option<Effect> {
+            self.opened = Some(crate::agent::PromptCommand::Model);
+            None
+        }
+
+        fn notify(&mut self, message: String) -> Option<Effect> {
+            self.notifications.push(message);
+            None
+        }
+    }
+
+    impl InterruptionContext for FakeWork {
+        fn agent(&self) -> &AgentState {
+            &self.agent
+        }
+
+        fn agent_mut(&mut self) -> &mut AgentState {
+            &mut self.agent
+        }
+
+        fn transition_to_chat(&mut self) {
+            self.chat_restored = true;
+        }
+
+        fn persist_finalized(&mut self) -> Option<Effect> {
+            self.finalized = true;
+            None
+        }
+    }
+
+    #[test]
+    fn submission_policy_runs_without_the_application_model() {
+        let mut context = FakeWork::default();
+        context.agent.prompt.set_value("hello");
+
+        assert!(submit(&mut context).is_none());
+        assert_eq!(context.agent.prompt(), "hello");
+        assert!(context.notifications.is_empty());
+
+        context.active = true;
+        assert!(submit(&mut context).is_none());
+        assert_eq!(context.notifications, ["Open a project to use the agent"]);
+        assert_eq!(context.agent.prompt(), "hello");
+        assert!(context.agent.session().run().is_none());
+
+        context.project = true;
+        assert!(submit(&mut context).is_some());
+        assert_eq!(context.agent.prompt(), "");
+        assert!(context.agent.session().is_running());
+    }
+
+    #[test]
+    fn command_and_interruption_follow_ups_use_the_abstract_context() {
+        let mut context = FakeWork {
+            active: true,
+            project: true,
+            ..FakeWork::default()
+        };
+        context.agent.prompt.set_value("/");
+        assert!(
+            context
+                .agent
+                .quick_fill_prompt_command(crate::agent::PromptCommandMovement::Next)
+        );
+
+        assert!(submit(&mut context).is_none());
+        assert_eq!(
+            context.opened,
+            Some(crate::agent::PromptCommand::ProviderLogin)
+        );
+        assert_eq!(context.agent.prompt(), "");
+
+        context.agent.prompt.set_value("next");
+        context.agent.begin_prompt().unwrap();
+        assert!(interrupt(&mut context).is_none());
+        assert_eq!(
+            context.agent.session().run().unwrap().status,
+            RunStatus::Cancelled
+        );
+        assert!(context.chat_restored);
+        assert!(context.finalized);
     }
 
     #[test]

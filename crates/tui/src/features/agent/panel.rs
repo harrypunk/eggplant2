@@ -27,7 +27,7 @@ pub(crate) fn focus_panel_input(model: &mut Model) -> Option<Effect> {
         return None;
     }
     if model.workspace.is_none() {
-        return super::work::notify(model, "Open a project to use the agent".to_string());
+        return super::adapter::notify(model, "Open a project to use the agent".to_string());
     }
     close_help(model);
     model.agent.prepare_panel_prompt();
