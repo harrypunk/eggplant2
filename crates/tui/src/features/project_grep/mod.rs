@@ -14,10 +14,19 @@ use crate::{
     data_object::{CommandId, Context, GeneralAction, Model, StatusMessage},
     document,
     manager::{
-        command_registry::Command, effect::Effect, general_action::GeneralActionSubscription,
+        command_registry::Command,
+        effect::Effect,
+        general_action::GeneralActionSubscription,
+        keymap_contribution::{ContextKeymap, KeymapCapability},
     },
     ui::UiRegistry,
 };
+
+pub const KEYMAPS: &[ContextKeymap] = &[ContextKeymap::new("project_grep", Context::ProjectGrep)
+    .with_capabilities(&[
+        KeymapCapability::ListNavigation,
+        KeymapCapability::ModalActions,
+    ])];
 
 pub static PROJECT_MENU_ITEM: CommandMenuItem =
     CommandMenuItem::action('p', "project", CommandId("project_grep_open"));

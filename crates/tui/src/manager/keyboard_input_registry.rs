@@ -77,7 +77,6 @@ impl Registry {
                 if list_navigation_contexts().contains(&context_name.as_str()) {
                     bindings = bindings.with_list_navigation();
                 }
-                bindings = with_common_actions(context_name, bindings);
                 for capability in capabilities {
                     bindings = apply_capability(bindings, *capability);
                 }
@@ -94,16 +93,7 @@ impl Registry {
 
 /// Contexts that compose the shared Ctrl-N/P aliases through Down/Up.
 fn list_navigation_contexts() -> &'static [&'static str] {
-    &[
-        "welcome",
-        "file_picker",
-        "theme_picker",
-        "buffer_grep",
-        "project_grep",
-        "vcs_branch",
-        "vcs_merge",
-        "vcs_reset",
-    ]
+    &["welcome", "vcs_branch", "vcs_merge", "vcs_reset"]
 }
 
 const MODAL_GENERAL_ACTIONS: [(KeyCode, GeneralAction); 4] = [
@@ -112,16 +102,6 @@ const MODAL_GENERAL_ACTIONS: [(KeyCode, GeneralAction); 4] = [
     (KeyCode::Enter, GeneralAction::Activate),
     (KeyCode::Esc, GeneralAction::Back),
 ];
-
-fn with_common_actions(context_name: &str, bindings: ContextBindings) -> ContextBindings {
-    match context_name {
-        "file_picker" | "theme_picker" | "buffer_grep" | "project_grep" => bindings
-            .with_general_actions(
-                MODAL_GENERAL_ACTIONS.map(|(key, action)| (KeyChord::from(key), action)),
-            ),
-        _ => bindings,
-    }
-}
 
 fn apply_capability(bindings: ContextBindings, capability: KeymapCapability) -> ContextBindings {
     match capability {
@@ -135,16 +115,6 @@ fn apply_capability(bindings: ContextBindings, capability: KeymapCapability) -> 
 fn common_bindings() -> KeymapConfig {
     HashMap::from([
         keymap_context(
-            "welcome",
-            [
-                ("welcome_previous", "up"),
-                ("welcome_next", "down"),
-                ("welcome_activate", "enter"),
-                ("focus_left", "ctrl-h"),
-                ("focus_right", "ctrl-l"),
-            ],
-        ),
-        keymap_context(
             "editor_input",
             [
                 ("exit_insert_mode", "esc"),
@@ -157,15 +127,6 @@ fn common_bindings() -> KeymapConfig {
             ],
         ),
         keymap_context("visual", [("exit_visual_mode", "esc")]),
-        keymap_context(
-            "code_navigation",
-            [
-                ("code_navigation_open", "enter"),
-                ("code_navigation_next", "down"),
-                ("code_navigation_previous", "up"),
-                ("close_code_navigation", "esc"),
-            ],
-        ),
         keymap_context("explorer", [("open_selected", "enter")]),
         keymap_context(
             "explorer_add",
@@ -192,12 +153,8 @@ fn common_bindings() -> KeymapConfig {
             "explorer_help",
             [("close_explorer_help", "esc"), ("explorer_help", "?")],
         ),
-        keymap_context("file_picker", []),
-        keymap_context("theme_picker", []),
         keymap_context("buffer_jump", [("buffer_jump_cancel", "esc")]),
         keymap_context("buffer_navigation", [("buffer_navigation_cancel", "esc")]),
-        keymap_context("buffer_grep", []),
-        keymap_context("project_grep", []),
         keymap_context("line_jump", [("line_jump_cancel", "esc")]),
         keymap_context("view_align", [("view_align_cancel", "esc")]),
         keymap_context("change", [("change_cancel", "esc")]),
@@ -309,7 +266,6 @@ fn parse_binding(
 fn parse_context(value: &str) -> Option<Context> {
     match value {
         "normal" => Some(Context::AppNormal),
-        "welcome" => Some(Context::Welcome),
         "vcs" => Some(Context::VCS),
         "vcs_history" => Some(Context::VcsHistory),
         "vcs_commit" => Some(Context::VcsCommit),
@@ -326,13 +282,8 @@ fn parse_context(value: &str) -> Option<Context> {
         "explorer_add" => Some(Context::ExplorerAdd),
         "explorer_delete" => Some(Context::ExplorerDelete),
         "explorer_transfer" => Some(Context::ExplorerTransfer),
-        "code_navigation" => Some(Context::CodeNavigation),
-        "file_picker" => Some(Context::FilePicker),
-        "theme_picker" => Some(Context::ThemePicker),
         "buffer_jump" => Some(Context::BufferJump),
         "buffer_navigation" => Some(Context::BufferNavigation),
-        "buffer_grep" => Some(Context::BufferGrep),
-        "project_grep" => Some(Context::ProjectGrep),
         "line_jump" => Some(Context::LineJump),
         "view_align" => Some(Context::ViewAlign),
         "change" => Some(Context::EditorChange),

@@ -2,6 +2,17 @@ mod commands;
 mod state;
 mod work;
 
+use crate::{
+    data_object::Context,
+    manager::keymap_contribution::{ContextKeymap, KeymapCapability},
+};
+
+pub const KEYMAPS: &[ContextKeymap] = &[ContextKeymap::new("file_picker", Context::FilePicker)
+    .with_capabilities(&[
+        KeymapCapability::ListNavigation,
+        KeymapCapability::ModalActions,
+    ])];
+
 pub(crate) use commands::{close, handle_input};
 pub use commands::{general_action_subscriptions, handle_command, handle_general_action};
 pub use state::{FileCollectionState, FileEntry, FilePickerState, PreviewState, ScanDepth};

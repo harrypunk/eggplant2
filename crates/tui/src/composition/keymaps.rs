@@ -12,6 +12,12 @@ pub fn catalog() -> KeymapCatalog {
         .extend(crate::provider_login::KEYMAPS.iter().copied())
         .extend(crate::model_selector::KEYMAPS.iter().copied())
         .extend(crate::agent::KEYMAPS.iter().copied())
+        .extend(crate::welcome::KEYMAPS.iter().copied())
+        .extend(crate::file_picker::KEYMAPS.iter().copied())
+        .extend(crate::theme_picker::KEYMAPS.iter().copied())
+        .extend(crate::buffer_grep::KEYMAPS.iter().copied())
+        .extend(crate::project_grep::KEYMAPS.iter().copied())
+        .extend(crate::code_navigation::KEYMAPS.iter().copied())
 }
 
 pub fn from_config(

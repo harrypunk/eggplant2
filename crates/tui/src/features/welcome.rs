@@ -1,7 +1,21 @@
 use crate::{
-    data_object::{CommandId, Model},
-    manager::{command_registry::Command, effect::Effect},
+    data_object::{CommandId, Context, Model},
+    manager::{
+        command_registry::Command,
+        effect::Effect,
+        keymap_contribution::{ContextKeymap, KeymapCapability},
+    },
 };
+
+pub const KEYMAPS: &[ContextKeymap] = &[ContextKeymap::new("welcome", Context::Welcome)
+    .with_commands(&[
+        ("welcome_previous", "up"),
+        ("welcome_next", "down"),
+        ("welcome_activate", "enter"),
+        ("focus_left", "ctrl-h"),
+        ("focus_right", "ctrl-l"),
+    ])
+    .with_capabilities(&[KeymapCapability::ListNavigation])];
 
 pub fn commands() -> Vec<Command> {
     [

@@ -12,11 +12,20 @@ use crate::{
     data_object::{CommandId, Context, GeneralAction, Model, StatusMessage},
     focus,
     manager::{
-        command_registry::Command, effect::Effect, general_action::GeneralActionSubscription,
+        command_registry::Command,
+        effect::Effect,
+        general_action::GeneralActionSubscription,
+        keymap_contribution::{ContextKeymap, KeymapCapability},
     },
     ui::UiRegistry,
 };
 use editor::DocumentPosition;
+
+pub const KEYMAPS: &[ContextKeymap] = &[ContextKeymap::new("buffer_grep", Context::BufferGrep)
+    .with_capabilities(&[
+        KeymapCapability::ListNavigation,
+        KeymapCapability::ModalActions,
+    ])];
 
 pub static CURRENT_FILE_MENU_ITEM: CommandMenuItem =
     CommandMenuItem::action('c', "current file", CommandId("buffer_grep_open"));

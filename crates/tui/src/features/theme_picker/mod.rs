@@ -9,9 +9,19 @@ pub use state::{ThemePickerEntry, ThemePickerState};
 use crate::{
     config::ThemeConfig,
     data_object::{CommandId, Context, GeneralAction, ModalController, Model, StatusMessage},
-    manager::{effect::Effect, general_action::GeneralActionSubscription},
+    manager::{
+        effect::Effect,
+        general_action::GeneralActionSubscription,
+        keymap_contribution::{ContextKeymap, KeymapCapability},
+    },
     theme::{Theme, ThemePersistenceState},
 };
+
+pub const KEYMAPS: &[ContextKeymap] = &[ContextKeymap::new("theme_picker", Context::ThemePicker)
+    .with_capabilities(&[
+        KeymapCapability::ListNavigation,
+        KeymapCapability::ModalActions,
+    ])];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ThemePickerCommand {
