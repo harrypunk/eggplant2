@@ -84,7 +84,7 @@ Assistant messages render as width-aware Markdown in both the dialog and panel. 
 
 ### Transcript navigation
 
-The dialog and panel Insert support PageUp/PageDown without introducing another editing mode. Panel Normal starts its transcript cursor at the bottom, follows streaming while in that state, moves with `j`/`k`, and reveals the cursor during page or line movement. The selected visual row receives cursor-line styling and a focused panel publishes the terminal cursor at that row; Insert keeps only the prompt cursor. Re-entering Normal resets navigation to bottom.
+The dialog and panel Insert support PageUp/PageDown without introducing another editing mode. Panel Normal starts its transcript cursor at the bottom, follows streaming while in that state, moves with `j`/`k`, and reveals the cursor during page or line movement. The selected visual row receives cursor-line styling and a focused panel publishes the terminal cursor at that row; Insert keeps only the prompt cursor. Re-entering Normal resets navigation to bottom. A successfully started prompt also restores both surfaces to bottom so the new exchange is visible; empty, rejected, or failed-to-begin submissions preserve the current viewport.
 
 `component/agent/navigation.rs` segregates page offsets, panel cursor state, and surface-specific view inputs. `features/agent/navigation.rs` handles commands, while `features/agent/ui.rs` resolves shared page geometry. Component `transcript_metrics` methods use the same content/layout calculations as rendering, preventing command/render viewport drift. The existing configured `PageScroll` percentage is reused, and no view mutates model state while rendering.
 

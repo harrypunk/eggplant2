@@ -144,6 +144,10 @@ impl PanelNavigation {
     }
 
     pub fn enter_normal(&mut self) {
+        self.follow_bottom();
+    }
+
+    pub(crate) fn follow_bottom(&mut self) {
         self.scroll.bottom();
         self.cursor = TranscriptCursor::Bottom;
     }

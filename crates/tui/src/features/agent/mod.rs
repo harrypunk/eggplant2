@@ -335,6 +335,8 @@ impl AgentState {
     pub fn begin_prompt(&mut self) -> Option<RunId> {
         let prompt = self.prompt.submission_text()?;
         let run_id = self.session.begin(prompt)?;
+        self.dialog_scroll.bottom();
+        self.panel_navigation.follow_bottom();
         self.prompt.complete_submission();
         let now = chrono::Utc::now().timestamp_millis();
         self.session_created_at.get_or_insert(now);

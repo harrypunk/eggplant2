@@ -95,6 +95,7 @@ mod tests {
             run,
             &"A sufficiently long Markdown response.\n\n".repeat(30),
         );
+        model.agent.session_mut().complete(run);
         (model, directory)
     }
 
@@ -161,5 +162,45 @@ mod tests {
         let reset = model.agent.navigation(AgentSurface::Panel).panel();
         assert_eq!(reset.cursor_row(metrics), Some(last));
         assert_eq!(reset.offset(metrics), metrics.max_offset());
+    }
+
+    #[test]
+    fn dialog_submission_restores_bottom_after_manual_scrolling() {
+        let (mut model, _directory) = model();
+        dialog::open(&mut model);
+        page_up(&mut model);
+        model.agent.prompt.set_value("next question");
+
+        model.agent.begin_prompt().unwrap();
+
+        let metrics = ui::navigation_metrics(&model, AgentSurface::Dialog);
+        assert_eq!(
+            model
+                .agent
+                .navigation(AgentSurface::Dialog)
+                .dialog()
+                .offset(metrics),
+            metrics.max_offset()
+        );
+    }
+
+    #[test]
+    fn panel_submission_restores_bottom_without_leaving_insert_mode() {
+        let (mut model, _directory) = model();
+        panel::focus_panel_input(&mut model);
+        model.agent.enter_insert_mode();
+        page_up(&mut model);
+        model.agent.prompt.set_value("next question");
+
+        model.agent.begin_prompt().unwrap();
+
+        let metrics = ui::navigation_metrics(&model, AgentSurface::Panel);
+        let navigation = model.agent.navigation(AgentSurface::Panel).panel();
+        assert_eq!(navigation.offset(metrics), metrics.max_offset());
+        assert_eq!(
+            navigation.cursor_row(metrics),
+            Some(metrics.content_rows - 1)
+        );
+        assert_eq!(model.agent.panel_mode(), AgentInputMode::Insert);
     }
 }
