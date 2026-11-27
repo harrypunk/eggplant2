@@ -1,4 +1,4 @@
-use std::{path::Path, sync::Arc};
+use std::{cmp::Reverse, path::Path, sync::Arc};
 
 use unicode_general_category::{GeneralCategory, get_general_category};
 
@@ -10,6 +10,17 @@ use crate::{
 };
 
 const MAX_FILE_REFERENCES: usize = 20;
+const OPENING_WRAPPERS: &[char] = &['(', '[', '{', '<', '`'];
+const QUOTE_DELIMITERS: &[char] = &['"', '\''];
+const PUNCTUATION_CATEGORIES: &[GeneralCategory] = &[
+    GeneralCategory::ConnectorPunctuation,
+    GeneralCategory::DashPunctuation,
+    GeneralCategory::OpenPunctuation,
+    GeneralCategory::ClosePunctuation,
+    GeneralCategory::InitialPunctuation,
+    GeneralCategory::FinalPunctuation,
+    GeneralCategory::OtherPunctuation,
+];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileReferenceStatus {
@@ -38,8 +49,24 @@ struct ReferenceSession {
     token: ReferenceToken,
     current: Option<FileEntry>,
     files: Arc<Vec<FileEntry>>,
-    results: ListState<FileEntry>,
-    status: FileReferenceStatus,
+    search: ReferenceSearch,
+}
+
+/// Search phases own only the data that is valid in that phase.
+#[derive(Debug)]
+enum ReferenceSearch {
+    Loading,
+    Filtering,
+    Ready(ListState<FileEntry>),
+    Failed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReferenceTransition {
+    Unchanged,
+    AwaitScan,
+    Scan,
+    Filter,
 }
 
 impl ReferenceSession {
@@ -48,8 +75,25 @@ impl ReferenceSession {
             token,
             current,
             files: Arc::new(Vec::new()),
-            results: ListState::default(),
-            status: FileReferenceStatus::Loading,
+            search: ReferenceSearch::Loading,
+        }
+    }
+
+    fn advance(
+        &mut self,
+        token: ReferenceToken,
+        current: Option<FileEntry>,
+    ) -> ReferenceTransition {
+        let changed = self.token.query != token.query || self.current != current;
+        self.token = token;
+        self.current = current;
+        match (changed, &self.search) {
+            (false, _) => ReferenceTransition::Unchanged,
+            (true, ReferenceSearch::Loading) => ReferenceTransition::AwaitScan,
+            (true, ReferenceSearch::Failed) => ReferenceTransition::Scan,
+            (true, ReferenceSearch::Filtering | ReferenceSearch::Ready(_)) => {
+                ReferenceTransition::Filter
+            }
         }
     }
 }
@@ -66,75 +110,51 @@ impl ReferenceToken {
     fn at_cursor(input: &TextInput) -> Option<Self> {
         let cursor = input.cursor_byte();
         let value = input.value();
-        let mut candidate: Option<Self> = None;
+        let prefix = &value[..cursor];
+        prefix
+            .char_indices()
+            .filter(|(index, character)| *character == '@' && valid_trigger_boundary(value, *index))
+            .find_map(|(start, _)| Self::from_fragment(start, cursor, &prefix[start + 1..]))
+    }
 
-        for (index, character) in value[..cursor].char_indices() {
-            if let Some(token) = candidate.as_mut().filter(|token| token.quoted) {
-                if character == '"' {
-                    candidate = None;
-                } else {
-                    token.query.push(character);
-                }
-                continue;
-            }
-
-            if character == '@' && valid_trigger_boundary(value, index) {
-                candidate = Some(Self {
-                    start: index,
-                    end: cursor,
-                    query: String::new(),
-                    quoted: false,
-                });
-                continue;
-            }
-
-            let Some(token) = candidate.as_mut() else {
-                continue;
-            };
-            if index == token.start + 1 && character == '"' {
-                token.quoted = true;
-            } else if is_unquoted_delimiter(character) {
-                candidate = None;
-            } else {
-                token.query.push(character);
-            }
+    /// Validate the complete fragment after a trigger without maintaining lexer state.
+    fn from_fragment(start: usize, end: usize, fragment: &str) -> Option<Self> {
+        match fragment.strip_prefix('"') {
+            Some(query) => (!query.contains('"')).then(|| Self {
+                start,
+                end,
+                query: query.to_string(),
+                quoted: true,
+            }),
+            None => (!fragment.chars().any(is_unquoted_delimiter)).then(|| Self {
+                start,
+                end,
+                query: fragment.to_string(),
+                quoted: false,
+            }),
         }
+    }
 
-        return candidate;
-
-        fn valid_trigger_boundary(value: &str, at: usize) -> bool {
-            let mut prefix = &value[..at];
-            loop {
-                let Some((index, previous)) = prefix.char_indices().last() else {
-                    return true;
-                };
-                if matches!(previous, '(' | '[' | '{' | '<' | '`') {
-                    prefix = &prefix[..index];
-                    continue;
-                }
-                return previous.is_whitespace() || is_non_ascii_punctuation(previous);
-            }
-        }
+    fn same_identity(&self, other: &Self) -> bool {
+        self.start == other.start && self.query == other.query && self.quoted == other.quoted
     }
 }
 
+fn valid_trigger_boundary(value: &str, at: usize) -> bool {
+    let boundary = value[..at].trim_end_matches(|character| OPENING_WRAPPERS.contains(&character));
+    boundary
+        .chars()
+        .next_back()
+        .is_none_or(|character| character.is_whitespace() || is_non_ascii_punctuation(character))
+}
+
 fn is_non_ascii_punctuation(character: char) -> bool {
-    !character.is_ascii()
-        && matches!(
-            get_general_category(character),
-            GeneralCategory::ConnectorPunctuation
-                | GeneralCategory::DashPunctuation
-                | GeneralCategory::OpenPunctuation
-                | GeneralCategory::ClosePunctuation
-                | GeneralCategory::InitialPunctuation
-                | GeneralCategory::FinalPunctuation
-                | GeneralCategory::OtherPunctuation
-        )
+    !character.is_ascii() && PUNCTUATION_CATEGORIES.contains(&get_general_category(character))
 }
 
 fn is_unquoted_delimiter(character: char) -> bool {
     character.is_whitespace()
-        || matches!(character, '"' | '\'')
+        || QUOTE_DELIMITERS.contains(&character)
         || is_non_ascii_punctuation(character)
 }
 
@@ -160,11 +180,11 @@ impl FileReferenceState {
             self.clear();
             return None;
         };
-        if self.dismissed.as_ref().is_some_and(|dismissed| {
-            dismissed.start == token.start
-                && dismissed.query == token.query
-                && dismissed.quoted == token.quoted
-        }) {
+        if self
+            .dismissed
+            .as_ref()
+            .is_some_and(|dismissed| dismissed.same_identity(&token))
+        {
             return None;
         }
 
@@ -178,29 +198,27 @@ impl FileReferenceState {
             return self.start_scan(root);
         }
 
-        let (query_changed, current_changed, status) = {
-            let session = self.session.as_mut().unwrap();
-            let query_changed = session.token.query != token.query;
-            let current_changed = session.current != current;
-            session.token = token;
-            session.current = current;
-            (query_changed, current_changed, session.status)
-        };
-        if !query_changed && !current_changed {
-            return None;
-        }
-        match status {
-            FileReferenceStatus::Loading => None,
-            FileReferenceStatus::Failed => self.start_scan(root),
-            FileReferenceStatus::Filtering | FileReferenceStatus::Ready => self.start_filter(),
+        let transition = self.session.as_mut().unwrap().advance(token, current);
+        match transition {
+            ReferenceTransition::Unchanged | ReferenceTransition::AwaitScan => None,
+            ReferenceTransition::Scan => self.start_scan(root),
+            ReferenceTransition::Filter => self.start_filter(),
         }
     }
 
     pub fn view(&self) -> Option<FileReferenceView<'_>> {
-        self.session.as_ref().map(|session| FileReferenceView {
-            entries: session.results.items(),
-            selected: session.results.selected(),
-            status: session.status,
+        self.session.as_ref().map(|session| {
+            let (status, results) = match &session.search {
+                ReferenceSearch::Loading => (FileReferenceStatus::Loading, None),
+                ReferenceSearch::Filtering => (FileReferenceStatus::Filtering, None),
+                ReferenceSearch::Ready(results) => (FileReferenceStatus::Ready, Some(results)),
+                ReferenceSearch::Failed => (FileReferenceStatus::Failed, None),
+            };
+            FileReferenceView {
+                entries: results.map_or(&[], |results| results.items()),
+                selected: results.and_then(|results| results.selected()),
+                status,
+            }
         })
     }
 
@@ -209,24 +227,28 @@ impl FileReferenceState {
     }
 
     pub fn select_next(&mut self) {
-        if let Some(session) = self.session.as_mut() {
-            session.results.select_next();
+        if let Some(session) = self.session.as_mut()
+            && let ReferenceSearch::Ready(results) = &mut session.search
+        {
+            results.select_next();
         }
     }
 
     pub fn select_previous(&mut self) {
-        if let Some(session) = self.session.as_mut() {
-            session.results.select_previous();
+        if let Some(session) = self.session.as_mut()
+            && let ReferenceSearch::Ready(results) = &mut session.search
+        {
+            results.select_previous();
         }
     }
 
     pub fn acceptance(&self, input: &TextInput) -> Option<FileReferenceAcceptance> {
         let session = self.session.as_ref()?;
-        if session.status != FileReferenceStatus::Ready {
+        let ReferenceSearch::Ready(results) = &session.search else {
             return None;
-        }
+        };
         let token = &session.token;
-        let entry = session.results.selected_item()?;
+        let entry = results.selected_item()?;
         let quoted = token.quoted || requires_quotes(&entry.display);
         let reference = if quoted {
             format!("@\"{}\"", entry.display)
@@ -270,9 +292,7 @@ impl FileReferenceState {
                 self.start_filter()
             }
             Err(_) => {
-                let session = self.session.as_mut().unwrap();
-                session.status = FileReferenceStatus::Failed;
-                session.results = ListState::default();
+                self.session.as_mut().unwrap().search = ReferenceSearch::Failed;
                 None
             }
         }
@@ -283,9 +303,9 @@ impl FileReferenceState {
             return;
         }
         let session = self.session.as_mut().unwrap();
-        session.status = FileReferenceStatus::Ready;
-        session.results = ListState::new(results);
-        session.results.select_current();
+        let mut results = ListState::new(results);
+        results.select_current();
+        session.search = ReferenceSearch::Ready(results);
     }
 
     fn accepts(&self, revision: u64) -> bool {
@@ -295,8 +315,7 @@ impl FileReferenceState {
     fn start_scan(&mut self, root: &Path) -> Option<FileReferenceRequest> {
         self.revision = self.revision.wrapping_add(1);
         let session = self.session.as_mut()?;
-        session.status = FileReferenceStatus::Loading;
-        session.results = ListState::default();
+        session.search = ReferenceSearch::Loading;
         Some(FileReferenceRequest::Scan {
             root: root.to_path_buf(),
             revision: self.revision,
@@ -306,8 +325,7 @@ impl FileReferenceState {
     fn start_filter(&mut self) -> Option<FileReferenceRequest> {
         self.revision = self.revision.wrapping_add(1);
         let session = self.session.as_mut()?;
-        session.status = FileReferenceStatus::Filtering;
-        session.results = ListState::default();
+        session.search = ReferenceSearch::Filtering;
         Some(FileReferenceRequest::Filter {
             files: session.files.clone(),
             query: session.token.query.clone(),
@@ -391,17 +409,18 @@ fn rank_references(
     query: &str,
     current: Option<&FileEntry>,
 ) -> Vec<FileEntry> {
-    let mut results = filter_files(files, query);
-    if let Some(current) = current {
-        if let Some(position) = results.iter().position(|entry| entry.path == current.path) {
-            let current = results.remove(position);
-            results.insert(0, current);
-        } else if !filter_files(std::slice::from_ref(current), query).is_empty() {
-            results.insert(0, current.clone());
-        }
-    }
-    results.truncate(MAX_FILE_REFERENCES);
-    results
+    let mut ranked = filter_files(files, query);
+    let missing_current = current
+        .filter(|current| {
+            !ranked.iter().any(|entry| entry.path == current.path)
+                && !filter_files(std::slice::from_ref(current), query).is_empty()
+        })
+        .cloned();
+    ranked.extend(missing_current);
+
+    // Stable sorting preserves fuzzy rank within the non-current partition.
+    ranked.sort_by_key(|entry| Reverse(current.is_some_and(|current| current.path == entry.path)));
+    ranked.into_iter().take(MAX_FILE_REFERENCES).collect()
 }
 
 #[cfg(test)]
@@ -474,6 +493,17 @@ mod tests {
         let quoted = ReferenceToken::at_cursor(&TextInput::new("read @\"my file")).unwrap();
         assert_eq!(quoted.query, "my file");
         assert!(quoted.quoted);
+        let quoted_at = ReferenceToken::at_cursor(&TextInput::new("@\"foo @bar")).unwrap();
+        assert_eq!(quoted_at.query, "foo @bar");
+        assert!(quoted_at.quoted);
+        assert_eq!(
+            ReferenceToken::at_cursor(&TextInput::new("@one @two")).map(|token| token.query),
+            Some("two".to_string())
+        );
+        assert_eq!(
+            ReferenceToken::at_cursor(&TextInput::new("@\"one\" @two")).map(|token| token.query),
+            Some("two".to_string())
+        );
         assert!(requires_quotes("a—b.txt"));
         assert!(requires_quotes("a“b.txt"));
         assert!(!requires_quotes("Ａ々🙂.rs"));
@@ -484,8 +514,13 @@ mod tests {
         let current = entry("src/main.rs");
         let files = vec![entry("alpha.rs"), entry("main.rs"), current.clone()];
         let ranked = rank_references(&files, "", Some(&current));
-        assert_eq!(ranked[0], current);
-        assert_eq!(ranked.len(), 3);
+        assert_eq!(
+            ranked
+                .iter()
+                .map(|entry| entry.display.as_str())
+                .collect::<Vec<_>>(),
+            ["src/main.rs", "alpha.rs", "main.rs"]
+        );
 
         let unsaved = entry("unsaved.rs");
         let ranked = rank_references(&files, "unsaved", Some(&unsaved));
