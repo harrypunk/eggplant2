@@ -589,6 +589,7 @@ mod tests {
         assert!(
             model
                 .agent
+                .runtime()
                 .run_context(model.agent.session().run().unwrap().id)
                 .is_none()
         );

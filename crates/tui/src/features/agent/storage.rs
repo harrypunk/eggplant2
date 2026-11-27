@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use eggplant_agent::{CancellationToken, MessageRole, RunId, SessionId};
 use eggplant_agent_storage::{
@@ -11,9 +11,16 @@ use crate::{
     manager::effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
 };
 
+use super::AgentRuntime;
+
 pub fn persist_finalized(model: &mut Model) -> Option<Effect> {
-    let store = model.agent.session_store()?;
-    let run = finalized_run(model, chrono::Utc::now().timestamp_millis())?;
+    let store = model.agent.runtime().session_store()?;
+    let workspace = model.workspace.as_ref().map(|workspace| workspace.root());
+    let run = finalized_run(
+        model.agent.runtime(),
+        workspace,
+        chrono::Utc::now().timestamp_millis(),
+    )?;
     Some(Effect::feature(StorageEffect {
         store,
         session_id: run.session.id.clone(),
@@ -22,19 +29,22 @@ pub fn persist_finalized(model: &mut Model) -> Option<Effect> {
     }))
 }
 
-fn finalized_run(model: &Model, now: i64) -> Option<FinalizedRun> {
-    let (run_id, status) = model
-        .agent
+fn finalized_run(
+    runtime: &AgentRuntime,
+    workspace: Option<&Path>,
+    now: i64,
+) -> Option<FinalizedRun> {
+    let (run_id, status) = runtime
         .session()
         .run()
         .map(|run| (run.id, run.status.clone()))?;
     if status.is_running() {
         return None;
     }
-    let started = model.agent.run_started_at(run_id)?;
-    let created = model.agent.session_created_at()?;
-    let session_id = model.agent.session().id().clone();
-    let editor_context = model.agent.run_context(run_id).map(|context| {
+    let started = runtime.run_started_at(run_id)?;
+    let created = runtime.session_created_at()?;
+    let session_id = runtime.session().id().clone();
+    let editor_context = runtime.run_context(run_id).map(|context| {
         serde_json::json!({
             "buffer_id": context.buffer.as_raw(),
             "path": context.path,
@@ -43,8 +53,7 @@ fn finalized_run(model: &Model, now: i64) -> Option<FinalizedRun> {
         })
         .to_string()
     });
-    let messages = model
-        .agent
+    let messages = runtime
         .session()
         .messages()
         .iter()
@@ -62,15 +71,13 @@ fn finalized_run(model: &Model, now: i64) -> Option<FinalizedRun> {
             },
         })
         .collect::<Vec<_>>();
-    let title = model
-        .agent
+    let title = runtime
         .session()
         .messages()
         .iter()
         .find(|message| message.role == MessageRole::User)
         .map(|message| message.text.chars().take(160).collect::<String>());
-    let tool_calls = model
-        .agent
+    let tool_calls = runtime
         .session()
         .tool_events()
         .iter()
@@ -93,10 +100,7 @@ fn finalized_run(model: &Model, now: i64) -> Option<FinalizedRun> {
             id: session_id.clone(),
             created_at: created,
             updated_at: now,
-            workspace: model
-                .workspace
-                .as_ref()
-                .map(|workspace| workspace.root().to_string_lossy().into_owned()),
+            workspace: workspace.map(|root| root.to_string_lossy().into_owned()),
             title,
         },
         run: RunRecord {
@@ -105,8 +109,8 @@ fn finalized_run(model: &Model, now: i64) -> Option<FinalizedRun> {
             status,
             created_at: started,
             completed_at: Some(now),
-            provider: model.agent.provider_name().to_string(),
-            model: model.agent.model().map(str::to_string),
+            provider: runtime.provider_name().to_string(),
+            model: runtime.model().map(str::to_string),
             editor_context,
         },
         messages,
@@ -168,6 +172,7 @@ impl Completion for StorageCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
         model
             .agent
+            .runtime_mut()
             .complete_storage(
                 &self.session_id,
                 self.run_id,
@@ -189,21 +194,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn finalized_record_uses_recorded_timestamps_without_mutating_model() {
-        let mut model = Model::default();
-        model.agent.set_prompt("question");
-        let run = model.agent.begin_prompt().unwrap();
-        model.agent.session_mut().complete(run);
-        let created = model.agent.session_created_at();
-        let started = model.agent.run_started_at(run);
+    fn finalized_record_uses_runtime_timestamps_without_ui_state() {
+        let mut runtime = AgentRuntime::default();
+        let run = runtime.begin("question".to_string(), None, 10).unwrap();
+        runtime.session_mut().complete(run);
+        let created = runtime.session_created_at();
+        let started = runtime.run_started_at(run);
 
-        let record = finalized_run(&model, 123).unwrap();
+        let record = finalized_run(&runtime, None, 123).unwrap();
 
         assert_eq!(record.session.created_at, created.unwrap());
         assert_eq!(record.run.created_at, started.unwrap());
         assert_eq!(record.run.completed_at, Some(123));
-        assert_eq!(model.agent.session_created_at(), created);
-        assert_eq!(model.agent.run_started_at(run), started);
+        assert_eq!(runtime.session_created_at(), created);
+        assert_eq!(runtime.run_started_at(run), started);
     }
 
     #[test]
@@ -215,9 +219,11 @@ mod tests {
             .session_mut()
             .begin("first".to_string())
             .unwrap();
-        model
-            .agent
-            .complete_storage(&session_id, first, Err("first failure".to_string()));
+        model.agent.runtime_mut().complete_storage(
+            &session_id,
+            first,
+            Err("first failure".to_string()),
+        );
         model.agent.session_mut().complete(first);
         let second = model
             .agent

@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use eggplant_agent::{
-    AgentContinuation, AgentProvider, AgentSession, CancellationToken, RunId, SessionId,
-};
+use eggplant_agent::{AgentContinuation, AgentProvider, AgentSession, CancellationToken, RunId};
 use eggplant_agent_storage::SessionStore;
 
 use super::{
@@ -244,33 +242,8 @@ impl AgentState {
         self.runtime.set_session_store(store);
     }
 
-    pub(crate) fn session_store(&self) -> Option<Arc<dyn SessionStore>> {
-        self.runtime.session_store()
-    }
-
     pub(crate) fn storage_error(&self) -> Option<&str> {
         self.runtime.storage_error()
-    }
-
-    pub(crate) fn session_created_at(&self) -> Option<i64> {
-        self.runtime.session_created_at()
-    }
-
-    pub(crate) fn run_started_at(&self, run_id: RunId) -> Option<i64> {
-        self.runtime.run_started_at(run_id)
-    }
-
-    pub(crate) fn run_context(&self, run_id: RunId) -> Option<&EditorContext> {
-        self.runtime.run_context(run_id)
-    }
-
-    pub(crate) fn complete_storage(
-        &mut self,
-        session_id: &SessionId,
-        run_id: RunId,
-        result: Result<(), String>,
-    ) -> Option<String> {
-        self.runtime.complete_storage(session_id, run_id, result)
     }
 
     pub fn begin_cancellation(&mut self) -> CancellationToken {
