@@ -4,21 +4,18 @@ use editor::{CursorMovement, InsertPosition, LineBoundary, OpenLineDirection, Wo
 
 use crate::{
     data_object::{Context, Model},
-    manager::{effect::Effect, keymap_contribution::ContextKeymap},
+    manager::{
+        effect::Effect,
+        keymap_contribution::{ContextKeymap, KeymapCapability},
+    },
 };
 
 pub const KEYMAPS: &[ContextKeymap] = &[
-    ContextKeymap::new("editor_input", Context::EditorInput).with_commands(&[
-        ("exit_insert_mode", "esc"),
-        ("backspace", "backspace"),
-        ("insert_newline", "enter"),
-        ("move_left", "left"),
-        ("move_right", "right"),
-        ("move_up", "up"),
-        ("move_down", "down"),
-    ]),
+    ContextKeymap::new("editor_input", Context::EditorInput)
+        .with_capabilities(&[KeymapCapability::InsertEditing]),
     ContextKeymap::new("visual", Context::EditorVisual)
-        .with_commands(&[("exit_visual_mode", "esc")]),
+        .with_commands(&[("exit_visual_mode", "esc")])
+        .with_capabilities(&[KeymapCapability::Motions]),
 ];
 
 pub(crate) use self::target::EditingTarget;

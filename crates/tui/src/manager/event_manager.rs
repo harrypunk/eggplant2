@@ -234,6 +234,14 @@ mod tests {
             ));
         }
 
+        for character in ['j', 'k'] {
+            let event = Event::Key(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE));
+            assert!(matches!(
+                manager.translate(event, &picker),
+                Some(Message::TextInput(TextInputEvent::Insert(actual))) if actual == character
+            ));
+        }
+
         let prefix_input = model_with_buffer(Context::BufferJump);
         for character in ['a', 'e', 'u'] {
             let event = Event::Key(KeyEvent::new(
@@ -554,16 +562,16 @@ mod tests {
             manager.translate(event, &model),
             Some(Message::TextInput(TextInputEvent::Insert('x')))
         ));
-        for (key, command) in [
-            (KeyCode::Down, "vcs_merge_next"),
-            (KeyCode::Up, "vcs_merge_previous"),
-            (KeyCode::Enter, "vcs_merge_submit"),
-            (KeyCode::Esc, "vcs_merge_cancel"),
+        for (key, action) in [
+            (KeyCode::Down, GeneralAction::Next),
+            (KeyCode::Up, GeneralAction::Previous),
+            (KeyCode::Enter, GeneralAction::Activate),
+            (KeyCode::Esc, GeneralAction::Back),
         ] {
             let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
             assert!(matches!(
                 manager.translate(event, &model),
-                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+                Some(Message::GeneralAction(actual)) if actual == action
             ));
         }
         let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
@@ -665,20 +673,31 @@ mod tests {
         let model = crate::startup::initial_model(None).unwrap();
         assert!(model.context_stack.is_empty());
 
-        for (key, command) in [
-            (KeyCode::Up, "welcome_previous"),
-            (KeyCode::Down, "welcome_next"),
-            (KeyCode::Char('p'), "welcome_previous"),
-            (KeyCode::Char('n'), "welcome_next"),
-            (KeyCode::Enter, "welcome_activate"),
-            (KeyCode::Char('h'), "focus_left"),
-            (KeyCode::Char('l'), "focus_right"),
+        for (key, modifiers, action) in [
+            (KeyCode::Up, KeyModifiers::NONE, GeneralAction::Previous),
+            (KeyCode::Down, KeyModifiers::NONE, GeneralAction::Next),
+            (
+                KeyCode::Char('p'),
+                KeyModifiers::CONTROL,
+                GeneralAction::Previous,
+            ),
+            (
+                KeyCode::Char('n'),
+                KeyModifiers::CONTROL,
+                GeneralAction::Next,
+            ),
         ] {
-            let modifiers = if matches!(key, KeyCode::Char('h' | 'l' | 'n' | 'p')) {
-                KeyModifiers::CONTROL
-            } else {
-                KeyModifiers::NONE
-            };
+            let event = Event::Key(KeyEvent::new(key, modifiers));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::GeneralAction(actual)) if actual == action
+            ));
+        }
+        for (key, modifiers, command) in [
+            (KeyCode::Enter, KeyModifiers::NONE, "welcome_activate"),
+            (KeyCode::Char('h'), KeyModifiers::CONTROL, "focus_left"),
+            (KeyCode::Char('l'), KeyModifiers::CONTROL, "focus_right"),
+        ] {
             let event = Event::Key(KeyEvent::new(key, modifiers));
             assert!(matches!(
                 manager.translate(event, &model),
@@ -913,16 +932,16 @@ mod tests {
 
         assert_eq!(model.context_stack.pop(), Some(Context::VcsResetMenu));
         assert!(model.modal.open(Context::VcsReset));
-        for (key, command) in [
-            (KeyCode::Down, "vcs_reset_next"),
-            (KeyCode::Up, "vcs_reset_previous"),
-            (KeyCode::Enter, "vcs_reset_submit"),
-            (KeyCode::Esc, "vcs_reset_cancel"),
+        for (key, action) in [
+            (KeyCode::Down, GeneralAction::Next),
+            (KeyCode::Up, GeneralAction::Previous),
+            (KeyCode::Enter, GeneralAction::Activate),
+            (KeyCode::Esc, GeneralAction::Back),
         ] {
             let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
             assert!(matches!(
                 manager.translate(event, &model),
-                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+                Some(Message::GeneralAction(actual)) if actual == action
             ));
         }
         let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
@@ -938,20 +957,19 @@ mod tests {
     }
 
     #[test]
-    fn vcs_selectors_share_ctrl_navigation_aliases() {
+    fn vcs_selectors_compose_list_navigation() {
         let manager = event_manager();
-        for (context, next, previous) in [
-            (Context::VcsBranch, "vcs_branch_next", "vcs_branch_previous"),
-            (Context::VcsMerge, "vcs_merge_next", "vcs_merge_previous"),
-            (Context::VcsReset, "vcs_reset_next", "vcs_reset_previous"),
-        ] {
+        for context in [Context::VcsBranch, Context::VcsMerge, Context::VcsReset] {
             let mut model = Model::default();
             assert!(model.modal.open(context));
-            for (key, command) in [(KeyCode::Char('n'), next), (KeyCode::Char('p'), previous)] {
+            for (key, action) in [
+                (KeyCode::Char('n'), GeneralAction::Next),
+                (KeyCode::Char('p'), GeneralAction::Previous),
+            ] {
                 let event = Event::Key(KeyEvent::new(key, KeyModifiers::CONTROL));
                 assert!(matches!(
                     manager.translate(event, &model),
-                    Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+                    Some(Message::GeneralAction(actual)) if actual == action
                 ));
             }
         }
@@ -981,16 +999,16 @@ mod tests {
             manager.translate(event, &model),
             Some(Message::TextInput(TextInputEvent::Insert('x')))
         ));
-        for (key, command) in [
-            (KeyCode::Down, "vcs_branch_next"),
-            (KeyCode::Up, "vcs_branch_previous"),
-            (KeyCode::Enter, "vcs_branch_submit"),
-            (KeyCode::Esc, "vcs_branch_cancel"),
+        for (key, action) in [
+            (KeyCode::Down, GeneralAction::Next),
+            (KeyCode::Up, GeneralAction::Previous),
+            (KeyCode::Enter, GeneralAction::Activate),
+            (KeyCode::Esc, GeneralAction::Back),
         ] {
             let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
             assert!(matches!(
                 manager.translate(event, &model),
-                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+                Some(Message::GeneralAction(actual)) if actual == action
             ));
         }
         let event = Event::Key(KeyEvent::new(KeyCode::Backspace, KeyModifiers::NONE));
@@ -1370,16 +1388,32 @@ mod tests {
         let mut model = Model::default();
         assert!(model.modal.open(Context::CodeNavigation));
 
-        for (key, command) in [
-            (KeyCode::Enter, "code_navigation_open"),
-            (KeyCode::Down, "code_navigation_next"),
-            (KeyCode::Up, "code_navigation_previous"),
-            (KeyCode::Esc, "close_code_navigation"),
+        for (key, modifiers, action) in [
+            (KeyCode::Enter, KeyModifiers::NONE, GeneralAction::Activate),
+            (KeyCode::Down, KeyModifiers::NONE, GeneralAction::Next),
+            (KeyCode::Up, KeyModifiers::NONE, GeneralAction::Previous),
+            (KeyCode::Esc, KeyModifiers::NONE, GeneralAction::Back),
+            (KeyCode::Char('j'), KeyModifiers::NONE, GeneralAction::Next),
+            (
+                KeyCode::Char('k'),
+                KeyModifiers::NONE,
+                GeneralAction::Previous,
+            ),
+            (
+                KeyCode::Char('n'),
+                KeyModifiers::CONTROL,
+                GeneralAction::Next,
+            ),
+            (
+                KeyCode::Char('p'),
+                KeyModifiers::CONTROL,
+                GeneralAction::Previous,
+            ),
         ] {
-            let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
+            let event = Event::Key(KeyEvent::new(key, modifiers));
             assert!(matches!(
                 manager.translate(event, &model),
-                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
+                Some(Message::GeneralAction(actual)) if actual == action
             ));
         }
     }

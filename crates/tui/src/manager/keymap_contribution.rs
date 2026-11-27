@@ -6,11 +6,17 @@ pub type CommandBinding = (&'static str, &'static str);
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum KeymapCapability {
     ListNavigation,
+    /// List navigation plus `j`/`k` for contexts without printable text input.
+    VimListNavigation,
     ModalActions,
     /// Permission to open the configured leader menu; the chord is resolved at runtime.
     LeaderMenu,
     /// Shared form focus and clipboard actions.
     FormActions,
+    /// Insert-mode editing commands shared by editor sessions.
+    InsertEditing,
+    /// Vim-style cursor motions shared by normal/visual editing.
+    Motions,
 }
 
 /// A feature-owned keymap declaration using its stable configuration name and typed context.

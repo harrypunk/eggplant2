@@ -12,4 +12,4 @@ use crate::{
 
 /// The persistent editor surface; its direct defaults come from `Config::default()`.
 pub const KEYMAPS: &[ContextKeymap] = &[ContextKeymap::new("normal", Context::AppNormal)
-    .with_capabilities(&[KeymapCapability::LeaderMenu])];
+    .with_capabilities(&[KeymapCapability::LeaderMenu, KeymapCapability::Motions])];

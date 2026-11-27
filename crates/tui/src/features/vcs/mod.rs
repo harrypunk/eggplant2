@@ -6,6 +6,7 @@ use crate::{
     manager::{
         command_registry::Command,
         effect::Effect,
+        general_action::GeneralActionSubscription,
         keymap_contribution::{ContextKeymap, KeymapCapability},
     },
 };
@@ -17,44 +18,26 @@ pub const KEYMAPS: &[ContextKeymap] = &[
         ("open_vcs_commit_detail", "enter"),
         ("close_vcs_history", "esc"),
     ]),
-    ContextKeymap::new("vcs_commit", Context::VcsCommit),
-    ContextKeymap::new("vcs_commit_input", Context::VcsCommitInput).with_commands(&[
-        ("exit_insert_mode", "esc"),
-        ("backspace", "backspace"),
-        ("insert_newline", "enter"),
-        ("move_left", "left"),
-        ("move_right", "right"),
-        ("move_up", "up"),
-        ("move_down", "down"),
+    ContextKeymap::new("vcs_commit", Context::VcsCommit)
+        .with_capabilities(&[KeymapCapability::Motions]),
+    ContextKeymap::new("vcs_commit_input", Context::VcsCommitInput)
+        .with_capabilities(&[KeymapCapability::InsertEditing]),
+    ContextKeymap::new("vcs_merge", Context::VcsMerge).with_capabilities(&[
+        KeymapCapability::ListNavigation,
+        KeymapCapability::ModalActions,
     ]),
-    ContextKeymap::new("vcs_merge", Context::VcsMerge)
-        .with_commands(&[
-            ("vcs_merge_submit", "enter"),
-            ("vcs_merge_next", "down"),
-            ("vcs_merge_previous", "up"),
-            ("vcs_merge_cancel", "esc"),
-        ])
-        .with_capabilities(&[KeymapCapability::ListNavigation]),
     ContextKeymap::new("vcs_reset_menu", Context::VcsResetMenu)
         .with_commands(&[("vcs_reset_menu_close", "esc")]),
-    ContextKeymap::new("vcs_reset", Context::VcsReset)
-        .with_commands(&[
-            ("vcs_reset_submit", "enter"),
-            ("vcs_reset_next", "down"),
-            ("vcs_reset_previous", "up"),
-            ("vcs_reset_cancel", "esc"),
-        ])
-        .with_capabilities(&[KeymapCapability::ListNavigation]),
+    ContextKeymap::new("vcs_reset", Context::VcsReset).with_capabilities(&[
+        KeymapCapability::ListNavigation,
+        KeymapCapability::ModalActions,
+    ]),
     ContextKeymap::new("vcs_branch_menu", Context::VcsBranchMenu)
         .with_commands(&[("vcs_branch_menu_close", "esc")]),
-    ContextKeymap::new("vcs_branch", Context::VcsBranch)
-        .with_commands(&[
-            ("vcs_branch_submit", "enter"),
-            ("vcs_branch_next", "down"),
-            ("vcs_branch_previous", "up"),
-            ("vcs_branch_cancel", "esc"),
-        ])
-        .with_capabilities(&[KeymapCapability::ListNavigation]),
+    ContextKeymap::new("vcs_branch", Context::VcsBranch).with_capabilities(&[
+        KeymapCapability::ListNavigation,
+        KeymapCapability::ModalActions,
+    ]),
 ];
 
 pub(crate) mod branch;
@@ -287,6 +270,17 @@ pub fn commands() -> Vec<Command> {
     commands.extend(merge::commands());
     commands.extend(reset::commands());
     commands
+}
+
+pub fn general_action_subscriptions() -> Vec<GeneralActionSubscription> {
+    [
+        branch::general_action_subscriptions(),
+        merge::general_action_subscriptions(),
+        reset::general_action_subscriptions(),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
 }
 
 fn history_next(model: &mut Model) -> Option<Effect> {

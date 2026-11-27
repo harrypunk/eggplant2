@@ -1,16 +1,15 @@
 use crate::{
-    data_object::{CommandId, Context, Model},
+    data_object::{CommandId, Context, GeneralAction, Model},
     manager::{
         command_registry::Command,
         effect::Effect,
+        general_action::GeneralActionSubscription,
         keymap_contribution::{ContextKeymap, KeymapCapability},
     },
 };
 
 pub const KEYMAPS: &[ContextKeymap] = &[ContextKeymap::new("welcome", Context::Welcome)
     .with_commands(&[
-        ("welcome_previous", "up"),
-        ("welcome_next", "down"),
         ("welcome_activate", "enter"),
         ("focus_left", "ctrl-h"),
         ("focus_right", "ctrl-l"),
@@ -40,6 +39,21 @@ pub fn commands() -> Vec<Command> {
     ]
     .into_iter()
     .collect()
+}
+
+pub fn general_action_subscriptions() -> Vec<GeneralActionSubscription> {
+    vec![GeneralActionSubscription::new(
+        Context::Welcome,
+        handle_general_action,
+    )]
+}
+
+pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option<Effect> {
+    match action {
+        GeneralAction::Next => next(model),
+        GeneralAction::Previous => previous(model),
+        _ => None,
+    }
 }
 
 fn next(model: &mut Model) -> Option<Effect> {

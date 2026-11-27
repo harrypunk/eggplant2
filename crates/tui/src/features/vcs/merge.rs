@@ -2,10 +2,11 @@ use std::path::{Path, PathBuf};
 
 use crate::{
     component::text_input::{TextInput, TextInputChange, TextInputEvent},
-    data_object::{CommandId, Context, Message, Model, StatusMessage},
+    data_object::{CommandId, Context, GeneralAction, Message, Model, StatusMessage},
     manager::{
         command_registry::Command,
         effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
+        general_action::GeneralActionSubscription,
     },
 };
 
@@ -230,6 +231,23 @@ pub(super) fn commands() -> Vec<Command> {
     ]
     .into_iter()
     .collect()
+}
+
+pub(super) fn general_action_subscriptions() -> Vec<GeneralActionSubscription> {
+    vec![GeneralActionSubscription::new(
+        Context::VcsMerge,
+        handle_general_action,
+    )]
+}
+
+pub(super) fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option<Effect> {
+    match action {
+        GeneralAction::Next => next(model),
+        GeneralAction::Previous => previous(model),
+        GeneralAction::Activate => submit(model),
+        GeneralAction::Back => cancel(model),
+        GeneralAction::FocusNext | GeneralAction::Paste => None,
+    }
 }
 
 fn next(model: &mut Model) -> Option<Effect> {

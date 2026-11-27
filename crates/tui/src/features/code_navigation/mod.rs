@@ -7,9 +7,15 @@ mod component;
 mod work;
 
 pub use component::overlay;
-pub use work::{close_document, commands, synchronize, synchronize_buffer};
+pub use work::{
+    close_document, commands, general_action_subscriptions, handle_general_action, synchronize,
+    synchronize_buffer,
+};
 
-use crate::{data_object::Context, manager::keymap_contribution::ContextKeymap};
+use crate::{
+    data_object::Context,
+    manager::keymap_contribution::{ContextKeymap, KeymapCapability},
+};
 use app::language::{
     DocumentEvent, LanguageError, LanguageServerSpec, LanguageService, NavigationKind,
     NavigationRequest, NavigationRequestId, SourceLocation,
@@ -18,11 +24,9 @@ use editor::{BufferId, DocumentPosition};
 
 pub const KEYMAPS: &[ContextKeymap] =
     &[
-        ContextKeymap::new("code_navigation", Context::CodeNavigation).with_commands(&[
-            ("code_navigation_open", "enter"),
-            ("code_navigation_next", "down"),
-            ("code_navigation_previous", "up"),
-            ("close_code_navigation", "esc"),
+        ContextKeymap::new("code_navigation", Context::CodeNavigation).with_capabilities(&[
+            KeymapCapability::VimListNavigation,
+            KeymapCapability::ModalActions,
         ]),
     ];
 

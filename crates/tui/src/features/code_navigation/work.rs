@@ -10,12 +10,13 @@ use editor::BufferId;
 use super::{NavigationOutcome, PendingSync};
 use crate::{
     capabilities::notification::Notification,
-    data_object::{CommandId, Context, Model, StatusMessage},
+    data_object::{CommandId, Context, GeneralAction, Model, StatusMessage},
     diagnostics::{DiagnosticFailureCompletion, DiagnosticsCompletion},
     document,
     manager::{
         command_registry::Command,
         effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
+        general_action::GeneralActionSubscription,
     },
     notifications::NotificationCompletion,
 };
@@ -48,6 +49,23 @@ pub fn commands() -> Vec<Command> {
     ]
     .into_iter()
     .collect()
+}
+
+pub fn general_action_subscriptions() -> Vec<GeneralActionSubscription> {
+    vec![GeneralActionSubscription::new(
+        Context::CodeNavigation,
+        handle_general_action,
+    )]
+}
+
+pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option<Effect> {
+    match action {
+        GeneralAction::Next => next(model),
+        GeneralAction::Previous => previous(model),
+        GeneralAction::Activate => open_selected(model),
+        GeneralAction::Back => close_command(model),
+        GeneralAction::FocusNext | GeneralAction::Paste => None,
+    }
 }
 
 fn definition(model: &mut Model) -> Option<Effect> {

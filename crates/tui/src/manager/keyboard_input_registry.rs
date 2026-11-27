@@ -1,16 +1,18 @@
 use std::collections::{HashMap, hash_map::Entry};
 
 use color_eyre::eyre::eyre;
-use crossterm::event::KeyCode;
 
 use crate::{
     config::KeymapConfig,
-    data_object::{CommandId, Context, GeneralAction},
+    data_object::{CommandId, Context},
     manager::{
         command_registry::CommandRegistry,
         context::{ContextBindings, KeyChord},
-        form_input::FORM_GENERAL_ACTIONS,
+        editing_keymap::{InsertEditingKeymap, MotionsKeymap},
+        form_input::FormActionsKeymap,
         keymap_contribution::{KeymapCapability, KeymapCatalog},
+        list_navigation::ListNavigationKeymap,
+        modal_input::ModalActionsKeymap,
     },
 };
 
@@ -81,21 +83,17 @@ impl Registry {
     }
 }
 
-const MODAL_GENERAL_ACTIONS: [(KeyCode, GeneralAction); 4] = [
-    (KeyCode::Down, GeneralAction::Next),
-    (KeyCode::Up, GeneralAction::Previous),
-    (KeyCode::Enter, GeneralAction::Activate),
-    (KeyCode::Esc, GeneralAction::Back),
-];
-
 fn apply_capability(bindings: ContextBindings, capability: KeymapCapability) -> ContextBindings {
     match capability {
-        KeymapCapability::ListNavigation => bindings.with_list_navigation(),
-        KeymapCapability::ModalActions => bindings.with_general_actions(
-            MODAL_GENERAL_ACTIONS.map(|(key, action)| (KeyChord::from(key), action)),
-        ),
+        KeymapCapability::ListNavigation => bindings.with_rule(ListNavigationKeymap::new()),
+        KeymapCapability::VimListNavigation => {
+            bindings.with_rule(ListNavigationKeymap::with_vim_keys())
+        }
+        KeymapCapability::ModalActions => bindings.with_rule(ModalActionsKeymap),
         KeymapCapability::LeaderMenu => bindings,
-        KeymapCapability::FormActions => bindings.with_general_actions(FORM_GENERAL_ACTIONS),
+        KeymapCapability::FormActions => bindings.with_rule(FormActionsKeymap),
+        KeymapCapability::InsertEditing => bindings.with_rule(InsertEditingKeymap),
+        KeymapCapability::Motions => bindings.with_rule(MotionsKeymap),
     }
 }
 
@@ -155,6 +153,7 @@ mod tests {
     use super::*;
     use crate::{
         config::{Config, keymap_context},
+        data_object::GeneralAction,
         manager::context::InputAction,
     };
 
@@ -201,7 +200,7 @@ mod tests {
             registry
                 .get_binding(&Context::EditorInput)
                 .unwrap()
-                .resolve(KeyChord::new(KeyCode::Esc, KeyModifiers::NONE)),
+                .resolve_chord(KeyChord::new(KeyCode::Esc, KeyModifiers::NONE)),
             Some(InputAction::Command(CommandId("exit_insert_mode")))
         ));
     }
@@ -263,43 +262,43 @@ mod tests {
 
         let picker = registry.get_binding(&Context::FilePicker).unwrap();
         assert_eq!(
-            picker.resolve(KeyChord::new(KeyCode::Enter, KeyModifiers::NONE)),
+            picker.resolve_chord(KeyChord::new(KeyCode::Enter, KeyModifiers::NONE)),
             Some(InputAction::General(GeneralAction::Activate))
         );
         assert_eq!(
-            picker.resolve(KeyChord::new(KeyCode::Down, KeyModifiers::NONE)),
+            picker.resolve_chord(KeyChord::new(KeyCode::Down, KeyModifiers::NONE)),
             Some(InputAction::General(GeneralAction::Next))
         );
         assert_eq!(
-            picker.resolve(KeyChord::new(KeyCode::Char('x'), KeyModifiers::NONE)),
+            picker.resolve_chord(KeyChord::new(KeyCode::Char('x'), KeyModifiers::NONE)),
             Some(InputAction::Command(CommandId("open_picker_file")))
         );
         assert_eq!(
-            picker.resolve(KeyChord::new(KeyCode::Char('n'), KeyModifiers::NONE)),
+            picker.resolve_chord(KeyChord::new(KeyCode::Char('n'), KeyModifiers::NONE)),
             Some(InputAction::Command(CommandId("file_picker_next")))
         );
 
         let selector = registry.get_binding(&Context::ModelSelector).unwrap();
         assert_eq!(
-            selector.resolve(KeyChord::new(KeyCode::Char('x'), KeyModifiers::CONTROL)),
+            selector.resolve_chord(KeyChord::new(KeyCode::Char('x'), KeyModifiers::CONTROL)),
             Some(InputAction::Command(CommandId("agent_interrupt")))
         );
         assert_eq!(
-            selector.resolve(KeyChord::new(KeyCode::Down, KeyModifiers::NONE)),
+            selector.resolve_chord(KeyChord::new(KeyCode::Down, KeyModifiers::NONE)),
             Some(InputAction::General(GeneralAction::Next))
         );
         assert_eq!(
-            selector.resolve(KeyChord::new(KeyCode::Enter, KeyModifiers::NONE)),
+            selector.resolve_chord(KeyChord::new(KeyCode::Enter, KeyModifiers::NONE)),
             Some(InputAction::General(GeneralAction::Activate))
         );
 
         let delete = registry.get_binding(&Context::ExplorerDelete).unwrap();
         assert_eq!(
-            delete.resolve(KeyChord::new(KeyCode::Char('y'), KeyModifiers::NONE)),
+            delete.resolve_chord(KeyChord::new(KeyCode::Char('y'), KeyModifiers::NONE)),
             Some(InputAction::Command(CommandId("explorer_delete_confirm")))
         );
         assert_eq!(
-            delete.resolve(KeyChord::new(KeyCode::Char('n'), KeyModifiers::NONE)),
+            delete.resolve_chord(KeyChord::new(KeyCode::Char('n'), KeyModifiers::NONE)),
             None
         );
     }

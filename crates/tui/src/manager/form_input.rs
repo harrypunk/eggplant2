@@ -1,15 +1,24 @@
 use crossterm::event::{KeyCode, KeyModifiers};
 
-use crate::{data_object::GeneralAction, manager::context::KeyChord};
+use crate::{
+    data_object::GeneralAction,
+    manager::{
+        context::{InputAction, KeyChord},
+        keymap_rule::KeymapRule,
+    },
+};
 
-/// Form-level semantic actions composed by `KeymapCapability::FormActions`.
-pub const FORM_GENERAL_ACTIONS: [(KeyChord, GeneralAction); 2] = [
-    (
-        KeyChord::new(KeyCode::Tab, KeyModifiers::NONE),
-        GeneralAction::FocusNext,
-    ),
-    (
-        KeyChord::new(KeyCode::Char('v'), KeyModifiers::CONTROL),
-        GeneralAction::Paste,
-    ),
-];
+/// Form-level focus and clipboard behavior shared through `FormActions`.
+#[derive(Debug, Default)]
+pub struct FormActionsKeymap;
+
+impl KeymapRule for FormActionsKeymap {
+    fn resolve(&self, key: KeyChord) -> Option<InputAction> {
+        let action = match (key.code, key.modifiers) {
+            (KeyCode::Tab, modifiers) if modifiers.is_empty() => GeneralAction::FocusNext,
+            (KeyCode::Char('v'), KeyModifiers::CONTROL) => GeneralAction::Paste,
+            _ => return None,
+        };
+        Some(InputAction::General(action))
+    }
+}

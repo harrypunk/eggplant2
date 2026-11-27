@@ -1,6 +1,7 @@
 pub mod command_registry;
 pub mod context;
 pub mod context_stack;
+pub mod editing_keymap;
 pub mod effect;
 pub mod event_manager;
 pub mod form_input;
@@ -9,7 +10,10 @@ pub mod input_resolver;
 pub mod input_routing;
 pub mod keyboard_input_registry;
 pub mod keymap_contribution;
+pub mod keymap_rule;
+pub mod list_navigation;
 pub mod message_manager;
+pub mod modal_input;
 pub mod mouse_manager;
 pub mod routed_input;
 pub mod text_input_keymap;

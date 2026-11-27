@@ -1,8 +1,9 @@
-use std::{collections::HashMap, str::FromStr};
+use std::{collections::HashMap, str::FromStr, sync::Arc};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
 use crate::data_object::{CommandId, Context, GeneralAction};
+use crate::manager::keymap_rule::KeymapRule;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InputAction {
@@ -157,19 +158,12 @@ fn parse_key_code(value: &str) -> Result<KeyCode, String> {
 
 type KeyActionMap = HashMap<KeyChord, InputAction>;
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub enum NavigationPolicy {
-    #[default]
-    Plain,
-    List,
-}
-
 /// Keybindings associated with one input context.
 #[derive(Debug, Clone)]
 pub struct ContextBindings {
     key_action_map: KeyActionMap,
     pub context: Context,
-    navigation: NavigationPolicy,
+    rules: Vec<Arc<dyn KeymapRule>>,
 }
 
 impl ContextBindings {
@@ -192,24 +186,12 @@ impl ContextBindings {
         Self {
             key_action_map: actions.into_iter().collect(),
             context,
-            navigation: NavigationPolicy::Plain,
+            rules: Vec::new(),
         }
     }
 
-    pub fn with_general_actions(
-        mut self,
-        actions: impl IntoIterator<Item = (KeyChord, GeneralAction)>,
-    ) -> Self {
-        self.key_action_map.extend(
-            actions
-                .into_iter()
-                .map(|(key, action)| (key, InputAction::General(action))),
-        );
-        self
-    }
-
-    pub fn with_list_navigation(mut self) -> Self {
-        self.navigation = NavigationPolicy::List;
+    pub fn with_rule(mut self, rule: impl KeymapRule + 'static) -> Self {
+        self.rules.push(Arc::new(rule));
         self
     }
 
@@ -217,33 +199,17 @@ impl ContextBindings {
         self.key_action_map.get(&key).copied()
     }
 
-    /// Resolve a direct binding before terminal compatibility fallbacks.
+    /// Resolve direct bindings before composed behavior rules and compatibility fallbacks.
     pub fn resolve_chord(&self, key: KeyChord) -> Option<InputAction> {
         self.resolve(key)
+            .or_else(|| self.rules.iter().find_map(|rule| rule.resolve(key)))
             .or_else(|| {
-                (self.navigation == NavigationPolicy::List)
-                    .then_some(key)
-                    .and_then(navigation_alias)
-                    .and_then(|alias| self.resolve(alias))
-            })
-            .or_else(|| {
-                key.shifted_symbol()
-                    .and_then(|shifted| self.resolve(shifted))
+                key.shifted_symbol().and_then(|shifted| {
+                    self.resolve(shifted)
+                        .or_else(|| self.rules.iter().find_map(|rule| rule.resolve(shifted)))
+                })
             })
     }
-}
-
-/// Ctrl-N/P are aliases for whatever Down/Up mean in the active context.
-fn navigation_alias(key: KeyChord) -> Option<KeyChord> {
-    if key.modifiers != KeyModifiers::CONTROL {
-        return None;
-    }
-    let code = match key.code {
-        KeyCode::Char('n') => KeyCode::Down,
-        KeyCode::Char('p') => KeyCode::Up,
-        _ => return None,
-    };
-    Some(KeyChord::from(code))
 }
 
 #[cfg(test)]
@@ -304,7 +270,9 @@ mod tests {
     }
 
     #[test]
-    fn list_alias_requires_an_opt_in_context() {
+    fn list_navigation_is_a_composed_rule_with_direct_precedence() {
+        use crate::manager::list_navigation::ListNavigationKeymap;
+
         let next = CommandId("next");
         let ctrl_n = KeyChord::new(KeyCode::Char('n'), KeyModifiers::CONTROL);
         let plain = ContextBindings::from_bindings(
@@ -313,20 +281,18 @@ mod tests {
         );
         assert_eq!(plain.resolve_chord(ctrl_n), None);
 
-        let list = plain.with_list_navigation();
-        assert_eq!(list.resolve_chord(ctrl_n), Some(InputAction::Command(next)));
-
-        let general = ContextBindings::from_actions(
-            Context::AppNormal,
-            [(
-                KeyChord::from(KeyCode::Down),
-                InputAction::General(GeneralAction::Next),
-            )],
-        )
-        .with_list_navigation();
+        let list = plain.with_rule(ListNavigationKeymap::new());
         assert_eq!(
-            general.resolve_chord(ctrl_n),
+            list.resolve_chord(KeyCode::Down.into()),
+            Some(InputAction::Command(next))
+        );
+        assert_eq!(
+            list.resolve_chord(ctrl_n),
             Some(InputAction::General(GeneralAction::Next))
+        );
+        assert_eq!(
+            list.resolve_chord(KeyChord::new(KeyCode::Char('p'), KeyModifiers::CONTROL)),
+            Some(InputAction::General(GeneralAction::Previous))
         );
     }
 

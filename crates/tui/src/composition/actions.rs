@@ -6,11 +6,14 @@ const PROVIDERS: &[SubscriptionProvider] = &[
     crate::file_picker::general_action_subscriptions,
     crate::theme_picker::general_action_subscriptions,
     crate::buffer_grep::general_action_subscriptions,
+    crate::code_navigation::general_action_subscriptions,
     crate::project_grep::general_action_subscriptions,
     crate::agent::general_action_subscriptions,
     crate::model_selector::general_action_subscriptions,
     crate::provider_login::general_action_subscriptions,
     crate::provider_logout::general_action_subscriptions,
+    crate::vcs::general_action_subscriptions,
+    crate::welcome::general_action_subscriptions,
 ];
 
 /// Assemble feature-owned general-action subscriptions at the composition root.
