@@ -36,7 +36,11 @@ pub const KEYMAPS: &[ContextKeymap] = &[
 ];
 
 pub(crate) use add::{handle_input as handle_add_input, overlay as add_overlay};
-pub use commands::handle_command;
+pub use commands::{
+    cancel_add, cancel_delete, cancel_transfer, close_help, confirm_delete, fold, next, open_add,
+    open_copy, open_delete, open_move, previous, refresh, submit_add, submit_transfer, toggle_help,
+    toggle_ignored_files, unfold,
+};
 pub(crate) use commands::{open_selected, refresh_changed};
 pub(crate) use delete::overlay as delete_overlay;
 pub(crate) use help::overlay as help_overlay;

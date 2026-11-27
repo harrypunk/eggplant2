@@ -361,7 +361,7 @@ mod tests {
         for character in text.chars() {
             editing::insert_char(&mut model, character);
         }
-        editing::handle_command(&mut model, CommandId("exit_insert_mode"));
+        editing::exit_insert_mode(&mut model);
         model
     }
 

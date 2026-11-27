@@ -3,7 +3,7 @@ pub(crate) mod target;
 use editor::{CursorMovement, InsertPosition, LineBoundary, OpenLineDirection, WordMovement};
 
 use crate::{
-    data_object::{CommandId, Context, Model, StatusMessage},
+    data_object::{Context, Model},
     manager::{effect::Effect, keymap_contribution::ContextKeymap},
 };
 
@@ -23,110 +23,173 @@ pub const KEYMAPS: &[ContextKeymap] = &[
 
 pub(crate) use self::target::EditingTarget;
 
-/// Dispatch physical-page-independent editing commands through the active adapter.
-pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    let result = target::with_active(model, |target| handle_command_with(target, id))?;
-    match result {
-        Ok(effect) => effect,
-        Err(id) => {
-            model.status = Some(StatusMessage::error(format!(
-                "unknown editing command `{}`",
-                id.as_str()
-            )));
-            None
-        }
-    }
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum EditPolicy {
+    Navigation,
+    Mutation,
 }
 
-fn handle_command_with(
-    target: &mut dyn EditingTarget,
-    id: CommandId,
-) -> Result<Option<Effect>, CommandId> {
-    if !target.is_editing_enabled() {
-        return Ok(None);
-    }
-    if mutates_text(id) && !target.can_mutate() {
-        return Ok(None);
-    }
-    let effect = match id.as_str() {
-        "enter_visual_mode" => enter_visual(target),
-        "enter_visual_line_mode" => enter_visual_line(target),
-        "exit_visual_mode" => {
-            target.session().enter_normal_mode();
-            None
+fn with_target(
+    model: &mut Model,
+    policy: EditPolicy,
+    mut operation: impl FnMut(&mut dyn EditingTarget) -> Option<Effect>,
+) -> Option<Effect> {
+    target::with_active(model, |target| {
+        if !target.is_editing_enabled() || (policy == EditPolicy::Mutation && !target.can_mutate())
+        {
+            return None;
         }
-        "enter_insert_mode" => enter_insert_with(target),
-        "insert_after_cursor" => enter_insert_at(target, InsertPosition::AfterCursor),
-        "insert_at_line_end" => enter_insert_at(target, InsertPosition::LineEnd),
-        "insert_at_first_nonblank" => enter_insert_at(target, InsertPosition::FirstNonBlank),
-        "open_line_below" => open_line(target, OpenLineDirection::Below),
-        "open_line_above" => open_line(target, OpenLineDirection::Above),
-        "exit_insert_mode" => {
-            target.session().enter_normal_mode();
-            target.after_edit()
-        }
-        "move_left" => move_cursor(target, CursorMovement::Left),
-        "move_right" => move_cursor(target, CursorMovement::Right),
-        "move_up" => move_cursor(target, CursorMovement::Up),
-        "move_down" => move_cursor(target, CursorMovement::Down),
-        "move_line_start" => move_line_boundary(target, LineBoundary::Start),
-        "move_line_end" => move_line_boundary(target, LineBoundary::End),
-        "move_next_word_start" => move_word(target, WordMovement::NextStart),
-        "move_previous_word_start" => move_word(target, WordMovement::PreviousStart),
-        "move_next_word_end" => move_word(target, WordMovement::NextEnd),
-        "backspace" => {
-            if target
-                .session()
-                .active_editor()
-                .and_then(|mut editor| editor.backspace())
-                .is_ok()
-            {
-                return Ok(target.after_edit());
-            }
-            None
-        }
-        "insert_newline" => insert(target, "\n"),
-        "undo" => {
-            if target
-                .session()
-                .active_editor()
-                .and_then(|mut editor| editor.undo())
-                .unwrap_or(false)
-            {
-                return Ok(target.after_edit());
-            }
-            None
-        }
-        "redo" => {
-            if target
-                .session()
-                .active_editor()
-                .and_then(|mut editor| editor.redo())
-                .unwrap_or(false)
-            {
-                return Ok(target.after_edit());
-            }
-            None
-        }
-        _ => return Err(id),
-    };
-    Ok(effect)
+        operation(target)
+    })?
 }
 
-fn mutates_text(id: CommandId) -> bool {
-    matches!(
-        id.as_str(),
-        "enter_insert_mode"
-            | "insert_after_cursor"
-            | "insert_at_line_end"
-            | "insert_at_first_nonblank"
-            | "open_line_below"
-            | "open_line_above"
-            | "backspace"
-            | "insert_newline"
-            | "undo"
-            | "redo"
-    )
+pub fn enter_visual_mode(model: &mut Model) -> Option<Effect> {
+    with_target(model, EditPolicy::Navigation, enter_visual)
+}
+
+pub fn enter_visual_line_mode(model: &mut Model) -> Option<Effect> {
+    with_target(model, EditPolicy::Navigation, enter_visual_line)
+}
+
+pub fn exit_visual_mode(model: &mut Model) -> Option<Effect> {
+    with_target(model, EditPolicy::Navigation, |target| {
+        target.session().enter_normal_mode();
+        None
+    })
+}
+
+pub fn enter_insert_mode(model: &mut Model) -> Option<Effect> {
+    with_target(model, EditPolicy::Mutation, enter_insert_with)
+}
+
+pub fn insert_after_cursor(model: &mut Model) -> Option<Effect> {
+    insert_at(model, InsertPosition::AfterCursor)
+}
+
+pub fn insert_at_line_end(model: &mut Model) -> Option<Effect> {
+    insert_at(model, InsertPosition::LineEnd)
+}
+
+pub fn insert_at_first_nonblank(model: &mut Model) -> Option<Effect> {
+    insert_at(model, InsertPosition::FirstNonBlank)
+}
+
+fn insert_at(model: &mut Model, position: InsertPosition) -> Option<Effect> {
+    with_target(model, EditPolicy::Mutation, |target| {
+        enter_insert_at(target, position)
+    })
+}
+
+pub fn open_line_below(model: &mut Model) -> Option<Effect> {
+    open_line_in(model, OpenLineDirection::Below)
+}
+
+pub fn open_line_above(model: &mut Model) -> Option<Effect> {
+    open_line_in(model, OpenLineDirection::Above)
+}
+
+fn open_line_in(model: &mut Model, direction: OpenLineDirection) -> Option<Effect> {
+    with_target(model, EditPolicy::Mutation, |target| {
+        open_line(target, direction)
+    })
+}
+
+pub fn exit_insert_mode(model: &mut Model) -> Option<Effect> {
+    with_target(model, EditPolicy::Navigation, |target| {
+        target.session().enter_normal_mode();
+        target.after_edit()
+    })
+}
+
+pub fn move_left(model: &mut Model) -> Option<Effect> {
+    move_in(model, CursorMovement::Left)
+}
+
+pub fn move_right(model: &mut Model) -> Option<Effect> {
+    move_in(model, CursorMovement::Right)
+}
+
+pub fn move_up(model: &mut Model) -> Option<Effect> {
+    move_in(model, CursorMovement::Up)
+}
+
+pub fn move_down(model: &mut Model) -> Option<Effect> {
+    move_in(model, CursorMovement::Down)
+}
+
+fn move_in(model: &mut Model, movement: CursorMovement) -> Option<Effect> {
+    with_target(model, EditPolicy::Navigation, |target| {
+        move_cursor(target, movement)
+    })
+}
+
+pub fn move_line_start(model: &mut Model) -> Option<Effect> {
+    move_to_boundary(model, LineBoundary::Start)
+}
+
+pub fn move_line_end(model: &mut Model) -> Option<Effect> {
+    move_to_boundary(model, LineBoundary::End)
+}
+
+fn move_to_boundary(model: &mut Model, boundary: LineBoundary) -> Option<Effect> {
+    with_target(model, EditPolicy::Navigation, |target| {
+        move_line_boundary(target, boundary)
+    })
+}
+
+pub fn move_next_word_start(model: &mut Model) -> Option<Effect> {
+    move_by_word(model, WordMovement::NextStart)
+}
+
+pub fn move_previous_word_start(model: &mut Model) -> Option<Effect> {
+    move_by_word(model, WordMovement::PreviousStart)
+}
+
+pub fn move_next_word_end(model: &mut Model) -> Option<Effect> {
+    move_by_word(model, WordMovement::NextEnd)
+}
+
+fn move_by_word(model: &mut Model, movement: WordMovement) -> Option<Effect> {
+    with_target(model, EditPolicy::Navigation, |target| {
+        move_word(target, movement)
+    })
+}
+
+pub fn backspace(model: &mut Model) -> Option<Effect> {
+    with_target(model, EditPolicy::Mutation, |target| {
+        target
+            .session()
+            .active_editor()
+            .and_then(|mut editor| editor.backspace())
+            .ok()?;
+        target.after_edit()
+    })
+}
+
+pub fn insert_newline(model: &mut Model) -> Option<Effect> {
+    with_target(model, EditPolicy::Mutation, |target| insert(target, "\n"))
+}
+
+pub fn undo(model: &mut Model) -> Option<Effect> {
+    with_target(model, EditPolicy::Mutation, |target| {
+        let changed = target
+            .session()
+            .active_editor()
+            .and_then(|mut editor| editor.undo())
+            .unwrap_or(false);
+        if changed { target.after_edit() } else { None }
+    })
+}
+
+pub fn redo(model: &mut Model) -> Option<Effect> {
+    with_target(model, EditPolicy::Mutation, |target| {
+        let changed = target
+            .session()
+            .active_editor()
+            .and_then(|mut editor| editor.redo())
+            .unwrap_or(false);
+        if changed { target.after_edit() } else { None }
+    })
 }
 
 pub(crate) fn insert_char(model: &mut Model, character: char) -> Option<Effect> {
@@ -230,7 +293,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        data_object::{AppPage, Context, Message},
+        data_object::{AppPage, CommandId, Context, Message},
         manager::message_manager::MessageManager,
         test_utils::input_context,
         test_utils::{create_buffer, open_file},
@@ -272,7 +335,7 @@ mod tests {
             model.active_page = page;
             let revision = model.editor.active_revision();
 
-            assert!(handle_command(&mut model, CommandId("enter_insert_mode")).is_none());
+            assert!(enter_insert_mode(&mut model).is_none());
             assert!(insert_char(&mut model, 'X').is_none());
             assert_eq!(model.editor.active_text_snapshot().unwrap().text, "abc");
             assert_eq!(model.editor.active_revision(), revision);
@@ -297,34 +360,34 @@ mod tests {
             &model
         ));
         for command in [
-            "enter_insert_mode",
-            "insert_after_cursor",
-            "insert_at_line_end",
-            "insert_at_first_nonblank",
-            "open_line_below",
-            "open_line_above",
-            "backspace",
-            "insert_newline",
-            "undo",
-            "redo",
+            enter_insert_mode as fn(&mut Model) -> Option<Effect>,
+            insert_after_cursor,
+            insert_at_line_end,
+            insert_at_first_nonblank,
+            open_line_below,
+            open_line_above,
+            backspace,
+            insert_newline,
+            undo,
+            redo,
         ] {
-            handle_command(&mut model, CommandId(command));
+            command(&mut model);
         }
         insert_char(&mut model, 'X');
         assert_eq!(model.editor.active_revision(), revision);
         assert_eq!(model.editor.active_text_snapshot().unwrap().text, "outside");
         assert_eq!(model.editor.mode(), EditMode::Normal);
 
-        handle_command(&mut model, CommandId("move_right"));
-        handle_command(&mut model, CommandId("enter_visual_mode"));
+        move_right(&mut model);
+        enter_visual_mode(&mut model);
         assert_eq!(model.editor.mode(), EditMode::Visual);
-        handle_command(&mut model, CommandId("exit_visual_mode"));
+        exit_visual_mode(&mut model);
 
         open_file(&mut model, &inside);
         assert!(!crate::capabilities::readonly::active_buffer_is_read_only(
             &model
         ));
-        handle_command(&mut model, CommandId("enter_insert_mode"));
+        enter_insert_mode(&mut model);
         insert_char(&mut model, 'X');
         assert_eq!(model.editor.active_text_snapshot().unwrap().text, "Xinside");
     }
@@ -336,11 +399,7 @@ mod tests {
             .session
             .insert_document(DocumentFactory::new().create(""));
 
-        assert!(
-            handle_command_with(&mut target, CommandId("enter_insert_mode"))
-                .unwrap()
-                .is_none()
-        );
+        assert!(enter_insert_with(&mut target).is_none());
         assert!(insert_char_with(&mut target, 'b').is_none());
 
         assert_eq!(target.session.active_text_snapshot().unwrap().text, "b");

@@ -362,7 +362,7 @@ mod tests {
         for character in text.chars() {
             crate::editing::insert_char(&mut model, character);
         }
-        crate::editing::handle_command(&mut model, CommandId("exit_insert_mode"));
+        crate::editing::exit_insert_mode(&mut model);
         model
     }
 

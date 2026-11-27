@@ -14,7 +14,10 @@ pub const KEYMAPS: &[ContextKeymap] = &[ContextKeymap::new("file_picker", Contex
     ])];
 
 pub(crate) use commands::{close, handle_input};
-pub use commands::{general_action_subscriptions, handle_command, handle_general_action};
+pub use commands::{
+    close_file_picker, general_action_subscriptions, handle_general_action, next, open,
+    open_selected, previous,
+};
 pub use state::{FileCollectionState, FileEntry, FilePickerState, PreviewState, ScanDepth};
 pub use work::FilePickerRequest;
 

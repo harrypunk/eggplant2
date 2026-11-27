@@ -2,7 +2,7 @@ use editor::{EditMode, SaveCompletion};
 
 use crate::{
     buffer,
-    data_object::{CommandId, DeferredAction, Model, RunningState, StatusMessage},
+    data_object::{DeferredAction, Model, RunningState, StatusMessage},
     document,
     manager::effect::{Completion, Effect},
 };
@@ -31,28 +31,39 @@ fn lifecycle_block(model: &Model) -> Option<LifecycleBlock> {
         .then_some(LifecycleBlock::CommitInProgress)
 }
 
-/// Application lifecycle commands and save-completion coordination.
-pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
+pub fn quit(model: &mut Model) -> Option<Effect> {
+    with_lifecycle(model, request_quit)
+}
+
+pub fn close_buffer(model: &mut Model) -> Option<Effect> {
+    with_lifecycle(model, request_close)
+}
+
+pub fn close_other_buffers(model: &mut Model) -> Option<Effect> {
+    with_lifecycle(model, |model| {
+        request_close_group(model, CloseGroup::Others)
+    })
+}
+
+pub fn close_buffers_right(model: &mut Model) -> Option<Effect> {
+    with_lifecycle(model, |model| request_close_group(model, CloseGroup::Right))
+}
+
+pub fn close_all_buffers(model: &mut Model) -> Option<Effect> {
+    with_lifecycle(model, |model| request_close_group(model, CloseGroup::All))
+}
+
+fn with_lifecycle(
+    model: &mut Model,
+    operation: impl FnOnce(&mut Model) -> Option<Effect>,
+) -> Option<Effect> {
     if let Some(block) = lifecycle_block(model) {
         return Some(crate::notifications::report_rejection(
             model,
             block.message(),
         ));
     }
-    match id.as_str() {
-        "quit" => request_quit(model),
-        "close_buffer" => request_close(model),
-        "close_other_buffers" => request_close_group(model, CloseGroup::Others),
-        "close_buffers_right" => request_close_group(model, CloseGroup::Right),
-        "close_all_buffers" => request_close_group(model, CloseGroup::All),
-        _ => {
-            model.status = Some(StatusMessage::error(format!(
-                "unknown lifecycle command `{}`",
-                id.as_str()
-            )));
-            None
-        }
-    }
+    operation(model)
 }
 
 enum SaveOutcome {
@@ -320,7 +331,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        data_object::{Message, StatusKind},
+        data_object::{CommandId, Message, StatusKind},
         manager::message_manager::MessageManager,
         test_utils::{create_buffer, open_file},
     };

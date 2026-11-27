@@ -1,6 +1,6 @@
 use crate::{
     component::text_input::TextInputEvent,
-    data_object::{CommandId, Context, FocusTarget, GeneralAction, Model, StatusMessage},
+    data_object::{Context, FocusTarget, GeneralAction, Model, StatusMessage},
     document,
     manager::{effect::Effect, general_action::GeneralActionSubscription},
 };
@@ -26,7 +26,7 @@ pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option
     }
 }
 
-fn open_selected(model: &mut Model) -> Option<Effect> {
+pub fn open_selected(model: &mut Model) -> Option<Effect> {
     let path = model.file_picker.selected_entry()?.path.clone();
     let documents = model.file_picker.documents().clone();
     let session = model.file_picker.session_revision();
@@ -39,25 +39,17 @@ fn open_selected(model: &mut Model) -> Option<Effect> {
     )
 }
 
-/// File-picker command adapter.
-pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    match id.as_str() {
-        "open_file_picker" => open(model),
-        "close_file_picker" => {
-            close(model);
-            None
-        }
-        "open_picker_file" => open_selected(model),
-        "file_picker_next" => model.file_picker.select_next().map(Effect::feature),
-        "file_picker_previous" => model.file_picker.select_previous().map(Effect::feature),
-        _ => {
-            model.status = Some(StatusMessage::error(format!(
-                "unknown file-picker command `{}`",
-                id.as_str()
-            )));
-            None
-        }
-    }
+pub fn close_file_picker(model: &mut Model) -> Option<Effect> {
+    close(model);
+    None
+}
+
+pub fn next(model: &mut Model) -> Option<Effect> {
+    model.file_picker.select_next().map(Effect::feature)
+}
+
+pub fn previous(model: &mut Model) -> Option<Effect> {
+    model.file_picker.select_previous().map(Effect::feature)
 }
 
 pub(crate) fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {
@@ -79,7 +71,7 @@ pub(crate) fn close(model: &mut Model) {
     model.current_focus = return_focus;
 }
 
-fn open(model: &mut Model) -> Option<Effect> {
+pub fn open(model: &mut Model) -> Option<Effect> {
     let Some(workspace) = &model.workspace else {
         model.status = Some(StatusMessage::info("No folder open"));
         return None;
@@ -100,7 +92,7 @@ fn open(model: &mut Model) -> Option<Effect> {
 mod tests {
     use super::*;
     use crate::{
-        data_object::{Message, Visibility},
+        data_object::{CommandId, Message, Visibility},
         explorer::ExpansionState,
         file_picker::PreviewState,
         manager::message_manager::MessageManager,

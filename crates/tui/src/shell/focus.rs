@@ -1,7 +1,7 @@
 use ratatui::layout::Rect;
 
 use crate::{
-    data_object::{CommandId, FocusDirection, FocusTarget, Model, StatusMessage, Visibility},
+    data_object::{FocusDirection, FocusTarget, Model, StatusMessage, Visibility},
     manager::effect::Effect,
 };
 
@@ -131,22 +131,24 @@ impl FocusManager {
     }
 }
 
-/// Root adapter for focus commands. The controller never reads `Model` directly.
-pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    match id.as_str() {
-        "toggle_file_explorer" => FocusManager::toggle_explorer(model),
-        "focus_left" => FocusManager::move_focus(model, FocusDirection::Left),
-        "focus_down" => FocusManager::move_focus(model, FocusDirection::Down),
-        "focus_up" => FocusManager::move_focus(model, FocusDirection::Up),
-        "focus_right" => FocusManager::move_focus(model, FocusDirection::Right),
-        _ => {
-            model.status = Some(StatusMessage::error(format!(
-                "unknown focus command `{}`",
-                id.as_str()
-            )));
-            None
-        }
-    }
+pub fn toggle_explorer(model: &mut Model) -> Option<Effect> {
+    FocusManager::toggle_explorer(model)
+}
+
+pub fn focus_left(model: &mut Model) -> Option<Effect> {
+    FocusManager::move_focus(model, FocusDirection::Left)
+}
+
+pub fn focus_down(model: &mut Model) -> Option<Effect> {
+    FocusManager::move_focus(model, FocusDirection::Down)
+}
+
+pub fn focus_up(model: &mut Model) -> Option<Effect> {
+    FocusManager::move_focus(model, FocusDirection::Up)
+}
+
+pub fn focus_right(model: &mut Model) -> Option<Effect> {
+    FocusManager::move_focus(model, FocusDirection::Right)
 }
 
 impl FocusHost for Model {
@@ -213,7 +215,7 @@ pub(crate) fn focus_editor(model: &mut Model) {
 mod tests {
     use super::*;
     use crate::{
-        data_object::{Context, Message},
+        data_object::{CommandId, Context, Message},
         manager::message_manager::MessageManager,
         startup::initial_model,
         test_utils::create_buffer,
@@ -299,14 +301,14 @@ mod tests {
         model.tools.active_tool = Some(crate::tools::ToolKind::Agent);
         model.tools.visibility = Visibility::Displayed;
 
-        handle_command(&mut model, CommandId("focus_right"));
+        focus_right(&mut model);
         assert_eq!(model.current_focus, FocusTarget::ToolsPanel);
         assert_eq!(
             crate::test_utils::input_context(&model),
             Some(Context::AgentChat)
         );
 
-        handle_command(&mut model, CommandId("focus_left"));
+        focus_left(&mut model);
         assert_eq!(model.current_focus, FocusTarget::Editor);
         assert_ne!(
             crate::test_utils::input_context(&model),
@@ -322,13 +324,13 @@ mod tests {
         model.tools.visibility = Visibility::Displayed;
         model.current_focus = FocusTarget::Editor;
 
-        handle_command(&mut model, CommandId("focus_right"));
+        focus_right(&mut model);
         assert_eq!(model.current_focus, FocusTarget::ToolsPanel);
         assert_eq!(
             crate::test_utils::input_context(&model),
             Some(Context::AgentChat)
         );
-        handle_command(&mut model, CommandId("focus_left"));
+        focus_left(&mut model);
         assert_eq!(model.current_focus, FocusTarget::Editor);
     }
 
@@ -345,7 +347,7 @@ mod tests {
             .agent
             .handle_input_event(crate::component::text_input::TextInputEvent::Insert('x'));
 
-        handle_command(&mut model, CommandId("focus_left"));
+        focus_left(&mut model);
 
         assert_eq!(model.current_focus, FocusTarget::Editor);
         assert_eq!(model.agent.prompt(), "x");

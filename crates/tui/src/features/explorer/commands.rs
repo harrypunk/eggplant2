@@ -3,7 +3,7 @@ use std::path::Path;
 use editor::DocumentFactory;
 
 use crate::{
-    data_object::{CommandId, Context, Model, StatusMessage},
+    data_object::{Context, Model},
     document,
     manager::effect::Effect,
 };
@@ -22,39 +22,66 @@ pub(crate) fn open_selected(documents: &DocumentFactory, model: &mut Model) -> O
         ExplorerEntryKind::File | ExplorerEntryKind::Link | ExplorerEntryKind::Other => {
             document::open_file(documents, model, &path)
         }
-        ExplorerEntryKind::Directory => handle_command(model, CommandId("explorer_unfold")),
+        ExplorerEntryKind::Directory => unfold(model),
     }
 }
 
-/// Explorer state and navigation commands.
-pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    match id.as_str() {
-        "explorer_next" => model.explorer.select_next(),
-        "explorer_previous" => model.explorer.select_previous(),
-        "explorer_fold" => return change_expansion(model, ExpansionState::Collapsed),
-        "explorer_unfold" => return change_expansion(model, ExpansionState::Expanded),
-        "refresh_explorer" => return refresh(model),
-        "toggle_ignored_files" => return toggle_ignored_files(model),
-        "explorer_help" => return toggle_help(model),
-        "close_explorer_help" => return close_help(model),
-        "explorer_add" => return add::open(model),
-        "explorer_add_submit" => return add::submit(model),
-        "close_explorer_add" => return add::cancel(model),
-        "explorer_delete" => return delete::open(model),
-        "explorer_delete_confirm" => return delete::confirm(model),
-        "close_explorer_delete" => return delete::cancel(model),
-        "explorer_move" => return transfer::open(model, TransferOperation::Move),
-        "explorer_transfer_submit" => return transfer::submit(model),
-        "close_explorer_transfer" => return transfer::cancel(model),
-        "explorer_copy" => return transfer::open(model, TransferOperation::Copy),
-        _ => {
-            model.status = Some(StatusMessage::error(format!(
-                "unknown explorer command `{}`",
-                id.as_str()
-            )));
-        }
-    }
+pub fn next(model: &mut Model) -> Option<Effect> {
+    model.explorer.select_next();
     None
+}
+
+pub fn previous(model: &mut Model) -> Option<Effect> {
+    model.explorer.select_previous();
+    None
+}
+
+pub fn fold(model: &mut Model) -> Option<Effect> {
+    change_expansion(model, ExpansionState::Collapsed)
+}
+
+pub fn unfold(model: &mut Model) -> Option<Effect> {
+    change_expansion(model, ExpansionState::Expanded)
+}
+
+pub fn open_add(model: &mut Model) -> Option<Effect> {
+    add::open(model)
+}
+
+pub fn submit_add(model: &mut Model) -> Option<Effect> {
+    add::submit(model)
+}
+
+pub fn cancel_add(model: &mut Model) -> Option<Effect> {
+    add::cancel(model)
+}
+
+pub fn open_delete(model: &mut Model) -> Option<Effect> {
+    delete::open(model)
+}
+
+pub fn confirm_delete(model: &mut Model) -> Option<Effect> {
+    delete::confirm(model)
+}
+
+pub fn cancel_delete(model: &mut Model) -> Option<Effect> {
+    delete::cancel(model)
+}
+
+pub fn open_move(model: &mut Model) -> Option<Effect> {
+    transfer::open(model, TransferOperation::Move)
+}
+
+pub fn open_copy(model: &mut Model) -> Option<Effect> {
+    transfer::open(model, TransferOperation::Copy)
+}
+
+pub fn submit_transfer(model: &mut Model) -> Option<Effect> {
+    transfer::submit(model)
+}
+
+pub fn cancel_transfer(model: &mut Model) -> Option<Effect> {
+    transfer::cancel(model)
 }
 
 fn change_expansion(model: &mut Model, target: ExpansionState) -> Option<Effect> {
@@ -69,7 +96,7 @@ fn change_expansion(model: &mut Model, target: ExpansionState) -> Option<Effect>
     model.explorer.unfold_request(&root).map(Effect::feature)
 }
 
-fn refresh(model: &mut Model) -> Option<Effect> {
+pub fn refresh(model: &mut Model) -> Option<Effect> {
     let root = model.workspace.as_ref()?.root().to_path_buf();
     Some(Effect::feature(
         model
@@ -91,12 +118,12 @@ pub(crate) fn refresh_changed(model: &mut Model, path: &Path) -> Option<Effect> 
     ))
 }
 
-fn toggle_ignored_files(model: &mut Model) -> Option<Effect> {
+pub fn toggle_ignored_files(model: &mut Model) -> Option<Effect> {
     let root = model.workspace.as_ref()?.root().to_path_buf();
     Some(Effect::feature(model.explorer.toggle_ignore_request(&root)))
 }
 
-fn toggle_help(model: &mut Model) -> Option<Effect> {
+pub fn toggle_help(model: &mut Model) -> Option<Effect> {
     if model.explorer.help_visible() {
         return close_help(model);
     }
@@ -107,7 +134,7 @@ fn toggle_help(model: &mut Model) -> Option<Effect> {
     None
 }
 
-fn close_help(model: &mut Model) -> Option<Effect> {
+pub fn close_help(model: &mut Model) -> Option<Effect> {
     model.explorer.close_help();
     model.modal.close(Context::ExplorerHelp);
     None
@@ -117,7 +144,7 @@ fn close_help(model: &mut Model) -> Option<Effect> {
 mod tests {
     use super::*;
     use crate::{
-        data_object::{FocusTarget, Message, StatusKind},
+        data_object::{CommandId, FocusTarget, Message, StatusKind},
         manager::message_manager::MessageManager,
         startup::initial_model,
     };

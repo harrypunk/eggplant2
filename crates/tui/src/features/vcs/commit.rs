@@ -350,9 +350,7 @@ mod tests {
         assert_eq!(model.vcs.commit.editor.mode(), EditMode::Insert);
         type_text(&mut model, "subject");
         assert_eq!(message(&model), "subject");
-        assert!(
-            crate::editing::handle_command(&mut model, CommandId("exit_insert_mode")).is_none()
-        );
+        assert!(crate::editing::exit_insert_mode(&mut model).is_none());
         assert_eq!(model.vcs.commit.editor.mode(), EditMode::Normal);
 
         assert!(close(&mut model).is_some());
@@ -493,7 +491,7 @@ mod tests {
             result: Err("retry".to_string()),
         })
         .update(&mut model);
-        crate::editing::handle_command(&mut model, CommandId("insert_at_line_end"));
+        crate::editing::insert_at_line_end(&mut model);
         type_text(&mut model, " second");
         assert!(submit(&mut model).is_some());
 

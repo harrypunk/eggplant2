@@ -152,323 +152,311 @@ impl Default for CommandRegistry {
 
 fn builtin_commands() -> impl IntoIterator<Item = Command> {
     [
-        Command::feature_id(CommandId("quit"), "quit", crate::lifecycle::handle_command),
-        Command::feature_id(
+        Command::feature(CommandId("quit"), "quit", crate::lifecycle::quit),
+        Command::feature(
             CommandId("enter_visual_mode"),
             "enter Visual mode",
-            crate::editing::handle_command,
+            crate::editing::enter_visual_mode,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("enter_visual_line_mode"),
             "enter linewise Visual mode",
-            crate::editing::handle_command,
+            crate::editing::enter_visual_line_mode,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("exit_visual_mode"),
             "leave Visual mode",
-            crate::editing::handle_command,
+            crate::editing::exit_visual_mode,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("enter_insert_mode"),
             "enter Insert mode",
-            crate::editing::handle_command,
+            crate::editing::enter_insert_mode,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("insert_after_cursor"),
             "insert after cursor",
-            crate::editing::handle_command,
+            crate::editing::insert_after_cursor,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("insert_at_line_end"),
             "insert at line end",
-            crate::editing::handle_command,
+            crate::editing::insert_at_line_end,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("insert_at_first_nonblank"),
             "insert at first non-blank character",
-            crate::editing::handle_command,
+            crate::editing::insert_at_first_nonblank,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("open_line_below"),
             "open indented line below",
-            crate::editing::handle_command,
+            crate::editing::open_line_below,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("open_line_above"),
             "open indented line above",
-            crate::editing::handle_command,
+            crate::editing::open_line_above,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("exit_insert_mode"),
             "leave Insert mode",
-            crate::editing::handle_command,
+            crate::editing::exit_insert_mode,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("move_left"),
             "move left",
-            crate::editing::handle_command,
+            crate::editing::move_left,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("move_right"),
             "move right",
-            crate::editing::handle_command,
+            crate::editing::move_right,
         ),
-        Command::feature_id(
-            CommandId("move_up"),
-            "move up",
-            crate::editing::handle_command,
-        ),
-        Command::feature_id(
+        Command::feature(CommandId("move_up"), "move up", crate::editing::move_up),
+        Command::feature(
             CommandId("move_down"),
             "move down",
-            crate::editing::handle_command,
+            crate::editing::move_down,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("move_line_start"),
             "move to line start",
-            crate::editing::handle_command,
+            crate::editing::move_line_start,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("move_line_end"),
             "move to line end",
-            crate::editing::handle_command,
+            crate::editing::move_line_end,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("move_next_word_start"),
             "move to next word start",
-            crate::editing::handle_command,
+            crate::editing::move_next_word_start,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("move_previous_word_start"),
             "move to previous word start",
-            crate::editing::handle_command,
+            crate::editing::move_previous_word_start,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("move_next_word_end"),
             "move to next word end",
-            crate::editing::handle_command,
+            crate::editing::move_next_word_end,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("page_scroll_down"),
             "scroll down",
-            crate::page_scroll::handle_command,
+            crate::page_scroll::down,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("page_scroll_up"),
             "scroll up",
-            crate::page_scroll::handle_command,
+            crate::page_scroll::up,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("focus_left"),
             "focus left",
-            crate::focus::handle_command,
+            crate::focus::focus_left,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("focus_down"),
             "focus down",
-            crate::focus::handle_command,
+            crate::focus::focus_down,
         ),
-        Command::feature_id(
-            CommandId("focus_up"),
-            "focus up",
-            crate::focus::handle_command,
-        ),
-        Command::feature_id(
+        Command::feature(CommandId("focus_up"), "focus up", crate::focus::focus_up),
+        Command::feature(
             CommandId("focus_right"),
             "focus right",
-            crate::focus::handle_command,
+            crate::focus::focus_right,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("backspace"),
             "backspace",
-            crate::editing::handle_command,
+            crate::editing::backspace,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("insert_newline"),
             "insert newline",
-            crate::editing::handle_command,
+            crate::editing::insert_newline,
         ),
-        Command::feature_id(CommandId("undo"), "undo", crate::editing::handle_command),
-        Command::feature_id(CommandId("redo"), "redo", crate::editing::handle_command),
-        Command::feature_id(
+        Command::feature(CommandId("undo"), "undo", crate::editing::undo),
+        Command::feature(CommandId("redo"), "redo", crate::editing::redo),
+        Command::feature(
             CommandId("close_buffer"),
             "close buffer",
-            crate::lifecycle::handle_command,
+            crate::lifecycle::close_buffer,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("close_other_buffers"),
             "close other buffers",
-            crate::lifecycle::handle_command,
+            crate::lifecycle::close_other_buffers,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("close_buffers_right"),
             "close buffers to the right",
-            crate::lifecycle::handle_command,
+            crate::lifecycle::close_buffers_right,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("close_all_buffers"),
             "close all buffers",
-            crate::lifecycle::handle_command,
+            crate::lifecycle::close_all_buffers,
         ),
-        Command::feature_id(
-            CommandId("next_buffer"),
-            "next buffer",
-            crate::buffer::handle_command,
-        ),
-        Command::feature_id(
+        Command::feature(CommandId("next_buffer"), "next buffer", crate::buffer::next),
+        Command::feature(
             CommandId("previous_buffer"),
             "previous buffer",
-            crate::buffer::handle_command,
+            crate::buffer::previous,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("explorer_next"),
             "next entry",
-            crate::explorer::handle_command,
+            crate::explorer::next,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("explorer_previous"),
             "previous entry",
-            crate::explorer::handle_command,
+            crate::explorer::previous,
         ),
         Command::document(
             CommandId("open_selected"),
             "open selected",
             crate::explorer::open_selected,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("explorer_fold"),
             "fold folder",
-            crate::explorer::handle_command,
+            crate::explorer::fold,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("explorer_unfold"),
             "unfold folder",
-            crate::explorer::handle_command,
+            crate::explorer::unfold,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("refresh_explorer"),
             "refresh explorer",
-            crate::explorer::handle_command,
+            crate::explorer::refresh,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("toggle_ignored_files"),
             "toggle ignored files",
-            crate::explorer::handle_command,
+            crate::explorer::toggle_ignored_files,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("explorer_help"),
             "show explorer help",
-            crate::explorer::handle_command,
+            crate::explorer::toggle_help,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("close_explorer_help"),
             "close explorer help",
-            crate::explorer::handle_command,
+            crate::explorer::close_help,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("explorer_add"),
             "add file or directory",
-            crate::explorer::handle_command,
+            crate::explorer::open_add,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("explorer_add_submit"),
             "create file or directory",
-            crate::explorer::handle_command,
+            crate::explorer::submit_add,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("close_explorer_add"),
             "cancel adding file or directory",
-            crate::explorer::handle_command,
+            crate::explorer::cancel_add,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("explorer_delete"),
             "delete file or directory",
-            crate::explorer::handle_command,
+            crate::explorer::open_delete,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("explorer_delete_confirm"),
             "confirm deletion",
-            crate::explorer::handle_command,
+            crate::explorer::confirm_delete,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("close_explorer_delete"),
             "cancel deletion",
-            crate::explorer::handle_command,
+            crate::explorer::cancel_delete,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("explorer_move"),
             "move file or directory",
-            crate::explorer::handle_command,
+            crate::explorer::open_move,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("explorer_transfer_submit"),
             "confirm transfer destination",
-            crate::explorer::handle_command,
+            crate::explorer::submit_transfer,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("close_explorer_transfer"),
             "cancel transfer",
-            crate::explorer::handle_command,
+            crate::explorer::cancel_transfer,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("explorer_copy"),
             "copy file or directory",
-            crate::explorer::handle_command,
+            crate::explorer::open_copy,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("toggle_file_explorer"),
             "toggle files",
-            crate::focus::handle_command,
+            crate::focus::toggle_explorer,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("open_file_picker"),
             "find file",
-            crate::file_picker::handle_command,
+            crate::file_picker::open,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("close_file_picker"),
             "close file picker",
-            crate::file_picker::handle_command,
+            crate::file_picker::close_file_picker,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("open_picker_file"),
             "open file",
-            crate::file_picker::handle_command,
+            crate::file_picker::open_selected,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("file_picker_next"),
             "next file",
-            crate::file_picker::handle_command,
+            crate::file_picker::next,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("file_picker_previous"),
             "previous file",
-            crate::file_picker::handle_command,
+            crate::file_picker::previous,
         ),
-        Command::feature_id(
+        Command::feature(
             ThemePickerCommand::Open.id(),
             "theme",
-            crate::theme_picker::handle_command,
+            crate::theme_picker::open,
         ),
-        Command::feature_id(
+        Command::feature(
             ThemePickerCommand::Close.id(),
             "close theme picker",
-            crate::theme_picker::handle_command,
+            crate::theme_picker::close,
         ),
-        Command::feature_id(
+        Command::feature(
             ThemePickerCommand::Next.id(),
             "next theme",
-            crate::theme_picker::handle_command,
+            crate::theme_picker::next,
         ),
-        Command::feature_id(
+        Command::feature(
             ThemePickerCommand::Previous.id(),
             "previous theme",
-            crate::theme_picker::handle_command,
+            crate::theme_picker::previous,
         ),
-        Command::feature_id(
+        Command::feature(
             ThemePickerCommand::Apply.id(),
             "apply theme",
-            crate::theme_picker::handle_command,
+            crate::theme_picker::apply,
         ),
     ]
 }
@@ -499,7 +487,7 @@ mod tests {
         let registry = CommandRegistry::builtin();
         let command = registry.get("open_theme_picker").unwrap();
         assert_eq!(command.description, "theme");
-        assert!(matches!(command.handler, CommandHandler::FeatureId(_)));
+        assert!(matches!(command.handler, CommandHandler::Feature(_)));
         assert!(registry.get("missing.command").is_none());
     }
 }

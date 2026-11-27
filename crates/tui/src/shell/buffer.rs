@@ -1,7 +1,7 @@
 use editor::{BufferId, EditMode};
 
 use crate::{
-    data_object::{CommandId, Model, StatusMessage},
+    data_object::{Model, StatusMessage},
     manager::effect::Effect,
 };
 
@@ -11,21 +11,12 @@ pub enum BufferMovement {
     Previous,
 }
 
-/// Buffer feature commands and shared save/reveal capabilities.
-pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    let movement = match id.as_str() {
-        "next_buffer" => BufferMovement::Next,
-        "previous_buffer" => BufferMovement::Previous,
-        _ => {
-            model.status = Some(StatusMessage::error(format!(
-                "unknown buffer command `{}`",
-                id.as_str()
-            )));
-            return None;
-        }
-    };
+pub fn next(model: &mut Model) -> Option<Effect> {
+    switch(model, BufferMovement::Next)
+}
 
-    switch(model, movement)
+pub fn previous(model: &mut Model) -> Option<Effect> {
+    switch(model, BufferMovement::Previous)
 }
 
 pub(crate) fn switch(model: &mut Model, movement: BufferMovement) -> Option<Effect> {
@@ -97,7 +88,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        data_object::Message,
+        data_object::{CommandId, Message},
         manager::message_manager::MessageManager,
         startup::initial_model,
         test_utils::{create_buffer, open_file},

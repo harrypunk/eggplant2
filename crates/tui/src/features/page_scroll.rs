@@ -2,7 +2,7 @@ use editor::{EditorSession, VerticalDirection};
 
 use crate::{
     capabilities::page_scroll::{ScrollDirection, ScrollViewport},
-    data_object::{CommandId, Model, StatusMessage},
+    data_object::Model,
     manager::effect::Effect,
 };
 
@@ -22,19 +22,15 @@ impl ScrollViewport for EditorSession {
     }
 }
 
-/// Compose page-scroll commands with the main editor's viewport capability.
-pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    let direction = match id.as_str() {
-        "page_scroll_down" => ScrollDirection::Down,
-        "page_scroll_up" => ScrollDirection::Up,
-        _ => {
-            model.status = Some(StatusMessage::error(format!(
-                "unknown page-scroll command `{}`",
-                id.as_str()
-            )));
-            return None;
-        }
-    };
+pub fn down(model: &mut Model) -> Option<Effect> {
+    scroll(model, ScrollDirection::Down)
+}
+
+pub fn up(model: &mut Model) -> Option<Effect> {
+    scroll(model, ScrollDirection::Up)
+}
+
+fn scroll(model: &mut Model, direction: ScrollDirection) -> Option<Effect> {
     model.page_scroll.scroll(&mut model.editor, direction);
     None
 }
@@ -43,8 +39,10 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
 mod tests {
     use super::*;
     use crate::{
-        capabilities::page_scroll::PageScroll, data_object::Message,
-        manager::message_manager::MessageManager, test_utils::create_buffer,
+        capabilities::page_scroll::PageScroll,
+        data_object::{CommandId, Message},
+        manager::message_manager::MessageManager,
+        test_utils::create_buffer,
     };
 
     #[test]

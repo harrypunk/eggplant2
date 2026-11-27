@@ -33,14 +33,6 @@ pub(crate) enum ThemePickerCommand {
 }
 
 impl ThemePickerCommand {
-    const ALL: [Self; 5] = [
-        Self::Open,
-        Self::Close,
-        Self::Next,
-        Self::Previous,
-        Self::Apply,
-    ];
-
     pub(crate) const fn id(self) -> CommandId {
         match self {
             Self::Open => CommandId("open_theme_picker"),
@@ -49,10 +41,6 @@ impl ThemePickerCommand {
             Self::Previous => CommandId("theme_picker_previous"),
             Self::Apply => CommandId("apply_theme"),
         }
-    }
-
-    fn from_id(id: CommandId) -> Option<Self> {
-        Self::ALL.into_iter().find(|command| command.id() == id)
     }
 }
 
@@ -66,25 +54,6 @@ struct ThemePickerAdapter<'a> {
 }
 
 impl ThemePickerAdapter<'_> {
-    fn handle(&mut self, command: ThemePickerCommand) -> Option<Effect> {
-        match command {
-            ThemePickerCommand::Open => self.open(),
-            ThemePickerCommand::Close => {
-                self.close();
-                None
-            }
-            ThemePickerCommand::Next => {
-                self.state.select_next();
-                None
-            }
-            ThemePickerCommand::Previous => {
-                self.state.select_previous();
-                None
-            }
-            ThemePickerCommand::Apply => self.apply(),
-        }
-    }
-
     fn open(&mut self) -> Option<Effect> {
         if !self.modal.open(Context::ThemePicker) {
             return None;
@@ -167,7 +136,7 @@ fn close_theme_picker(model: &mut Model) {
     .close();
 }
 
-fn apply(model: &mut Model) -> Option<Effect> {
+pub fn apply(model: &mut Model) -> Option<Effect> {
     if !model.theme_picker.selection_is_visible() {
         return None;
     }
@@ -214,22 +183,38 @@ fn apply(model: &mut Model) -> Option<Effect> {
         modal,
         status,
     }
-    .handle(ThemePickerCommand::Apply)
+    .apply()
 }
 
-/// Registered composition-root adapter for theme-picker commands.
-pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    let Some(command) = ThemePickerCommand::from_id(id) else {
-        model.status = Some(StatusMessage::error(format!(
-            "unknown theme command `{}`",
-            id.as_str()
-        )));
-        return None;
-    };
-    if command == ThemePickerCommand::Apply {
-        return apply(model);
-    }
+pub fn open(model: &mut Model) -> Option<Effect> {
+    with_adapter(model, |adapter| adapter.open())
+}
 
+pub fn close(model: &mut Model) -> Option<Effect> {
+    with_adapter(model, |adapter| {
+        adapter.close();
+        None
+    })
+}
+
+pub fn next(model: &mut Model) -> Option<Effect> {
+    with_adapter(model, |adapter| {
+        adapter.state.select_next();
+        None
+    })
+}
+
+pub fn previous(model: &mut Model) -> Option<Effect> {
+    with_adapter(model, |adapter| {
+        adapter.state.select_previous();
+        None
+    })
+}
+
+fn with_adapter(
+    model: &mut Model,
+    operation: impl FnOnce(&mut ThemePickerAdapter) -> Option<Effect>,
+) -> Option<Effect> {
     let Model {
         theme_picker,
         theme,
@@ -238,14 +223,13 @@ pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
         status,
         ..
     } = model;
-    ThemePickerAdapter {
+    operation(&mut ThemePickerAdapter {
         state: theme_picker,
         theme,
         persistence: theme_persistence,
         modal,
         status,
-    }
-    .handle(command)
+    })
 }
 
 #[cfg(test)]
@@ -255,17 +239,6 @@ mod tests {
 
     use super::*;
     use crate::{data_object::Message, manager::message_manager::MessageManager, theme::ThemeName};
-
-    #[test]
-    fn command_ids_convert_to_typed_commands() {
-        for command in ThemePickerCommand::ALL {
-            assert_eq!(ThemePickerCommand::from_id(command.id()), Some(command));
-        }
-        assert_eq!(
-            ThemePickerCommand::from_id(CommandId("unknown_theme_command")),
-            None
-        );
-    }
 
     #[test]
     fn theme_menu_applies_selection_and_escape_preserves_the_active_theme() {
