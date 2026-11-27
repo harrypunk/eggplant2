@@ -5,15 +5,10 @@ use std::{
 
 use editor::{DocumentFactory, OpenDocumentError, preview_document};
 
-use nucleo_matcher::{
-    Config, Matcher, Utf32Str,
-    pattern::{CaseMatching, Normalization, Pattern},
-};
-
 use super::{FileEntry, FilePickerState, PREVIEW_VIEWPORT_HEIGHT, PreviewState, ScanDepth};
 use crate::{
     data_object::{Message, Model},
-    filesystem::workspace_walk,
+    file_search::{filter_files, scan_files},
     manager::effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
 };
 
@@ -114,55 +109,6 @@ impl Completion for FilePickerCompletion {
         let root = workspace.as_ref().map(|workspace| workspace.root());
         self.apply(file_picker, root).map(Effect::feature)
     }
-}
-
-fn scan_files(root: &Path, depth: ScanDepth) -> Result<Vec<FileEntry>, String> {
-    let mut builder = workspace_walk(root);
-    builder.max_depth(match depth {
-        ScanDepth::TopLevel => Some(1),
-        ScanDepth::Recursive => None,
-    });
-
-    let mut files = builder
-        .build()
-        .filter_map(|entry| match entry {
-            Ok(entry) if entry.depth() > 0 && entry.path().is_file() => {
-                let path = entry.path().to_path_buf();
-                let relative = path.strip_prefix(root).unwrap_or(&path);
-                Some(Ok(FileEntry {
-                    display: relative.to_string_lossy().into_owned(),
-                    path,
-                }))
-            }
-            Ok(_) => None,
-            Err(error) => Some(Err(error.to_string())),
-        })
-        .collect::<Result<Vec<_>, String>>()?;
-    files.sort_by(|left, right| left.display.cmp(&right.display));
-    Ok(files)
-}
-
-fn filter_files(files: &[FileEntry], query: &str) -> Vec<FileEntry> {
-    let pattern = Pattern::parse(query, CaseMatching::Smart, Normalization::Smart);
-    let mut matcher = Matcher::new(Config::DEFAULT.match_paths());
-    let mut buffer = Vec::new();
-    let mut matches = files
-        .iter()
-        .filter_map(|entry| {
-            pattern
-                .score(Utf32Str::new(&entry.display, &mut buffer), &mut matcher)
-                .map(|score| (score, entry.clone()))
-        })
-        .collect::<Vec<_>>();
-    matches.sort_by(|(left_score, left), (right_score, right)| {
-        right_score
-            .cmp(left_score)
-            .then_with(|| left.display.cmp(&right.display))
-    });
-    matches
-        .into_iter()
-        .map(|(_, entry)| entry)
-        .collect::<Vec<_>>()
 }
 
 fn read_preview(documents: &DocumentFactory, path: &Path) -> PreviewState {

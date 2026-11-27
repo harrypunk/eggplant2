@@ -13,12 +13,13 @@ pub const KEYMAPS: &[ContextKeymap] = &[ContextKeymap::new("file_picker", Contex
         KeymapCapability::ModalActions,
     ])];
 
+pub use crate::file_search::{FileEntry, ScanDepth};
 pub(crate) use commands::{close, handle_input};
 pub use commands::{
     close_file_picker, general_action_subscriptions, handle_general_action, next, open,
     open_selected, previous,
 };
-pub use state::{FileCollectionState, FileEntry, FilePickerState, PreviewState, ScanDepth};
+pub use state::{FileCollectionState, FilePickerState, PreviewState};
 pub use work::FilePickerRequest;
 
 pub(crate) const POPUP_MAX_HEIGHT: u16 = 36;

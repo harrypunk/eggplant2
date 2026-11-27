@@ -6,23 +6,11 @@ use std::{
 
 use editor::{DocumentFactory, TextViewSnapshot};
 
-use super::FilePickerRequest;
+use super::{FileEntry, FilePickerRequest, ScanDepth};
 use crate::{
     component::text_input::TextInput,
     data_object::{FocusTarget, Visibility},
 };
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FileEntry {
-    pub path: PathBuf,
-    pub display: String,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ScanDepth {
-    TopLevel,
-    Recursive,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileCollectionState {

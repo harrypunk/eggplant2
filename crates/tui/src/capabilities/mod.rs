@@ -13,4 +13,5 @@ pub mod readonly;
 pub mod register;
 pub mod search;
 
+pub(crate) mod file_search;
 pub(crate) mod filesystem;

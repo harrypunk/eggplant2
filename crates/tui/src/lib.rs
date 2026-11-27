@@ -13,8 +13,8 @@ pub mod theme;
 pub mod tools;
 pub mod ui;
 
-pub(crate) use capabilities::filesystem;
 pub use capabilities::{clipboard, copy_hash, document, file_watcher, register, search};
+pub(crate) use capabilities::{file_search, filesystem};
 pub use shell::{buffer, command_menu, focus, lifecycle};
 
 pub use features::{

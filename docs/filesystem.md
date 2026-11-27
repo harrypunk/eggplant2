@@ -7,6 +7,7 @@ Eggplant owns filesystem policy. Helix provides document/editing primitives and 
 | Layer | Responsibility |
 | --- | --- |
 | Command menu / input context | Turn key sequences into semantic messages such as `OpenFilePicker` or `OpenPickerFile`. |
+| Shared file-search capability | Own workspace file entries, recursive/top-level scanning, ignore policy, and Nucleo fuzzy matching for both FilePicker and Agent `@` references. |
 | `FilePickerState` | Own query, cached file set, ranked results, selection, preview state, and background revisions. |
 | `FilePickerRequest` | Describe blocking scan, filter, or preview work with owned inputs. |
 | Effect runtime | Execute blocking work with `tokio::task::spawn_blocking` and send completion messages back to the single update loop. |
