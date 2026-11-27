@@ -124,15 +124,12 @@ mod tests {
     #[test]
     fn overlays_follow_modal_ownership() {
         let mut model = Model::default();
-        model.agent.open_dialog(
-            Some(crate::agent::EditorContext {
-                buffer: editor::BufferId::from_raw(1),
-                path: std::path::PathBuf::from("/workspace/main.rs"),
-                revision: 1,
-                line: 1,
-            }),
-            "main.rs:1".to_string(),
-        );
+        model.agent.open_dialog(Some(crate::agent::EditorContext {
+            buffer: editor::BufferId::from_raw(1),
+            path: std::path::PathBuf::from("/workspace/main.rs"),
+            revision: 1,
+            line: 1,
+        }));
         assert!(dialog_overlay(&model).is_none());
 
         assert!(model.modal.open(Context::AgentChatDialog));
@@ -187,7 +184,7 @@ mod tests {
         assert_eq!(view_commands(&model, AgentSurface::Panel), provider);
         assert_eq!(view_commands(&model, AgentSurface::Dialog), None);
 
-        model.agent.open_dialog(None, String::new());
+        model.agent.open_dialog(None);
         assert!(model.modal.open(Context::AgentChatDialog));
         assert_eq!(view_commands(&model, AgentSurface::Dialog), provider);
         assert_eq!(view_commands(&model, AgentSurface::Panel), None);

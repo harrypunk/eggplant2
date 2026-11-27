@@ -30,7 +30,7 @@ pub(crate) fn focus_panel_input(model: &mut Model) -> Option<Effect> {
         return super::adapter::notify(model, "Open a project to use the agent".to_string());
     }
     close_help(model);
-    model.agent.prepare_panel_prompt();
+    model.agent.prepare_panel();
     model.current_focus = FocusTarget::ToolsPanel;
     None
 }
@@ -66,7 +66,7 @@ pub(crate) fn close_help(model: &mut Model) -> Option<Effect> {
 
 pub(crate) fn close_panel_input(model: &mut Model) {
     close_help(model);
-    model.agent.prepare_panel_prompt();
+    model.agent.prepare_panel();
     crate::focus::focus_editor(model);
 }
 

@@ -10,7 +10,6 @@ enum DialogOpenPlan {
     Ready {
         context: Option<EditorContext>,
         modal_context: Context,
-        label: String,
     },
 }
 
@@ -25,14 +24,9 @@ impl DialogOpenPlan {
                     Some(_) => Context::AgentApproval,
                     None => Context::AgentChatDialog,
                 };
-                let label = context
-                    .as_ref()
-                    .map(|context| prompt_label(model, context))
-                    .unwrap_or_default();
                 Self::Ready {
                     context,
                     modal_context,
-                    label,
                 }
             }
         }
@@ -49,11 +43,10 @@ pub(crate) fn open(model: &mut Model) -> Option<Effect> {
         DialogOpenPlan::Ready {
             context,
             modal_context,
-            label,
         } => match model.modal.open(modal_context) {
             false => None,
             true => {
-                model.agent.open_dialog(context, label);
+                model.agent.open_dialog(context);
                 None
             }
         },
@@ -114,13 +107,4 @@ pub(crate) fn resume_overlay(model: &mut Model, context: Option<Context>) {
         OverlayTransition::Resume => model.agent.resume_dialog(),
         OverlayTransition::Skip | OverlayTransition::Suspend => {}
     }
-}
-
-fn prompt_label(model: &Model, context: &EditorContext) -> String {
-    let relative = model
-        .workspace
-        .as_ref()
-        .and_then(|workspace| context.path.strip_prefix(workspace.root()).ok())
-        .unwrap_or(&context.path);
-    format!("{}:{}", relative.display(), context.line)
 }

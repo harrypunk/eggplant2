@@ -693,25 +693,25 @@ mod tests {
     }
 
     #[test]
-    fn panel_discards_only_untouched_dialog_prefill() {
+    fn panel_preserves_the_same_editable_draft() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("main.rs");
         std::fs::write(&path, "fn main() {}\n").unwrap();
         let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
         open_file(&mut model, &path);
-        let context = Some(crate::agent::context::editor_context(&model).unwrap());
+        model.agent.prompt.set_value("explain @main.rs");
 
         model
             .agent
-            .prepare_prompt(context.clone(), "main.rs:1".to_string());
-        assert_eq!(model.agent.prompt(), "main.rs:1");
-        model.agent.prepare_panel_prompt();
-        assert_eq!(model.agent.prompt(), "");
+            .open_dialog(crate::agent::context::editor_context(&model));
+        model.agent.prepare_panel();
+        assert_eq!(model.agent.prompt(), "explain @main.rs");
 
-        model.agent.prepare_prompt(context, "main.rs:1".to_string());
         model.agent.handle_input_event(TextInputEvent::Insert('?'));
-        model.agent.prepare_panel_prompt();
-        assert_eq!(model.agent.prompt(), "main.rs:1?");
+        model
+            .agent
+            .open_dialog(crate::agent::context::editor_context(&model));
+        assert_eq!(model.agent.prompt(), "explain @main.rs?");
     }
 
     #[test]
@@ -729,7 +729,7 @@ mod tests {
     }
 
     #[test]
-    fn prefill_is_editable_and_draft_state_survives_close_and_reopen() {
+    fn dialog_starts_empty_and_preserves_the_draft_across_close_and_reopen() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("main.rs");
         std::fs::write(&path, "first\nsecond").unwrap();
@@ -746,18 +746,14 @@ mod tests {
             .unwrap();
 
         open(&mut model);
-        assert_eq!(model.agent.prompt(), "main.rs:2");
+        assert_eq!(model.agent.prompt(), "");
         handle_input(&mut model, TextInputEvent::Insert('?'));
-        assert_eq!(model.agent.prompt(), "main.rs:2?");
-        handle_input(&mut model, TextInputEvent::DeleteBackward);
-        assert_eq!(model.agent.prompt(), "main.rs:2");
+        assert_eq!(model.agent.prompt(), "?");
         close(&mut model);
         open(&mut model);
-        assert_eq!(model.agent.prompt(), "main.rs:2");
+        assert_eq!(model.agent.prompt(), "?");
 
-        for _ in "main.rs:2".chars() {
-            handle_input(&mut model, TextInputEvent::DeleteBackward);
-        }
+        handle_input(&mut model, TextInputEvent::DeleteBackward);
         close(&mut model);
         open(&mut model);
         assert_eq!(model.agent.prompt(), "");
@@ -771,6 +767,7 @@ mod tests {
         let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
         open_file(&mut model, &path);
         open(&mut model);
+        model.agent.prompt.set_value("main.rs:1");
 
         handle_input(
             &mut model,
@@ -803,6 +800,7 @@ mod tests {
         open_file(&mut model, &path);
         let manager = MessageManager::default();
         open(&mut model);
+        model.agent.prompt.set_value("main.rs:1");
         let effect = submit(&mut model).unwrap();
         assert!(model.agent.session().is_running());
         close(&mut model);
@@ -829,7 +827,7 @@ mod tests {
         assert_ne!(input_context(&model), Some(Context::AgentChat));
 
         open(&mut model);
-        assert_eq!(model.agent.prompt(), "main.rs:1");
+        assert_eq!(model.agent.prompt(), "");
         assert_eq!(model.agent.session().messages().len(), 2);
     }
 
@@ -871,6 +869,7 @@ mod tests {
         open_file(&mut model, &path);
         let manager = MessageManager::default();
         open(&mut model);
+        model.agent.prompt.set_value("persist this prompt");
         let effect = submit(&mut model).unwrap();
 
         if let Some(storage) = perform(&manager, &mut model, effect) {
@@ -971,6 +970,7 @@ mod tests {
         open_file(&mut model, &path);
         let manager = MessageManager::default();
         open(&mut model);
+        model.agent.prompt.set_value("persist this prompt");
         let effect = submit(&mut model).unwrap();
 
         if let Some(storage) = perform(&manager, &mut model, effect) {
@@ -998,6 +998,7 @@ mod tests {
         open_file(&mut model, &path);
         let manager = MessageManager::default();
         open(&mut model);
+        model.agent.prompt.set_value("cancel this prompt");
         let effect = submit(&mut model).unwrap();
         close(&mut model);
         open(&mut model);
@@ -1044,6 +1045,7 @@ mod tests {
         open_file(&mut model, &path);
         let manager = MessageManager::default();
         open(&mut model);
+        model.agent.prompt.set_value("first prompt");
         let effect = submit(&mut model).unwrap();
         perform(&manager, &mut model, effect);
         assert_eq!(
@@ -1059,6 +1061,7 @@ mod tests {
 
         close(&mut model);
         open(&mut model);
+        model.agent.prompt.set_value("second prompt");
         let effect = submit(&mut model).unwrap();
         interrupt(&mut model);
         perform(&manager, &mut model, effect);
@@ -1113,6 +1116,7 @@ mod tests {
         open_file(&mut model, &path);
         let manager = MessageManager::default();
         open(&mut model);
+        model.agent.prompt.set_value("read main.rs");
         let effect = submit(&mut model).unwrap();
         perform(&manager, &mut model, effect);
 
@@ -1225,6 +1229,7 @@ mod tests {
     fn begin_write(model: &mut Model) {
         let manager = MessageManager::default();
         open(model);
+        model.agent.prompt.set_value("write main.rs");
         let effect = submit(model).unwrap();
         perform(&manager, model, effect);
         assert_eq!(
@@ -1517,6 +1522,7 @@ mod tests {
         }));
         open_file(&mut model, &path);
         open(&mut model);
+        model.agent.prompt.set_value("run tools");
         (model, requests, directory)
     }
 
@@ -1604,6 +1610,7 @@ mod tests {
         open_file(&mut model, &path);
         let manager = MessageManager::default();
         open(&mut model);
+        model.agent.prompt.set_value("repeat read");
         let effect = submit(&mut model).unwrap();
         perform(&manager, &mut model, effect);
 

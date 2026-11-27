@@ -225,20 +225,14 @@ impl AgentState {
         self.context.as_ref()
     }
 
-    pub fn prepare_prompt(&mut self, context: Option<EditorContext>, label: String) {
-        self.prompt.prepare_dialog_prefill(label);
-        self.context = context;
-    }
-
-    pub fn prepare_panel_prompt(&mut self) {
-        self.prompt.prepare_panel();
+    pub fn prepare_panel(&mut self) {
         self.context = None;
         self.panel_mode = AgentInputMode::Normal;
         self.help_visible = false;
     }
 
-    pub fn open_dialog(&mut self, context: Option<EditorContext>, label: String) {
-        self.prepare_prompt(context, label);
+    pub fn open_dialog(&mut self, context: Option<EditorContext>) {
+        self.context = context;
         self.dialog = AgentDialogState::Open;
     }
 

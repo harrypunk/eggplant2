@@ -2,21 +2,11 @@ use crate::component::text_input::{TextInput, TextInputEvent};
 
 use super::{PromptCommandMovement, PromptCommandState};
 
-/// Distinguishes automatic dialog prefill from text the user actually owns.
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub enum DraftOrigin {
-    #[default]
-    Empty,
-    DialogPrefill,
-    User,
-}
-
-/// Prompt input, command-menu state, and draft policy shared by Agent surfaces.
+/// Prompt input and command-menu state shared by Agent surfaces.
 #[derive(Debug, Default)]
 pub struct AgentPrompt {
     input: TextInput,
     commands: PromptCommandState,
-    draft: DraftOrigin,
 }
 
 impl AgentPrompt {
@@ -32,29 +22,10 @@ impl AgentPrompt {
     pub fn set_value(&mut self, value: impl Into<String>) {
         self.input.set_value(value);
         self.commands.clear();
-        self.draft = DraftOrigin::User;
     }
 
     pub fn command_state(&self) -> &PromptCommandState {
         &self.commands
-    }
-
-    pub fn prepare_dialog_prefill(&mut self, label: String) {
-        if self.draft != DraftOrigin::Empty {
-            return;
-        }
-        self.input.set_value(label);
-        self.commands.clear();
-        self.draft = DraftOrigin::DialogPrefill;
-    }
-
-    pub fn prepare_panel(&mut self) {
-        if self.draft != DraftOrigin::DialogPrefill {
-            return;
-        }
-        self.input.clear();
-        self.commands.clear();
-        self.draft = DraftOrigin::Empty;
     }
 
     pub fn quick_fill(&mut self, movement: PromptCommandMovement) -> bool {
@@ -62,21 +33,18 @@ impl AgentPrompt {
             return false;
         };
         self.input.set_value(name);
-        self.draft = DraftOrigin::User;
         true
     }
 
     pub fn edit(&mut self, event: TextInputEvent) {
         if self.input.handle_event(event).content_changed() {
             self.commands.clear();
-            self.draft = DraftOrigin::User;
         }
     }
 
     pub fn backspace(&mut self) {
         if self.input.backspace() {
             self.commands.clear();
-            self.draft = DraftOrigin::User;
         }
     }
 
@@ -88,7 +56,6 @@ impl AgentPrompt {
     pub fn complete_submission(&mut self) {
         self.input.clear();
         self.commands.clear();
-        self.draft = DraftOrigin::Empty;
     }
 }
 
@@ -97,31 +64,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn panel_clears_only_untouched_dialog_prefill() {
-        let mut prompt = AgentPrompt::default();
-        prompt.prepare_dialog_prefill("main.rs:1".to_string());
-        prompt.prepare_panel();
-        assert_eq!(prompt.value(), "");
-
-        prompt.prepare_dialog_prefill("main.rs:1".to_string());
-        prompt.edit(TextInputEvent::Insert('?'));
-        prompt.prepare_panel();
-        assert_eq!(prompt.value(), "main.rs:1?");
-    }
-
-    #[test]
     fn cursor_movement_and_noop_backspace_preserve_prompt_policy() {
         let mut prompt = AgentPrompt::default();
-        prompt.prepare_dialog_prefill("main.rs:1".to_string());
-        prompt.edit(TextInputEvent::Cursor(
-            crate::component::text_input::TextCursorMovement::Left,
-        ));
-        prompt.prepare_panel();
-        assert_eq!(prompt.value(), "");
-
         prompt.backspace();
-        prompt.prepare_dialog_prefill("main.rs:1".to_string());
-        assert_eq!(prompt.value(), "main.rs:1");
+        assert_eq!(prompt.value(), "");
 
         prompt.set_value("/");
         assert!(prompt.quick_fill(PromptCommandMovement::Next));
@@ -134,9 +80,12 @@ mod tests {
     #[test]
     fn submission_clears_only_when_completed() {
         let mut prompt = AgentPrompt::default();
-        prompt.prepare_dialog_prefill("main.rs:1".to_string());
-        assert_eq!(prompt.submission_text().as_deref(), Some("main.rs:1"));
-        assert_eq!(prompt.value(), "main.rs:1");
+        prompt.set_value("explain @main.rs");
+        assert_eq!(
+            prompt.submission_text().as_deref(),
+            Some("explain @main.rs")
+        );
+        assert_eq!(prompt.value(), "explain @main.rs");
         prompt.complete_submission();
         assert_eq!(prompt.value(), "");
         assert!(prompt.submission_text().is_none());

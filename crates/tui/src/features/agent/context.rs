@@ -4,10 +4,10 @@ use super::{
 };
 use crate::data_object::Model;
 
-/// Capture the active workspace file as optional Agent context and dialog prefill metadata.
+/// Capture the active workspace file as optional Agent tool context.
 ///
 /// Agent availability depends on the project, not on an open buffer. External, standalone, and
-/// untitled buffers do not provide file context and therefore produce no automatic prefill.
+/// untitled buffers do not provide file context.
 pub(crate) fn editor_context(model: &Model) -> Option<EditorContext> {
     let root = model.workspace.as_ref()?.root();
     let buffer = model.editor.active_buffer()?;

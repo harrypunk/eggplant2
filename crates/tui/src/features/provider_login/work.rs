@@ -484,15 +484,12 @@ mod tests {
     fn inline_agent_dialog_resumes_after_provider_login() {
         let mut model = Model::default();
         let buffer = crate::test_utils::create_buffer(&mut model, "fn main() {}\n");
-        model.agent.open_dialog(
-            Some(crate::agent::EditorContext {
-                buffer,
-                path: std::path::PathBuf::from("/workspace/main.rs"),
-                revision: 1,
-                line: 1,
-            }),
-            "main.rs:1".to_string(),
-        );
+        model.agent.open_dialog(Some(crate::agent::EditorContext {
+            buffer,
+            path: std::path::PathBuf::from("/workspace/main.rs"),
+            revision: 1,
+            line: 1,
+        }));
         assert!(model.modal.open(Context::AgentChatDialog));
 
         open(&mut model);
