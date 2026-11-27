@@ -35,6 +35,14 @@ impl AgentState {
         &mut self.runtime
     }
 
+    pub(crate) fn ui(&self) -> &AgentUiState {
+        &self.ui
+    }
+
+    pub(crate) fn ui_mut(&mut self) -> &mut AgentUiState {
+        &mut self.ui
+    }
+
     pub fn prompt(&self) -> &str {
         self.ui.prompt()
     }
@@ -279,9 +287,5 @@ impl AgentState {
 
     pub(crate) fn take_suspension(&mut self, run_id: RunId) -> Option<AgentContinuation> {
         self.runtime.take_suspension(run_id)
-    }
-
-    pub(crate) fn clear_suspension(&mut self) {
-        self.runtime.clear_suspension();
     }
 }

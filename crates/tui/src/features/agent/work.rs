@@ -2,12 +2,14 @@ use eggplant_agent::{ToolResult, ToolResultStatus};
 
 use crate::manager::effect::Effect;
 
-use super::{AgentState, tools::ToolContext};
+use super::{runtime::AgentRuntime, tools::ToolContext, ui_state::AgentUiState};
 
 /// Root-supplied capabilities needed to accept and dispatch an Agent submission.
 pub(crate) trait SubmissionContext {
-    fn agent(&self) -> &AgentState;
-    fn agent_mut(&mut self) -> &mut AgentState;
+    fn runtime(&self) -> &AgentRuntime;
+    fn runtime_mut(&mut self) -> &mut AgentRuntime;
+    fn ui(&self) -> &AgentUiState;
+    fn ui_mut(&mut self) -> &mut AgentUiState;
     fn submission_active(&self) -> bool;
     fn project_available(&self) -> bool;
     fn tool_context(&self) -> Option<ToolContext>;
@@ -19,8 +21,8 @@ pub(crate) trait SubmissionContext {
 
 /// Root coordination required after interrupting the active Agent run.
 pub(crate) trait InterruptionContext {
-    fn agent(&self) -> &AgentState;
-    fn agent_mut(&mut self) -> &mut AgentState;
+    fn runtime(&self) -> &AgentRuntime;
+    fn runtime_mut(&mut self) -> &mut AgentRuntime;
     fn transition_to_chat(&mut self);
     fn persist_finalized(&mut self) -> Option<Effect>;
 }
@@ -59,10 +61,10 @@ impl Submission {
         if !context.submission_active() {
             return Self::Inactive;
         }
-        let prompt = context.agent().prompt().trim();
+        let prompt = context.ui().prompt().trim();
         if prompt.starts_with('/') {
             return context
-                .agent()
+                .ui()
                 .command_state()
                 .selected()
                 .or_else(|| super::PromptCommand::from_input(prompt))
@@ -81,13 +83,13 @@ fn rejection(context: &impl SubmissionContext, prompt: &str) -> Option<Submissio
     if prompt.is_empty() {
         return Some(SubmissionRejection::EmptyPrompt);
     }
-    if context.agent().session().is_running() {
+    if context.runtime().session().is_running() {
         return Some(SubmissionRejection::AlreadyRunning);
     }
     if !context.project_available() {
         return Some(SubmissionRejection::MissingProject);
     }
-    if context.agent().provider().is_none() {
+    if context.runtime().provider().is_none() {
         return Some(SubmissionRejection::MissingProvider);
     }
     None
@@ -103,9 +105,15 @@ pub(crate) fn submit(context: &mut impl SubmissionContext) -> Option<Effect> {
 }
 
 fn start_run(context: &mut impl SubmissionContext, accepted: AcceptedSubmission) -> Option<Effect> {
-    let run_id = context.agent_mut().begin_prompt()?;
-    let provider = context.agent().provider()?;
-    let cancellation = context.agent_mut().begin_cancellation();
+    let editor_context = context.ui().context().cloned();
+    let run_id = context.runtime_mut().begin(
+        accepted.prompt.clone(),
+        editor_context,
+        chrono::Utc::now().timestamp_millis(),
+    )?;
+    context.ui_mut().complete_successful_submission();
+    let provider = context.runtime().provider()?;
+    let cancellation = context.runtime_mut().begin_cancellation();
     Some(Effect::feature(ProviderAgentRun {
         run_id,
         prompt: accepted.prompt,
@@ -120,7 +128,7 @@ fn execute_prompt_command(
     context: &mut impl SubmissionContext,
     command: super::PromptCommand,
 ) -> Option<Effect> {
-    context.agent_mut().complete_prompt_command();
+    context.ui_mut().complete_prompt_command();
     match command {
         super::PromptCommand::ProviderLogin => context.open_provider_login(),
         super::PromptCommand::Logout => context.open_provider_logout(),
@@ -132,10 +140,10 @@ fn execute_prompt_command(
 }
 
 pub(crate) fn interrupt(context: &mut impl InterruptionContext) -> Option<Effect> {
-    let pending = context.agent().session().pending_approval().cloned();
-    let run_id = context.agent().session().run().map(|run| run.id);
-    context.agent().cancel_active();
-    context.agent_mut().session_mut().cancel();
+    let pending = context.runtime().session().pending_approval().cloned();
+    let run_id = context.runtime().session().run().map(|run| run.id);
+    context.runtime().cancel_active();
+    context.runtime_mut().session_mut().cancel();
     run_id
         .zip(pending)
         .map(|(run_id, approval)| {
@@ -152,11 +160,11 @@ pub(crate) fn interrupt(context: &mut impl InterruptionContext) -> Option<Effect
         .into_iter()
         .for_each(|(run_id, result)| {
             context
-                .agent_mut()
+                .runtime_mut()
                 .session_mut()
                 .complete_tool_call(run_id, result);
         });
-    context.agent_mut().clear_suspension();
+    context.runtime_mut().clear_suspension();
     context.transition_to_chat();
     context.persist_finalized()
 }
@@ -237,7 +245,8 @@ mod tests {
 
     #[derive(Default)]
     struct FakeWork {
-        agent: AgentState,
+        runtime: AgentRuntime,
+        ui: AgentUiState,
         active: bool,
         project: bool,
         opened: Option<crate::agent::PromptCommand>,
@@ -247,12 +256,20 @@ mod tests {
     }
 
     impl SubmissionContext for FakeWork {
-        fn agent(&self) -> &AgentState {
-            &self.agent
+        fn runtime(&self) -> &AgentRuntime {
+            &self.runtime
         }
 
-        fn agent_mut(&mut self) -> &mut AgentState {
-            &mut self.agent
+        fn runtime_mut(&mut self) -> &mut AgentRuntime {
+            &mut self.runtime
+        }
+
+        fn ui(&self) -> &AgentUiState {
+            &self.ui
+        }
+
+        fn ui_mut(&mut self) -> &mut AgentUiState {
+            &mut self.ui
         }
 
         fn submission_active(&self) -> bool {
@@ -289,12 +306,12 @@ mod tests {
     }
 
     impl InterruptionContext for FakeWork {
-        fn agent(&self) -> &AgentState {
-            &self.agent
+        fn runtime(&self) -> &AgentRuntime {
+            &self.runtime
         }
 
-        fn agent_mut(&mut self) -> &mut AgentState {
-            &mut self.agent
+        fn runtime_mut(&mut self) -> &mut AgentRuntime {
+            &mut self.runtime
         }
 
         fn transition_to_chat(&mut self) {
@@ -310,23 +327,23 @@ mod tests {
     #[test]
     fn submission_policy_runs_without_the_application_model() {
         let mut context = FakeWork::default();
-        context.agent.set_prompt("hello");
+        context.ui.set_prompt("hello");
 
         assert!(submit(&mut context).is_none());
-        assert_eq!(context.agent.prompt(), "hello");
+        assert_eq!(context.ui.prompt(), "hello");
         assert!(context.notifications.is_empty());
 
         context.active = true;
         assert!(submit(&mut context).is_none());
         assert_eq!(context.notifications, ["Open a project to use the agent"]);
-        assert_eq!(context.agent.prompt(), "hello");
-        assert!(context.agent.session().run().is_none());
+        assert_eq!(context.ui.prompt(), "hello");
+        assert!(context.runtime.session().run().is_none());
 
         context.project = true;
-        context.agent.set_provider(Arc::new(TestProvider));
+        context.runtime.set_provider(Arc::new(TestProvider));
         assert!(submit(&mut context).is_some());
-        assert_eq!(context.agent.prompt(), "");
-        assert!(context.agent.session().is_running());
+        assert_eq!(context.ui.prompt(), "");
+        assert!(context.runtime.session().is_running());
     }
 
     #[test]
@@ -336,7 +353,7 @@ mod tests {
             project: true,
             ..FakeWork::default()
         };
-        context.agent.set_prompt("hello");
+        context.ui.set_prompt("hello");
 
         assert!(submit(&mut context).is_none());
 
@@ -344,8 +361,8 @@ mod tests {
             context.notifications,
             ["No model available; use /provider or Space a i to log in"]
         );
-        assert_eq!(context.agent.prompt(), "hello");
-        assert!(context.agent.session().run().is_none());
+        assert_eq!(context.ui.prompt(), "hello");
+        assert!(context.runtime.session().run().is_none());
     }
 
     #[test]
@@ -355,41 +372,42 @@ mod tests {
             project: true,
             ..FakeWork::default()
         };
-        context.agent.set_prompt("/provider ");
-        assert_eq!(context.agent.command_state().selected(), None);
+        context.ui.set_prompt("/provider ");
+        assert_eq!(context.ui.command_state().selected(), None);
 
         assert!(submit(&mut context).is_none());
         assert_eq!(
             context.opened,
             Some(crate::agent::PromptCommand::ProviderLogin)
         );
-        assert_eq!(context.agent.prompt(), "");
+        assert_eq!(context.ui.prompt(), "");
 
-        context.agent.set_prompt("/provider");
+        context.ui.set_prompt("/provider");
         assert!(
             context
-                .agent
+                .ui
                 .quick_fill_prompt_command(crate::agent::PromptCommandMovement::Current)
         );
-        context
-            .agent
-            .handle_input_event(TextInputEvent::Insert(' '));
-        assert_eq!(context.agent.command_state().selected(), None);
-        context.agent.backspace();
-        assert_eq!(context.agent.prompt(), "/provider");
+        context.ui.handle_input_event(TextInputEvent::Insert(' '));
+        assert_eq!(context.ui.command_state().selected(), None);
+        context.ui.backspace();
+        assert_eq!(context.ui.prompt(), "/provider");
         context.opened = None;
         assert!(submit(&mut context).is_none());
         assert_eq!(
             context.opened,
             Some(crate::agent::PromptCommand::ProviderLogin)
         );
-        assert_eq!(context.agent.prompt(), "");
+        assert_eq!(context.ui.prompt(), "");
 
-        context.agent.set_prompt("next");
-        context.agent.begin_prompt().unwrap();
+        context.ui.set_prompt("next");
+        context
+            .runtime
+            .begin("next".to_string(), None, 123)
+            .unwrap();
         assert!(interrupt(&mut context).is_none());
         assert_eq!(
-            context.agent.session().run().unwrap().status,
+            context.runtime.session().run().unwrap().status,
             RunStatus::Cancelled
         );
         assert!(context.chat_restored);

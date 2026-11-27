@@ -4,18 +4,27 @@ use crate::{
 };
 
 use super::{
-    AgentState,
+    runtime::AgentRuntime,
     tools::ToolContext,
+    ui_state::AgentUiState,
     work::{InterruptionContext, SubmissionContext},
 };
 
 impl SubmissionContext for Model {
-    fn agent(&self) -> &AgentState {
-        &self.agent
+    fn runtime(&self) -> &AgentRuntime {
+        self.agent.runtime()
     }
 
-    fn agent_mut(&mut self) -> &mut AgentState {
-        &mut self.agent
+    fn runtime_mut(&mut self) -> &mut AgentRuntime {
+        self.agent.runtime_mut()
+    }
+
+    fn ui(&self) -> &AgentUiState {
+        self.agent.ui()
+    }
+
+    fn ui_mut(&mut self) -> &mut AgentUiState {
+        self.agent.ui_mut()
     }
 
     fn submission_active(&self) -> bool {
@@ -48,12 +57,12 @@ impl SubmissionContext for Model {
 }
 
 impl InterruptionContext for Model {
-    fn agent(&self) -> &AgentState {
-        &self.agent
+    fn runtime(&self) -> &AgentRuntime {
+        self.agent.runtime()
     }
 
-    fn agent_mut(&mut self) -> &mut AgentState {
-        &mut self.agent
+    fn runtime_mut(&mut self) -> &mut AgentRuntime {
+        self.agent.runtime_mut()
     }
 
     fn transition_to_chat(&mut self) {
