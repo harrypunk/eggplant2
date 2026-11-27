@@ -15,7 +15,7 @@ pub const KEYMAPS: &[ContextKeymap] = &[ContextKeymap::new("welcome", Context::W
         ("focus_right", "ctrl-l"),
     ])
     .with_capabilities(&[
-        KeymapCapability::ListNavigation,
+        KeymapCapability::VimListNavigation,
         KeymapCapability::LeaderMenu,
     ])];
 

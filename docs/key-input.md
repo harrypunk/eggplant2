@@ -223,7 +223,7 @@ Approval mode has no printable prompt input and no cursor. Reopening with `Ctrl-
 
 File/theme pickers and both live-grep lists wrap from first to last and last to first. Their rendered list window follows the selection so the selected row remains visible, including after wraparound and in small terminals.
 
-`Ctrl-N`/`Ctrl-P` and arrow navigation are implemented by the shared `ListNavigationKeymap` rule, not per-feature binding aliases. Only contexts that compose list navigation inherit them, including both Agent inputs; ordinary editor input does not. The LSP location list additionally opts into `VimListNavigation`, adding `j`/`k` alongside arrows and Ctrl-N/P. Text-entry pickers deliberately use only the base rule, so `j`/`k` remain query text. An explicit direct binding in the same context takes priority over every rule.
+`Ctrl-N`/`Ctrl-P` and arrow navigation are implemented by the shared `ListNavigationKeymap` rule, not per-feature binding aliases. Only contexts that compose list navigation inherit them, including both Agent inputs; ordinary editor input does not. The LSP location list and Welcome button list additionally opt into `VimListNavigation`, adding `j`/`k` alongside arrows and Ctrl-N/P. Text-entry pickers deliberately use only the base rule, so `j`/`k` remain query text. An explicit direct binding in the same context takes priority over every rule.
 
 ### VCS status page
 

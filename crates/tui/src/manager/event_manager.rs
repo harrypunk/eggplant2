@@ -676,6 +676,12 @@ mod tests {
         for (key, modifiers, action) in [
             (KeyCode::Up, KeyModifiers::NONE, GeneralAction::Previous),
             (KeyCode::Down, KeyModifiers::NONE, GeneralAction::Next),
+            (KeyCode::Char('j'), KeyModifiers::NONE, GeneralAction::Next),
+            (
+                KeyCode::Char('k'),
+                KeyModifiers::NONE,
+                GeneralAction::Previous,
+            ),
             (
                 KeyCode::Char('p'),
                 KeyModifiers::CONTROL,
