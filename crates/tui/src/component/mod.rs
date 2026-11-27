@@ -9,6 +9,7 @@ pub mod file_picker;
 pub mod form;
 pub mod key_hints;
 pub mod list;
+pub mod markdown;
 pub mod notification;
 pub mod picker;
 pub mod popup;

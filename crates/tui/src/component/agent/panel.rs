@@ -3,14 +3,14 @@ use ratatui::{
     Frame,
     layout::{Constraint, Layout, Position, Rect},
     text::Line,
-    widgets::{Block, BorderType, Paragraph, Widget, Wrap},
+    widgets::{Block, BorderType, Paragraph, Widget},
 };
 
 use super::{
     footer::{AgentFooter, footer_layout},
     prompt::AgentPromptView,
     props::AgentViewProps,
-    transcript::transcript_lines,
+    transcript::render_transcript as render_agent_transcript,
 };
 use crate::{
     agent::AgentInputMode,
@@ -128,14 +128,12 @@ fn status_text(props: &AgentPanelProps<'_>) -> String {
 }
 
 fn render_transcript(props: &AgentPanelProps<'_>, area: Rect, frame: &mut Frame) {
-    Paragraph::new(transcript_lines(
+    render_agent_transcript(
         props.shared.session,
-        area.height,
+        area,
         props.shared.styles,
-    ))
-    .wrap(Wrap { trim: false })
-    .style(props.shared.styles.base)
-    .render(area, frame.buffer_mut());
+        frame.buffer_mut(),
+    );
 }
 
 fn render_prompt(props: &AgentPanelProps<'_>, area: Rect, input_height: u16, frame: &mut Frame) {
@@ -230,7 +228,7 @@ mod tests {
         );
         let rows = render(&props, 50, 12);
         let content = rows.join("\n");
-        assert!(content.contains("You: question"));
+        assert!(content.contains("You: question"), "{content}");
         assert!(content.contains("Agent: answer"));
         let answer_row = rows
             .iter()
@@ -243,6 +241,59 @@ mod tests {
             .rposition(|row| row.contains("unknown · no model"))
             .unwrap();
         assert_eq!(footer_row, rows.len() - 2);
+    }
+
+    #[test]
+    fn assistant_markdown_is_rendered_without_parsing_user_prompt_markup() {
+        let theme = Theme::default();
+        let mut session = AgentSession::default();
+        let run = session.begin("show **raw**".to_string()).unwrap();
+        session.append_delta(run, "# Result\n\n**bold** and `code`\n\n- one\n- two");
+        let prompt = TextInput::default();
+        let props = panel_props(
+            &session,
+            &prompt,
+            None,
+            AgentInputMode::Normal,
+            FocusState::Focused,
+            theme.ui(),
+        );
+
+        let content = render(&props, 60, 22).join("\n");
+        assert!(content.contains("You: show **raw**"));
+        assert!(content.contains("Agent: Result"));
+        assert!(content.contains("bold"));
+        assert!(content.contains("code"));
+        assert!(content.contains("• one"));
+        assert!(!content.contains("**bold**"));
+        assert!(!content.contains("# Result"));
+    }
+
+    #[test]
+    fn wrapped_markdown_transcript_stays_bottom_anchored() {
+        let theme = Theme::default();
+        let mut session = AgentSession::default();
+        let run = session.begin("question".to_string()).unwrap();
+        session.append_delta(
+            run,
+            &format!(
+                "start-marker\n\n{}\n\nfinal-marker",
+                "long wrapped text ".repeat(30)
+            ),
+        );
+        let prompt = TextInput::default();
+        let props = panel_props(
+            &session,
+            &prompt,
+            None,
+            AgentInputMode::Normal,
+            FocusState::Focused,
+            theme.ui(),
+        );
+
+        let content = render(&props, 44, 12).join("\n");
+        assert!(content.contains("final-marker"), "{content}");
+        assert!(!content.contains("start-marker"), "{content}");
     }
 
     #[test]

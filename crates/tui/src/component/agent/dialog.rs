@@ -1,4 +1,4 @@
-use eggplant_agent::{MessageRole, ToolApproval};
+use eggplant_agent::ToolApproval;
 use ratatui::{
     Frame,
     buffer::Buffer,
@@ -10,7 +10,7 @@ use super::{
     footer::{AgentFooter, footer_layout},
     prompt::AgentPromptView,
     props::AgentViewProps,
-    transcript::diff_lines,
+    transcript::{diff_lines, render_latest_assistant},
 };
 use crate::component::{
     popup::{Popup, content_area},
@@ -52,10 +52,7 @@ impl AgentDialogContent<'_> {
         Paragraph::new(self.status_text())
             .style(self.props.styles.muted)
             .render(status, buffer);
-        Paragraph::new(self.latest_assistant_text())
-            .wrap(Wrap { trim: false })
-            .style(self.props.styles.base)
-            .render(assistant, buffer);
+        render_latest_assistant(self.props.session, assistant, self.props.styles, buffer);
         AgentPromptView::render(
             &self.props.prompt,
             self.props.styles,
@@ -81,17 +78,6 @@ impl AgentDialogContent<'_> {
                     .map(|run| run.status.label().to_string())
             })
             .unwrap_or_else(|| "Ready".to_string())
-    }
-
-    fn latest_assistant_text(&self) -> &str {
-        self.props
-            .session
-            .messages()
-            .iter()
-            .rev()
-            .find(|message| message.role == MessageRole::Assistant)
-            .map(|message| message.text.as_str())
-            .unwrap_or("")
     }
 
     fn render_approval(&self, approval: &ToolApproval, area: Rect, buffer: &mut Buffer) {
@@ -215,6 +201,29 @@ mod tests {
         assert!(content.contains("Streaming"));
         assert!(content.contains("answer"));
         assert!(content.contains("context ?"));
+    }
+
+    #[test]
+    fn renders_the_latest_assistant_message_as_markdown() {
+        let theme = Theme::default();
+        let mut session = AgentSession::default();
+        let run = session.begin("question".to_string()).unwrap();
+        session.append_delta(run, "## Summary\n\n```rust\nfn main() {}\n```");
+        let prompt = TextInput::default();
+        let props = AgentDialogProps {
+            session: &session,
+            prompt: AgentPromptProps::new(&prompt),
+            storage_error: None,
+            model_notice: None,
+            footer: Default::default(),
+            styles: theme.ui(),
+        };
+
+        let content = render(&props, 70, 20);
+        assert!(content.contains("Summary"));
+        assert!(content.contains("fn main()"));
+        assert!(!content.contains("## Summary"));
+        assert!(!content.contains("```rust"));
     }
 
     #[test]

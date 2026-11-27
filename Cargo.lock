@@ -2958,6 +2958,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "markdown-model"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "84b8af2dd4208b7afbe328a488039961b2b638c36b0b4311c21626003469a180"
+dependencies = [
+ "pulldown-cmark",
+]
+
+[[package]]
+name = "markdown-ratatui"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4f5f4686d293bd15c7106919c9a406cbc20b4225e70438a89156f0f0ab82f4f"
+dependencies = [
+ "markdown-model",
+ "ratatui-core",
+ "unicode-segmentation",
+ "unicode-width 0.2.2",
+]
+
+[[package]]
 name = "maybe-async"
 version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3498,6 +3519,17 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.9",
+]
+
+[[package]]
+name = "pulldown-cmark"
+version = "0.13.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3db2be46835f013dd3f4fa7f5f7402c537787b54ebb6fe2b94bbdd7e2669bb7b"
+dependencies = [
+ "bitflags 2.13.2",
+ "memchr",
+ "unicase",
 ]
 
 [[package]]
@@ -5075,6 +5107,7 @@ dependencies = [
  "helix-core",
  "helix-view",
  "ignore",
+ "markdown-ratatui",
  "notify",
  "nucleo-matcher",
  "ratatui",
@@ -5108,6 +5141,12 @@ checksum = "7c8a2469e56e6e5095c82ccd3afb98dad95f7af7929aab6d8ba8d6e0f73657da"
 dependencies = [
  "arrayvec",
 ]
+
+[[package]]
+name = "unicase"
+version = "2.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "357cc3acc6a036009fd6c973ed009037c732d60d0b4f6c673e9041497482a28f"
 
 [[package]]
 name = "unicode-bom"
