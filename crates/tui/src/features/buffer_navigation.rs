@@ -36,17 +36,17 @@ impl BufferNavigationState {
 
 pub fn commands() -> Vec<Command> {
     [
-        Command::feature(
+        Command::feature_id(
             CommandId("next_buffer_pending"),
             "select next buffer after b",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("previous_buffer_pending"),
             "select previous buffer after b",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("buffer_navigation_cancel"),
             "cancel pending buffer navigation",
             handle_command,

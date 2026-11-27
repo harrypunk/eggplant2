@@ -111,7 +111,8 @@ impl MessageManager {
         };
         match &command.handler {
             CommandHandler::Message(message) => self.update(model, message()),
-            CommandHandler::Feature(handler) => handler(model, id),
+            CommandHandler::Feature(handler) => handler(model),
+            CommandHandler::FeatureId(handler) => handler(model, id),
             CommandHandler::Document(handler) => handler(&self.documents, model),
             CommandHandler::Dispatch(selector) => match selector(model) {
                 Some(target) => self.invoke_command(model, target),

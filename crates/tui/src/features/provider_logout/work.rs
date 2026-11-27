@@ -16,12 +16,12 @@ pub fn commands() -> Vec<Command> {
         Command::feature(
             CommandId("provider_logout_open"),
             "log out of a provider",
-            handle_command,
+            open,
         ),
         Command::feature(
             CommandId("provider_logout_close"),
             "close provider logout",
-            handle_command,
+            close,
         ),
     ]
     .into_iter()
@@ -44,14 +44,6 @@ pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option
         GeneralAction::FocusNext | GeneralAction::Paste => {}
     }
     None
-}
-
-pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    match id.as_str() {
-        "provider_logout_open" => open(model),
-        "provider_logout_close" => close(model),
-        _ => None,
-    }
 }
 
 pub fn open(model: &mut Model) -> Option<Effect> {

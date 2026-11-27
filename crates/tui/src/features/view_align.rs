@@ -28,17 +28,17 @@ pub const KEYMAPS: &[ContextKeymap] = &[ContextKeymap::new("view_align", Context
 
 pub fn commands() -> Vec<Command> {
     [
-        Command::feature(
+        Command::feature_id(
             CommandId("view_align_start"),
             "align cursor line in viewport",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("view_align_cancel"),
             "cancel pending viewport alignment",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("view_toggle_wrap"),
             "toggle editor text wrapping",
             handle_command,

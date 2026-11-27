@@ -13,48 +13,65 @@ pub fn commands() -> Vec<Command> {
         Command::feature(
             CommandId("provider_login_open"),
             "open provider login",
-            handle_command,
+            open,
         ),
         Command::feature(
             CommandId("provider_login_next"),
             "select next provider login option",
-            handle_command,
+            next,
         ),
         Command::feature(
             CommandId("provider_login_previous"),
             "select previous provider login option",
-            handle_command,
+            previous,
         ),
         Command::feature(
             CommandId("provider_login_activate"),
             "activate provider login option",
-            handle_command,
+            activate_current,
         ),
         Command::feature(
             CommandId("provider_login_close"),
             "go back or close provider login",
-            handle_command,
+            back_from_command,
         ),
     ]
     .into_iter()
     .collect()
 }
 
-pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    if id.as_str() == "provider_login_open" {
-        return open(model);
-    }
-    if !available(model) || model.provider_login.is_saving() {
+pub(super) fn next(model: &mut Model) -> Option<Effect> {
+    if !command_available(model) {
         return None;
     }
-    match id.as_str() {
-        "provider_login_next" => model.provider_login.select_next(),
-        "provider_login_previous" => model.provider_login.select_previous(),
-        "provider_login_activate" => return activate(model),
-        "provider_login_close" => return back(model),
-        _ => {}
-    }
+    model.provider_login.select_next();
     None
+}
+
+pub(super) fn previous(model: &mut Model) -> Option<Effect> {
+    if !command_available(model) {
+        return None;
+    }
+    model.provider_login.select_previous();
+    None
+}
+
+pub(super) fn activate_current(model: &mut Model) -> Option<Effect> {
+    if !command_available(model) {
+        return None;
+    }
+    activate(model)
+}
+
+pub(crate) fn back_from_command(model: &mut Model) -> Option<Effect> {
+    if !command_available(model) {
+        return None;
+    }
+    back(model)
+}
+
+fn command_available(model: &Model) -> bool {
+    available(model) && !model.provider_login.is_saving()
 }
 
 pub fn general_action_subscriptions() -> Vec<GeneralActionSubscription> {
@@ -254,12 +271,12 @@ mod tests {
 
     fn open_api_key_at(model: &mut Model, index: usize) {
         open(model);
-        handle_command(model, CommandId("provider_login_next"));
-        handle_command(model, CommandId("provider_login_activate"));
+        next(model);
+        activate_current(model);
         for _ in 0..index {
-            handle_command(model, CommandId("provider_login_next"));
+            next(model);
         }
-        handle_command(model, CommandId("provider_login_activate"));
+        activate_current(model);
     }
 
     fn insert_key(model: &mut Model, key: &str) {
@@ -282,8 +299,8 @@ mod tests {
     }
 
     fn submit_and_complete(model: &mut Model) {
-        let effect = handle_command(model, CommandId("provider_login_activate"))
-            .expect("API-key submission should create a save effect");
+        let effect =
+            activate_current(model).expect("API-key submission should create a save effect");
         complete_effect(model, effect);
     }
 
@@ -312,21 +329,21 @@ mod tests {
 
         let mut model = Model::default();
         open(&mut model);
-        handle_command(&mut model, CommandId("provider_login_activate"));
+        activate_current(&mut model);
         assert_eq!(
             model.provider_login.page(),
             ProviderLoginPage::Providers(ProviderAuthMethod::Account)
         );
 
-        handle_command(&mut model, CommandId("provider_login_close"));
+        back_from_command(&mut model);
         assert_eq!(
             model.provider_login.page(),
             ProviderLoginPage::AuthenticationMethod
         );
-        handle_command(&mut model, CommandId("provider_login_next"));
-        handle_command(&mut model, CommandId("provider_login_activate"));
-        handle_command(&mut model, CommandId("provider_login_next"));
-        handle_command(&mut model, CommandId("provider_login_activate"));
+        next(&mut model);
+        activate_current(&mut model);
+        next(&mut model);
+        activate_current(&mut model);
         let ProviderLoginPage::OpenAiInput(provider) = model.provider_login.page() else {
             panic!("provider selection should open its OpenAI-compatible input");
         };
@@ -339,13 +356,13 @@ mod tests {
             crate::provider_login::DEFAULT_KIMI_FOR_CODING_ENDPOINT
         );
 
-        handle_command(&mut model, CommandId("provider_login_close"));
+        back_from_command(&mut model);
         assert_eq!(
             model.provider_login.page(),
             ProviderLoginPage::Providers(ProviderAuthMethod::ApiKey)
         );
-        handle_command(&mut model, CommandId("provider_login_close"));
-        handle_command(&mut model, CommandId("provider_login_close"));
+        back_from_command(&mut model);
+        back_from_command(&mut model);
         assert!(!model.provider_login.is_open());
         assert!(!model.modal.is_active(Context::ProviderLogin));
     }
@@ -438,14 +455,14 @@ mod tests {
     fn invalid_or_unpersistable_keys_stay_in_the_masked_draft() {
         let mut model = Model::default();
         open_api_key_at(&mut model, 0);
-        handle_command(&mut model, CommandId("provider_login_activate"));
+        activate_current(&mut model);
         assert_eq!(
             model.provider_login.error(),
             Some("API key must not be empty")
         );
 
         insert_key(&mut model, "secret");
-        assert!(handle_command(&mut model, CommandId("provider_login_activate")).is_none());
+        assert!(activate_current(&mut model).is_none());
         assert!(
             model
                 .provider_login

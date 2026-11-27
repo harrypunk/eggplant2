@@ -143,7 +143,7 @@ impl Completion for DiagnosticFailureCompletion {
 }
 
 pub fn commands() -> Vec<Command> {
-    vec![Command::feature(
+    vec![Command::feature_id(
         CommandId("code_diagnostics"),
         "show diagnostics",
         handle_command,

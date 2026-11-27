@@ -31,7 +31,6 @@ pub use state::{
     ProviderLoginSubmission,
 };
 pub use ui::register_ui;
-pub use work::{
-    commands, general_action_subscriptions, handle_command, handle_general_action, handle_input,
-    open,
-};
+#[cfg(test)]
+pub(crate) use work::back_from_command;
+pub use work::{commands, general_action_subscriptions, handle_general_action, handle_input, open};

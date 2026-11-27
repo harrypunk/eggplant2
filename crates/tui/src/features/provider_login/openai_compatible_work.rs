@@ -263,10 +263,8 @@ mod tests {
 
     use super::{super::work, *};
     use crate::{
-        component::text_input::TextInputEvent,
-        data_object::{CommandId, GeneralAction},
-        manager::message_manager::MessageManager,
-        provider_login::ProviderLoginPage,
+        component::text_input::TextInputEvent, data_object::GeneralAction,
+        manager::message_manager::MessageManager, provider_login::ProviderLoginPage,
     };
 
     #[derive(Debug)]
@@ -337,12 +335,12 @@ mod tests {
 
     fn open_form_at(model: &mut Model, provider_index: usize) {
         work::open(model);
-        work::handle_command(model, CommandId("provider_login_next"));
-        work::handle_command(model, CommandId("provider_login_activate"));
+        work::next(model);
+        work::activate_current(model);
         for _ in 0..provider_index {
-            work::handle_command(model, CommandId("provider_login_next"));
+            work::next(model);
         }
-        work::handle_command(model, CommandId("provider_login_activate"));
+        work::activate_current(model);
         work::handle_general_action(model, GeneralAction::FocusNext);
         work::handle_input(model, TextInputEvent::Insert('k'));
     }
@@ -365,7 +363,7 @@ mod tests {
         let (catalogs, _catalog_directory) = crate::test_utils::model_catalog_store();
         model.model_catalogs = Some(catalogs.clone());
         open_form(&mut model);
-        let save = work::handle_command(&mut model, CommandId("provider_login_activate")).unwrap();
+        let save = work::activate_current(&mut model).unwrap();
         let fetch = perform(&mut model, save).expect("successful save should fetch models");
         match model.provider_login.page() {
             ProviderLoginPage::OpenAiModelsLoading(_) => {}
@@ -378,9 +376,8 @@ mod tests {
         }
         assert_eq!(model.provider_login.models(), ["gpt-a", "gpt-b"]);
 
-        work::handle_command(&mut model, CommandId("provider_login_next"));
-        let activation =
-            work::handle_command(&mut model, CommandId("provider_login_activate")).unwrap();
+        work::next(&mut model);
+        let activation = work::activate_current(&mut model).unwrap();
         perform(&mut model, activation);
 
         assert!(!model.provider_login.is_open());
@@ -447,7 +444,7 @@ mod tests {
                 .value(),
             crate::provider_login::DEFAULT_KIMI_FOR_CODING_ENDPOINT
         );
-        let save = work::handle_command(&mut model, CommandId("provider_login_activate")).unwrap();
+        let save = work::activate_current(&mut model).unwrap();
         let fetch = perform(&mut model, save).expect("Kimi save should fetch its catalog");
         perform(&mut model, fetch);
         assert_eq!(
@@ -455,9 +452,8 @@ mod tests {
             ["kimi-for-coding", "k3-256k"]
         );
 
-        work::handle_command(&mut model, CommandId("provider_login_next"));
-        let activation =
-            work::handle_command(&mut model, CommandId("provider_login_activate")).unwrap();
+        work::next(&mut model);
+        let activation = work::activate_current(&mut model).unwrap();
         perform(&mut model, activation);
 
         assert!(!model.provider_login.is_open());
@@ -499,12 +495,11 @@ mod tests {
             crate::provider_login::DEFAULT_QWEN_TOKENPLAN_INDIVIDUAL_CN_ENDPOINT
         );
 
-        let save = work::handle_command(&mut model, CommandId("provider_login_activate")).unwrap();
+        let save = work::activate_current(&mut model).unwrap();
         let fetch = perform(&mut model, save).expect("Qwen save should fetch its catalog");
         perform(&mut model, fetch);
         assert_eq!(model.provider_login.models(), ["qwen3.7-max"]);
-        let activation =
-            work::handle_command(&mut model, CommandId("provider_login_activate")).unwrap();
+        let activation = work::activate_current(&mut model).unwrap();
         perform(&mut model, activation);
 
         assert!(!model.provider_login.is_open());
@@ -537,7 +532,7 @@ mod tests {
         let (mut model, _store, _directory, _activated) =
             model_with_factory(Err("catalog unavailable".to_string()));
         open_form(&mut model);
-        let save = work::handle_command(&mut model, CommandId("provider_login_activate")).unwrap();
+        let save = work::activate_current(&mut model).unwrap();
         let fetch = perform(&mut model, save).unwrap();
         perform(&mut model, fetch);
 

@@ -114,7 +114,7 @@ impl LineJumpState {
 }
 
 pub fn commands() -> Vec<Command> {
-    vec![Command::feature(
+    vec![Command::feature_id(
         CommandId("line_jump_cancel"),
         "cancel pending line jump",
         handle_command,

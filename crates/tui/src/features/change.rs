@@ -70,37 +70,37 @@ enum SelectionOperation {
 
 pub fn commands() -> Vec<Command> {
     [
-        Command::feature(
+        Command::feature_id(
             CommandId("delete_grapheme"),
             "delete grapheme under cursor",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("delete_selection_x"),
             "delete selection",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("delete_selection_d"),
             "delete selection",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("change_selection"),
             "change selection",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("delete_line_pending"),
             "delete current line",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("change_line_pending"),
             "change current line",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("change_cancel"),
             "cancel pending delete/change",
             handle_command,

@@ -32,27 +32,27 @@ pub static CURRENT_FILE_MENU_ITEM: CommandMenuItem =
 
 pub fn commands() -> Vec<Command> {
     [
-        Command::feature(
+        Command::feature_id(
             CommandId("buffer_grep_open"),
             "search current file",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("buffer_grep_close"),
             "close current-file search",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("buffer_grep_next"),
             "next search match",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("buffer_grep_previous"),
             "previous search match",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("buffer_grep_accept"),
             "jump to search match",
             handle_command,

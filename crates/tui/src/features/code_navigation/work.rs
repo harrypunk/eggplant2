@@ -22,37 +22,37 @@ use crate::{
 
 pub fn commands() -> Vec<Command> {
     [
-        Command::feature(
+        Command::feature_id(
             CommandId("code_definition"),
             "go to definition",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("code_references"),
             "find references",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("code_implementation"),
             "go to implementation",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("code_navigation_next"),
             "next location",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("code_navigation_previous"),
             "previous location",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("code_navigation_open"),
             "open location",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("close_code_navigation"),
             "close locations",
             handle_command,

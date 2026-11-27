@@ -206,27 +206,27 @@ impl MergeState {
 
 pub(super) fn commands() -> Vec<Command> {
     [
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_merge_start"),
             "fast-forward merge",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_merge_cancel"),
             "cancel fast-forward merge",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_merge_submit"),
             "submit fast-forward merge",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_merge_next"),
             "select next merge target",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_merge_previous"),
             "select previous merge target",
             handle_command,

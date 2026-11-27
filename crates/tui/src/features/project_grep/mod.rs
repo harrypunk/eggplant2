@@ -33,27 +33,27 @@ pub static PROJECT_MENU_ITEM: CommandMenuItem =
 
 pub fn commands() -> Vec<Command> {
     [
-        Command::feature(
+        Command::feature_id(
             CommandId("project_grep_open"),
             "search project",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("project_grep_close"),
             "close project search",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("project_grep_next"),
             "next project search match",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("project_grep_previous"),
             "previous project search match",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("project_grep_accept"),
             "open project search match",
             handle_command,

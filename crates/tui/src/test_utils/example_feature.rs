@@ -32,7 +32,7 @@ impl Default for ExampleFeatureState {
 }
 
 pub fn register(commands: &mut CommandRegistry, ui: &mut UiRegistry) -> color_eyre::Result<()> {
-    commands.register(Command::feature(
+    commands.register(Command::feature_id(
         CommandId("example.increment"),
         "increment example",
         handle_command,

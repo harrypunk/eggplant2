@@ -347,42 +347,42 @@ enum BranchOperation {
 
 pub(super) fn commands() -> Vec<Command> {
     [
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_branch_menu"),
             "branch actions",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_branch_menu_close"),
             "close branch actions",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_branch_create"),
             "create and switch branch",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_branch_switch"),
             "switch existing branch",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_branch_cancel"),
             "cancel branch workflow",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_branch_submit"),
             "accept branch selection or name",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_branch_next"),
             "select next branch",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_branch_previous"),
             "select previous branch",
             handle_command,

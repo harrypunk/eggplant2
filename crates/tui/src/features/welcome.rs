@@ -22,12 +22,12 @@ pub const KEYMAPS: &[ContextKeymap] = &[ContextKeymap::new("welcome", Context::W
 
 pub fn commands() -> Vec<Command> {
     [
-        Command::feature(
+        Command::feature_id(
             CommandId("welcome_next"),
             "select next welcome command",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("welcome_previous"),
             "select previous welcome command",
             handle_command,

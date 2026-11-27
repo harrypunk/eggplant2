@@ -20,12 +20,12 @@ pub fn commands() -> Vec<Command> {
         Command::feature(
             CommandId("model_selector_open"),
             "select provider model",
-            handle_command,
+            open,
         ),
         Command::feature(
             CommandId("model_selector_close"),
             "close model selector",
-            handle_command,
+            close,
         ),
     ]
     .into_iter()
@@ -48,14 +48,6 @@ pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option
         GeneralAction::FocusNext | GeneralAction::Paste => {}
     }
     None
-}
-
-pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    match id.as_str() {
-        "model_selector_open" => open(model),
-        "model_selector_close" => close(model),
-        _ => None,
-    }
 }
 
 pub fn open(model: &mut Model) -> Option<Effect> {

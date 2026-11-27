@@ -179,7 +179,7 @@ mod tests {
     use crate::agent::approval::{approve_write, reject_write};
     use crate::{
         agent::{
-            commands::{handle_command, handle_input},
+            commands::{command_next, command_quick_fill, handle_input},
             dialog::{close, open},
             panel::{
                 close_panel_input, enter_insert_mode, enter_normal_mode, focus_panel_input,
@@ -187,7 +187,7 @@ mod tests {
             },
         },
         component::text_input::TextInputEvent,
-        data_object::{CommandId, Context, Model, Visibility},
+        data_object::{Context, Model, Visibility},
         manager::message_manager::MessageManager,
         startup::initial_model as build_model,
         test_utils::input_context,
@@ -591,7 +591,7 @@ mod tests {
         assert_eq!(model.agent.prompt(), "/provide");
         assert!(model.agent.session().run().is_none());
 
-        handle_command(&mut model, CommandId("agent_command_quick_fill"));
+        command_quick_fill(&mut model);
         assert_eq!(model.agent.prompt(), "/provider");
         submit(&mut model);
         assert!(model.provider_login.is_open());
@@ -601,7 +601,7 @@ mod tests {
         assert!(model.context_stack.is_empty());
         assert!(model.agent.session().run().is_none());
 
-        crate::provider_login::handle_command(&mut model, CommandId("provider_login_close"));
+        crate::provider_login::back_from_command(&mut model);
         assert_eq!(input_context(&model), Some(Context::AgentChatInsert));
         assert_eq!(model.agent.prompt(), "");
 
@@ -627,8 +627,8 @@ mod tests {
         enter_insert_mode(&mut model);
         model.agent.prompt.set_value("/");
 
-        handle_command(&mut model, CommandId("agent_command_next"));
-        handle_command(&mut model, CommandId("agent_command_next"));
+        command_next(&mut model);
+        command_next(&mut model);
         assert_eq!(model.agent.prompt(), "/model");
         assert_eq!(
             model.agent.command_state().selected(),
@@ -677,7 +677,7 @@ mod tests {
         assert_eq!(input_context(&model), Some(Context::AgentChatDialog));
         assert!(model.context_stack.is_empty());
         model.agent.prompt.set_value("/provider");
-        handle_command(&mut model, CommandId("agent_command_quick_fill"));
+        command_quick_fill(&mut model);
 
         submit(&mut model);
         assert!(model.provider_login.is_open());
@@ -686,7 +686,7 @@ mod tests {
         assert!(model.context_stack.is_empty());
         assert!(model.agent.session().run().is_none());
 
-        crate::provider_login::handle_command(&mut model, CommandId("provider_login_close"));
+        crate::provider_login::back_from_command(&mut model);
         assert!(model.agent.dialog_open());
         assert_eq!(input_context(&model), Some(Context::AgentChatDialog));
         assert!(model.context_stack.is_empty());

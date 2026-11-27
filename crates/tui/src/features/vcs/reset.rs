@@ -257,33 +257,33 @@ impl ResetState {
 
 pub(super) fn commands() -> Vec<Command> {
     [
-        Command::feature(CommandId("vcs_reset_menu"), "reset commits", handle_command),
-        Command::feature(
+        Command::feature_id(CommandId("vcs_reset_menu"), "reset commits", handle_command),
+        Command::feature_id(
             CommandId("vcs_reset_menu_close"),
             "close reset menu",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_reset_soft"),
             "soft reset to ref or commit",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_reset_cancel"),
             "cancel soft reset",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_reset_submit"),
             "submit soft reset",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_reset_next"),
             "select next reset target",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_reset_previous"),
             "select previous reset target",
             handle_command,

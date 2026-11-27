@@ -69,17 +69,17 @@ impl CommitState {
 
 pub(super) fn commands() -> Vec<Command> {
     [
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_commit_submit"),
             "commit staged changes",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_commit_close"),
             "close commit page and preserve the message",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_commit_discard"),
             "discard the commit message",
             handle_command,

@@ -179,118 +179,118 @@ pub(crate) fn repository_mutation_completed(model: &mut Model) -> Option<Effect>
 
 pub fn commands() -> Vec<Command> {
     let mut commands = [
-        Command::feature(
+        Command::feature_id(
             CommandId("open_vcs_page"),
             "open Git history",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("open_vcs_history"),
             "open Git history",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("close_vcs_history"),
             "close Git history",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("close_vcs_history_q"),
             "close Git history",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_history_next"),
             "select next commit",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_history_previous"),
             "select previous commit",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_history_toggle_diff"),
             "toggle commit files or detail diff",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("open_vcs_commit_detail"),
             "open commit detail",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_history_copy_short"),
             "copy short commit hash",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_history_copy_full"),
             "copy full commit hash",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_history_load_more"),
             "load more commits",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("close_vcs_page"),
             "close Git page",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("close_vcs_page_q"),
             "close Git page",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_next_change"),
             "select next changed file",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_previous_change"),
             "select previous changed file",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("open_vcs_change"),
             "open selected changed file",
             handle_command,
         ),
-        Command::feature(CommandId("vcs_stage"), "stage changed file", handle_command),
-        Command::feature(
+        Command::feature_id(CommandId("vcs_stage"), "stage changed file", handle_command),
+        Command::feature_id(
             CommandId("vcs_unstage"),
             "unstage changed file",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_stage_all"),
             "stage all changes",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_unstage_all"),
             "unstage all changes",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_toggle_diff"),
             "toggle changed-file diff",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_discard"),
             "discard changed file",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_commit_placeholder"),
             "commit staged files",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("vcs_help_placeholder"),
             "Git help",
             handle_command,

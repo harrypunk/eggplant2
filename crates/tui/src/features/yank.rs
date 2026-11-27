@@ -64,27 +64,27 @@ struct PendingPaste {
 
 pub fn commands() -> Vec<Command> {
     [
-        Command::feature(
+        Command::feature_id(
             CommandId("yank_selection"),
             "yank selection",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("yank_line_pending"),
             "yank current line",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("paste_after"),
             "paste after cursor",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("paste_before"),
             "paste before cursor",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("yank_cancel"),
             "cancel pending yank",
             handle_command,

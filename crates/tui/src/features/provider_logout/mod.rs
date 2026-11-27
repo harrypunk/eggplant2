@@ -18,6 +18,4 @@ pub const KEYMAPS: &[ContextKeymap] =
 
 pub use state::{ProviderLogoutLoad, ProviderLogoutPage, ProviderLogoutState};
 pub use ui::register_ui;
-pub use work::{
-    close, commands, general_action_subscriptions, handle_command, handle_general_action, open,
-};
+pub use work::{close, commands, general_action_subscriptions, handle_general_action, open};

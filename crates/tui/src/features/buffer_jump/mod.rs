@@ -23,12 +23,12 @@ pub const SEARCH_MENU_ITEM: CommandMenuItem = CommandMenuItem::action(
 
 pub fn commands() -> Vec<Command> {
     [
-        Command::feature(
+        Command::feature_id(
             CommandId("buffer_jump_start"),
             "jump in visible buffer",
             handle_command,
         ),
-        Command::feature(
+        Command::feature_id(
             CommandId("buffer_jump_cancel"),
             "cancel buffer jump",
             handle_command,

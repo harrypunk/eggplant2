@@ -34,6 +34,8 @@ The root `leader` setting configures the opening chord (`Space` by default); arb
 
 Exact handler signatures should remain narrow. Do not use a generic command bus carrying arbitrary strings and untyped payloads throughout the application.
 
+`Command::feature` binds a stable ID directly to a `fn(&mut Model) -> Option<Effect>` callback. Features register semantic functions instead of receiving the resolved `CommandId` and matching its string again. Shared parameterized operations use small typed wrappers. Agent, provider login, provider logout, and model selection use this direct path and have no ID-based `handle_command` dispatcher. `Command::feature_id` is a temporary compatibility path for editor, explorer, shell, theme, and VCS slices awaiting migration; it must not be used for new commands and is removed once those registrations move.
+
 ## Effects and completion routing
 
 Updates remain pure. A feature returns an effect request; the runtime locates the registered handler and executes it with the appropriate scheduling semantics.

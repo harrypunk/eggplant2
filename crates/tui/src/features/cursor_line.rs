@@ -31,7 +31,7 @@ impl CursorLineState {
 }
 
 pub fn commands() -> Vec<Command> {
-    vec![Command::feature(
+    vec![Command::feature_id(
         CommandId("cursor_line_toggle"),
         "toggle cursor-line background",
         handle_command,
