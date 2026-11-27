@@ -257,53 +257,40 @@ impl ResetState {
 
 pub(super) fn commands() -> Vec<Command> {
     [
-        Command::feature_id(CommandId("vcs_reset_menu"), "reset commits", handle_command),
-        Command::feature_id(
+        Command::feature(CommandId("vcs_reset_menu"), "reset commits", open_menu),
+        Command::feature(
             CommandId("vcs_reset_menu_close"),
             "close reset menu",
-            handle_command,
+            close_menu,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("vcs_reset_soft"),
             "soft reset to ref or commit",
-            handle_command,
+            start,
         ),
-        Command::feature_id(
-            CommandId("vcs_reset_cancel"),
-            "cancel soft reset",
-            handle_command,
-        ),
-        Command::feature_id(
-            CommandId("vcs_reset_submit"),
-            "submit soft reset",
-            handle_command,
-        ),
-        Command::feature_id(
+        Command::feature(CommandId("vcs_reset_cancel"), "cancel soft reset", cancel),
+        Command::feature(CommandId("vcs_reset_submit"), "submit soft reset", submit),
+        Command::feature(
             CommandId("vcs_reset_next"),
             "select next reset target",
-            handle_command,
+            next,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("vcs_reset_previous"),
             "select previous reset target",
-            handle_command,
+            previous,
         ),
     ]
     .into_iter()
     .collect()
 }
 
-pub(super) fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    match id.as_str() {
-        "vcs_reset_menu" => open_menu(model),
-        "vcs_reset_menu_close" => close_menu(model),
-        "vcs_reset_soft" => start(model),
-        "vcs_reset_cancel" => cancel(model),
-        "vcs_reset_submit" => submit(model),
-        "vcs_reset_next" => select(model, true),
-        "vcs_reset_previous" => select(model, false),
-        _ => None,
-    }
+fn next(model: &mut Model) -> Option<Effect> {
+    select(model, true)
+}
+
+fn previous(model: &mut Model) -> Option<Effect> {
+    select(model, false)
 }
 
 fn open_menu(model: &mut Model) -> Option<Effect> {
@@ -476,9 +463,9 @@ mod tests {
     }
 
     fn start(model: &mut Model) -> u64 {
-        handle_command(model, CommandId("vcs_reset_menu"));
+        open_menu(model);
         assert!(model.vcs.reset.is_menu());
-        assert!(handle_command(model, CommandId("vcs_reset_soft")).is_some());
+        assert!(super::start(model).is_some());
         assert!(model.vcs.reset.is_loading());
         assert_eq!(
             crate::test_utils::input_context(model),
@@ -520,10 +507,10 @@ mod tests {
             handle_input(&mut model, TextInputEvent::Insert(character));
         }
         assert_eq!(model.vcs.reset.revision_query(), Some("abcd"));
-        assert!(handle_command(&mut model, CommandId("vcs_reset_submit")).is_some());
+        assert!(submit(&mut model).is_some());
         assert!(model.vcs.reset.is_resetting());
         assert_eq!(model.vcs.reset.target(), Some("abcd"));
-        assert!(handle_command(&mut model, CommandId("vcs_reset_cancel")).is_none());
+        assert!(cancel(&mut model).is_none());
 
         let revision = model.vcs.reset.revision;
         Box::new(ResetCompletion {
@@ -535,7 +522,7 @@ mod tests {
         assert!(model.vcs.reset.is_selecting());
         assert_eq!(model.vcs.reset.error(), Some("unknown revision"));
 
-        handle_command(&mut model, CommandId("vcs_reset_submit"));
+        submit(&mut model);
         let completion = Box::new(ResetCompletion {
             repository: PathBuf::from("/workspace"),
             revision: model.vcs.reset.revision,
@@ -558,8 +545,8 @@ mod tests {
         let mut model = model();
         let revision = start(&mut model);
         targets(&mut model, revision);
-        handle_command(&mut model, CommandId("vcs_reset_next"));
-        handle_command(&mut model, CommandId("vcs_reset_submit"));
+        next(&mut model);
+        submit(&mut model);
         assert_eq!(model.vcs.reset.target(), Some("origin/main"));
 
         let revision = model.vcs.reset.revision;

@@ -206,45 +206,38 @@ impl MergeState {
 
 pub(super) fn commands() -> Vec<Command> {
     [
-        Command::feature_id(
-            CommandId("vcs_merge_start"),
-            "fast-forward merge",
-            handle_command,
-        ),
-        Command::feature_id(
+        Command::feature(CommandId("vcs_merge_start"), "fast-forward merge", start),
+        Command::feature(
             CommandId("vcs_merge_cancel"),
             "cancel fast-forward merge",
-            handle_command,
+            cancel,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("vcs_merge_submit"),
             "submit fast-forward merge",
-            handle_command,
+            submit,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("vcs_merge_next"),
             "select next merge target",
-            handle_command,
+            next,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("vcs_merge_previous"),
             "select previous merge target",
-            handle_command,
+            previous,
         ),
     ]
     .into_iter()
     .collect()
 }
 
-pub(super) fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    match id.as_str() {
-        "vcs_merge_start" => start(model),
-        "vcs_merge_cancel" => cancel(model),
-        "vcs_merge_submit" => submit(model),
-        "vcs_merge_next" => select(model, true),
-        "vcs_merge_previous" => select(model, false),
-        _ => None,
-    }
+fn next(model: &mut Model) -> Option<Effect> {
+    select(model, true)
+}
+
+fn previous(model: &mut Model) -> Option<Effect> {
+    select(model, false)
 }
 
 fn start(model: &mut Model) -> Option<Effect> {

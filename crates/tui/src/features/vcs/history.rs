@@ -819,10 +819,12 @@ mod tests {
         std::fs::write(&path, "hello").unwrap();
         let mut model = history_file_model(directory.path(), ::vcs::ChangeKind::Modified);
 
-        let Some(Effect::OpenDocument(request)) = crate::vcs::handle_command(
-            &mut model,
-            crate::data_object::CommandId("open_vcs_commit_detail"),
-        ) else {
+        let Some(Effect::OpenDocument(request)) =
+            crate::manager::message_manager::MessageManager::default().update(
+                &mut model,
+                Message::InvokeCommand(crate::data_object::CommandId("open_vcs_commit_detail")),
+            )
+        else {
             panic!("expected a document-open request");
         };
         assert_eq!(model.active_page, AppPage::Editor);

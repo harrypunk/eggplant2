@@ -347,63 +347,57 @@ enum BranchOperation {
 
 pub(super) fn commands() -> Vec<Command> {
     [
-        Command::feature_id(
-            CommandId("vcs_branch_menu"),
-            "branch actions",
-            handle_command,
-        ),
-        Command::feature_id(
+        Command::feature(CommandId("vcs_branch_menu"), "branch actions", open_menu),
+        Command::feature(
             CommandId("vcs_branch_menu_close"),
             "close branch actions",
-            handle_command,
+            close_menu,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("vcs_branch_create"),
             "create and switch branch",
-            handle_command,
+            create,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("vcs_branch_switch"),
             "switch existing branch",
-            handle_command,
+            switch,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("vcs_branch_cancel"),
             "cancel branch workflow",
-            handle_command,
+            cancel,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("vcs_branch_submit"),
             "accept branch selection or name",
-            handle_command,
+            submit,
         ),
-        Command::feature_id(
-            CommandId("vcs_branch_next"),
-            "select next branch",
-            handle_command,
-        ),
-        Command::feature_id(
+        Command::feature(CommandId("vcs_branch_next"), "select next branch", next),
+        Command::feature(
             CommandId("vcs_branch_previous"),
             "select previous branch",
-            handle_command,
+            previous,
         ),
     ]
     .into_iter()
     .collect()
 }
 
-pub(super) fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    match id.as_str() {
-        "vcs_branch_menu" => open_menu(model),
-        "vcs_branch_menu_close" => close_menu(model),
-        "vcs_branch_create" => start(model, BranchMode::Create),
-        "vcs_branch_switch" => start(model, BranchMode::Switch),
-        "vcs_branch_cancel" => cancel(model),
-        "vcs_branch_submit" => submit(model),
-        "vcs_branch_next" => select(model, true),
-        "vcs_branch_previous" => select(model, false),
-        _ => None,
-    }
+fn create(model: &mut Model) -> Option<Effect> {
+    start(model, BranchMode::Create)
+}
+
+fn switch(model: &mut Model) -> Option<Effect> {
+    start(model, BranchMode::Switch)
+}
+
+fn next(model: &mut Model) -> Option<Effect> {
+    select(model, true)
+}
+
+fn previous(model: &mut Model) -> Option<Effect> {
+    select(model, false)
 }
 
 fn open_menu(model: &mut Model) -> Option<Effect> {

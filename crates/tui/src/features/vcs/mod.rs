@@ -179,121 +179,105 @@ pub(crate) fn repository_mutation_completed(model: &mut Model) -> Option<Effect>
 
 pub fn commands() -> Vec<Command> {
     let mut commands = [
-        Command::feature_id(
-            CommandId("open_vcs_page"),
-            "open Git history",
-            handle_command,
-        ),
-        Command::feature_id(
+        Command::feature(CommandId("open_vcs_page"), "open Git history", open_page),
+        Command::feature(
             CommandId("open_vcs_history"),
             "open Git history",
-            handle_command,
+            open_history,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("close_vcs_history"),
             "close Git history",
-            handle_command,
+            close_history,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("close_vcs_history_q"),
             "close Git history",
-            handle_command,
+            close_history,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("vcs_history_next"),
             "select next commit",
-            handle_command,
+            history_next,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("vcs_history_previous"),
             "select previous commit",
-            handle_command,
+            history_previous,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("vcs_history_toggle_diff"),
             "toggle commit files or detail diff",
-            handle_command,
+            toggle_history,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("open_vcs_commit_detail"),
             "open commit detail",
-            handle_command,
+            open_commit,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("vcs_history_copy_short"),
             "copy short commit hash",
-            handle_command,
+            copy_short,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("vcs_history_copy_full"),
             "copy full commit hash",
-            handle_command,
+            copy_full,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("vcs_history_load_more"),
             "load more commits",
-            handle_command,
+            load_history_more,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("close_vcs_page"),
             "close Git page",
-            handle_command,
+            close_status_page,
         ),
-        Command::feature_id(
-            CommandId("close_vcs_page_q"),
-            "close Git page",
-            handle_command,
-        ),
-        Command::feature_id(
+        Command::feature(CommandId("close_vcs_page_q"), "close Git page", close_page),
+        Command::feature(
             CommandId("vcs_next_change"),
             "select next changed file",
-            handle_command,
+            next_change,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("vcs_previous_change"),
             "select previous changed file",
-            handle_command,
+            previous_change,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("open_vcs_change"),
             "open selected changed file",
-            handle_command,
+            open_selected_change,
         ),
-        Command::feature_id(CommandId("vcs_stage"), "stage changed file", handle_command),
-        Command::feature_id(
-            CommandId("vcs_unstage"),
-            "unstage changed file",
-            handle_command,
-        ),
-        Command::feature_id(
-            CommandId("vcs_stage_all"),
-            "stage all changes",
-            handle_command,
-        ),
-        Command::feature_id(
+        Command::feature(CommandId("vcs_stage"), "stage changed file", stage),
+        Command::feature(CommandId("vcs_unstage"), "unstage changed file", unstage),
+        Command::feature(CommandId("vcs_stage_all"), "stage all changes", stage_all),
+        Command::feature(
             CommandId("vcs_unstage_all"),
             "unstage all changes",
-            handle_command,
+            unstage_all,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("vcs_toggle_diff"),
             "toggle changed-file diff",
-            handle_command,
+            toggle_diff,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("vcs_discard"),
             "discard changed file",
-            handle_command,
+            discard_selected_change,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("vcs_commit_placeholder"),
             "commit staged files",
-            handle_command,
+            commit::open,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("vcs_help_placeholder"),
             "Git help",
-            handle_command,
+            toggle_vcs_help,
         ),
     ]
     .into_iter()
@@ -305,55 +289,72 @@ pub fn commands() -> Vec<Command> {
     commands
 }
 
-pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    match id.as_str() {
-        "open_vcs_page" => open_page(model),
-        "open_vcs_history" => open_history(model),
-        "close_vcs_history" | "close_vcs_history_q" => close_history(model),
-        "vcs_history_next" => select_history(model, SelectionDirection::Next),
-        "vcs_history_previous" => select_history(model, SelectionDirection::Previous),
-        "vcs_history_toggle_diff" => match model.vcs.history.pane {
-            HistoryPane::Detail => toggle_history_file_diff(model),
-            HistoryPane::List => toggle_history_files(model),
-        },
-        "open_vcs_commit_detail" => match model.vcs.history.pane {
-            HistoryPane::Detail => open_history_file(model),
-            HistoryPane::List => open_history_detail(model),
-        },
-        "vcs_history_copy_short" => copy_history_hash(model, crate::copy_hash::HashFormat::Short),
-        "vcs_history_copy_full" => copy_history_hash(model, crate::copy_hash::HashFormat::Full),
-        "vcs_history_load_more" => load_history_more(model),
-        "close_vcs_page" => {
-            if model.vcs.help_visible {
-                model.vcs.help_visible = false;
-                None
-            } else {
-                close_page(model)
-            }
-        }
-        "close_vcs_page_q" => close_page(model),
-        "vcs_next_change" => select_change(model, SelectionDirection::Next),
-        "vcs_previous_change" => select_change(model, SelectionDirection::Previous),
-        "open_vcs_change" => open_selected_change(model),
-        "vcs_stage" => mutate_selected_change(model, true),
-        "vcs_unstage" => mutate_selected_change(model, false),
-        "vcs_stage_all" => mutate_all_changes(model, true),
-        "vcs_unstage_all" => mutate_all_changes(model, false),
-        "vcs_toggle_diff" => toggle_diff(model),
-        "vcs_discard" => discard_selected_change(model),
-        "vcs_commit_placeholder" => commit::open(model),
-        "vcs_help_placeholder" => {
-            model.vcs.help_visible = !model.vcs.help_visible;
-            None
-        }
-        _ => {
-            model.status = Some(StatusMessage::error(format!(
-                "unknown VCS command `{}`",
-                id.as_str()
-            )));
-            None
-        }
+fn history_next(model: &mut Model) -> Option<Effect> {
+    select_history(model, SelectionDirection::Next)
+}
+
+fn history_previous(model: &mut Model) -> Option<Effect> {
+    select_history(model, SelectionDirection::Previous)
+}
+
+fn toggle_history(model: &mut Model) -> Option<Effect> {
+    match model.vcs.history.pane {
+        HistoryPane::Detail => toggle_history_file_diff(model),
+        HistoryPane::List => toggle_history_files(model),
     }
+}
+
+fn open_commit(model: &mut Model) -> Option<Effect> {
+    match model.vcs.history.pane {
+        HistoryPane::Detail => open_history_file(model),
+        HistoryPane::List => open_history_detail(model),
+    }
+}
+
+fn copy_short(model: &mut Model) -> Option<Effect> {
+    copy_history_hash(model, crate::copy_hash::HashFormat::Short)
+}
+
+fn copy_full(model: &mut Model) -> Option<Effect> {
+    copy_history_hash(model, crate::copy_hash::HashFormat::Full)
+}
+
+fn close_status_page(model: &mut Model) -> Option<Effect> {
+    if model.vcs.help_visible {
+        model.vcs.help_visible = false;
+        None
+    } else {
+        close_page(model)
+    }
+}
+
+fn next_change(model: &mut Model) -> Option<Effect> {
+    select_change(model, SelectionDirection::Next)
+}
+
+fn previous_change(model: &mut Model) -> Option<Effect> {
+    select_change(model, SelectionDirection::Previous)
+}
+
+fn stage(model: &mut Model) -> Option<Effect> {
+    mutate_selected_change(model, true)
+}
+
+fn unstage(model: &mut Model) -> Option<Effect> {
+    mutate_selected_change(model, false)
+}
+
+fn stage_all(model: &mut Model) -> Option<Effect> {
+    mutate_all_changes(model, true)
+}
+
+fn unstage_all(model: &mut Model) -> Option<Effect> {
+    mutate_all_changes(model, false)
+}
+
+fn toggle_vcs_help(model: &mut Model) -> Option<Effect> {
+    model.vcs.help_visible = !model.vcs.help_visible;
+    None
 }
 
 fn open_page(model: &mut Model) -> Option<Effect> {
@@ -459,7 +460,7 @@ mod tests {
     fn page_open_and_close_restores_the_editor_context() {
         let mut model = Model::default();
 
-        assert!(handle_command(&mut model, CommandId("open_vcs_page")).is_none());
+        assert!(open_page(&mut model).is_none());
         assert_eq!(model.active_page, AppPage::Vcs);
         assert!(model.context_stack.is_empty());
         assert_eq!(
@@ -467,7 +468,7 @@ mod tests {
             &HistoryState::Failed("not a Git repository".to_string())
         );
 
-        assert!(handle_command(&mut model, CommandId("close_vcs_page")).is_none());
+        assert!(close_status_page(&mut model).is_none());
         assert_eq!(model.active_page, AppPage::Editor);
         assert!(model.context_stack.is_empty());
     }
@@ -533,9 +534,9 @@ mod tests {
         model.vcs.history.selected = Some(0);
         model.vcs.history.has_more = true;
 
-        assert!(handle_command(&mut model, CommandId("vcs_history_load_more")).is_some());
+        assert!(load_history_more(&mut model).is_some());
         assert_eq!(model.vcs.history.more, HistoryMoreState::Loading);
-        assert!(handle_command(&mut model, CommandId("vcs_history_load_more")).is_none());
+        assert!(load_history_more(&mut model).is_none());
         let revision = model.vcs.history.revision;
         Box::new(HistoryCompletion {
             target: root.clone(),
@@ -566,7 +567,7 @@ mod tests {
         assert_eq!(model.vcs.history.selected, Some(0));
         assert_eq!(model.vcs.history.more, HistoryMoreState::Idle);
         assert!(!model.vcs.history.has_more);
-        assert!(handle_command(&mut model, CommandId("vcs_history_load_more")).is_none());
+        assert!(load_history_more(&mut model).is_none());
     }
 
     #[test]
@@ -586,7 +587,7 @@ mod tests {
         model.vcs.history.selected = Some(0);
         model.vcs.history.has_more = true;
 
-        assert!(handle_command(&mut model, CommandId("vcs_history_load_more")).is_some());
+        assert!(load_history_more(&mut model).is_some());
         Box::new(HistoryCompletion {
             target: root,
             offset: 1,
@@ -600,7 +601,7 @@ mod tests {
             HistoryMoreState::Failed("network unavailable".to_string())
         );
         assert!(matches!(model.vcs.history.state, HistoryState::Ready(_)));
-        assert!(handle_command(&mut model, CommandId("vcs_history_load_more")).is_some());
+        assert!(load_history_more(&mut model).is_some());
         assert_eq!(model.vcs.history.more, HistoryMoreState::Loading);
     }
 
@@ -708,9 +709,7 @@ mod tests {
             ChangesState::Ready(vec![change(path.clone(), ChangeKind::Modified)]);
         model.vcs.changes.selected = Some(0);
 
-        let Some(Effect::OpenDocument(request)) =
-            handle_command(&mut model, CommandId("open_vcs_change"))
-        else {
+        let Some(Effect::OpenDocument(request)) = open_selected_change(&mut model) else {
             panic!("expected an open-document effect");
         };
         assert_eq!(model.active_page, AppPage::Editor);
@@ -737,13 +736,13 @@ mod tests {
         ]);
         model.vcs.changes.selected = Some(0);
 
-        assert!(handle_command(&mut model, CommandId("vcs_stage")).is_some());
+        assert!(stage(&mut model).is_some());
         let revision = model.vcs.changes.operation_revision();
         assert!(model.vcs.changes.operation_in_progress());
         model.vcs.changes.selected = Some(1);
 
-        assert!(handle_command(&mut model, CommandId("vcs_stage")).is_some());
-        assert!(handle_command(&mut model, CommandId("vcs_stage_all")).is_some());
+        assert!(stage(&mut model).is_some());
+        assert!(stage_all(&mut model).is_some());
         assert_eq!(model.vcs.changes.operation_revision(), revision);
         assert_eq!(model.vcs.notice, None);
         assert_eq!(
@@ -762,7 +761,7 @@ mod tests {
         .update(&mut model);
         assert!(matches!(refresh, Some(Effect::Batch(_))));
         assert!(!model.vcs.changes.operation_in_progress());
-        assert!(handle_command(&mut model, CommandId("vcs_stage")).is_some());
+        assert!(stage(&mut model).is_some());
     }
 
     #[test]
@@ -776,7 +775,7 @@ mod tests {
             ChangesState::Ready(vec![change(root.join("note.txt"), ChangeKind::Modified)]);
         model.vcs.changes.selected = Some(0);
 
-        assert!(handle_command(&mut model, CommandId("vcs_stage")).is_some());
+        assert!(stage(&mut model).is_some());
         let revision = model.vcs.changes.operation_revision();
         let stale = Box::new(OperationCompletion {
             kind: OperationKind::Stage,
@@ -839,7 +838,7 @@ mod tests {
         ]);
         model.vcs.changes.selected = Some(1);
 
-        assert!(handle_command(&mut model, CommandId("vcs_stage_all")).is_some());
+        assert!(stage_all(&mut model).is_some());
         let refresh = Box::new(BulkOperationCompletion {
             stage: true,
             target: root.clone(),
@@ -869,7 +868,7 @@ mod tests {
             "Staged all changes"
         );
 
-        assert!(handle_command(&mut model, CommandId("vcs_unstage_all")).is_some());
+        assert!(unstage_all(&mut model).is_some());
         let refresh = Box::new(BulkOperationCompletion {
             stage: false,
             target: root.clone(),
@@ -911,7 +910,7 @@ mod tests {
         model.vcs.changes.state =
             ChangesState::Ready(vec![change(root.join("note.txt"), ChangeKind::Modified)]);
         model.vcs.changes.selected = Some(0);
-        assert!(handle_command(&mut model, CommandId("vcs_stage")).is_some());
+        assert!(stage(&mut model).is_some());
 
         let effect = Box::new(OperationCompletion {
             kind: OperationKind::Stage,
@@ -929,7 +928,7 @@ mod tests {
             model.notifications.current().unwrap().message(),
             "index locked"
         );
-        assert!(handle_command(&mut model, CommandId("vcs_stage")).is_some());
+        assert!(stage(&mut model).is_some());
     }
 
     #[test]
@@ -968,7 +967,7 @@ mod tests {
         model.vcs.changes.state = ChangesState::Ready(vec![selected.clone()]);
         model.vcs.changes.selected = Some(0);
 
-        assert!(handle_command(&mut model, CommandId("vcs_toggle_diff")).is_some());
+        assert!(toggle_diff(&mut model).is_some());
         let revision = model.vcs.changes.diff_revision;
         Box::new(DiffCompletion {
             change: selected.clone(),
@@ -988,11 +987,11 @@ mod tests {
             }
         );
 
-        assert!(handle_command(&mut model, CommandId("vcs_toggle_diff")).is_none());
+        assert!(toggle_diff(&mut model).is_none());
         assert_eq!(model.vcs.changes.expanded, None);
         assert_eq!(model.vcs.changes.diff, DiffState::Idle);
 
-        assert!(handle_command(&mut model, CommandId("vcs_toggle_diff")).is_none());
+        assert!(toggle_diff(&mut model).is_none());
         assert_eq!(
             model.vcs.changes.expanded,
             Some((selected.path.clone(), selected.staged))
@@ -1048,10 +1047,10 @@ mod tests {
         };
         model.active_page = AppPage::Vcs;
 
-        assert!(handle_command(&mut model, CommandId("open_vcs_history")).is_none());
+        assert!(open_history(&mut model).is_none());
         assert_eq!(model.active_page, AppPage::VcsHistory);
         assert!(model.context_stack.is_empty());
-        assert!(handle_command(&mut model, CommandId("close_vcs_history")).is_none());
+        assert!(close_history(&mut model).is_none());
         assert_eq!(model.active_page, AppPage::Vcs);
         assert!(model.context_stack.is_empty());
 
@@ -1095,7 +1094,7 @@ mod tests {
             CommitDetailsState::Failed("failed".to_string()),
         ] {
             model.vcs.history.detail = detail;
-            assert!(handle_command(&mut model, CommandId("vcs_history_toggle_diff")).is_none());
+            assert!(toggle_history(&mut model).is_none());
             select_history(&mut model, SelectionDirection::Next);
             {
                 let mut navigation = navigation::HistoryNavigation::new(&mut model.vcs);
@@ -1134,7 +1133,7 @@ mod tests {
             }],
         };
 
-        assert!(handle_command(&mut model, CommandId("vcs_history_toggle_diff")).is_some());
+        assert!(toggle_history(&mut model).is_some());
         Box::new(HistoryFilesCompletion {
             commit_id: commit.id.clone(),
             target: root,
@@ -1147,9 +1146,9 @@ mod tests {
             CommitDetailsState::Ready(_)
         ));
 
-        assert!(handle_command(&mut model, CommandId("vcs_history_toggle_diff")).is_none());
+        assert!(toggle_history(&mut model).is_none());
         assert_eq!(model.vcs.history.expanded, None);
-        assert!(handle_command(&mut model, CommandId("vcs_history_toggle_diff")).is_none());
+        assert!(toggle_history(&mut model).is_none());
         assert_eq!(model.vcs.history.expanded, Some(commit.id));
         assert!(matches!(
             model.vcs.history.files,
@@ -1185,7 +1184,7 @@ mod tests {
             }],
         };
 
-        assert!(handle_command(&mut model, CommandId("open_vcs_commit_detail")).is_some());
+        assert!(open_commit(&mut model).is_some());
         Box::new(HistoryDetailCompletion {
             commit_id: "abc1234".to_string(),
             target: root.clone(),
@@ -1199,7 +1198,7 @@ mod tests {
         ));
         assert_eq!(model.vcs.history.selected_file, Some(0));
 
-        assert!(handle_command(&mut model, CommandId("vcs_history_toggle_diff")).is_some());
+        assert!(toggle_history(&mut model).is_some());
         Box::new(HistoryFileDiffCompletion {
             commit_id: "full-commit-id".to_string(),
             file_path: "note.txt".to_string(),
@@ -1300,11 +1299,11 @@ mod tests {
             },
         );
 
-        assert!(handle_command(&mut model, CommandId("open_vcs_commit_detail")).is_none());
+        assert!(open_commit(&mut model).is_none());
         assert_eq!(model.vcs.history.selected_file, Some(0));
         select_history(&mut model, SelectionDirection::Next);
         assert_eq!(model.vcs.history.selected_file, Some(1));
-        assert!(handle_command(&mut model, CommandId("vcs_history_toggle_diff")).is_some());
+        assert!(toggle_history(&mut model).is_some());
         Box::new(HistoryFileDiffCompletion {
             commit_id: "full-commit-id".to_string(),
             file_path: "second.txt".to_string(),
@@ -1332,14 +1331,14 @@ mod tests {
         };
         model.active_page = AppPage::Vcs;
 
-        assert!(handle_command(&mut model, CommandId("vcs_help_placeholder")).is_none());
+        assert!(toggle_vcs_help(&mut model).is_none());
         assert!(model.vcs.help_visible);
-        assert!(handle_command(&mut model, CommandId("close_vcs_page")).is_none());
+        assert!(close_status_page(&mut model).is_none());
         assert!(!model.vcs.help_visible);
         assert_eq!(model.active_page, AppPage::Vcs);
 
-        assert!(handle_command(&mut model, CommandId("vcs_help_placeholder")).is_none());
-        assert!(handle_command(&mut model, CommandId("close_vcs_page_q")).is_none());
+        assert!(toggle_vcs_help(&mut model).is_none());
+        assert!(close_page(&mut model).is_none());
         assert_eq!(model.active_page, AppPage::Editor);
         assert!(!model.vcs.help_visible);
     }
@@ -1355,7 +1354,7 @@ mod tests {
         staged.staged = true;
         model.vcs.changes.state = ChangesState::Ready(vec![staged]);
         model.vcs.changes.selected = Some(0);
-        assert!(handle_command(&mut model, CommandId("vcs_discard")).is_some());
+        assert!(discard_selected_change(&mut model).is_some());
         assert_eq!(
             model.notifications.current().unwrap().message(),
             "Select an unstaged change to discard"
@@ -1373,7 +1372,7 @@ mod tests {
             model.vcs.changes.state =
                 ChangesState::Ready(vec![change(root.join("note.txt"), kind)]);
             model.vcs.changes.selected = Some(0);
-            handle_command(&mut model, CommandId("vcs_discard"));
+            discard_selected_change(&mut model);
             assert_eq!(model.notifications.current().unwrap().message(), message);
             assert!(!model.vcs.changes.operation_in_progress());
         }
@@ -1381,7 +1380,7 @@ mod tests {
         model.vcs.changes.state =
             ChangesState::Ready(vec![change(root.join("note.txt"), ChangeKind::Modified)]);
         model.vcs.changes.selected = Some(0);
-        assert!(handle_command(&mut model, CommandId("vcs_discard")).is_some());
+        assert!(discard_selected_change(&mut model).is_some());
         assert!(model.vcs.changes.operation_in_progress());
         let completion = Box::new(OperationCompletion {
             kind: OperationKind::Discard,
@@ -1410,7 +1409,7 @@ mod tests {
         )]);
         model.vcs.changes.selected = Some(0);
 
-        assert!(handle_command(&mut model, CommandId("open_vcs_change")).is_none());
+        assert!(open_selected_change(&mut model).is_none());
         assert!(model.editor.is_empty());
         assert_eq!(
             model.status.as_ref().map(|status| status.text.as_str()),

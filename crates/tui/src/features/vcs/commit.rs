@@ -69,33 +69,24 @@ impl CommitState {
 
 pub(super) fn commands() -> Vec<Command> {
     [
-        Command::feature_id(
+        Command::feature(
             CommandId("vcs_commit_submit"),
             "commit staged changes",
-            handle_command,
+            submit,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("vcs_commit_close"),
             "close commit page and preserve the message",
-            handle_command,
+            close,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("vcs_commit_discard"),
             "discard the commit message",
-            handle_command,
+            discard,
         ),
     ]
     .into_iter()
     .collect()
-}
-
-pub(super) fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    match id.as_str() {
-        "vcs_commit_submit" => submit(model),
-        "vcs_commit_close" => close(model),
-        "vcs_commit_discard" => discard(model),
-        _ => None,
-    }
 }
 
 pub(crate) fn open(model: &mut Model) -> Option<Effect> {
@@ -332,7 +323,7 @@ mod tests {
     }
 
     fn submit(model: &mut Model) -> Option<Effect> {
-        handle_command(model, CommandId("vcs_commit_submit"))
+        super::submit(model)
     }
 
     fn finish_save(model: &mut Model, completion: editor::SaveCompletion) -> Option<Effect> {

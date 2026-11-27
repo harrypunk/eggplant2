@@ -11,7 +11,6 @@ use crate::{
 };
 
 pub type FeatureHandler = fn(&mut Model) -> Option<Effect>;
-pub type LegacyFeatureHandler = fn(&mut Model, CommandId) -> Option<Effect>;
 pub type DocumentHandler = fn(&DocumentFactory, &mut Model) -> Option<Effect>;
 pub type CommandSelector = fn(&Model) -> Option<CommandId>;
 /// A feature's command metadata; the registry owns insertion and duplicate validation.
@@ -21,8 +20,6 @@ type CommandProvider = fn() -> Vec<Command>;
 pub enum CommandHandler {
     Message(fn() -> Message),
     Feature(FeatureHandler),
-    /// Transitional ID-dispatch path for features awaiting direct-callback migration.
-    FeatureId(LegacyFeatureHandler),
     /// Invoke a command that needs the shared document-opening capability.
     Document(DocumentHandler),
     /// Resolve a data-driven command target, then use the normal dispatch path.
@@ -52,18 +49,6 @@ impl Command {
             id,
             description,
             handler: CommandHandler::Feature(handler),
-        }
-    }
-
-    pub fn feature_id(
-        id: CommandId,
-        description: &'static str,
-        handler: LegacyFeatureHandler,
-    ) -> Self {
-        Self {
-            id,
-            description,
-            handler: CommandHandler::FeatureId(handler),
         }
     }
 
