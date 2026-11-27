@@ -100,6 +100,11 @@ pub enum OverlayPlacement {
         max_height: u16,
         margin: u16,
     },
+    EditorPanel {
+        max_width: u16,
+        max_height: u16,
+        margin: u16,
+    },
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -133,6 +138,10 @@ impl OverlayContribution {
     }
 
     pub fn area(self, main: Rect, frame: Rect) -> Rect {
+        self.area_with_editor(main, main, frame)
+    }
+
+    pub fn area_with_editor(self, main: Rect, editor: Rect, frame: Rect) -> Rect {
         match self.placement {
             OverlayPlacement::Centered(size) => centered_area(main, size),
             OverlayPlacement::BottomRight(size) => bottom_right_area(frame, size),
@@ -142,6 +151,11 @@ impl OverlayContribution {
                 max_height,
                 margin,
             } => main_panel_area(main, max_width, max_height, margin),
+            OverlayPlacement::EditorPanel {
+                max_width,
+                max_height,
+                margin,
+            } => main_panel_area(editor, max_width, max_height, margin),
         }
     }
 }

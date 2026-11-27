@@ -111,14 +111,17 @@ impl Editor {
         self.ui
             .render_status(StatusSlot::Message, model, frame, areas.status);
         overlays.iter().for_each(|overlay| {
-            let area = overlay.area(areas.main, frame.area());
+            let area = overlay.area_with_editor(areas.main, areas.editor, frame.area());
             (overlay.render)(model, frame, area);
         });
 
         let overlay_cursor = overlays.iter().rev().find_map(|overlay| {
-            overlay
-                .cursor
-                .and_then(|cursor| cursor(model, overlay.area(areas.main, frame.area())))
+            overlay.cursor.and_then(|cursor| {
+                cursor(
+                    model,
+                    overlay.area_with_editor(areas.main, areas.editor, frame.area()),
+                )
+            })
         });
         overlay_cursor
             .or_else(|| cursor.filter(|_| overlays.is_empty() && editor_overlays.is_empty()))
@@ -142,7 +145,7 @@ fn layout_areas(area: Rect, explorer: Visibility, tools: Visibility) -> PageLayo
     let [explorer_area, editor, tools_area] = Layout::horizontal([
         panel_constraint(explorer, 28),
         Constraint::Fill(1),
-        panel_constraint(tools, 32),
+        panel_constraint(tools, 40),
     ])
     .flex(Flex::Start)
     .areas(main);
@@ -337,6 +340,19 @@ mod tests {
         );
         assert!(hidden.explorer.is_none());
         assert_eq!(hidden.editor.width, 100);
+    }
+
+    #[test]
+    fn tools_panel_uses_the_wider_shared_layout_constraint() {
+        let areas = layout_areas(
+            Rect::new(0, 0, 120, 30),
+            Visibility::Displayed,
+            Visibility::Displayed,
+        );
+
+        assert_eq!(areas.explorer.unwrap().width, 28);
+        assert_eq!(areas.tools.unwrap(), Rect::new(80, 0, 40, 29));
+        assert_eq!(areas.editor, Rect::new(28, 0, 52, 29));
     }
 
     #[test]

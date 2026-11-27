@@ -1,7 +1,4 @@
-use ratatui::{
-    Frame,
-    layout::{Margin, Rect},
-};
+use ratatui::{Frame, layout::Rect};
 
 use crate::{
     component::agent::{
@@ -26,7 +23,11 @@ fn dialog_overlay(model: &Model) -> Option<OverlayContribution> {
         OverlayContribution::new(
             "agent",
             OverlayKind::Modal,
-            OverlayPlacement::MainPanelFill(Margin::new(4, 2)),
+            OverlayPlacement::EditorPanel {
+                max_width: 80,
+                max_height: 22,
+                margin: 4,
+            },
             render_dialog,
         )
         .with_cursor(dialog_cursor)
@@ -177,16 +178,24 @@ mod tests {
     }
 
     #[test]
-    fn dialog_fills_the_available_area_inside_its_margins() {
+    fn dialog_is_bounded_and_centered_within_the_editor_region() {
         let mut model = Model::default();
         assert!(model.modal.open(Context::AgentChatDialog));
         let overlay = dialog_overlay(&model).unwrap();
-        let main = Rect::new(10, 20, 120, 40);
+        let frame = Rect::new(0, 0, 140, 40);
+        let editor = Rect::new(28, 0, 92, 40);
 
         assert_eq!(
-            overlay.area(main, main),
-            Rect::new(14, 22, 112, 36),
-            "dialog should grow with the main panel rather than use a fixed size"
+            overlay.area_with_editor(frame, editor, frame),
+            Rect::new(34, 9, 80, 22),
+            "dialog should preserve the explorer, tools, and editor perimeter"
+        );
+
+        let small_editor = Rect::new(28, 0, 60, 18);
+        assert_eq!(
+            overlay.area_with_editor(frame, small_editor, frame),
+            Rect::new(30, 2, 56, 14),
+            "small terminals should clamp inside the editor"
         );
     }
 
