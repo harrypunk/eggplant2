@@ -7,7 +7,7 @@ mod component;
 mod work;
 
 pub use component::overlay;
-pub use work::{close_document, commands, handle_command, synchronize, synchronize_buffer};
+pub use work::{close_document, commands, synchronize, synchronize_buffer};
 
 use crate::{data_object::Context, manager::keymap_contribution::ContextKeymap};
 use app::language::{

@@ -22,15 +22,15 @@ pub const KEYMAPS: &[ContextKeymap] = &[ContextKeymap::new("welcome", Context::W
 
 pub fn commands() -> Vec<Command> {
     [
-        Command::feature_id(
+        Command::feature(
             CommandId("welcome_next"),
             "select next welcome command",
-            handle_command,
+            next,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("welcome_previous"),
             "select previous welcome command",
-            handle_command,
+            previous,
         ),
         Command::dispatch(
             CommandId("welcome_activate"),
@@ -42,14 +42,16 @@ pub fn commands() -> Vec<Command> {
     .collect()
 }
 
-pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    if !available(model) {
-        return None;
+fn next(model: &mut Model) -> Option<Effect> {
+    if available(model) {
+        model.welcome.select_next();
     }
-    match id.as_str() {
-        "welcome_next" => model.welcome.select_next(),
-        "welcome_previous" => model.welcome.select_previous(),
-        _ => return None,
+    None
+}
+
+fn previous(model: &mut Model) -> Option<Effect> {
+    if available(model) {
+        model.welcome.select_previous();
     }
     None
 }
@@ -118,7 +120,7 @@ mod tests {
         let mut model = welcome_model();
         crate::test_utils::create_buffer(&mut model, "text");
         let selected = model.welcome.selected();
-        handle_command(&mut model, CommandId("welcome_next"));
+        next(&mut model);
         assert_eq!(model.welcome.selected(), selected);
     }
 

@@ -143,22 +143,16 @@ impl Completion for DiagnosticFailureCompletion {
 }
 
 pub fn commands() -> Vec<Command> {
-    vec![Command::feature_id(
+    vec![Command::feature(
         CommandId("code_diagnostics"),
         "show diagnostics",
-        handle_command,
+        show,
     )]
 }
 
-fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    if id == CommandId("code_diagnostics") {
-        toggle_panel(model);
-        return None;
-    }
-    Some(crate::notifications::report_status(
-        model,
-        StatusMessage::error(format!("unknown diagnostics command `{}`", id.as_str())),
-    ))
+fn show(model: &mut Model) -> Option<Effect> {
+    toggle_panel(model);
+    None
 }
 
 #[cfg(test)]

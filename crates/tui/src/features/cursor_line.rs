@@ -31,10 +31,10 @@ impl CursorLineState {
 }
 
 pub fn commands() -> Vec<Command> {
-    vec![Command::feature_id(
+    vec![Command::feature(
         CommandId("cursor_line_toggle"),
         "toggle cursor-line background",
-        handle_command,
+        toggle,
     )]
 }
 
@@ -75,10 +75,7 @@ fn render(context: EditorDecorationContext<'_>, area: Rect, buffer: &mut Buffer)
         });
 }
 
-pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    if id.as_str() != "cursor_line_toggle" {
-        return None;
-    }
+fn toggle(model: &mut Model) -> Option<Effect> {
     model.cursor_line.toggle();
     model.status = Some(StatusMessage::info(if model.cursor_line.enabled() {
         "Cursor line enabled"
@@ -143,7 +140,7 @@ mod tests {
     #[test]
     fn toggle_command_changes_only_feature_state_and_status() {
         let mut model = Model::default();
-        handle_command(&mut model, CommandId("cursor_line_toggle"));
+        toggle(&mut model);
         assert!(!model.cursor_line.enabled());
         assert_eq!(
             model.status.as_ref().map(|status| status.text.as_str()),

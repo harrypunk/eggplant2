@@ -32,30 +32,26 @@ pub static CURRENT_FILE_MENU_ITEM: CommandMenuItem =
 
 pub fn commands() -> Vec<Command> {
     [
-        Command::feature_id(
+        Command::feature(
             CommandId("buffer_grep_open"),
             "search current file",
-            handle_command,
+            open_command,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("buffer_grep_close"),
             "close current-file search",
-            handle_command,
+            close_command,
         ),
-        Command::feature_id(
-            CommandId("buffer_grep_next"),
-            "next search match",
-            handle_command,
-        ),
-        Command::feature_id(
+        Command::feature(CommandId("buffer_grep_next"), "next search match", next),
+        Command::feature(
             CommandId("buffer_grep_previous"),
             "previous search match",
-            handle_command,
+            previous,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("buffer_grep_accept"),
             "jump to search match",
-            handle_command,
+            accept_command,
         ),
     ]
     .into_iter()
@@ -90,26 +86,30 @@ pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option
     None
 }
 
-pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    match id.as_str() {
-        "buffer_grep_open" => open(model),
-        "buffer_grep_close" => close(model),
-        "buffer_grep_next" => {
-            model.buffer_grep.select_next();
-            model.buffer_grep.refresh_preview(&model.editor);
-        }
-        "buffer_grep_previous" => {
-            model.buffer_grep.select_previous();
-            model.buffer_grep.refresh_preview(&model.editor);
-        }
-        "buffer_grep_accept" => accept(model),
-        _ => {
-            model.status = Some(StatusMessage::error(format!(
-                "unknown buffer-grep command `{}`",
-                id.as_str()
-            )));
-        }
-    }
+fn open_command(model: &mut Model) -> Option<Effect> {
+    open(model);
+    None
+}
+
+fn close_command(model: &mut Model) -> Option<Effect> {
+    close(model);
+    None
+}
+
+fn next(model: &mut Model) -> Option<Effect> {
+    model.buffer_grep.select_next();
+    model.buffer_grep.refresh_preview(&model.editor);
+    None
+}
+
+fn previous(model: &mut Model) -> Option<Effect> {
+    model.buffer_grep.select_previous();
+    model.buffer_grep.refresh_preview(&model.editor);
+    None
+}
+
+fn accept_command(model: &mut Model) -> Option<Effect> {
+    accept(model);
     None
 }
 

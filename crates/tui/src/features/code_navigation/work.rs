@@ -22,69 +22,63 @@ use crate::{
 
 pub fn commands() -> Vec<Command> {
     [
-        Command::feature_id(
-            CommandId("code_definition"),
-            "go to definition",
-            handle_command,
-        ),
-        Command::feature_id(
-            CommandId("code_references"),
-            "find references",
-            handle_command,
-        ),
-        Command::feature_id(
+        Command::feature(CommandId("code_definition"), "go to definition", definition),
+        Command::feature(CommandId("code_references"), "find references", references),
+        Command::feature(
             CommandId("code_implementation"),
             "go to implementation",
-            handle_command,
+            implementation,
         ),
-        Command::feature_id(
-            CommandId("code_navigation_next"),
-            "next location",
-            handle_command,
-        ),
-        Command::feature_id(
+        Command::feature(CommandId("code_navigation_next"), "next location", next),
+        Command::feature(
             CommandId("code_navigation_previous"),
             "previous location",
-            handle_command,
+            previous,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("code_navigation_open"),
             "open location",
-            handle_command,
+            open_selected_command,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("close_code_navigation"),
             "close locations",
-            handle_command,
+            close_command,
         ),
     ]
     .into_iter()
     .collect()
 }
 
-pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    match id.as_str() {
-        "code_definition" => start(model, NavigationKind::Definition),
-        "code_references" => start(model, NavigationKind::References),
-        "code_implementation" => start(model, NavigationKind::Implementation),
-        "code_navigation_next" => {
-            model.code_navigation.select_next();
-            None
-        }
-        "code_navigation_previous" => {
-            model.code_navigation.select_previous();
-            None
-        }
-        "code_navigation_open" => open_selected(model),
-        "close_code_navigation" => {
-            close(model);
-            None
-        }
-        _ => notify(
-            model,
-            StatusMessage::error(format!("unknown code-navigation command `{}`", id.as_str())),
-        ),
-    }
+fn definition(model: &mut Model) -> Option<Effect> {
+    start(model, NavigationKind::Definition)
+}
+
+fn references(model: &mut Model) -> Option<Effect> {
+    start(model, NavigationKind::References)
+}
+
+fn implementation(model: &mut Model) -> Option<Effect> {
+    start(model, NavigationKind::Implementation)
+}
+
+fn next(model: &mut Model) -> Option<Effect> {
+    model.code_navigation.select_next();
+    None
+}
+
+fn previous(model: &mut Model) -> Option<Effect> {
+    model.code_navigation.select_previous();
+    None
+}
+
+fn open_selected_command(model: &mut Model) -> Option<Effect> {
+    open_selected(model)
+}
+
+fn close_command(model: &mut Model) -> Option<Effect> {
+    close(model);
+    None
 }
 
 fn start(model: &mut Model, kind: NavigationKind) -> Option<Effect> {

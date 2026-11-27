@@ -1,6 +1,6 @@
 use crate::{
     buffer::{self, BufferMovement},
-    data_object::{CommandId, Context, Model, PendingInput, StatusMessage},
+    data_object::{CommandId, Context, Model, PendingInput},
     manager::{command_registry::Command, effect::Effect, keymap_contribution::ContextKeymap},
 };
 
@@ -36,38 +36,38 @@ impl BufferNavigationState {
 
 pub fn commands() -> Vec<Command> {
     [
-        Command::feature_id(
+        Command::feature(
             CommandId("next_buffer_pending"),
             "select next buffer after b",
-            handle_command,
+            next,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("previous_buffer_pending"),
             "select previous buffer after b",
-            handle_command,
+            previous,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("buffer_navigation_cancel"),
             "cancel pending buffer navigation",
-            handle_command,
+            cancel,
         ),
     ]
     .into_iter()
     .collect()
 }
 
-pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    match id.as_str() {
-        "next_buffer_pending" => start(model, BufferMovement::Next),
-        "previous_buffer_pending" => start(model, BufferMovement::Previous),
-        "buffer_navigation_cancel" => reset(model),
-        _ => {
-            model.status = Some(StatusMessage::error(format!(
-                "unknown buffer-navigation command `{}`",
-                id.as_str()
-            )));
-        }
-    }
+fn next(model: &mut Model) -> Option<Effect> {
+    start(model, BufferMovement::Next);
+    None
+}
+
+fn previous(model: &mut Model) -> Option<Effect> {
+    start(model, BufferMovement::Previous);
+    None
+}
+
+fn cancel(model: &mut Model) -> Option<Effect> {
+    reset(model);
     None
 }
 

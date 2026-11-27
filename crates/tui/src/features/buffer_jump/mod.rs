@@ -23,15 +23,15 @@ pub const SEARCH_MENU_ITEM: CommandMenuItem = CommandMenuItem::action(
 
 pub fn commands() -> Vec<Command> {
     [
-        Command::feature_id(
+        Command::feature(
             CommandId("buffer_jump_start"),
             "jump in visible buffer",
-            handle_command,
+            start_command,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("buffer_jump_cancel"),
             "cancel buffer jump",
-            handle_command,
+            cancel,
         ),
     ]
     .into_iter()
@@ -43,17 +43,13 @@ pub fn register_ui(ui: &mut UiRegistry) -> color_eyre::Result<()> {
     ui.register_editor_overlay("buffer_jump", component::editor_overlay)
 }
 
-pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    match id.as_str() {
-        "buffer_jump_start" => start(model),
-        "buffer_jump_cancel" => close(model),
-        _ => {
-            model.status = Some(StatusMessage::error(format!(
-                "unknown buffer-jump command `{}`",
-                id.as_str()
-            )));
-        }
-    }
+fn start_command(model: &mut Model) -> Option<Effect> {
+    start(model);
+    None
+}
+
+fn cancel(model: &mut Model) -> Option<Effect> {
+    close(model);
     None
 }
 

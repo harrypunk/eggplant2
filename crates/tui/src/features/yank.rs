@@ -64,50 +64,43 @@ struct PendingPaste {
 
 pub fn commands() -> Vec<Command> {
     [
-        Command::feature_id(
+        Command::feature(
             CommandId("yank_selection"),
             "yank selection",
-            handle_command,
+            yank_selection,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("yank_line_pending"),
             "yank current line",
-            handle_command,
+            yank_line_pending,
         ),
-        Command::feature_id(
-            CommandId("paste_after"),
-            "paste after cursor",
-            handle_command,
-        ),
-        Command::feature_id(
+        Command::feature(CommandId("paste_after"), "paste after cursor", paste_after),
+        Command::feature(
             CommandId("paste_before"),
             "paste before cursor",
-            handle_command,
+            paste_before,
         ),
-        Command::feature_id(
-            CommandId("yank_cancel"),
-            "cancel pending yank",
-            handle_command,
-        ),
+        Command::feature(CommandId("yank_cancel"), "cancel pending yank", cancel),
     ]
     .into_iter()
     .collect()
 }
 
-pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    match id.as_str() {
-        "yank_selection" => return yank_selection(model),
-        "yank_line_pending" => start(model),
-        "paste_after" => return paste(model, PastePosition::After),
-        "paste_before" => return paste(model, PastePosition::Before),
-        "yank_cancel" => reset(model),
-        _ => {
-            model.status = Some(StatusMessage::error(format!(
-                "unknown yank command `{}`",
-                id.as_str()
-            )));
-        }
-    }
+fn yank_line_pending(model: &mut Model) -> Option<Effect> {
+    start(model);
+    None
+}
+
+fn paste_after(model: &mut Model) -> Option<Effect> {
+    paste(model, PastePosition::After)
+}
+
+fn paste_before(model: &mut Model) -> Option<Effect> {
+    paste(model, PastePosition::Before)
+}
+
+fn cancel(model: &mut Model) -> Option<Effect> {
+    reset(model);
     None
 }
 
@@ -333,11 +326,11 @@ mod tests {
         model.current_focus = crate::data_object::FocusTarget::Editor;
         let revision = model.editor.active_revision();
 
-        handle_command(&mut model, CommandId("yank_line_pending"));
+        yank_line_pending(&mut model);
         assert!(handle_input(&mut model, 'y').is_some());
         assert!(!model.register.unnamed().is_empty());
-        handle_command(&mut model, CommandId("paste_after"));
-        handle_command(&mut model, CommandId("paste_before"));
+        paste_after(&mut model);
+        paste_before(&mut model);
 
         assert_eq!(model.editor.active_revision(), revision);
         assert_eq!(model.editor.active_text_snapshot().unwrap().text, "outside");

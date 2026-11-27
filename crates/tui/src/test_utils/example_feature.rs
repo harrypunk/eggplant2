@@ -5,7 +5,7 @@ use ratatui::{
 };
 
 use crate::{
-    data_object::{CommandId, Message, Model, StatusMessage, Visibility},
+    data_object::{CommandId, Message, Model, Visibility},
     manager::{
         command_registry::{Command, CommandRegistry},
         effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
@@ -32,29 +32,18 @@ impl Default for ExampleFeatureState {
 }
 
 pub fn register(commands: &mut CommandRegistry, ui: &mut UiRegistry) -> color_eyre::Result<()> {
-    commands.register(Command::feature_id(
+    commands.register(Command::feature(
         CommandId("example.increment"),
         "increment example",
-        handle_command,
+        increment,
     ))?;
     ui.register_overlay("example", overlay)
 }
 
-fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    match id.as_str() {
-        "example.increment" => {
-            model.example_feature.pending += 1;
-            model.example_feature.visibility = Visibility::Displayed;
-            Some(Effect::feature(ExampleEffect))
-        }
-        _ => {
-            model.status = Some(StatusMessage::error(format!(
-                "unknown example command `{}`",
-                id.as_str()
-            )));
-            None
-        }
-    }
+fn increment(model: &mut Model) -> Option<Effect> {
+    model.example_feature.pending += 1;
+    model.example_feature.visibility = Visibility::Displayed;
+    Some(Effect::feature(ExampleEffect))
 }
 
 struct ExampleCompletion;

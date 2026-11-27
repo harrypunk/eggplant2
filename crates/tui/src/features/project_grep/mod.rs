@@ -33,30 +33,30 @@ pub static PROJECT_MENU_ITEM: CommandMenuItem =
 
 pub fn commands() -> Vec<Command> {
     [
-        Command::feature_id(
+        Command::feature(
             CommandId("project_grep_open"),
             "search project",
-            handle_command,
+            open_command,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("project_grep_close"),
             "close project search",
-            handle_command,
+            close_command,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("project_grep_next"),
             "next project search match",
-            handle_command,
+            next,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("project_grep_previous"),
             "previous project search match",
-            handle_command,
+            previous,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("project_grep_accept"),
             "open project search match",
-            handle_command,
+            accept,
         ),
     ]
     .into_iter()
@@ -87,25 +87,22 @@ pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option
     None
 }
 
-pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    match id.as_str() {
-        "project_grep_open" => open(model),
-        "project_grep_close" => close(model),
-        "project_grep_next" => {
-            return model.project_grep.select_next().map(Effect::feature);
-        }
-        "project_grep_previous" => {
-            return model.project_grep.select_previous().map(Effect::feature);
-        }
-        "project_grep_accept" => return accept(model),
-        _ => {
-            model.status = Some(StatusMessage::error(format!(
-                "unknown project-grep command `{}`",
-                id.as_str()
-            )));
-        }
-    }
+fn open_command(model: &mut Model) -> Option<Effect> {
+    open(model);
     None
+}
+
+fn close_command(model: &mut Model) -> Option<Effect> {
+    close(model);
+    None
+}
+
+fn next(model: &mut Model) -> Option<Effect> {
+    model.project_grep.select_next().map(Effect::feature)
+}
+
+fn previous(model: &mut Model) -> Option<Effect> {
+    model.project_grep.select_previous().map(Effect::feature)
 }
 
 pub fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<Effect> {

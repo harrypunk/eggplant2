@@ -1,5 +1,5 @@
 use crate::{
-    data_object::{CommandId, Context, Model, PendingInput, StatusMessage},
+    data_object::{CommandId, Context, Model, PendingInput},
     editing::{self, EditingTarget, target},
     manager::{command_registry::Command, effect::Effect, keymap_contribution::ContextKeymap},
 };
@@ -70,63 +70,70 @@ enum SelectionOperation {
 
 pub fn commands() -> Vec<Command> {
     [
-        Command::feature_id(
+        Command::feature(
             CommandId("delete_grapheme"),
             "delete grapheme under cursor",
-            handle_command,
+            delete_grapheme,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("delete_selection_x"),
             "delete selection",
-            handle_command,
+            delete_selection_x,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("delete_selection_d"),
             "delete selection",
-            handle_command,
+            delete_selection_d,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("change_selection"),
             "change selection",
-            handle_command,
+            change_selection,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("delete_line_pending"),
             "delete current line",
-            handle_command,
+            delete_line_pending,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("change_line_pending"),
             "change current line",
-            handle_command,
+            change_line_pending,
         ),
-        Command::feature_id(
+        Command::feature(
             CommandId("change_cancel"),
             "cancel pending delete/change",
-            handle_command,
+            cancel,
         ),
     ]
     .into_iter()
     .collect()
 }
 
-pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    match id.as_str() {
-        "delete_grapheme" => return delete_grapheme(model),
-        "delete_selection_x" | "delete_selection_d" => {
-            return delete_selection(model, SelectionOperation::Delete);
-        }
-        "change_selection" => return delete_selection(model, SelectionOperation::Change),
-        "delete_line_pending" => start(model, PendingChange::Delete),
-        "change_line_pending" => start(model, PendingChange::Change),
-        "change_cancel" => reset(model),
-        _ => {
-            model.status = Some(StatusMessage::error(format!(
-                "unknown change command `{}`",
-                id.as_str()
-            )));
-        }
-    }
+fn delete_selection_x(model: &mut Model) -> Option<Effect> {
+    delete_selection(model, SelectionOperation::Delete)
+}
+
+fn delete_selection_d(model: &mut Model) -> Option<Effect> {
+    delete_selection(model, SelectionOperation::Delete)
+}
+
+fn change_selection(model: &mut Model) -> Option<Effect> {
+    delete_selection(model, SelectionOperation::Change)
+}
+
+fn delete_line_pending(model: &mut Model) -> Option<Effect> {
+    start(model, PendingChange::Delete);
+    None
+}
+
+fn change_line_pending(model: &mut Model) -> Option<Effect> {
+    start(model, PendingChange::Change);
+    None
+}
+
+fn cancel(model: &mut Model) -> Option<Effect> {
+    reset(model);
     None
 }
 
@@ -331,11 +338,11 @@ mod tests {
         let revision = model.editor.active_revision();
 
         for command in [
-            "delete_grapheme",
-            "delete_line_pending",
-            "change_line_pending",
+            delete_grapheme as fn(&mut Model) -> Option<Effect>,
+            delete_line_pending,
+            change_line_pending,
         ] {
-            handle_command(&mut model, CommandId(command));
+            command(&mut model);
         }
 
         assert_eq!(model.editor.active_revision(), revision);

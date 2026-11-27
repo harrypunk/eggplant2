@@ -1,7 +1,7 @@
 use editor::EditorSession;
 
 use crate::{
-    data_object::{AppPage, CommandId, Context, FocusTarget, Model, PendingInput, StatusMessage},
+    data_object::{AppPage, CommandId, Context, FocusTarget, Model, PendingInput},
     explorer::ExplorerState,
     manager::{command_registry::Command, effect::Effect, keymap_contribution::ContextKeymap},
     navigation::VerticalNavigation,
@@ -114,23 +114,15 @@ impl LineJumpState {
 }
 
 pub fn commands() -> Vec<Command> {
-    vec![Command::feature_id(
+    vec![Command::feature(
         CommandId("line_jump_cancel"),
         "cancel pending line jump",
-        handle_command,
+        cancel,
     )]
 }
 
-pub fn handle_command(model: &mut Model, id: CommandId) -> Option<Effect> {
-    match id.as_str() {
-        "line_jump_cancel" => reset(model),
-        _ => {
-            model.status = Some(StatusMessage::error(format!(
-                "unknown line-jump command `{}`",
-                id.as_str()
-            )));
-        }
-    }
+fn cancel(model: &mut Model) -> Option<Effect> {
+    reset(model);
     None
 }
 
