@@ -130,12 +130,20 @@ impl Editor {
     }
 }
 
-struct PageLayout {
-    main: Rect,
+pub(crate) struct PageLayout {
+    pub(crate) main: Rect,
     explorer: Option<Rect>,
-    editor: Rect,
-    tools: Option<Rect>,
+    pub(crate) editor: Rect,
+    pub(crate) tools: Option<Rect>,
     status: Rect,
+}
+
+pub(crate) fn layout_regions(model: &Model) -> PageLayout {
+    layout_areas(
+        model.window_area,
+        model.explorer.visibility,
+        model.tools.visibility,
+    )
 }
 
 fn layout_areas(area: Rect, explorer: Visibility, tools: Visibility) -> PageLayout {
@@ -145,7 +153,7 @@ fn layout_areas(area: Rect, explorer: Visibility, tools: Visibility) -> PageLayo
     let [explorer_area, editor, tools_area] = Layout::horizontal([
         panel_constraint(explorer, 28),
         Constraint::Fill(1),
-        panel_constraint(tools, 40),
+        panel_constraint(tools, 48),
     ])
     .flex(Flex::Start)
     .areas(main);
@@ -351,8 +359,8 @@ mod tests {
         );
 
         assert_eq!(areas.explorer.unwrap().width, 28);
-        assert_eq!(areas.tools.unwrap(), Rect::new(80, 0, 40, 29));
-        assert_eq!(areas.editor, Rect::new(28, 0, 52, 29));
+        assert_eq!(areas.tools.unwrap(), Rect::new(72, 0, 48, 29));
+        assert_eq!(areas.editor, Rect::new(28, 0, 44, 29));
     }
 
     #[test]

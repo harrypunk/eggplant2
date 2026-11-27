@@ -8,10 +8,11 @@ use ratatui::{
 
 use super::{
     footer::{AgentFooter, footer_layout},
+    navigation::ViewportMetrics,
     prompt::AgentPromptView,
     props::AgentViewProps,
     status::{RunStatusPresentation, status_text as agent_status_text},
-    transcript::render_transcript as render_agent_transcript,
+    transcript::{conversation_metrics, render_transcript as render_agent_transcript},
 };
 use crate::{
     agent::AgentInputMode,
@@ -57,25 +58,40 @@ pub struct AgentPanelProps<'a> {
 
 pub struct AgentPanel;
 
+struct PanelLayout {
+    status: Rect,
+    transcript: Rect,
+    prompt: Rect,
+    footer: Rect,
+    input_height: u16,
+}
+
 impl AgentPanel {
     pub fn render(props: &AgentPanelProps<'_>, frame: &mut Frame, area: Rect) {
         let inner = render_chrome(props, frame, area);
         if inner.width == 0 || inner.height == 0 {
             return;
         }
-        let [content, footer] = footer_layout(inner);
-        let input_height = input_height(props, content);
-        let completion_height = AgentPromptView::completion_height(&props.shared.prompt).min(
-            content
-                .height
-                .saturating_sub(input_height.saturating_add(1)),
-        );
-        let prompt_height = completion_height + input_height;
-        let [status, transcript, prompt] = panel_layout(content, prompt_height);
-        render_status(props, status, frame);
-        render_transcript(props, transcript, frame);
-        render_prompt(props, prompt, input_height, frame);
-        AgentFooter::render(&props.shared, footer, frame.buffer_mut());
+        let layout = content_layout(props, inner);
+        render_status(props, layout.status, frame);
+        let transcript_cursor = render_transcript(props, layout.transcript, frame);
+        render_prompt(props, layout.prompt, layout.input_height, frame);
+        if props.focus == FocusState::Focused
+            && props.mode == AgentInputMode::Normal
+            && let Some(cursor) = transcript_cursor
+        {
+            frame.set_cursor_position(cursor);
+        }
+        AgentFooter::render(&props.shared, layout.footer, frame.buffer_mut());
+    }
+
+    pub fn transcript_metrics(props: &AgentPanelProps<'_>, area: Rect) -> ViewportMetrics {
+        let inner = Block::bordered().inner(area);
+        conversation_metrics(
+            props.shared.session,
+            content_layout(props, inner).transcript,
+            props.shared.styles,
+        )
     }
 }
 
@@ -89,6 +105,25 @@ fn render_chrome(props: &AgentPanelProps<'_>, frame: &mut Frame, area: Rect) -> 
     let inner = block.inner(area);
     frame.render_widget(block, area);
     inner
+}
+
+fn content_layout(props: &AgentPanelProps<'_>, inner: Rect) -> PanelLayout {
+    let [content, footer] = footer_layout(inner);
+    let input_height = input_height(props, content);
+    let completion_height = AgentPromptView::completion_height(&props.shared.prompt).min(
+        content
+            .height
+            .saturating_sub(input_height.saturating_add(1)),
+    );
+    let prompt_height = completion_height + input_height;
+    let [status, transcript, prompt] = panel_layout(content, prompt_height);
+    PanelLayout {
+        status,
+        transcript,
+        prompt,
+        footer,
+        input_height,
+    }
 }
 
 fn input_height(props: &AgentPanelProps<'_>, area: Rect) -> u16 {
@@ -122,13 +157,19 @@ fn status_text(props: &AgentPanelProps<'_>) -> String {
     format!("{status} · {}", props.mode.label())
 }
 
-fn render_transcript(props: &AgentPanelProps<'_>, area: Rect, frame: &mut Frame) {
+fn render_transcript(
+    props: &AgentPanelProps<'_>,
+    area: Rect,
+    frame: &mut Frame,
+) -> Option<Position> {
     render_agent_transcript(
         props.shared.session,
         area,
         props.shared.styles,
+        props.shared.navigation.panel(),
+        props.mode,
         frame.buffer_mut(),
-    );
+    )
 }
 
 fn render_prompt(props: &AgentPanelProps<'_>, area: Rect, input_height: u16, frame: &mut Frame) {
@@ -161,7 +202,7 @@ mod tests {
 
     use super::*;
     use crate::component::{
-        agent::{AgentModelNotice, AgentPromptProps},
+        agent::{AgentModelNotice, AgentPromptProps, PanelNavigation, SurfaceNavigation},
         text_input::TextInput,
     };
     use crate::{
@@ -181,6 +222,7 @@ mod tests {
         AgentPanelProps {
             shared: AgentViewProps {
                 session,
+                navigation: SurfaceNavigation::Panel(PanelNavigation::default()),
                 prompt: AgentPromptProps::new(prompt).with_commands(commands, None),
                 storage_error: None,
                 model_notice: None,
@@ -375,6 +417,53 @@ mod tests {
         assert!(content.contains("Approval: Replace text in main.rs"));
         assert!(content.contains("before"));
         assert!(content.contains("after"));
+    }
+
+    #[test]
+    fn normal_mode_shows_the_bottom_cursor_and_cursor_line() {
+        let theme = Theme::default();
+        let mut session = AgentSession::default();
+        let run = session.begin("question".to_string()).unwrap();
+        session.append_delta(run, "first\n\nsecond");
+        let prompt = TextInput::default();
+        let props = panel_props(
+            &session,
+            &prompt,
+            None,
+            AgentInputMode::Normal,
+            FocusState::Focused,
+            theme.ui(),
+        );
+        let area = Rect::new(0, 0, 60, 20);
+        let layout = content_layout(&props, Block::bordered().inner(area));
+        let metrics = conversation_metrics(&session, layout.transcript, theme.ui());
+        let (offset, cursor) = props
+            .shared
+            .navigation
+            .panel()
+            .viewport(metrics, AgentInputMode::Normal);
+        let cursor = cursor.unwrap();
+        let position = Position::new(
+            layout.transcript.x,
+            layout.transcript.y + cursor.saturating_sub(offset) as u16,
+        );
+        let mut terminal = Terminal::new(TestBackend::new(60, 20)).unwrap();
+
+        terminal
+            .draw(|frame| AgentPanel::render(&props, frame, area))
+            .unwrap();
+
+        terminal.backend_mut().assert_cursor_position(position);
+        assert_eq!(
+            terminal
+                .backend()
+                .buffer()
+                .cell(position)
+                .unwrap()
+                .style()
+                .bg,
+            theme.ui().cursor_line.bg
+        );
     }
 
     #[test]

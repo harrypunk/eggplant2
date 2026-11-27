@@ -3,7 +3,7 @@ use ratatui::{Frame, layout::Rect};
 use crate::{
     component::agent::{
         AgentDialog, AgentFooterProps, AgentHelp, AgentModelNotice, AgentPanel, AgentPanelProps,
-        AgentPromptProps, AgentReferenceProps, AgentViewProps,
+        AgentPromptProps, AgentReferenceProps, AgentViewProps, ViewportMetrics,
     },
     data_object::{Context, FocusState, FocusTarget, Model},
     ui::{OverlayContribution, OverlayKind, OverlayPlacement, UiRegistry},
@@ -24,9 +24,9 @@ fn dialog_overlay(model: &Model) -> Option<OverlayContribution> {
             "agent",
             OverlayKind::Modal,
             OverlayPlacement::EditorPanel {
-                max_width: 80,
-                max_height: 22,
-                margin: 4,
+                max_width: 88,
+                max_height: 26,
+                margin: 2,
             },
             render_dialog,
         )
@@ -45,6 +45,7 @@ fn view_props(model: &Model, surface: AgentSurface) -> AgentViewProps<'_> {
         prompt: AgentPromptProps::new(model.agent.prompt_state())
             .with_commands(commands, selected_command)
             .with_references(references),
+        navigation: model.agent.navigation(surface),
         storage_error: model.agent.storage_error(),
         model_notice: model
             .agent
@@ -110,21 +111,38 @@ fn prompt_references(model: &Model, surface: AgentSurface) -> Option<AgentRefere
         })
 }
 
-pub(crate) fn render_panel(model: &Model, frame: &mut Frame, area: Rect) {
+fn panel_props(model: &Model) -> AgentPanelProps<'_> {
     let focus = if model.current_focus == FocusTarget::ToolsPanel {
         FocusState::Focused
     } else {
         FocusState::Unfocused
     };
-    AgentPanel::render(
-        &AgentPanelProps {
-            shared: view_props(model, AgentSurface::Panel),
-            mode: model.agent.panel_mode(),
-            focus,
-        },
-        frame,
-        area,
-    );
+    AgentPanelProps {
+        shared: view_props(model, AgentSurface::Panel),
+        mode: model.agent.panel_mode(),
+        focus,
+    }
+}
+
+pub(crate) fn render_panel(model: &Model, frame: &mut Frame, area: Rect) {
+    AgentPanel::render(&panel_props(model), frame, area);
+}
+
+pub(super) fn navigation_metrics(model: &Model, surface: AgentSurface) -> ViewportMetrics {
+    let regions = crate::page::editor::layout_regions(model);
+    match surface {
+        AgentSurface::Dialog => dialog_overlay(model)
+            .map(|overlay| {
+                let area =
+                    overlay.area_with_editor(regions.main, regions.editor, model.window_area);
+                AgentDialog::transcript_metrics(&view_props(model, AgentSurface::Dialog), area)
+            })
+            .unwrap_or_default(),
+        AgentSurface::Panel => regions
+            .tools
+            .map(|area| AgentPanel::transcript_metrics(&panel_props(model), area))
+            .unwrap_or_default(),
+    }
 }
 
 #[cfg(test)]
@@ -187,14 +205,14 @@ mod tests {
 
         assert_eq!(
             overlay.area_with_editor(frame, editor, frame),
-            Rect::new(34, 9, 80, 22),
+            Rect::new(30, 7, 88, 26),
             "dialog should preserve the explorer, tools, and editor perimeter"
         );
 
         let small_editor = Rect::new(28, 0, 60, 18);
         assert_eq!(
             overlay.area_with_editor(frame, small_editor, frame),
-            Rect::new(30, 2, 56, 14),
+            Rect::new(29, 1, 58, 16),
             "small terminals should clamp inside the editor"
         );
     }

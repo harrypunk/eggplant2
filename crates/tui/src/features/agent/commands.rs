@@ -29,6 +29,26 @@ pub fn commands() -> Vec<Command> {
             super::work::interrupt,
         ),
         Command::feature(
+            CommandId("agent_scroll_up"),
+            "scroll agent transcript up",
+            super::navigation::page_up,
+        ),
+        Command::feature(
+            CommandId("agent_scroll_down"),
+            "scroll agent transcript down",
+            super::navigation::page_down,
+        ),
+        Command::feature(
+            CommandId("agent_cursor_up"),
+            "move agent transcript cursor up",
+            super::navigation::cursor_up,
+        ),
+        Command::feature(
+            CommandId("agent_cursor_down"),
+            "move agent transcript cursor down",
+            super::navigation::cursor_down,
+        ),
+        Command::feature(
             CommandId("agent_approve"),
             "approve agent write",
             super::approval::approve_write,
@@ -204,6 +224,10 @@ mod tests {
             "agent_close",
             "agent_submit",
             "agent_interrupt",
+            "agent_scroll_up",
+            "agent_scroll_down",
+            "agent_cursor_up",
+            "agent_cursor_down",
             "agent_approve",
             "agent_reject",
             "agent_toggle_panel",

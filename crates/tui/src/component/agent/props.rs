@@ -1,6 +1,7 @@
 use eggplant_agent::AgentSession;
 
 use super::AgentPromptProps;
+use super::navigation::SurfaceNavigation;
 use crate::theme::UiTheme;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,6 +39,7 @@ impl<'a> AgentFooterProps<'a> {
 pub struct AgentViewProps<'a> {
     pub session: &'a AgentSession,
     pub prompt: AgentPromptProps<'a>,
+    pub navigation: SurfaceNavigation,
     pub storage_error: Option<&'a str>,
     pub model_notice: Option<AgentModelNotice>,
     pub footer: AgentFooterProps<'a>,

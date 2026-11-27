@@ -3,29 +3,37 @@ use eggplant_agent::{
 };
 use ratatui::{
     buffer::Buffer,
-    layout::Rect,
+    layout::{Position, Rect},
     style::Style,
     text::{Line, Span},
     widgets::{Paragraph, Widget, Wrap},
 };
 use unicode_width::UnicodeWidthStr;
 
-use crate::{component::markdown::PreparedMarkdown, theme::UiTheme};
+use super::navigation::{PageScrollState, PanelNavigation, ViewportMetrics};
+use crate::{agent::AgentInputMode, component::markdown::PreparedMarkdown, theme::UiTheme};
 
 pub(super) fn render_transcript(
     session: &AgentSession,
     area: Rect,
     styles: &UiTheme,
+    navigation: PanelNavigation,
+    mode: AgentInputMode,
     buffer: &mut Buffer,
-) {
+) -> Option<Position> {
     if area.is_empty() {
-        return;
+        return None;
     }
-    render_bottom_anchored(
-        &transcript_blocks(session, area.width, styles),
-        area,
-        buffer,
-    );
+    let blocks = transcript_blocks(session, area.width, styles);
+    let metrics = block_metrics(&blocks, area);
+    let (offset, cursor) = navigation.viewport(metrics, mode);
+    render_blocks(&blocks, area, offset, cursor, styles, buffer);
+    cursor.and_then(|row| {
+        (row >= offset && row < offset + usize::from(area.height)).then_some(Position::new(
+            area.x,
+            area.y + row.saturating_sub(offset) as u16,
+        ))
+    })
 }
 
 fn transcript_blocks(session: &AgentSession, width: u16, styles: &UiTheme) -> Vec<PreparedBlock> {
@@ -85,6 +93,7 @@ pub(super) fn render_latest_assistant(
     session: &AgentSession,
     area: Rect,
     styles: &UiTheme,
+    scroll: PageScrollState,
     buffer: &mut Buffer,
 ) {
     if area.is_empty() {
@@ -97,7 +106,31 @@ pub(super) fn render_latest_assistant(
         .find(|message| message.role == MessageRole::Assistant)
         .map(|message| vec![PreparedBlock::message(message, area.width, None, styles)])
         .unwrap_or_default();
-    render_bottom_anchored(&blocks, area, buffer);
+    let offset = scroll.offset(block_metrics(&blocks, area));
+    render_blocks(&blocks, area, offset, None, styles, buffer);
+}
+
+pub(super) fn conversation_metrics(
+    session: &AgentSession,
+    area: Rect,
+    styles: &UiTheme,
+) -> ViewportMetrics {
+    block_metrics(&transcript_blocks(session, area.width, styles), area)
+}
+
+pub(super) fn latest_assistant_metrics(
+    session: &AgentSession,
+    area: Rect,
+    styles: &UiTheme,
+) -> ViewportMetrics {
+    let blocks = session
+        .messages()
+        .iter()
+        .rev()
+        .find(|message| message.role == MessageRole::Assistant)
+        .map(|message| vec![PreparedBlock::message(message, area.width, None, styles)])
+        .unwrap_or_default();
+    block_metrics(&blocks, area)
 }
 
 #[derive(Debug)]
@@ -222,18 +255,26 @@ impl PreparedBlock {
     }
 }
 
-fn render_bottom_anchored(blocks: &[PreparedBlock], area: Rect, buffer: &mut Buffer) {
-    let heights = blocks
-        .iter()
-        .map(|block| block.height(area.width))
-        .collect::<Vec<_>>();
-    let total = heights.iter().sum::<usize>();
-    let offset = total.saturating_sub(usize::from(area.height));
+fn block_metrics(blocks: &[PreparedBlock], area: Rect) -> ViewportMetrics {
+    ViewportMetrics {
+        content_rows: blocks.iter().map(|block| block.height(area.width)).sum(),
+        viewport_rows: usize::from(area.height),
+    }
+}
+
+fn render_blocks(
+    blocks: &[PreparedBlock],
+    area: Rect,
+    offset: usize,
+    cursor: Option<usize>,
+    styles: &UiTheme,
+    buffer: &mut Buffer,
+) {
     let viewport_end = offset.saturating_add(usize::from(area.height));
     let mut start = 0usize;
 
-    for (block, height) in blocks.iter().zip(heights) {
-        let end = start.saturating_add(height);
+    for block in blocks {
+        let end = start.saturating_add(block.height(area.width));
         if end <= offset {
             start = end;
             continue;
@@ -250,6 +291,17 @@ fn render_bottom_anchored(blocks: &[PreparedBlock], area: Rect, buffer: &mut Buf
         let height = visible_end.saturating_sub(visible_start) as u16;
         block.render(Rect { y, height, ..area }, top_clip, buffer);
         start = end;
+    }
+
+    if let Some(row) = cursor.filter(|row| *row >= offset && *row < viewport_end) {
+        buffer.set_style(
+            Rect {
+                y: area.y + row.saturating_sub(offset) as u16,
+                height: 1,
+                ..area
+            },
+            styles.cursor_line,
+        );
     }
 }
 

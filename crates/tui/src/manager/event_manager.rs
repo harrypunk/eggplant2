@@ -615,6 +615,8 @@ mod tests {
         for (key, modifiers, command) in [
             (KeyCode::F(7), KeyModifiers::CONTROL, "agent_interrupt"),
             (KeyCode::Tab, KeyModifiers::NONE, "agent_command_quick_fill"),
+            (KeyCode::PageUp, KeyModifiers::NONE, "agent_scroll_up"),
+            (KeyCode::PageDown, KeyModifiers::NONE, "agent_scroll_down"),
         ] {
             let event = Event::Key(KeyEvent::new(key, modifiers));
             assert!(matches!(
@@ -774,6 +776,10 @@ mod tests {
             (KeyCode::Char('i'), "agent_insert"),
             (KeyCode::Char('?'), "agent_help"),
             (KeyCode::Esc, "agent_panel_normal"),
+            (KeyCode::Char('k'), "agent_cursor_up"),
+            (KeyCode::Char('j'), "agent_cursor_down"),
+            (KeyCode::PageUp, "agent_scroll_up"),
+            (KeyCode::PageDown, "agent_scroll_down"),
         ] {
             let event = Event::Key(KeyEvent::new(key, KeyModifiers::NONE));
             assert!(matches!(
@@ -798,6 +804,13 @@ mod tests {
             manager.translate(event, &model),
             Some(Message::TextInput(TextInputEvent::Insert(' ')))
         ));
+        for character in ['j', 'k'] {
+            let event = Event::Key(KeyEvent::new(KeyCode::Char(character), KeyModifiers::NONE));
+            assert!(matches!(
+                manager.translate(event, &model),
+                Some(Message::TextInput(TextInputEvent::Insert(actual))) if actual == character
+            ));
+        }
         for (key, modifiers, action) in [
             (KeyCode::Enter, KeyModifiers::NONE, GeneralAction::Activate),
             (KeyCode::Esc, KeyModifiers::NONE, GeneralAction::Back),
@@ -821,6 +834,8 @@ mod tests {
         for (key, modifiers, command) in [
             (KeyCode::F(7), KeyModifiers::CONTROL, "agent_interrupt"),
             (KeyCode::Tab, KeyModifiers::NONE, "agent_command_quick_fill"),
+            (KeyCode::PageUp, KeyModifiers::NONE, "agent_scroll_up"),
+            (KeyCode::PageDown, KeyModifiers::NONE, "agent_scroll_down"),
         ] {
             let event = Event::Key(KeyEvent::new(key, modifiers));
             assert!(matches!(

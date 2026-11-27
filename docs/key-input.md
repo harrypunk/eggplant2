@@ -155,6 +155,7 @@ On an expanded directory, `h` folds that directory. On a file or collapsed direc
 | --- | --- |
 | Open inline Agent dialog | `Ctrl-I` |
 | Submit prompt / accept the active file reference | `Enter` |
+| Page the dialog transcript while editing | `PageUp` / `PageDown` |
 | Quick-fill a command / accept the active file reference | `Tab` |
 | Dismiss completion, then the dialog, without cancelling the run | `Esc` |
 | Edit prompt / delete previous character | Printable input / `Backspace` |
@@ -165,7 +166,7 @@ On an expanded directory, `h` folds that directory. On a file or collapsed direc
 
 The inline dialog requires an open project but no active buffer. Opening it never injects a file path, line number, or other prefill; the existing draft is preserved across dialog and panel presentations. External buffers do not prevent chatting. Both surfaces accept freeform text and `@path` references. The project panel focuses its bottom input when opened. Without an active provider, both surfaces show `No model available · /provider or Space a i to log in`; submitting preserves the draft and shows the same guidance instead of generating a simulated response.
 
-Panel input starts in Normal mode: `i` enters Insert, `?` opens a modal help popup, the configured leader opens the shared command menu, and `Ctrl-H`/`Ctrl-L` move focus. The help popup closes with `?` or `Esc` without activating the panel underneath. Insert accepts text (including Space), Backspace edits, Enter submits, and `Esc` returns to Normal without leaving the panel.
+Panel input starts in Normal mode: `i` enters Insert, `?` opens a modal help popup, the configured leader opens the shared command menu, and `Ctrl-H`/`Ctrl-L` move focus. Normal starts the transcript cursor at the bottom, shows its cursor line, moves with `j`/`k`, and pages both cursor and viewport with `PageUp`/`PageDown`. Insert accepts text (including Space and `j`/`k`), Backspace edits, Enter submits, PageUp/PageDown scroll without editing, and `Esc` returns to Normal with the cursor reset to bottom without leaving the panel.
 
 Agent file references:
 

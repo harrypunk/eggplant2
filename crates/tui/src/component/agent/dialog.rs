@@ -8,10 +8,11 @@ use ratatui::{
 
 use super::{
     footer::{AgentFooter, footer_layout},
+    navigation::ViewportMetrics,
     prompt::AgentPromptView,
     props::AgentViewProps,
     status::{RunStatusPresentation, status_text},
-    transcript::{diff_lines, render_latest_assistant},
+    transcript::{diff_lines, latest_assistant_metrics, render_latest_assistant},
 };
 use crate::component::{
     popup::{Popup, content_area},
@@ -40,6 +41,10 @@ impl AgentDialog {
         }
         AgentPromptView::cursor(&props.prompt, props.styles, input_area(props, area))
     }
+
+    pub fn transcript_metrics(props: &AgentDialogProps<'_>, area: Rect) -> ViewportMetrics {
+        latest_assistant_metrics(props.session, assistant_area(props, area), props.styles)
+    }
 }
 
 struct AgentDialogContent<'a> {
@@ -57,7 +62,13 @@ impl AgentDialogContent<'_> {
         ))
         .style(self.props.styles.muted)
         .render(status, buffer);
-        render_latest_assistant(self.props.session, assistant, self.props.styles, buffer);
+        render_latest_assistant(
+            self.props.session,
+            assistant,
+            self.props.styles,
+            self.props.navigation.dialog(),
+            buffer,
+        );
         AgentPromptView::render(
             &self.props.prompt,
             self.props.styles,
@@ -136,6 +147,12 @@ fn prompt_area(props: &AgentDialogProps<'_>, area: Rect) -> Rect {
     dialog_layout(area, prompt)[2]
 }
 
+fn assistant_area(props: &AgentDialogProps<'_>, area: Rect) -> Rect {
+    let [content, _] = footer_layout(content_area(area));
+    let (_, prompt) = prompt_heights(props, content);
+    dialog_layout(content, prompt)[1]
+}
+
 fn input_area(props: &AgentDialogProps<'_>, area: Rect) -> Rect {
     let [content, _] = footer_layout(content_area(area));
     let (input, _) = prompt_heights(props, content);
@@ -149,7 +166,7 @@ mod tests {
     use super::*;
     use crate::{
         agent::PromptCommand,
-        component::agent::{AgentModelNotice, AgentPromptProps},
+        component::agent::{AgentModelNotice, AgentPromptProps, SurfaceNavigation},
         theme::Theme,
     };
     use eggplant_agent::AgentSession;
@@ -177,6 +194,7 @@ mod tests {
         let prompt = TextInput::new("main.rs:1");
         let props = AgentDialogProps {
             session: &session,
+            navigation: SurfaceNavigation::default(),
             prompt: AgentPromptProps::new(&prompt),
             storage_error: None,
             model_notice: None,
@@ -199,6 +217,7 @@ mod tests {
         let prompt = TextInput::default();
         let props = AgentDialogProps {
             session: &session,
+            navigation: SurfaceNavigation::default(),
             prompt: AgentPromptProps::new(&prompt),
             storage_error: None,
             model_notice: None,
@@ -220,6 +239,7 @@ mod tests {
         let prompt = TextInput::default();
         let props = AgentDialogProps {
             session: &session,
+            navigation: SurfaceNavigation::default(),
             prompt: AgentPromptProps::new(&prompt),
             storage_error: None,
             model_notice: Some(AgentModelNotice::Unavailable),
@@ -257,6 +277,7 @@ mod tests {
         let prompt = TextInput::default();
         let props = AgentDialogProps {
             session: &session,
+            navigation: SurfaceNavigation::default(),
             prompt: AgentPromptProps::new(&prompt),
             storage_error: None,
             model_notice: None,
@@ -279,6 +300,7 @@ mod tests {
         let prompt = TextInput::new("/");
         let props = AgentDialogProps {
             session: &session,
+            navigation: SurfaceNavigation::default(),
             prompt: AgentPromptProps::new(&prompt).with_commands(
                 Some(PromptCommand::ALL.to_vec()),
                 Some(PromptCommand::Logout),
@@ -321,6 +343,7 @@ mod tests {
         let prompt = TextInput::new("ab".repeat(100));
         let props = AgentDialogProps {
             session: &session,
+            navigation: SurfaceNavigation::default(),
             prompt: AgentPromptProps::new(&prompt),
             storage_error: None,
             model_notice: None,

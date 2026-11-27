@@ -103,7 +103,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        component::agent::{AgentFooterProps, AgentPromptProps},
+        component::agent::{AgentFooterProps, AgentPromptProps, SurfaceNavigation},
         component::text_input::TextInput,
         theme::Theme,
     };
@@ -132,6 +132,7 @@ mod tests {
         let theme = Theme::default();
         let props = AgentViewProps {
             session: &session,
+            navigation: SurfaceNavigation::default(),
             prompt: AgentPromptProps::new(&prompt),
             storage_error: None,
             model_notice: None,
@@ -164,6 +165,7 @@ mod tests {
         let theme = Theme::default();
         let props = AgentViewProps {
             session: &session,
+            navigation: SurfaceNavigation::default(),
             prompt: AgentPromptProps::new(&prompt),
             storage_error: None,
             model_notice: None,

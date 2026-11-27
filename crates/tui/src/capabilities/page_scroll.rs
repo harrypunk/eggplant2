@@ -60,7 +60,7 @@ impl PageScroll {
         viewport.scroll_lines(direction, self.rows(height));
     }
 
-    fn rows(self, viewport_height: usize) -> usize {
+    pub(crate) fn rows(self, viewport_height: usize) -> usize {
         (viewport_height.saturating_mul(usize::from(self.step_percent)) / 100).max(1)
     }
 }

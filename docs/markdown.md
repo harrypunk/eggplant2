@@ -51,7 +51,7 @@ component/markdown::PreparedMarkdown
 ratatui::Buffer
 ```
 
-`component/markdown/mod.rs` is the package-facing adapter and maps `UiTheme` roles to Markdown text, heading, link, code, diagram, muted, and selection styles. `component/agent/transcript.rs` composes Markdown and plain blocks, supplies role prefixes, and bottom-anchors both Agent presentations using actual wrapped block heights. Neither adapter performs filesystem, network, provider, or terminal-probing work.
+`component/markdown/mod.rs` is the package-facing adapter and maps `UiTheme` roles to Markdown text, heading, link, code, diagram, muted, and selection styles. `component/agent/transcript.rs` composes Markdown and plain blocks, supplies role prefixes, and renders caller-selected offsets with actual wrapped block heights. Bottom state follows streaming content; panel Normal can instead reveal and highlight a cursor row. Neither adapter performs filesystem, network, provider, or terminal-probing work.
 
 The package provides CommonMark plus tables, task lists, and strikethrough, nested block layout, code wrapping, narrow-table fallback, and bounded parsing/layout. Parse or layout-limit failures fall back to readable raw message text. Trailing package block-spacing rows are excluded when the Agent transcript supplies its own inter-message spacing.
 

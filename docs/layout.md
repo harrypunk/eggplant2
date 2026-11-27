@@ -27,12 +27,12 @@ Overlay layer:
 | Region | Layout constraints |
 | --- | --- |
 | Root | `main = Fill(1)`, `status = Length(1)` |
-| Main | `file explorer = Length(28)` when displayed, `editor = Fill(1)`, `tools = Length(40)` when displayed |
+| Main | `file explorer = Length(28)` when displayed, `editor = Fill(1)`, `tools = Length(48)` when displayed |
 | Editor | `buffer tabs = Length(1)`, `editing area = Fill(1)`; line-number gutter = document digits + one space, text = `Fill(1)` |
 | Key-hints overlay | Bottom-right of `main`; content-sized vertical list with borders, above the status bar |
 | File-picker overlay | Centered in `main`, maximum 160×36; left query/results and right preview in equal columns. Preview snapshots cover the maximum 34 inner rows and smaller layouts clip them. |
 | Buffer-grep overlay | Same picker geometry and input cursor as the file picker; left regex/results and right match-centered buffer context with current syntax highlights, yellow match blocks, and selected-line styling. |
-| Agent dialog | Centered within the editor region rather than the full main area, maximum 80×22 with a small-terminal margin. The explorer and tools remain visible, along with the editor perimeter around the popup. |
+| Agent dialog | Centered within the editor region rather than the full main area, maximum 88×26 with a small-terminal margin. The explorer and tools remain visible, along with the editor perimeter around the popup. |
 | Project-grep overlay | Same picker geometry; left path/line/results and right match-centered file preview with syntax and match highlighting. |
 
 All layout groups use `Flex::Start`. Hidden nodes remain in the layout tree and use zero width, so they do not reduce the editor's fill area.

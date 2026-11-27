@@ -4,6 +4,7 @@ mod commands;
 mod completion;
 mod context;
 mod dialog;
+mod navigation;
 mod panel;
 mod prompt;
 mod prompt_command;
@@ -30,6 +31,8 @@ pub const KEYMAPS: &[ContextKeymap] = &[
         .with_commands(&[
             ("agent_interrupt", "ctrl-f7"),
             ("agent_command_quick_fill", "tab"),
+            ("agent_scroll_up", "pageup"),
+            ("agent_scroll_down", "pagedown"),
         ])
         .with_capabilities(&[
             KeymapCapability::ListNavigation,
@@ -43,12 +46,18 @@ pub const KEYMAPS: &[ContextKeymap] = &[
             ("focus_left", "ctrl-h"),
             ("focus_right", "ctrl-l"),
             ("agent_interrupt", "ctrl-f7"),
+            ("agent_cursor_up", "k"),
+            ("agent_cursor_down", "j"),
+            ("agent_scroll_up", "pageup"),
+            ("agent_scroll_down", "pagedown"),
         ])
         .with_capabilities(&[KeymapCapability::LeaderMenu]),
     ContextKeymap::new("agent_chat_insert", Context::AgentChatInsert)
         .with_commands(&[
             ("agent_interrupt", "ctrl-f7"),
             ("agent_command_quick_fill", "tab"),
+            ("agent_scroll_up", "pageup"),
+            ("agent_scroll_down", "pagedown"),
         ])
         .with_capabilities(&[
             KeymapCapability::ListNavigation,
@@ -65,7 +74,10 @@ pub const KEYMAPS: &[ContextKeymap] = &[
 ];
 
 use crate::{
-    component::text_input::{TextInput, TextInputEvent},
+    component::{
+        agent::{PageScrollState, PanelNavigation, SurfaceNavigation},
+        text_input::{TextInput, TextInputEvent},
+    },
     data_object::Context,
     manager::keymap_contribution::{ContextKeymap, KeymapCapability},
 };
@@ -114,6 +126,8 @@ pub struct AgentState {
     prompt: prompt::AgentPrompt,
     dialog: AgentDialogState,
     panel_mode: AgentInputMode,
+    dialog_scroll: PageScrollState,
+    panel_navigation: PanelNavigation,
     help_visible: bool,
     context: Option<EditorContext>,
     provider: Option<Arc<dyn AgentProvider>>,
@@ -132,6 +146,8 @@ impl Default for AgentState {
             prompt: prompt::AgentPrompt::default(),
             dialog: AgentDialogState::Closed,
             panel_mode: AgentInputMode::Normal,
+            dialog_scroll: PageScrollState::default(),
+            panel_navigation: PanelNavigation::default(),
             help_visible: false,
             context: None,
             provider: None,
@@ -221,6 +237,21 @@ impl AgentState {
         }
     }
 
+    pub fn navigation(&self, surface: surface::AgentSurface) -> SurfaceNavigation {
+        match surface {
+            surface::AgentSurface::Dialog => SurfaceNavigation::Dialog(self.dialog_scroll),
+            surface::AgentSurface::Panel => SurfaceNavigation::Panel(self.panel_navigation),
+        }
+    }
+
+    pub fn dialog_scroll_mut(&mut self) -> &mut PageScrollState {
+        &mut self.dialog_scroll
+    }
+
+    pub fn panel_navigation_mut(&mut self) -> &mut PanelNavigation {
+        &mut self.panel_navigation
+    }
+
     pub fn help_visible(&self) -> bool {
         self.help_visible
     }
@@ -232,6 +263,7 @@ impl AgentState {
 
     pub fn enter_normal_mode(&mut self) {
         self.panel_mode = AgentInputMode::Normal;
+        self.panel_navigation.enter_normal();
     }
 
     pub fn toggle_help(&mut self) {
@@ -278,11 +310,13 @@ impl AgentState {
     pub fn prepare_panel(&mut self) {
         self.context = None;
         self.panel_mode = AgentInputMode::Normal;
+        self.panel_navigation.enter_normal();
         self.help_visible = false;
     }
 
     pub fn open_dialog(&mut self, context: Option<EditorContext>) {
         self.context = context;
+        self.dialog_scroll.bottom();
         self.dialog = AgentDialogState::Open;
     }
 
