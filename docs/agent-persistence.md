@@ -28,6 +28,8 @@ AgentSession / provider-neutral records
 
 The TUI/composition root selects the implementation. Provider code, popup/panel rendering, and editor mutation must not depend on SeaORM entities or SQL.
 
+Within the SeaORM adapter, `store/mod.rs` is only the `SessionStore` implementation and connection owner. `store/write.rs` owns finalized-run validation and transactions, `store/read.rs` owns recent/transcript queries and related-row assembly, `store/search.rs` owns message/tool predicates and keyset search, and `store/records.rs` owns row/domain mappings, persistence encodings, pagination values, and SQLite bounds. Entities and migrations remain separate from these workflows. This keeps SQL operations explicit without giving one module all storage responsibilities.
+
 The port lives in `agent-storage`. Relational drivers belong in separate adapters; neither `eggplant-agent` nor editor code depends on them. The TUI depends only on `SessionStore`, never SeaORM entities, SQL, connection URLs, or backend query syntax.
 
 The default application creates and migrates `~/.eggplant/ai/data.sqlite`; an absolute `session_db` overrides that location. There is no SQLite feature flag or in-memory production fallback. MySQL/PostgreSQL drivers and cloud URLs are not included.

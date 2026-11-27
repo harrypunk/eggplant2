@@ -2,6 +2,8 @@ use eggplant_agent::{
     CancellationToken, MessageRole, RunId, RunStatus, SessionId, ToolResult, ToolResultStatus,
 };
 
+use eggplant_agent_storage::{MessageRecord, RunRecord, SessionRecord, ToolCallRecord};
+
 use super::*;
 
 async fn test_store() -> (SeaOrmSessionStore, tempfile::TempDir) {
