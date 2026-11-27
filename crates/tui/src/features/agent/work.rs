@@ -310,7 +310,7 @@ mod tests {
     #[test]
     fn submission_policy_runs_without_the_application_model() {
         let mut context = FakeWork::default();
-        context.agent.prompt.set_value("hello");
+        context.agent.set_prompt("hello");
 
         assert!(submit(&mut context).is_none());
         assert_eq!(context.agent.prompt(), "hello");
@@ -336,7 +336,7 @@ mod tests {
             project: true,
             ..FakeWork::default()
         };
-        context.agent.prompt.set_value("hello");
+        context.agent.set_prompt("hello");
 
         assert!(submit(&mut context).is_none());
 
@@ -355,7 +355,7 @@ mod tests {
             project: true,
             ..FakeWork::default()
         };
-        context.agent.prompt.set_value("/provider ");
+        context.agent.set_prompt("/provider ");
         assert_eq!(context.agent.command_state().selected(), None);
 
         assert!(submit(&mut context).is_none());
@@ -365,7 +365,7 @@ mod tests {
         );
         assert_eq!(context.agent.prompt(), "");
 
-        context.agent.prompt.set_value("/provider");
+        context.agent.set_prompt("/provider");
         assert!(
             context
                 .agent
@@ -385,7 +385,7 @@ mod tests {
         );
         assert_eq!(context.agent.prompt(), "");
 
-        context.agent.prompt.set_value("next");
+        context.agent.set_prompt("next");
         context.agent.begin_prompt().unwrap();
         assert!(interrupt(&mut context).is_none());
         assert_eq!(
@@ -584,7 +584,7 @@ mod tests {
         model.tools.visibility = Visibility::Displayed;
         focus_panel_input(&mut model);
         enter_insert_mode(&mut model);
-        model.agent.prompt.set_value("/provide");
+        model.agent.set_prompt("/provide");
 
         submit(&mut model);
         assert!(!model.provider_login.is_open());
@@ -605,7 +605,7 @@ mod tests {
         assert_eq!(input_context(&model), Some(Context::AgentChatInsert));
         assert_eq!(model.agent.prompt(), "");
 
-        model.agent.prompt.set_value("/unknown");
+        model.agent.set_prompt("/unknown");
         handle_input(&mut model, TextInputEvent::DeleteBackward);
         submit(&mut model);
         assert_eq!(model.agent.prompt(), "/unknow");
@@ -625,7 +625,7 @@ mod tests {
         model.tools.visibility = Visibility::Displayed;
         focus_panel_input(&mut model);
         enter_insert_mode(&mut model);
-        model.agent.prompt.set_value("/");
+        model.agent.set_prompt("/");
 
         command_next(&mut model);
         command_next(&mut model);
@@ -654,7 +654,7 @@ mod tests {
         model.tools.visibility = Visibility::Displayed;
         focus_panel_input(&mut model);
         enter_insert_mode(&mut model);
-        model.agent.prompt.set_value("/logout");
+        model.agent.set_prompt("/logout");
 
         submit(&mut model);
 
@@ -676,7 +676,7 @@ mod tests {
         assert!(model.modal.is_active(Context::AgentChatDialog));
         assert_eq!(input_context(&model), Some(Context::AgentChatDialog));
         assert!(model.context_stack.is_empty());
-        model.agent.prompt.set_value("/provider");
+        model.agent.set_prompt("/provider");
         command_quick_fill(&mut model);
 
         submit(&mut model);
@@ -699,7 +699,7 @@ mod tests {
         std::fs::write(&path, "fn main() {}\n").unwrap();
         let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
         open_file(&mut model, &path);
-        model.agent.prompt.set_value("explain @main.rs");
+        model.agent.set_prompt("explain @main.rs");
 
         model
             .agent
@@ -772,7 +772,7 @@ mod tests {
             assert!(handle_input(&mut model, TextInputEvent::Insert(character)).is_none());
         }
         assert!(!model.agent.file_references_active());
-        model.agent.prompt.set_value("");
+        model.agent.set_prompt("");
 
         assert!(handle_input(&mut model, TextInputEvent::Insert('@')).is_none());
         assert!(model.agent.file_references_active());
@@ -848,7 +848,7 @@ mod tests {
             .session_mut()
             .begin("active".to_string())
             .unwrap();
-        model.agent.prompt.set_value("next");
+        model.agent.set_prompt("next");
 
         assert!(model.agent.begin_prompt().is_none());
         assert_eq!(model.agent.prompt(), "next");
@@ -893,7 +893,7 @@ mod tests {
         let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
         open_file(&mut model, &path);
         open(&mut model);
-        model.agent.prompt.set_value("main.rs:1");
+        model.agent.set_prompt("main.rs:1");
 
         handle_input(
             &mut model,
@@ -926,7 +926,7 @@ mod tests {
         open_file(&mut model, &path);
         let manager = MessageManager::default();
         open(&mut model);
-        model.agent.prompt.set_value("main.rs:1");
+        model.agent.set_prompt("main.rs:1");
         let effect = submit(&mut model).unwrap();
         assert!(model.agent.session().is_running());
         close(&mut model);
@@ -995,7 +995,7 @@ mod tests {
         open_file(&mut model, &path);
         let manager = MessageManager::default();
         open(&mut model);
-        model.agent.prompt.set_value("persist this prompt");
+        model.agent.set_prompt("persist this prompt");
         let effect = submit(&mut model).unwrap();
 
         if let Some(storage) = perform(&manager, &mut model, effect) {
@@ -1096,7 +1096,7 @@ mod tests {
         open_file(&mut model, &path);
         let manager = MessageManager::default();
         open(&mut model);
-        model.agent.prompt.set_value("persist this prompt");
+        model.agent.set_prompt("persist this prompt");
         let effect = submit(&mut model).unwrap();
 
         if let Some(storage) = perform(&manager, &mut model, effect) {
@@ -1124,7 +1124,7 @@ mod tests {
         open_file(&mut model, &path);
         let manager = MessageManager::default();
         open(&mut model);
-        model.agent.prompt.set_value("cancel this prompt");
+        model.agent.set_prompt("cancel this prompt");
         let effect = submit(&mut model).unwrap();
         close(&mut model);
         open(&mut model);
@@ -1171,7 +1171,7 @@ mod tests {
         open_file(&mut model, &path);
         let manager = MessageManager::default();
         open(&mut model);
-        model.agent.prompt.set_value("first prompt");
+        model.agent.set_prompt("first prompt");
         let effect = submit(&mut model).unwrap();
         perform(&manager, &mut model, effect);
         assert_eq!(
@@ -1187,7 +1187,7 @@ mod tests {
 
         close(&mut model);
         open(&mut model);
-        model.agent.prompt.set_value("second prompt");
+        model.agent.set_prompt("second prompt");
         let effect = submit(&mut model).unwrap();
         interrupt(&mut model);
         perform(&manager, &mut model, effect);
@@ -1242,7 +1242,7 @@ mod tests {
         open_file(&mut model, &path);
         let manager = MessageManager::default();
         open(&mut model);
-        model.agent.prompt.set_value("read main.rs");
+        model.agent.set_prompt("read main.rs");
         let effect = submit(&mut model).unwrap();
         perform(&manager, &mut model, effect);
 
@@ -1355,7 +1355,7 @@ mod tests {
     fn begin_write(model: &mut Model) {
         let manager = MessageManager::default();
         open(model);
-        model.agent.prompt.set_value("write main.rs");
+        model.agent.set_prompt("write main.rs");
         let effect = submit(model).unwrap();
         perform(&manager, model, effect);
         assert_eq!(
@@ -1648,7 +1648,7 @@ mod tests {
         }));
         open_file(&mut model, &path);
         open(&mut model);
-        model.agent.prompt.set_value("run tools");
+        model.agent.set_prompt("run tools");
         (model, requests, directory)
     }
 
@@ -1736,7 +1736,7 @@ mod tests {
         open_file(&mut model, &path);
         let manager = MessageManager::default();
         open(&mut model);
-        model.agent.prompt.set_value("repeat read");
+        model.agent.set_prompt("repeat read");
         let effect = submit(&mut model).unwrap();
         perform(&manager, &mut model, effect);
 

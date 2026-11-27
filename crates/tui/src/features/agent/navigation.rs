@@ -169,7 +169,7 @@ mod tests {
         let (mut model, _directory) = model();
         dialog::open(&mut model);
         page_up(&mut model);
-        model.agent.prompt.set_value("next question");
+        model.agent.set_prompt("next question");
 
         model.agent.begin_prompt().unwrap();
 
@@ -190,7 +190,7 @@ mod tests {
         panel::focus_panel_input(&mut model);
         model.agent.enter_insert_mode();
         page_up(&mut model);
-        model.agent.prompt.set_value("next question");
+        model.agent.set_prompt("next question");
 
         model.agent.begin_prompt().unwrap();
 

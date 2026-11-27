@@ -226,7 +226,7 @@ mod tests {
         model.tools.active_tool = Some(ToolKind::Agent);
         model.tools.visibility = Visibility::Displayed;
         model.agent.enter_insert_mode();
-        model.agent.prompt.set_value("/p");
+        model.agent.set_prompt("/p");
         let provider = Some(vec![crate::agent::PromptCommand::ProviderLogin]);
         assert_eq!(view_commands(&model, AgentSurface::Panel), provider);
         assert_eq!(view_commands(&model, AgentSurface::Dialog), None);
@@ -243,7 +243,7 @@ mod tests {
         model.agent.enter_normal_mode();
         assert_eq!(view_commands(&model, AgentSurface::Panel), None);
         model.agent.enter_insert_mode();
-        model.agent.prompt.set_value("plain prompt");
+        model.agent.set_prompt("plain prompt");
         assert_eq!(view_commands(&model, AgentSurface::Panel), None);
         assert_eq!(view_commands(&model, AgentSurface::Dialog), None);
     }

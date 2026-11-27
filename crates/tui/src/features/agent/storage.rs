@@ -105,8 +105,8 @@ fn finalized_run(model: &Model, now: i64) -> Option<FinalizedRun> {
             status,
             created_at: started,
             completed_at: Some(now),
-            provider: model.agent.provider_name.clone(),
-            model: model.agent.model.clone(),
+            provider: model.agent.provider_name().to_string(),
+            model: model.agent.model().map(str::to_string),
             editor_context,
         },
         messages,
@@ -191,10 +191,10 @@ mod tests {
     #[test]
     fn finalized_record_uses_recorded_timestamps_without_mutating_model() {
         let mut model = Model::default();
-        model.agent.prompt.set_value("question");
+        model.agent.set_prompt("question");
         let run = model.agent.begin_prompt().unwrap();
         model.agent.session_mut().complete(run);
-        let created = model.agent.session_created_at;
+        let created = model.agent.session_created_at();
         let started = model.agent.run_started_at(run);
 
         let record = finalized_run(&model, 123).unwrap();
@@ -202,7 +202,7 @@ mod tests {
         assert_eq!(record.session.created_at, created.unwrap());
         assert_eq!(record.run.created_at, started.unwrap());
         assert_eq!(record.run.completed_at, Some(123));
-        assert_eq!(model.agent.session_created_at, created);
+        assert_eq!(model.agent.session_created_at(), created);
         assert_eq!(model.agent.run_started_at(run), started);
     }
 
