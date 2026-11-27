@@ -13,6 +13,30 @@ impl ViewportMetrics {
     pub fn max_offset(self) -> usize {
         self.content_rows.saturating_sub(self.viewport_rows)
     }
+
+    fn reveal_offset(self, row: usize, current: usize) -> usize {
+        let offset = match self.row_location(row, current) {
+            RowLocation::BeforeViewport => row,
+            RowLocation::Visible => current,
+            RowLocation::AfterViewport => row.saturating_add(1).saturating_sub(self.viewport_rows),
+        };
+        offset.min(self.max_offset())
+    }
+
+    fn row_location(self, row: usize, current: usize) -> RowLocation {
+        match row {
+            row if row < current => RowLocation::BeforeViewport,
+            row if row >= current.saturating_add(self.viewport_rows) => RowLocation::AfterViewport,
+            _ => RowLocation::Visible,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RowLocation {
+    BeforeViewport,
+    Visible,
+    AfterViewport,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -25,6 +49,15 @@ enum ScrollPosition {
     #[default]
     Bottom,
     Offset(usize),
+}
+
+impl ScrollPosition {
+    fn from_offset(offset: usize, metrics: ViewportMetrics) -> Self {
+        match offset {
+            offset if offset == metrics.max_offset() => Self::Bottom,
+            offset => Self::Offset(offset),
+        }
+    }
 }
 
 impl PageScrollState {
@@ -50,11 +83,7 @@ impl PageScrollState {
             ScrollDirection::Up => current.saturating_sub(rows),
             ScrollDirection::Down => current.saturating_add(rows).min(metrics.max_offset()),
         };
-        self.position = if next == metrics.max_offset() {
-            ScrollPosition::Bottom
-        } else {
-            ScrollPosition::Offset(next)
-        };
+        self.position = ScrollPosition::from_offset(next, metrics);
     }
 
     pub fn bottom(&mut self) {
@@ -66,19 +95,7 @@ impl PageScrollState {
             return;
         }
         let current = self.offset(metrics);
-        let viewport_end = current.saturating_add(metrics.viewport_rows);
-        let next = if row < current {
-            row
-        } else if row >= viewport_end {
-            row.saturating_add(1).saturating_sub(metrics.viewport_rows)
-        } else {
-            current
-        };
-        self.position = if next == metrics.max_offset() {
-            ScrollPosition::Bottom
-        } else {
-            ScrollPosition::Offset(next.min(metrics.max_offset()))
-        };
+        self.position = ScrollPosition::from_offset(metrics.reveal_offset(row, current), metrics);
     }
 }
 
@@ -216,6 +233,13 @@ mod tests {
         content_rows: 100,
         viewport_rows: 20,
     };
+
+    #[test]
+    fn reveal_offset_is_pure_for_before_visible_after_and_bottom_rows() {
+        for (row, current, expected) in [(40, 50, 40), (55, 50, 50), (75, 50, 56), (99, 50, 80)] {
+            assert_eq!(METRICS.reveal_offset(row, current), expected);
+        }
+    }
 
     #[test]
     fn page_scroll_follows_bottom_until_manual_navigation() {
