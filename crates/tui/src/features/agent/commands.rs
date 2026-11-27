@@ -179,8 +179,7 @@ pub(crate) fn command_quick_fill(model: &mut Model) -> Option<Effect> {
 }
 
 fn activate(model: &mut Model) -> Option<Effect> {
-    if model.agent.file_references_active() {
-        model.agent.accept_file_reference();
+    if model.agent.accept_file_reference() {
         None
     } else {
         super::work::submit(model)

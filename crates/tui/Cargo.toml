@@ -30,6 +30,7 @@ ratatui = "0.30.2"
 serde = { version = "1.0.229", features = ["derive"] }
 toml = "1.1.8"
 unicode-width = "0.2"
+unicode-general-category = "1.1.0"
 vcs.workspace = true
 serde_json = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "sync", "time"] }

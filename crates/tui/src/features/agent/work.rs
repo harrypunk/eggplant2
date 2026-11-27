@@ -797,6 +797,50 @@ mod tests {
     }
 
     #[test]
+    fn enter_submits_literal_reference_when_no_candidate_matches() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(directory.path().join("main.rs"), "fn main() {}\n").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let manager = MessageManager::default();
+        open(&mut model);
+
+        for character in "ping @nonexistent".chars() {
+            let mut effect = handle_input(&mut model, TextInputEvent::Insert(character));
+            while let Some(request) = effect {
+                effect = perform(&manager, &mut model, request);
+            }
+        }
+        let references = model.agent.file_references().unwrap();
+        assert_eq!(references.status, crate::agent::FileReferenceStatus::Ready);
+        assert!(references.entries.is_empty());
+
+        let effect = handle_general_action(&mut model, GeneralAction::Activate).unwrap();
+        assert!(model.agent.session().is_running());
+        assert_eq!(model.agent.prompt(), "");
+        perform(&manager, &mut model, effect);
+        assert_eq!(
+            model.agent.session().messages()[0].text,
+            "ping @nonexistent"
+        );
+    }
+
+    #[test]
+    fn enter_during_loading_submits_and_rejects_the_late_scan() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(directory.path().join("main.rs"), "fn main() {}\n").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let manager = MessageManager::default();
+        open(&mut model);
+
+        let pending_scan = handle_input(&mut model, TextInputEvent::Insert('@')).unwrap();
+        let submission = handle_general_action(&mut model, GeneralAction::Activate).unwrap();
+        assert!(model.agent.session().is_running());
+        assert!(perform(&manager, &mut model, pending_scan).is_none());
+        perform(&manager, &mut model, submission);
+        assert_eq!(model.agent.session().messages()[0].text, "@");
+    }
+
+    #[test]
     fn failed_begin_preserves_the_prompt() {
         let mut model = Model::default();
         model

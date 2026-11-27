@@ -5083,6 +5083,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "toml",
+ "unicode-general-category",
  "unicode-width 0.2.2",
  "vcs",
 ]

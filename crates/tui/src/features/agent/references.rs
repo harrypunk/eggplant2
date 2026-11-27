@@ -1,5 +1,7 @@
 use std::{path::Path, sync::Arc};
 
+use unicode_general_category::{GeneralCategory, get_general_category};
+
 use crate::{
     component::{list::ListState, text_input::TextInput},
     data_object::{Message, Model},
@@ -101,34 +103,44 @@ impl ReferenceToken {
         return candidate;
 
         fn valid_trigger_boundary(value: &str, at: usize) -> bool {
-            let Some((previous_index, previous)) = value[..at].char_indices().last() else {
-                return true;
-            };
-            if previous.is_whitespace() || is_cjk_punctuation(previous) {
-                return true;
+            let mut prefix = &value[..at];
+            loop {
+                let Some((index, previous)) = prefix.char_indices().last() else {
+                    return true;
+                };
+                if matches!(previous, '(' | '[' | '{' | '<' | '`') {
+                    prefix = &prefix[..index];
+                    continue;
+                }
+                return previous.is_whitespace() || is_non_ascii_punctuation(previous);
             }
-            if !matches!(previous, '(' | '[' | '{' | '<' | '`') {
-                return false;
-            }
-            value[..previous_index]
-                .chars()
-                .last()
-                .is_none_or(|character| character.is_whitespace() || is_cjk_punctuation(character))
         }
     }
 }
 
-fn is_cjk_punctuation(character: char) -> bool {
-    matches!(character, '\u{3000}'..='\u{303f}' | '\u{ff00}'..='\u{ff65}')
+fn is_non_ascii_punctuation(character: char) -> bool {
+    !character.is_ascii()
+        && matches!(
+            get_general_category(character),
+            GeneralCategory::ConnectorPunctuation
+                | GeneralCategory::DashPunctuation
+                | GeneralCategory::OpenPunctuation
+                | GeneralCategory::ClosePunctuation
+                | GeneralCategory::InitialPunctuation
+                | GeneralCategory::FinalPunctuation
+                | GeneralCategory::OtherPunctuation
+        )
 }
 
 fn is_unquoted_delimiter(character: char) -> bool {
-    character.is_whitespace() || matches!(character, '"' | '\'') || is_cjk_punctuation(character)
+    character.is_whitespace()
+        || matches!(character, '"' | '\'')
+        || is_non_ascii_punctuation(character)
 }
 
 fn requires_quotes(path: &str) -> bool {
     path.chars()
-        .any(|character| character.is_whitespace() || is_cjk_punctuation(character))
+        .any(|character| character.is_whitespace() || is_non_ascii_punctuation(character))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -210,6 +222,9 @@ impl FileReferenceState {
 
     pub fn acceptance(&self, input: &TextInput) -> Option<FileReferenceAcceptance> {
         let session = self.session.as_ref()?;
+        if session.status != FileReferenceStatus::Ready {
+            return None;
+        }
         let token = &session.token;
         let entry = session.results.selected_item()?;
         let quoted = token.quoted || requires_quotes(&entry.display);
@@ -292,6 +307,7 @@ impl FileReferenceState {
         self.revision = self.revision.wrapping_add(1);
         let session = self.session.as_mut()?;
         session.status = FileReferenceStatus::Filtering;
+        session.results = ListState::default();
         Some(FileReferenceRequest::Filter {
             files: session.files.clone(),
             query: session.token.query.clone(),
@@ -427,7 +443,11 @@ mod tests {
         for (text, query) in [
             ("@src", "src"),
             ("see (@src", "src"),
+            ("see ((@src", "src"),
+            ("see `(@src", "src"),
             ("查看，@src", "src"),
+            ("“@src", "src"),
+            ("—@src", "src"),
             ("explain @src", "src"),
         ] {
             let input = TextInput::new(text);
@@ -437,7 +457,15 @@ mod tests {
                 "{text}"
             );
         }
-        for text in ["user@example.com", "查看@src", "foo(@src", "plain"] {
+        for text in [
+            "user@example.com",
+            "查看@src",
+            "foo(@src",
+            "Ａ@src",
+            "々@src",
+            "🙂@src",
+            "plain",
+        ] {
             assert!(
                 ReferenceToken::at_cursor(&TextInput::new(text)).is_none(),
                 "{text}"
@@ -446,6 +474,9 @@ mod tests {
         let quoted = ReferenceToken::at_cursor(&TextInput::new("read @\"my file")).unwrap();
         assert_eq!(quoted.query, "my file");
         assert!(quoted.quoted);
+        assert!(requires_quotes("a—b.txt"));
+        assert!(requires_quotes("a“b.txt"));
+        assert!(!requires_quotes("Ａ々🙂.rs"));
     }
 
     #[test]
@@ -482,6 +513,31 @@ mod tests {
         let acceptance = state.acceptance(&input).unwrap();
         assert!(input.replace_range(acceptance.range, &acceptance.replacement));
         assert_eq!(input.value(), "read @src/main.rs  before");
+    }
+
+    #[test]
+    fn pending_and_empty_filters_never_accept_stale_candidates() {
+        let input = TextInput::new("@");
+        let mut state = ready_state(&input, None);
+        assert!(state.acceptance(&input).is_some());
+        let stale_revision = state.revision;
+
+        let edited = TextInput::new("@q");
+        let Some(FileReferenceRequest::Filter { revision, .. }) =
+            state.update(&edited, Path::new("/workspace"), None)
+        else {
+            panic!("editing the query should start a new filter");
+        };
+        let view = state.view().unwrap();
+        assert_eq!(view.status, FileReferenceStatus::Filtering);
+        assert!(view.entries.is_empty());
+        assert!(state.acceptance(&edited).is_none());
+
+        state.complete_filter(stale_revision, vec![entry("stale.rs")]);
+        assert!(state.acceptance(&edited).is_none());
+        state.complete_filter(revision, Vec::new());
+        assert_eq!(state.view().unwrap().status, FileReferenceStatus::Ready);
+        assert!(state.acceptance(&edited).is_none());
     }
 
     #[test]
