@@ -169,8 +169,9 @@ Panel input starts in Normal mode: `i` enters Insert, `?` opens a modal help pop
 
 Agent file references:
 
-- `@` at a token boundary searches the open project; an email-style `user@example.com` remains ordinary text.
-- The current buffer is the first matching candidate. Up/Down and Ctrl-N/Ctrl-P navigate, and Tab or Enter inserts the selected literal `@path` without submitting. A pending filter has no stale selectable rows; if no candidate can be accepted, Enter submits the prompt normally.
+- `@` at a token boundary starts a file reference; an email-style `user@example.com` remains ordinary text.
+- Bare `@` immediately shows only the current file, already selected, without scanning the project. The first query character starts file search; deleting back to `@` cancels pending search and restores the current-file-only row.
+- After searching, the current buffer is the first matching candidate. Up/Down and Ctrl-N/Ctrl-P navigate, and Tab or Enter inserts the selected literal `@path` without submitting. A pending filter has no stale selectable rows; if no candidate can be accepted, Enter submits the prompt normally.
 - Escape hides the completion without erasing the query; the next Escape follows the normal dialog/panel behavior. Paths with whitespace are inserted as `@"path with spaces"`.
 
 Agent slash commands:

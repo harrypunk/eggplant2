@@ -55,27 +55,49 @@ struct ReferenceSession {
 /// Search phases own only the data that is valid in that phase.
 #[derive(Debug)]
 enum ReferenceSearch {
+    CurrentFile(ListState<FileEntry>),
     Loading,
     Filtering,
     Ready(ListState<FileEntry>),
     Failed,
 }
 
+impl ReferenceSearch {
+    fn current_file(current: Option<&FileEntry>) -> Self {
+        let mut results = ListState::new(current.cloned().into_iter().collect());
+        results.select_current();
+        Self::CurrentFile(results)
+    }
+
+    fn current_results(&self) -> Option<&ListState<FileEntry>> {
+        match self {
+            Self::CurrentFile(results) => Some(results),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ReferenceTransition {
     Unchanged,
     AwaitScan,
+    ShowCurrent,
     Scan,
     Filter,
 }
 
 impl ReferenceSession {
     fn new(token: ReferenceToken, current: Option<FileEntry>) -> Self {
+        let search = if token.query.is_empty() {
+            ReferenceSearch::current_file(current.as_ref())
+        } else {
+            ReferenceSearch::Loading
+        };
         Self {
             token,
             current,
             files: Arc::new(Vec::new()),
-            search: ReferenceSearch::Loading,
+            search,
         }
     }
 
@@ -85,12 +107,28 @@ impl ReferenceSession {
         current: Option<FileEntry>,
     ) -> ReferenceTransition {
         let changed = self.token.query != token.query || self.current != current;
+        let query_empty = token.query.is_empty();
         self.token = token;
         self.current = current;
+
+        if query_empty {
+            let showing_current = self.search.current_results().is_some();
+            if changed || !showing_current {
+                self.search = ReferenceSearch::current_file(self.current.as_ref());
+            }
+            return if showing_current {
+                ReferenceTransition::Unchanged
+            } else {
+                ReferenceTransition::ShowCurrent
+            };
+        }
+
         match (changed, &self.search) {
             (false, _) => ReferenceTransition::Unchanged,
             (true, ReferenceSearch::Loading) => ReferenceTransition::AwaitScan,
-            (true, ReferenceSearch::Failed) => ReferenceTransition::Scan,
+            (true, ReferenceSearch::Failed | ReferenceSearch::CurrentFile(_)) => {
+                ReferenceTransition::Scan
+            }
             (true, ReferenceSearch::Filtering | ReferenceSearch::Ready(_)) => {
                 ReferenceTransition::Filter
             }
@@ -193,14 +231,16 @@ impl FileReferenceState {
             .as_ref()
             .is_none_or(|session| session.token.start != token.start)
         {
-            self.dismissed = None;
-            self.session = Some(ReferenceSession::new(token, current));
-            return self.start_scan(root);
+            return self.begin_session(token, current, root);
         }
 
         let transition = self.session.as_mut().unwrap().advance(token, current);
         match transition {
             ReferenceTransition::Unchanged | ReferenceTransition::AwaitScan => None,
+            ReferenceTransition::ShowCurrent => {
+                self.revision = self.revision.wrapping_add(1);
+                None
+            }
             ReferenceTransition::Scan => self.start_scan(root),
             ReferenceTransition::Filter => self.start_filter(),
         }
@@ -209,6 +249,9 @@ impl FileReferenceState {
     pub fn view(&self) -> Option<FileReferenceView<'_>> {
         self.session.as_ref().map(|session| {
             let (status, results) = match &session.search {
+                ReferenceSearch::CurrentFile(results) => {
+                    (FileReferenceStatus::Ready, Some(results))
+                }
                 ReferenceSearch::Loading => (FileReferenceStatus::Loading, None),
                 ReferenceSearch::Filtering => (FileReferenceStatus::Filtering, None),
                 ReferenceSearch::Ready(results) => (FileReferenceStatus::Ready, Some(results)),
@@ -228,7 +271,8 @@ impl FileReferenceState {
 
     pub fn select_next(&mut self) {
         if let Some(session) = self.session.as_mut()
-            && let ReferenceSearch::Ready(results) = &mut session.search
+            && let ReferenceSearch::Ready(results) | ReferenceSearch::CurrentFile(results) =
+                &mut session.search
         {
             results.select_next();
         }
@@ -236,7 +280,8 @@ impl FileReferenceState {
 
     pub fn select_previous(&mut self) {
         if let Some(session) = self.session.as_mut()
-            && let ReferenceSearch::Ready(results) = &mut session.search
+            && let ReferenceSearch::Ready(results) | ReferenceSearch::CurrentFile(results) =
+                &mut session.search
         {
             results.select_previous();
         }
@@ -244,8 +289,9 @@ impl FileReferenceState {
 
     pub fn acceptance(&self, input: &TextInput) -> Option<FileReferenceAcceptance> {
         let session = self.session.as_ref()?;
-        let ReferenceSearch::Ready(results) = &session.search else {
-            return None;
+        let results = match &session.search {
+            ReferenceSearch::CurrentFile(results) | ReferenceSearch::Ready(results) => results,
+            _ => return None,
         };
         let token = &session.token;
         let entry = results.selected_item()?;
@@ -306,6 +352,23 @@ impl FileReferenceState {
         let mut results = ListState::new(results);
         results.select_current();
         session.search = ReferenceSearch::Ready(results);
+    }
+
+    fn begin_session(
+        &mut self,
+        token: ReferenceToken,
+        current: Option<FileEntry>,
+        root: &Path,
+    ) -> Option<FileReferenceRequest> {
+        let show_current = token.query.is_empty();
+        self.dismissed = None;
+        self.session = Some(ReferenceSession::new(token, current));
+        if show_current {
+            self.revision = self.revision.wrapping_add(1);
+            None
+        } else {
+            self.start_scan(root)
+        }
     }
 
     fn accepts(&self, revision: u64) -> bool {
@@ -529,8 +592,69 @@ mod tests {
     }
 
     #[test]
-    fn selection_wraps_and_acceptance_preserves_the_suffix() {
+    fn empty_query_shows_only_current_file_without_scanning() {
         let input = TextInput::new("@");
+        let current = entry("src/main.rs");
+        let mut state = FileReferenceState::default();
+
+        assert!(
+            state
+                .update(&input, Path::new("/workspace"), Some(current.clone()))
+                .is_none()
+        );
+        let view = state.view().unwrap();
+        assert_eq!(view.status, FileReferenceStatus::Ready);
+        assert_eq!(view.entries, &[current]);
+        assert_eq!(view.selected, Some(0));
+        assert_eq!(
+            state.acceptance(&input).unwrap().replacement,
+            "@src/main.rs "
+        );
+
+        let mut without_current = FileReferenceState::default();
+        assert!(
+            without_current
+                .update(&input, Path::new("/workspace"), None)
+                .is_none()
+        );
+        assert!(without_current.view().unwrap().entries.is_empty());
+    }
+
+    #[test]
+    fn first_query_scans_and_returning_to_empty_cancels_it() {
+        let empty = TextInput::new("@");
+        let current = entry("src/main.rs");
+        let mut state = FileReferenceState::default();
+        assert!(
+            state
+                .update(&empty, Path::new("/workspace"), Some(current.clone()))
+                .is_none()
+        );
+
+        let query = TextInput::new("@m");
+        let Some(FileReferenceRequest::Scan { revision, .. }) =
+            state.update(&query, Path::new("/workspace"), Some(current.clone()))
+        else {
+            panic!("the first query character should start a scan");
+        };
+        assert_eq!(state.view().unwrap().status, FileReferenceStatus::Loading);
+
+        assert!(
+            state
+                .update(&empty, Path::new("/workspace"), Some(current.clone()))
+                .is_none()
+        );
+        assert_eq!(state.view().unwrap().entries, &[current]);
+        assert!(
+            state
+                .complete_scan(revision, Ok(vec![entry("stale.rs")]))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn selection_wraps_and_acceptance_preserves_the_suffix() {
+        let input = TextInput::new("@.");
         let mut state = ready_state(&input, Some(entry("src/main.rs")));
         assert_eq!(state.view().unwrap().selected, Some(0));
         state.select_previous();
@@ -538,7 +662,7 @@ mod tests {
         state.select_next();
         assert_eq!(state.view().unwrap().selected, Some(0));
 
-        let mut input = TextInput::new("read @ before");
+        let mut input = TextInput::new("read @. before");
         for _ in 0.." before".chars().count() {
             input.handle_event(crate::component::text_input::TextInputEvent::Cursor(
                 crate::component::text_input::TextCursorMovement::Left,
@@ -552,7 +676,7 @@ mod tests {
 
     #[test]
     fn pending_and_empty_filters_never_accept_stale_candidates() {
-        let input = TextInput::new("@");
+        let input = TextInput::new("@.");
         let mut state = ready_state(&input, None);
         assert!(state.acceptance(&input).is_some());
         let stale_revision = state.revision;
@@ -577,7 +701,7 @@ mod tests {
 
     #[test]
     fn escape_preserves_text_and_rejects_stale_completions() {
-        let input = TextInput::new("@");
+        let input = TextInput::new("@m");
         let mut state = FileReferenceState::default();
         let Some(FileReferenceRequest::Scan { revision, .. }) =
             state.update(&input, Path::new("/workspace"), None)
@@ -596,9 +720,9 @@ mod tests {
                 .update(&input, Path::new("/workspace"), None)
                 .is_none()
         );
-        assert_eq!(input.value(), "@");
+        assert_eq!(input.value(), "@m");
 
-        let edited = TextInput::new("@m");
+        let edited = TextInput::new("@ma");
         assert!(
             state
                 .update(&edited, Path::new("/workspace"), None)
@@ -613,21 +737,23 @@ mod tests {
         assert!(
             state
                 .update(&quoted, Path::new("/workspace"), None)
-                .is_some()
+                .is_none()
         );
+        assert!(state.is_active());
         state.dismiss();
 
         let unquoted = TextInput::new("@");
         assert!(
             state
                 .update(&unquoted, Path::new("/workspace"), None)
-                .is_some()
+                .is_none()
         );
+        assert!(state.is_active());
     }
 
     #[test]
     fn paths_with_spaces_are_inserted_as_quoted_references() {
-        let input = TextInput::new("@");
+        let input = TextInput::new("@.");
         let mut state = ready_state(&input, None);
         let revision = state.revision;
         state.complete_filter(revision, vec![entry("my folder/a file.txt")]);

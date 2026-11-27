@@ -726,15 +726,15 @@ mod tests {
         let manager = MessageManager::default();
         open(&mut model);
 
-        let effect = handle_input(&mut model, TextInputEvent::Insert('@')).unwrap();
-        let filter = perform(&manager, &mut model, effect).unwrap();
-        assert!(perform(&manager, &mut model, filter).is_none());
+        assert!(handle_input(&mut model, TextInputEvent::Insert('@')).is_none());
         let references = model.agent.file_references().unwrap();
+        assert_eq!(references.entries.len(), 1);
         assert_eq!(references.entries[0].display, "main.rs");
         assert_eq!(references.selected, Some(0));
 
-        let effect = handle_input(&mut model, TextInputEvent::Insert('a')).unwrap();
-        assert!(perform(&manager, &mut model, effect).is_none());
+        let scan = handle_input(&mut model, TextInputEvent::Insert('a')).unwrap();
+        let filter = perform(&manager, &mut model, scan).unwrap();
+        assert!(perform(&manager, &mut model, filter).is_none());
         let references = model.agent.file_references().unwrap();
         assert_eq!(references.entries[0].display, "main.rs");
         assert!(
@@ -774,10 +774,9 @@ mod tests {
         assert!(!model.agent.file_references_active());
         model.agent.prompt.set_value("");
 
-        let effect = handle_input(&mut model, TextInputEvent::Insert('@')).unwrap();
-        let filter = perform(&manager, &mut model, effect).unwrap();
-        perform(&manager, &mut model, filter);
+        assert!(handle_input(&mut model, TextInputEvent::Insert('@')).is_none());
         assert!(model.agent.file_references_active());
+        assert!(model.agent.file_references().unwrap().entries.is_empty());
         handle_general_action(&mut model, GeneralAction::Back);
         assert!(!model.agent.file_references_active());
         assert!(model.agent.dialog_open());
@@ -832,12 +831,13 @@ mod tests {
         let manager = MessageManager::default();
         open(&mut model);
 
-        let pending_scan = handle_input(&mut model, TextInputEvent::Insert('@')).unwrap();
+        assert!(handle_input(&mut model, TextInputEvent::Insert('@')).is_none());
+        let pending_scan = handle_input(&mut model, TextInputEvent::Insert('m')).unwrap();
         let submission = handle_general_action(&mut model, GeneralAction::Activate).unwrap();
         assert!(model.agent.session().is_running());
         assert!(perform(&manager, &mut model, pending_scan).is_none());
         perform(&manager, &mut model, submission);
-        assert_eq!(model.agent.session().messages()[0].text, "@");
+        assert_eq!(model.agent.session().messages()[0].text, "@m");
     }
 
     #[test]
