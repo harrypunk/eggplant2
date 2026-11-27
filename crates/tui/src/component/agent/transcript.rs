@@ -21,42 +21,64 @@ pub(super) fn render_transcript(
     if area.is_empty() {
         return;
     }
-    let mut blocks = Vec::new();
-    if session.messages().is_empty() {
-        blocks.push(PreparedBlock::plain(
-            vec![Line::styled("No conversation yet", styles.muted)],
-            styles,
-        ));
-    } else {
-        for (index, message) in session.messages().iter().enumerate() {
-            if index > 0 {
-                blocks.push(PreparedBlock::spacer(styles));
-            }
-            blocks.push(PreparedBlock::message(
-                message,
-                area.width,
-                RolePrefix::for_role(message.role),
-                styles,
-            ));
-        }
-    }
+    render_bottom_anchored(
+        &transcript_blocks(session, area.width, styles),
+        area,
+        buffer,
+    );
+}
+
+fn transcript_blocks(session: &AgentSession, width: u16, styles: &UiTheme) -> Vec<PreparedBlock> {
+    let messages = message_blocks(session.messages(), width, styles);
     let tools = session
         .tool_events()
         .iter()
         .map(|event| tool_event_line(event, styles))
         .collect::<Vec<_>>();
-    if !tools.is_empty() {
-        blocks.push(PreparedBlock::spacer(styles));
-        blocks.push(PreparedBlock::plain(tools, styles));
-    }
-    if let Some(approval) = session.pending_approval() {
-        blocks.push(PreparedBlock::spacer(styles));
-        blocks.push(PreparedBlock::plain(
-            approval_lines(approval, styles),
+    let tools = spaced_plain_section(tools, styles);
+    let approval = session
+        .pending_approval()
+        .and_then(|approval| spaced_plain_section(approval_lines(approval, styles), styles));
+
+    messages
+        .into_iter()
+        .chain(tools.into_iter().flatten())
+        .chain(approval.into_iter().flatten())
+        .collect()
+}
+
+fn message_blocks(messages: &[ChatMessage], width: u16, styles: &UiTheme) -> Vec<PreparedBlock> {
+    match messages {
+        [] => vec![PreparedBlock::plain(
+            vec![Line::styled("No conversation yet", styles.muted)],
             styles,
-        ));
+        )],
+        messages => messages
+            .iter()
+            .enumerate()
+            .flat_map(|(index, message)| {
+                (index > 0)
+                    .then(|| PreparedBlock::spacer(styles))
+                    .into_iter()
+                    .chain(std::iter::once(PreparedBlock::message(
+                        message,
+                        width,
+                        RolePrefix::for_role(message.role, styles),
+                        styles,
+                    )))
+            })
+            .collect(),
     }
-    render_bottom_anchored(&blocks, area, buffer);
+}
+
+fn spaced_plain_section(lines: Vec<Line<'static>>, styles: &UiTheme) -> Option<[PreparedBlock; 2]> {
+    if lines.is_empty() {
+        return None;
+    }
+    Some([
+        PreparedBlock::spacer(styles),
+        PreparedBlock::plain(lines, styles),
+    ])
 }
 
 pub(super) fn render_latest_assistant(
@@ -97,12 +119,12 @@ struct RolePrefix {
 }
 
 impl RolePrefix {
-    fn for_role(role: MessageRole) -> Option<Self> {
+    fn for_role(role: MessageRole, styles: &UiTheme) -> Option<Self> {
         match role {
             MessageRole::User => None,
             MessageRole::Assistant => Some(Self {
                 text: "Agent: ",
-                style: Style::default(),
+                style: styles.action_hint,
             }),
         }
     }
@@ -128,13 +150,9 @@ impl PreparedBlock {
                     .map_or(width, |prefix| width.saturating_sub(prefix.width()));
                 let fallback_prefix = prefix.as_ref().map_or("", |_| "Agent: ");
                 match PreparedMarkdown::parse(&message.text, markdown_width, styles) {
-                    Ok(markdown) if markdown.line_count() > 0 => Self::Markdown {
-                        markdown,
-                        prefix: prefix.map(|mut prefix| {
-                            prefix.style = styles.action_hint;
-                            prefix
-                        }),
-                    },
+                    Ok(markdown) if markdown.line_count() > 0 => {
+                        Self::Markdown { markdown, prefix }
+                    }
                     _ => Self::plain(
                         plain_message_lines(&message.text, fallback_prefix, styles.action_hint),
                         styles,

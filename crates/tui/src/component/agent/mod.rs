@@ -8,6 +8,7 @@ mod prompt;
 mod props;
 mod provider_login;
 mod reference_menu;
+mod status;
 mod transcript;
 
 pub use command_menu::AgentCommandMenu;

@@ -1,7 +1,7 @@
-use eggplant_agent::RunStatus;
 use ratatui::{
     Frame,
     layout::{Constraint, Layout, Position, Rect},
+    style::Style,
     text::Line,
     widgets::{Block, BorderType, Paragraph, Widget},
 };
@@ -10,6 +10,7 @@ use super::{
     footer::{AgentFooter, footer_layout},
     prompt::AgentPromptView,
     props::AgentViewProps,
+    status::{RunStatusPresentation, status_text as agent_status_text},
     transcript::render_transcript as render_agent_transcript,
 };
 use crate::{
@@ -19,6 +20,33 @@ use crate::{
 };
 
 const AUTO_HEIGHT: AutoHeight = AutoHeight::new(3, 8, 2, 2, 4);
+
+struct PanelChrome {
+    title: Line<'static>,
+    border_style: Style,
+    border_type: BorderType,
+}
+
+impl PanelChrome {
+    fn new(props: &AgentPanelProps<'_>) -> Self {
+        let styles = props.shared.styles;
+        match props.focus {
+            FocusState::Focused => Self {
+                title: Line::styled(
+                    format!(" Agent ● {} ", props.mode.label()),
+                    styles.base.patch(styles.action_hint),
+                ),
+                border_style: styles.base.patch(styles.focused_border),
+                border_type: BorderType::Double,
+            },
+            FocusState::Unfocused => Self {
+                title: Line::styled(" Agent ", styles.base.patch(styles.muted)),
+                border_style: styles.base.patch(styles.border),
+                border_type: BorderType::Plain,
+            },
+        }
+    }
+}
 
 #[derive(Clone)]
 pub struct AgentPanelProps<'a> {
@@ -52,32 +80,11 @@ impl AgentPanel {
 }
 
 fn render_chrome(props: &AgentPanelProps<'_>, frame: &mut Frame, area: Rect) -> Rect {
-    let focused = props.focus == FocusState::Focused;
-    let (border_style, border_type, title_style) = if focused {
-        (
-            props.shared.styles.focused_border,
-            BorderType::Double,
-            props.shared.styles.action_hint,
-        )
-    } else {
-        (
-            props.shared.styles.border,
-            BorderType::Plain,
-            props.shared.styles.muted,
-        )
-    };
-    let title = if focused {
-        format!(" Agent ● {} ", props.mode.label())
-    } else {
-        " Agent ".to_string()
-    };
+    let chrome = PanelChrome::new(props);
     let block = Block::bordered()
-        .title(Line::styled(
-            title,
-            props.shared.styles.base.patch(title_style),
-        ))
-        .border_type(border_type)
-        .border_style(props.shared.styles.base.patch(border_style))
+        .title(chrome.title)
+        .border_type(chrome.border_type)
+        .border_style(chrome.border_style)
         .style(props.shared.styles.base);
     let inner = block.inner(area);
     frame.render_widget(block, area);
@@ -107,23 +114,11 @@ fn render_status(props: &AgentPanelProps<'_>, area: Rect, frame: &mut Frame) {
 }
 
 fn status_text(props: &AgentPanelProps<'_>) -> String {
-    let status = props
-        .shared
-        .model_notice
-        .map(|notice| notice.text().to_string())
-        .or_else(|| {
-            props
-                .shared
-                .storage_error
-                .map(|error| format!("Storage warning: {error}"))
-        })
-        .or_else(|| {
-            props.shared.session.run().map(|run| match &run.status {
-                RunStatus::Failed(error) => format!("Failed: {error}"),
-                status => status.label().to_string(),
-            })
-        })
-        .unwrap_or_else(|| "No active run".to_string());
+    let status = agent_status_text(
+        &props.shared,
+        RunStatusPresentation::Detailed,
+        "No active run",
+    );
     format!("{status} · {}", props.mode.label())
 }
 

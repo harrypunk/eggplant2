@@ -10,6 +10,7 @@ use super::{
     footer::{AgentFooter, footer_layout},
     prompt::AgentPromptView,
     props::AgentViewProps,
+    status::{RunStatusPresentation, status_text},
     transcript::{diff_lines, render_latest_assistant},
 };
 use crate::component::{
@@ -49,9 +50,13 @@ impl AgentDialogContent<'_> {
     fn render_prompt(&self, area: Rect, buffer: &mut Buffer) {
         let (input_height, prompt_height) = prompt_heights(self.props, area);
         let [status, assistant, prompt] = dialog_layout(area, prompt_height);
-        Paragraph::new(self.status_text())
-            .style(self.props.styles.muted)
-            .render(status, buffer);
+        Paragraph::new(status_text(
+            self.props,
+            RunStatusPresentation::Summary,
+            "Ready",
+        ))
+        .style(self.props.styles.muted)
+        .render(status, buffer);
         render_latest_assistant(self.props.session, assistant, self.props.styles, buffer);
         AgentPromptView::render(
             &self.props.prompt,
@@ -60,24 +65,6 @@ impl AgentDialogContent<'_> {
             input_height,
             buffer,
         );
-    }
-
-    fn status_text(&self) -> String {
-        self.props
-            .model_notice
-            .map(|notice| notice.text().to_string())
-            .or_else(|| {
-                self.props
-                    .storage_error
-                    .map(|error| format!("Storage warning: {error}"))
-            })
-            .or_else(|| {
-                self.props
-                    .session
-                    .run()
-                    .map(|run| run.status.label().to_string())
-            })
-            .unwrap_or_else(|| "Ready".to_string())
     }
 
     fn render_approval(&self, approval: &ToolApproval, area: Rect, buffer: &mut Buffer) {
