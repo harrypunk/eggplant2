@@ -37,12 +37,12 @@ impl AgentPanel {
         }
         let [content, footer] = footer_layout(inner);
         let input_height = input_height(props, content);
-        let command_height = AgentPromptView::command_height(&props.shared.prompt).min(
+        let completion_height = AgentPromptView::completion_height(&props.shared.prompt).min(
             content
                 .height
                 .saturating_sub(input_height.saturating_add(1)),
         );
-        let prompt_height = command_height + input_height;
+        let prompt_height = completion_height + input_height;
         let [status, transcript, prompt] = panel_layout(content, prompt_height);
         render_status(props, status, frame);
         render_transcript(props, transcript, frame);

@@ -130,8 +130,8 @@ impl Widget for AgentDialogContent<'_> {
     }
 }
 
-fn command_height(props: &AgentDialogProps<'_>) -> u16 {
-    AgentPromptView::command_height(&props.prompt)
+fn completion_height(props: &AgentDialogProps<'_>) -> u16 {
+    AgentPromptView::completion_height(&props.prompt)
 }
 
 fn dialog_layout(area: Rect, prompt: u16) -> [Rect; 3] {
@@ -153,8 +153,9 @@ fn prompt_input_height(prompt: &TextInput, area: Rect) -> u16 {
 /// Measure the combined menu + input prompt and bound the menu to the actual dialog viewport.
 fn prompt_heights(props: &AgentDialogProps<'_>, area: Rect) -> (u16, u16) {
     let input = prompt_input_height(props.prompt.input(), area);
-    let commands = command_height(props).min(area.height.saturating_sub(input + STATUS_HEIGHT));
-    (input, commands.saturating_add(input))
+    let completion =
+        completion_height(props).min(area.height.saturating_sub(input + STATUS_HEIGHT));
+    (input, completion.saturating_add(input))
 }
 
 fn prompt_area(props: &AgentDialogProps<'_>, area: Rect) -> Rect {

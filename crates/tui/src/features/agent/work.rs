@@ -179,7 +179,7 @@ mod tests {
     use crate::agent::approval::{approve_write, reject_write};
     use crate::{
         agent::{
-            commands::{command_next, command_quick_fill, handle_input},
+            commands::{command_next, command_quick_fill, handle_general_action, handle_input},
             dialog::{close, open},
             panel::{
                 close_panel_input, enter_insert_mode, enter_normal_mode, focus_panel_input,
@@ -187,7 +187,7 @@ mod tests {
             },
         },
         component::text_input::TextInputEvent,
-        data_object::{Context, Model, Visibility},
+        data_object::{Context, GeneralAction, Model, Visibility},
         manager::message_manager::MessageManager,
         startup::initial_model as build_model,
         test_utils::input_context,
@@ -712,6 +712,88 @@ mod tests {
             .agent
             .open_dialog(crate::agent::context::editor_context(&model));
         assert_eq!(model.agent.prompt(), "explain @main.rs?");
+    }
+
+    #[test]
+    fn at_completion_ranks_the_current_buffer_and_accepts_before_submission() {
+        let directory = tempfile::tempdir().unwrap();
+        for name in ["alpha.rs", "main.rs", "z.rs"] {
+            std::fs::write(directory.path().join(name), "fn main() {}\n").unwrap();
+        }
+        let path = directory.path().join("main.rs");
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        open_file(&mut model, &path);
+        let manager = MessageManager::default();
+        open(&mut model);
+
+        let effect = handle_input(&mut model, TextInputEvent::Insert('@')).unwrap();
+        let filter = perform(&manager, &mut model, effect).unwrap();
+        assert!(perform(&manager, &mut model, filter).is_none());
+        let references = model.agent.file_references().unwrap();
+        assert_eq!(references.entries[0].display, "main.rs");
+        assert_eq!(references.selected, Some(0));
+
+        let effect = handle_input(&mut model, TextInputEvent::Insert('a')).unwrap();
+        assert!(perform(&manager, &mut model, effect).is_none());
+        let references = model.agent.file_references().unwrap();
+        assert_eq!(references.entries[0].display, "main.rs");
+        assert!(
+            references
+                .entries
+                .iter()
+                .any(|entry| entry.display == "alpha.rs")
+        );
+        command_next(&mut model);
+        assert_eq!(model.agent.file_references().unwrap().selected, Some(1));
+        crate::agent::commands::command_previous(&mut model);
+        assert_eq!(model.agent.file_references().unwrap().selected, Some(0));
+
+        assert!(handle_general_action(&mut model, GeneralAction::Activate).is_none());
+        assert_eq!(model.agent.prompt(), "@main.rs ");
+        assert!(model.agent.session().run().is_none());
+        assert!(!model.agent.file_references_active());
+
+        let effect = handle_general_action(&mut model, GeneralAction::Activate).unwrap();
+        assert!(model.agent.session().is_running());
+        assert_eq!(model.agent.prompt(), "");
+        perform(&manager, &mut model, effect);
+        assert_eq!(model.agent.session().messages()[0].text, "@main.rs");
+    }
+
+    #[test]
+    fn completion_escape_preserves_text_and_email_at_signs_stay_plain() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(directory.path().join("main.rs"), "fn main() {}\n").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let manager = MessageManager::default();
+        open(&mut model);
+
+        for character in "mail user@example.com".chars() {
+            assert!(handle_input(&mut model, TextInputEvent::Insert(character)).is_none());
+        }
+        assert!(!model.agent.file_references_active());
+        model.agent.prompt.set_value("");
+
+        let effect = handle_input(&mut model, TextInputEvent::Insert('@')).unwrap();
+        let filter = perform(&manager, &mut model, effect).unwrap();
+        perform(&manager, &mut model, filter);
+        assert!(model.agent.file_references_active());
+        handle_general_action(&mut model, GeneralAction::Back);
+        assert!(!model.agent.file_references_active());
+        assert!(model.agent.dialog_open());
+        assert_eq!(model.agent.prompt(), "@");
+
+        let effect = handle_input(&mut model, TextInputEvent::Insert('m')).unwrap();
+        let filter = perform(&manager, &mut model, effect).unwrap();
+        perform(&manager, &mut model, filter);
+        assert_eq!(
+            model.agent.file_references().unwrap().entries[0].display,
+            "main.rs"
+        );
+        handle_general_action(&mut model, GeneralAction::Back);
+        handle_general_action(&mut model, GeneralAction::Back);
+        assert!(!model.agent.dialog_open());
+        assert_eq!(model.agent.prompt(), "@m");
     }
 
     #[test]

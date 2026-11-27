@@ -134,6 +134,27 @@ impl TextInput {
         *self = Self::new(value);
     }
 
+    pub fn cursor_byte(&self) -> usize {
+        self.cursor.byte_index(&self.value)
+    }
+
+    /// Replace a UTF-8 boundary-aligned range and place the cursor after the replacement.
+    pub fn replace_range(&mut self, range: std::ops::Range<usize>, replacement: &str) -> bool {
+        if range.start > range.end
+            || range.end > self.value.len()
+            || !self.value.is_char_boundary(range.start)
+            || !self.value.is_char_boundary(range.end)
+        {
+            return false;
+        }
+        let cursor_byte = range.start + replacement.len();
+        self.value.replace_range(range, replacement);
+        self.cursor = TextCursor {
+            offset: self.value[..cursor_byte].chars().count(),
+        };
+        true
+    }
+
     pub fn clear(&mut self) {
         *self = Self::default();
     }
@@ -408,6 +429,17 @@ mod tests {
         input.insert_str("界🙂");
         assert_eq!(input.value(), "a界🙂b");
         assert_eq!(input.cursor.byte_index(input.value()), "a界🙂".len());
+    }
+
+    #[test]
+    fn replace_range_preserves_the_suffix_and_tracks_the_unicode_cursor() {
+        let mut input = TextInput::new("read @m then 界");
+        assert!(input.replace_range(5..7, "@main.rs "));
+        assert_eq!(input.value(), "read @main.rs  then 界");
+        assert_eq!(input.cursor_byte(), "read @main.rs ".len());
+        let inside_character = input.value().find('界').unwrap() + 1;
+        assert!(!input.replace_range(inside_character..inside_character + 1, "invalid"));
+        assert!(!input.replace_range(0..input.value.len() + 1, "invalid"));
     }
 
     #[test]

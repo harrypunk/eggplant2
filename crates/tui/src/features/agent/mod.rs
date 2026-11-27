@@ -7,6 +7,7 @@ mod dialog;
 mod panel;
 mod prompt;
 mod prompt_command;
+mod references;
 mod run;
 mod storage;
 mod surface;
@@ -20,6 +21,7 @@ pub use commands::{commands, general_action_subscriptions, handle_general_action
 pub(crate) use dialog::{resume_overlay, suspend_for_overlay};
 pub(crate) use panel::{close_panel_input, focus_panel_input};
 pub(crate) use prompt_command::{PromptCommand, PromptCommandMovement, PromptCommandState};
+pub use references::{FileReferenceStatus, FileReferenceView};
 pub use ui::register_ui;
 pub(crate) use ui::render_panel;
 
@@ -158,6 +160,54 @@ impl AgentState {
 
     pub fn quick_fill_prompt_command(&mut self, movement: PromptCommandMovement) -> bool {
         self.prompt.quick_fill(movement)
+    }
+
+    pub fn file_references(&self) -> Option<FileReferenceView<'_>> {
+        self.prompt.reference_view()
+    }
+
+    pub fn file_references_active(&self) -> bool {
+        self.prompt.references_active()
+    }
+
+    pub fn update_file_references(
+        &mut self,
+        root: &std::path::Path,
+        current: Option<crate::file_search::FileEntry>,
+    ) -> Option<references::FileReferenceRequest> {
+        self.prompt.update_references(root, current)
+    }
+
+    pub fn select_next_file_reference(&mut self) {
+        self.prompt.select_next_reference();
+    }
+
+    pub fn select_previous_file_reference(&mut self) {
+        self.prompt.select_previous_reference();
+    }
+
+    pub fn dismiss_file_references(&mut self) {
+        self.prompt.dismiss_references();
+    }
+
+    pub fn accept_file_reference(&mut self) -> bool {
+        self.prompt.accept_reference()
+    }
+
+    pub(crate) fn complete_file_reference_scan(
+        &mut self,
+        revision: u64,
+        result: Result<Vec<crate::file_search::FileEntry>, String>,
+    ) -> Option<references::FileReferenceRequest> {
+        self.prompt.complete_reference_scan(revision, result)
+    }
+
+    pub(crate) fn complete_file_reference_filter(
+        &mut self,
+        revision: u64,
+        results: Vec<crate::file_search::FileEntry>,
+    ) {
+        self.prompt.complete_reference_filter(revision, results);
     }
 
     pub fn panel_mode(&self) -> AgentInputMode {

@@ -154,8 +154,9 @@ On an expanded directory, `h` folds that directory. On a file or collapsed direc
 | Action | Default binding |
 | --- | --- |
 | Open inline Agent dialog | `Ctrl-I` |
-| Submit prompt | `Enter` |
-| Dismiss dialog without cancelling the run | `Esc` |
+| Submit prompt / accept the active file reference | `Enter` |
+| Quick-fill a command / accept the active file reference | `Tab` |
+| Dismiss completion, then the dialog, without cancelling the run | `Esc` |
 | Edit prompt / delete previous character | Printable input / `Backspace` |
 | Interrupt the active run | `Ctrl-F7` |
 | Toggle the shared Agent tool panel | `Space a t` |
@@ -165,6 +166,12 @@ On an expanded directory, `h` folds that directory. On a file or collapsed direc
 The inline dialog requires an open project but no active buffer. Opening it never injects a file path, line number, or other prefill; the existing draft is preserved across dialog and panel presentations. External buffers do not prevent chatting. Both surfaces accept freeform text and `@path` references. The project panel focuses its bottom input when opened. Without an active provider, both surfaces show `No model available · /provider or Space a i to log in`; submitting preserves the draft and shows the same guidance instead of generating a simulated response.
 
 Panel input starts in Normal mode: `i` enters Insert, `?` opens a modal help popup, the configured leader opens the shared command menu, and `Ctrl-H`/`Ctrl-L` move focus. The help popup closes with `?` or `Esc` without activating the panel underneath. Insert accepts text (including Space), Backspace edits, Enter submits, and `Esc` returns to Normal without leaving the panel.
+
+Agent file references:
+
+- `@` at a token boundary searches the open project; an email-style `user@example.com` remains ordinary text.
+- The current buffer is the first matching candidate. Up/Down and Ctrl-N/Ctrl-P navigate, and Tab or Enter inserts the selected literal `@path` without submitting.
+- Escape hides the completion without erasing the query; the next Escape follows the normal dialog/panel behavior. Paths with whitespace are inserted as `@"path with spaces"`.
 
 Agent slash commands:
 

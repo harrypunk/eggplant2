@@ -89,10 +89,23 @@ pub(crate) fn handle_input(model: &mut Model, event: TextInputEvent) -> Option<E
         Some(super::surface::AgentSurface::Panel) => super::panel::insert_input_available(model),
         None => false,
     };
-    if available {
-        model.agent.handle_input_event(event);
+    if !available {
+        return None;
     }
-    None
+    let root = model
+        .workspace
+        .as_ref()
+        .map(|workspace| workspace.root().to_path_buf());
+    let current = super::context::current_file(model);
+    model.agent.handle_input_event(event);
+    let Some(root) = root else {
+        model.agent.dismiss_file_references();
+        return None;
+    };
+    model
+        .agent
+        .update_file_references(&root, current)
+        .map(Effect::feature)
 }
 
 pub fn general_action_subscriptions() -> Vec<GeneralActionSubscription> {
@@ -106,12 +119,21 @@ pub fn handle_general_action(model: &mut Model, action: GeneralAction) -> Option
     match action {
         GeneralAction::Next => command_next(model),
         GeneralAction::Previous => command_previous(model),
-        GeneralAction::Activate => super::work::submit(model),
-        GeneralAction::Back => match super::surface::active(model) {
-            Some(super::surface::AgentSurface::Panel) => super::panel::enter_normal_mode(model),
-            Some(super::surface::AgentSurface::Dialog) => super::dialog::close(model),
-            None => None,
-        },
+        GeneralAction::Activate => activate(model),
+        GeneralAction::Back => {
+            if model.agent.file_references_active() {
+                model.agent.dismiss_file_references();
+                None
+            } else {
+                match super::surface::active(model) {
+                    Some(super::surface::AgentSurface::Panel) => {
+                        super::panel::enter_normal_mode(model)
+                    }
+                    Some(super::surface::AgentSurface::Dialog) => super::dialog::close(model),
+                    None => None,
+                }
+            }
+        }
         GeneralAction::FocusNext | GeneralAction::Paste => None,
     }
 }
@@ -130,15 +152,39 @@ fn panel_normal(model: &mut Model) -> Option<Effect> {
 }
 
 pub(crate) fn command_next(model: &mut Model) -> Option<Effect> {
-    quick_fill(model, super::PromptCommandMovement::Next)
+    if model.agent.file_references_active() {
+        model.agent.select_next_file_reference();
+        None
+    } else {
+        quick_fill(model, super::PromptCommandMovement::Next)
+    }
 }
 
 pub(crate) fn command_previous(model: &mut Model) -> Option<Effect> {
-    quick_fill(model, super::PromptCommandMovement::Previous)
+    if model.agent.file_references_active() {
+        model.agent.select_previous_file_reference();
+        None
+    } else {
+        quick_fill(model, super::PromptCommandMovement::Previous)
+    }
 }
 
 pub(crate) fn command_quick_fill(model: &mut Model) -> Option<Effect> {
-    quick_fill(model, super::PromptCommandMovement::Current)
+    if model.agent.file_references_active() {
+        model.agent.accept_file_reference();
+        None
+    } else {
+        quick_fill(model, super::PromptCommandMovement::Current)
+    }
+}
+
+fn activate(model: &mut Model) -> Option<Effect> {
+    if model.agent.file_references_active() {
+        model.agent.accept_file_reference();
+        None
+    } else {
+        super::work::submit(model)
+    }
 }
 
 fn quick_fill(model: &mut Model, movement: super::PromptCommandMovement) -> Option<Effect> {

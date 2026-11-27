@@ -2,7 +2,7 @@ use super::{
     EditorContext,
     tools::{BufferContext, ToolContext},
 };
-use crate::data_object::Model;
+use crate::{data_object::Model, file_search::FileEntry};
 
 /// Capture the active workspace file as optional Agent tool context.
 ///
@@ -26,6 +26,18 @@ pub(crate) fn editor_context(model: &Model) -> Option<EditorContext> {
         path: path.to_path_buf(),
         revision,
         line,
+    })
+}
+
+/// Project the active workspace buffer into the shared file-search identity.
+pub(crate) fn current_file(model: &Model) -> Option<FileEntry> {
+    let root = model.workspace.as_ref()?.root();
+    let context = editor_context(model)?;
+    let relative = context.path.strip_prefix(root).ok()?;
+    let display = relative.to_string_lossy().into_owned();
+    Some(FileEntry {
+        path: context.path,
+        display,
     })
 }
 

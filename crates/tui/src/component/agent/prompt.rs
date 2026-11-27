@@ -4,19 +4,23 @@ use ratatui::{
     widgets::Widget,
 };
 
-use super::command_menu::AgentCommandMenu;
+use super::{
+    command_menu::AgentCommandMenu,
+    reference_menu::{AgentReferenceMenu, AgentReferenceProps},
+};
 use crate::{
     agent::PromptCommand,
     component::{text_input::TextInput, text_layout::TextFlow},
     theme::UiTheme,
 };
 
-/// Inputs for the shared Agent menu + text-input view.
+/// Inputs for the shared Agent completion menus + text-input view.
 #[derive(Clone)]
 pub struct AgentPromptProps<'a> {
     input: &'a TextInput,
     commands: Option<Vec<PromptCommand>>,
     selected_command: Option<PromptCommand>,
+    references: Option<AgentReferenceProps>,
 }
 
 impl<'a> AgentPromptProps<'a> {
@@ -25,6 +29,7 @@ impl<'a> AgentPromptProps<'a> {
             input,
             commands: None,
             selected_command: None,
+            references: None,
         }
     }
 
@@ -40,6 +45,15 @@ impl<'a> AgentPromptProps<'a> {
 
     pub fn input(&self) -> &TextInput {
         self.input
+    }
+
+    pub fn with_references(mut self, references: Option<AgentReferenceProps>) -> Self {
+        self.references = references;
+        self
+    }
+
+    pub fn references(&self) -> Option<&AgentReferenceProps> {
+        self.references.as_ref()
     }
 
     pub fn commands(&self) -> Option<&[PromptCommand]> {
@@ -58,9 +72,13 @@ impl AgentPromptView {
         AgentCommandMenu::height(props.commands())
     }
 
+    pub fn completion_height(props: &AgentPromptProps<'_>) -> u16 {
+        Self::command_height(props).max(AgentReferenceMenu::height(props.references()))
+    }
+
     pub fn layout(props: &AgentPromptProps<'_>, area: Rect, input: u16) -> [Rect; 2] {
-        let commands = Self::command_height(props).min(area.height.saturating_sub(input));
-        Layout::vertical([Constraint::Length(commands), Constraint::Length(input)]).areas(area)
+        let completion = Self::completion_height(props).min(area.height.saturating_sub(input));
+        Layout::vertical([Constraint::Length(completion), Constraint::Length(input)]).areas(area)
     }
 
     /// Render the shared prompt and return the exact text-input area for cursor policy.
@@ -71,13 +89,15 @@ impl AgentPromptView {
         input_height: u16,
         buffer: &mut Buffer,
     ) -> Rect {
-        let [commands, input] = Self::layout(props, area, input_height);
-        if let Some(command_items) = props.commands() {
+        let [completion, input] = Self::layout(props, area, input_height);
+        if let Some(references) = props.references() {
+            AgentReferenceMenu::render(references, styles, completion, buffer);
+        } else if let Some(command_items) = props.commands() {
             AgentCommandMenu::render(
                 command_items,
                 props.selected_command(),
                 styles,
-                commands,
+                completion,
                 buffer,
             );
         }

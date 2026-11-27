@@ -1,12 +1,17 @@
 use crate::component::text_input::{TextInput, TextInputEvent};
 
-use super::{PromptCommandMovement, PromptCommandState};
+use super::{
+    PromptCommandMovement, PromptCommandState,
+    references::{FileReferenceRequest, FileReferenceState, FileReferenceView},
+};
+use crate::file_search::FileEntry;
 
-/// Prompt input and command-menu state shared by Agent surfaces.
+/// Prompt input with independently composable slash-command and file-reference completion.
 #[derive(Debug, Default)]
 pub struct AgentPrompt {
     input: TextInput,
     commands: PromptCommandState,
+    references: FileReferenceState,
 }
 
 impl AgentPrompt {
@@ -22,10 +27,66 @@ impl AgentPrompt {
     pub fn set_value(&mut self, value: impl Into<String>) {
         self.input.set_value(value);
         self.commands.clear();
+        self.references.clear();
     }
 
     pub fn command_state(&self) -> &PromptCommandState {
         &self.commands
+    }
+
+    pub fn reference_view(&self) -> Option<FileReferenceView<'_>> {
+        self.references.view()
+    }
+
+    pub fn references_active(&self) -> bool {
+        self.references.is_active()
+    }
+
+    pub fn update_references(
+        &mut self,
+        root: &std::path::Path,
+        current: Option<FileEntry>,
+    ) -> Option<FileReferenceRequest> {
+        self.references.update(&self.input, root, current)
+    }
+
+    pub fn select_next_reference(&mut self) {
+        self.references.select_next();
+    }
+
+    pub fn select_previous_reference(&mut self) {
+        self.references.select_previous();
+    }
+
+    pub fn dismiss_references(&mut self) {
+        self.references.dismiss();
+    }
+
+    pub fn accept_reference(&mut self) -> bool {
+        let Some(acceptance) = self.references.acceptance(&self.input) else {
+            return false;
+        };
+        if !self
+            .input
+            .replace_range(acceptance.range, &acceptance.replacement)
+        {
+            return false;
+        }
+        self.references.clear();
+        self.commands.clear();
+        true
+    }
+
+    pub(super) fn complete_reference_scan(
+        &mut self,
+        revision: u64,
+        result: Result<Vec<FileEntry>, String>,
+    ) -> Option<FileReferenceRequest> {
+        self.references.complete_scan(revision, result)
+    }
+
+    pub(super) fn complete_reference_filter(&mut self, revision: u64, results: Vec<FileEntry>) {
+        self.references.complete_filter(revision, results);
     }
 
     pub fn quick_fill(&mut self, movement: PromptCommandMovement) -> bool {
@@ -56,6 +117,7 @@ impl AgentPrompt {
     pub fn complete_submission(&mut self) {
         self.input.clear();
         self.commands.clear();
+        self.references.clear();
     }
 }
 

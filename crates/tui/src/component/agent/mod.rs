@@ -7,6 +7,7 @@ mod panel;
 mod prompt;
 mod props;
 mod provider_login;
+mod reference_menu;
 mod transcript;
 
 pub use command_menu::AgentCommandMenu;
@@ -18,3 +19,4 @@ pub use panel::{AgentPanel, AgentPanelProps};
 pub use prompt::{AgentPromptProps, AgentPromptView};
 pub use props::{AgentFooterProps, AgentModelNotice, AgentViewProps};
 pub use provider_login::ProviderLogin;
+pub use reference_menu::AgentReferenceProps;

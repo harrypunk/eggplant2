@@ -6,7 +6,7 @@ use ratatui::{
 use crate::{
     component::agent::{
         AgentDialog, AgentFooterProps, AgentHelp, AgentModelNotice, AgentPanel, AgentPanelProps,
-        AgentPromptProps, AgentViewProps,
+        AgentPromptProps, AgentReferenceProps, AgentViewProps,
     },
     data_object::{Context, FocusState, FocusTarget, Model},
     ui::{OverlayContribution, OverlayKind, OverlayPlacement, UiRegistry},
@@ -38,10 +38,12 @@ fn view_props(model: &Model, surface: AgentSurface) -> AgentViewProps<'_> {
     let selected_command = commands
         .as_ref()
         .and_then(|_| model.agent.command_state().selected());
+    let references = prompt_references(model, surface);
     AgentViewProps {
         session: model.agent.session(),
         prompt: AgentPromptProps::new(model.agent.prompt_state())
-            .with_commands(commands, selected_command),
+            .with_commands(commands, selected_command)
+            .with_references(references),
         storage_error: model.agent.storage_error(),
         model_notice: model
             .agent
@@ -86,7 +88,25 @@ fn render_help(model: &Model, frame: &mut Frame, area: Rect) {
 fn prompt_commands(model: &Model, surface: AgentSurface) -> Option<Vec<super::PromptCommand>> {
     super::surface::prompt_active(model)
         .filter(|active| *active == surface)
+        .filter(|_| !model.agent.file_references_active())
         .and_then(|_| model.agent.command_state().commands(model.agent.prompt()))
+}
+
+fn prompt_references(model: &Model, surface: AgentSurface) -> Option<AgentReferenceProps> {
+    super::surface::prompt_active(model)
+        .filter(|active| *active == surface)
+        .and_then(|_| model.agent.file_references())
+        .map(|references| {
+            AgentReferenceProps::new(
+                references
+                    .entries
+                    .iter()
+                    .map(|entry| entry.display.clone())
+                    .collect(),
+                references.selected,
+                references.status,
+            )
+        })
 }
 
 pub(crate) fn render_panel(model: &Model, frame: &mut Frame, area: Rect) {
