@@ -21,17 +21,10 @@ fn resolve_write(model: &mut Model, approved: bool) -> Option<Effect> {
     let provider = model.agent.provider()?;
     let root = tool_context(model)?.root;
     let continuation = model.agent.take_suspension(run_id)?;
+    let kind = super::write::MutationKind::from_call(&approval.call)?;
     let outcome = match approved {
-        true => match approval.call.name.as_str() {
-            super::create::TOOL_NAME => {
-                super::create::apply(&mut model.editor, &root, &approval.call)
-            }
-            _ => super::write::apply(&mut model.editor, &root, &approval.call),
-        },
-        false => match approval.call.name.as_str() {
-            super::create::TOOL_NAME => super::create::rejected(&approval.call),
-            _ => super::write::rejected(&approval.call),
-        },
+        true => kind.apply(&mut model.editor, &root, &approval.call),
+        false => kind.reject(&approval.call),
     };
     let super::write::WriteOutcome { result, edited } = outcome;
     let context = tool_context(model)?;

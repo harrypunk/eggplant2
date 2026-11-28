@@ -119,7 +119,7 @@ The worker suspends with an owned provider-neutral continuation rather than bloc
 
 ### New-file creation
 
-`create` accepts only a workspace-relative path and full text content. It rejects existing paths and directories, then composes the existing `CreateTarget`/`filesystem::create` no-overwrite path, `DocumentFactory::open` syntax-aware buffer creation, and `EditorSession::create_file_document` full-text initialization. Approval uses the same single-mutation-per-round and rejection behavior as exact replacement. The resulting buffer uses the ordinary after-edit auto-save/language-sync pipeline, so nested paths and first-save persistence need no agent-specific filesystem writer. Existing-file `write` retains its exact old-text/revision contract.
+`create` accepts only a workspace-relative path and full text content. It rejects existing paths and directories, then composes the existing `CreateTarget`/`filesystem::create` no-overwrite path, `DocumentFactory::open` syntax-aware buffer creation, and `EditorSession::create_file_document` full-text initialization. Approval uses the same single-mutation-per-round and rejection behavior as exact replacement. The resulting buffer uses the ordinary after-edit auto-save/language-sync pipeline, so nested paths and first-save persistence need no agent-specific filesystem writer. Existing-file `write` retains its exact old-text/revision contract. `MutationKind` provides typed dispatch to the `MutationTool` implementations, while `DiffPreview` owns preview line/byte/marker policy rather than module-level free functions and constants.
 
 ### What not to do
 

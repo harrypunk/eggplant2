@@ -218,7 +218,7 @@ impl RunProgress {
         require(valid, "provider emitted an invalid tool call")?;
         let writes = calls
             .iter()
-            .filter(|call| super::write::is_mutation(call))
+            .filter(|call| super::write::MutationKind::from_call(call).is_some())
             .count();
         require(
             writes == 0 || (writes == 1 && calls.len() == 1),
@@ -370,26 +370,19 @@ impl ProviderAgentRun {
         output_used: usize,
     ) -> ToolExecution {
         match calls {
-            [call] if super::write::is_mutation(call) && !self.cancellation.is_cancelled() => {
-                match call.name.as_str() {
-                    super::create::TOOL_NAME => {
-                        match super::create::prepare(call, &self.context.root) {
-                            Ok(approval) => ToolExecution::Approval(approval),
-                            Err(result) => {
-                                ToolExecution::Results(vec![super::tools::bound_result(
-                                    result,
-                                    MAX_TOOL_OUTPUT.saturating_sub(output_used),
-                                )])
-                            }
-                        }
-                    }
-                    _ => match super::write::prepare(call, &self.context) {
-                        Ok(approval) => ToolExecution::Approval(approval),
-                        Err(result) => ToolExecution::Results(vec![super::tools::bound_result(
-                            result,
-                            MAX_TOOL_OUTPUT.saturating_sub(output_used),
-                        )]),
-                    },
+            [call]
+                if super::write::MutationKind::from_call(call).is_some()
+                    && !self.cancellation.is_cancelled() =>
+            {
+                let prepared = super::write::MutationKind::from_call(call)
+                    .expect("mutation was checked")
+                    .prepare(call, &self.context);
+                match prepared {
+                    Ok(approval) => ToolExecution::Approval(approval),
+                    Err(result) => ToolExecution::Results(vec![super::tools::bound_result(
+                        result,
+                        MAX_TOOL_OUTPUT.saturating_sub(output_used),
+                    )]),
                 }
             }
             _ => ToolExecution::Results(
