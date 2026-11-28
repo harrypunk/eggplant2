@@ -1,6 +1,6 @@
 # AI agent architecture
 
-Status: M12.1–M12.5 are implemented. Inline chat, OpenAI streaming, bounded tools, approved writes, and SeaORM SQLite persistence are complete. Cloud backends and backend-specific full-text search remain deferred.
+Status: M12.1–M12.6 are implemented. Multi-turn chat, OpenAI streaming, bounded tools, approved writes, durable SQLite sessions, `/new`, and `/sessions` restoration are complete. M12.7 covers startup continuation and recent-session pagination; M12.8 will address provider context budgets before any compaction.
 
 The agent is a primary Eggplant workflow, not a detached chat window or an excuse to bypass editor safety. It should make a small coding task feel like a natural extension of navigation, search, diagnostics, and editing.
 
@@ -64,7 +64,7 @@ The popup is a modal input workflow owned by the shell's existing context/modal 
 - Streaming/queued/waiting-approval/error status.
 - Enter to submit, Escape to hide, and an explicit cancel command for the active run.
 
-Hiding the popup does not cancel the run. Reopening restores the current session. Multiline prompts, prompt history, session pickers, and rich Markdown are later enhancements, not prerequisites for the first useful workflow.
+Hiding the popup does not cancel the run. Reopening restores the current session. Markdown rendering and the `/sessions` finalized-session picker are implemented. Multiline prompts and prompt history remain later enhancements.
 
 ### Agent tool panel
 
@@ -340,8 +340,8 @@ See [Agent tools](agent-tools.md) for path, result, revision, and approval contr
 - The first real provider and its minimal streaming/configuration interface.
 - Future tuning of the implemented byte/line/step limits, informed by provider behavior and terminal responsiveness.
 - Final keybindings after conflict and context tests.
-- Session persistence/resume format; the first useful workflow may use the default SQLite store directly.
-- Token accounting and context compaction after transcript/tool limits are measured.
+- Latest-workspace startup continuation, older-session pagination, crash/in-flight recovery, and Pi-style branching/session trees.
+- Token accounting, visible context-budget policy, and compaction after transcript/tool workloads are measured.
 - Multi-file patch and session-review UX after one approved revision-safe write works.
 
 Do not resolve these questions by introducing a general framework. Record the chosen behavior when a real consumer requires it.

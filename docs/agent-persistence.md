@@ -1,6 +1,6 @@
 # Agent persistence
 
-Status: implemented. Provider-neutral records, asynchronous `SessionStore`, finalized-run effects, and a SeaORM SQLite adapter with migrations, transactions, keyset reads, and search are complete. Provider credentials also have a backend-neutral `ProviderCredentialStore`, SeaORM SQLite migration/CRUD implementation, and masked multi-provider API-key save workflow. Provider model catalogs use the separate `ModelCatalogStore` and `agent_model_catalogs` table for cached, validator-aware refreshes. OpenAI-compatible catalog selection, activation, and restart restoration are implemented; interactive account login and non-OpenAI provider/model selection remain deferred. SQLite is always enabled and defaults to `~/.eggplant/ai/data.sqlite`; `session_db` can override that path. Cloud backends and backend-specific full-text search remain deferred.
+Status: implemented. Provider-neutral records, asynchronous `SessionStore`, finalized-run effects, and a SeaORM SQLite adapter with migrations, transactions, keyset reads, and search are complete. Finalized transcript rehydration, `/new`, and the `/sessions` workspace picker are also implemented; automatic startup continuation and older-session pagination are planned for M12.7. Provider credentials also have a backend-neutral `ProviderCredentialStore`, SeaORM SQLite migration/CRUD implementation, and masked multi-provider API-key save workflow. Provider model catalogs use the separate `ModelCatalogStore` and `agent_model_catalogs` table for cached, validator-aware refreshes. OpenAI-compatible catalog selection, activation, and restart restoration are implemented; interactive account login and non-OpenAI provider/model selection remain deferred. SQLite is always enabled and defaults to `~/.eggplant/ai/data.sqlite`; `session_db` can override that path. Cloud backends and backend-specific full-text search remain deferred.
 
 ## Recommendation
 
@@ -176,7 +176,10 @@ Optional `sqlx-mysql` / `sqlx-postgres` features belong only to future deploymen
 2. **Implemented:** injected-provider finalization flows through the existing update/effect path, with run-scoped storage warnings and no rendering barrier.
 3. **Implemented:** separate SeaORM SQLite adapter with migrations, transactions, and keyset reads.
 4. **Implemented:** filter/search and truncation tests plus corrupt, locked, overflow, migration-failure, and cancellation coverage.
-5. Deferred: add backend-specific full-text search only with measured requirements.
-6. Deferred: add cloud configuration, migrations policy, TLS/pool limits, and manual deployment smoke tests behind the same `SessionStore` boundary.
+5. **Implemented:** multi-turn provider history, declarative transcript rehydration, stable session metadata, `/new`, and the generation-safe `/sessions` picker.
+6. **Next (M12.7):** deterministic latest-workspace startup continuation, keyset recent-session pagination, and restart/resume smoke coverage.
+7. **Planned (M12.8):** measured provider-context budgets with explicit omission/truncation policy; evaluate compaction only after real workloads justify it.
+8. Deferred: add backend-specific full-text search only with measured requirements.
+9. Deferred: add cloud configuration, migrations policy, TLS/pool limits, and manual deployment smoke tests behind the same `SessionStore` boundary.
 
 Persistence must not delay M12.2's real provider. Production startup always injects SQLite; tests may intentionally leave the store unconfigured to exercise other workflows. Hiding the popup/panel preserves the current in-progress session.

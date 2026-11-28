@@ -1,7 +1,7 @@
 # Eggplant first-edition plan
 
-Last updated: 2026-11-21
-Current baseline: M10, M11.1/M11.2, and M12.1–M12.5 are complete; agent storage uses SeaORM SQLite at `~/.eggplant/ai/data.sqlite` by default
+Last updated: 2026-11-28
+Current baseline: M10, M11.1/M11.2, and M12.1–M12.6 are complete; agent storage uses SeaORM SQLite at `~/.eggplant/ai/data.sqlite` by default
 
 ## Purpose
 
@@ -516,7 +516,7 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 ### Milestone 12: Inline AI agent
 
-**Status: M12.1–M12.5 complete. Inline chat, OpenAI streaming, bounded read/grep, approved writes, and scalable storage ports with opt-in SeaORM SQLite persistence are implemented.**
+**Status: M12.1–M12.6 complete. Inline chat, multi-turn OpenAI streaming, bounded read/grep, approved writes, durable SQLite sessions, and interactive finalized-session restoration are implemented. M12.7 is the next reviewable phase.**
 
 **Goal:** make agent chat and bounded coding tools a first-class inline workflow without creating a second editor, bypassing persistence, or adopting a general agent/plugin framework. Read [AI agent architecture](docs/agent.md) and [Agent tools](docs/agent-tools.md) before implementation.
 
@@ -572,7 +572,35 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 - [x] Test temporary SQLite stores, truncation, locked/corrupt stores, migration failure, cancellation, and ordinary editing without a configured store.
 - [x] Keep MySQL/PostgreSQL cloud deployment separate and unbundled: future adapters must preserve `SessionStore`, secret references, TLS validation, pool/timeouts, explicit migration policy, and manual deployment smoke tests. No cloud drivers or credentials are required in workspace tests.
 
-**M12 exit criteria:** users can chat inline, watch the same session in the tool panel, use bounded read/grep tools, and approve safe revision-checked edits while normal editing remains usable during provider/tool failure. No arbitrary shell, autonomous sub-agent, plugin host, or automatic Git mutation is required. Persistence is an independent storage slice, not a prerequisite for provider chat.
+#### M12.6 — Continuous and resumable conversations
+
+**Status: complete.** Multi-turn provider context, headless restoration, and interactive finalized-session resume are implemented without coupling storage records to provider replay or presentation.
+
+- [x] Project prior answered turns into new provider requests while preserving `SessionId`, advancing `RunId`, and keeping the current prompt and tool follow-ups free of duplication; do not replay thinking.
+- [x] Restore finalized `SessionSnapshot`s through the `SessionStore` interface with declarative pagination, deduplicated related rows, answer-only display parts, stable session titles, and the next run identity.
+- [x] Add `/new` and `/sessions` with workspace filtering, bounded selection-following rows, typed Loading/Ready/Restoring states, generation-checked completions, and originating-overlay restoration.
+- [x] Reset both transcript presentations through typed `SessionChanged` outcomes; protect active runs and ignore stale loads instead of replacing newer state.
+- [x] Make prompt commands composable through metadata/effect definitions and typed command identities, removing enum-owned metadata, execution matches, and per-command submission-adapter methods.
+- [x] Cover multi-turn requests, tool rounds, paginated SQLite rehydration, stale restores, `/new`, picker rendering/workflows, finalization metadata, and title eviction with local fakes and temporary stores.
+
+#### M12.7 — Session continuation polish
+
+**Status: next.** Finish the ordinary restart/navigation workflow before adding a larger context framework.
+
+- [ ] Choose and implement one deterministic latest-workspace startup-continuation policy, including a clear fresh-start path and no provider request while a stored transcript is loading.
+- [ ] Add keyset pagination to the recent-session picker without unbounded rendering, numeric-index selection drift, or stale completion replacement; preserve selection by `SessionId`.
+- [ ] Add restart smoke coverage proving that a restored exchange is visible and sent in the next provider request, the next `RunId` does not overwrite storage, `/new` remains independent, and startup/load failures stay recoverable.
+- [ ] Keep crash/in-flight recovery, pending approvals, durable reasoning parts, and Pi-style branching/session trees outside this slice.
+
+#### M12.8 — Provider context management
+
+**Status: planned after M12.7.** Treat durable transcript history, live session state, and provider request context as separate projections.
+
+- [ ] Introduce a narrow provider-neutral context-budget policy for prior turns, current prompt, and tool history; preserve answer-only history and provider-specific request policies.
+- [ ] Use measured token usage and explicit model-capacity metadata to bound requests deterministically, with visible truncation/omission policy rather than silently deleting durable history or overflowing the model.
+- [ ] Measure real multi-turn/tool workloads before choosing summarization or compaction. Keep reasoning persistence, provider replay signatures, and compaction metadata as independently reviewed follow-ups.
+
+**M12 exit criteria:** users can chat inline with multi-turn provider context, watch the same session in the tool panel, use bounded read/grep tools, approve safe revision-checked edits, and restore finalized sessions while normal editing remains usable during provider/tool failure. No arbitrary shell, autonomous sub-agent, plugin host, or automatic Git mutation is required. Persistence is an independent storage slice, not a prerequisite for provider chat.
 
 ## TBD — much later editions
 
