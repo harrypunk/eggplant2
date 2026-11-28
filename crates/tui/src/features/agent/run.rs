@@ -155,9 +155,10 @@ impl ProviderRound {
 
 impl RunProgress {
     fn request(&self, prompt: &str, cancellation: CancellationToken) -> AgentRequest {
-        let request = match self.history.is_empty() {
-            true => AgentRequest::new(prompt.to_string(), cancellation),
-            false => AgentRequest::follow_up(self.history.clone(), cancellation),
+        let request = match self.step {
+            0 => AgentRequest::new(prompt.to_string(), cancellation)
+                .with_prior_history(self.history.clone()),
+            _ => AgentRequest::follow_up(self.history.clone(), cancellation),
         };
         match self.thinking_id.as_ref() {
             Some(id) => request.with_thinking_id(id.clone()),
@@ -227,9 +228,12 @@ impl RunProgress {
             writes == 0 || (writes == 1 && calls.len() == 1),
             "write must be the only tool call in its round",
         )?;
-        let history = match history.is_empty() {
-            true => vec![ProviderMessage::user(prompt.to_string())],
-            false => history,
+        let history = match step {
+            0 => history
+                .into_iter()
+                .chain([ProviderMessage::user(prompt.to_string())])
+                .collect(),
+            _ => history,
         };
         let tool_calls = tool_calls + calls.len();
         Ok(Self {
@@ -508,6 +512,53 @@ mod tests {
         assert_eq!(
             progress.thinking_id,
             Some(eggplant_agent::ThinkingId::new("medium2026"))
+        );
+    }
+
+    #[test]
+    fn prior_history_and_current_prompt_survive_the_first_tool_round() {
+        let prior = vec![
+            ProviderMessage::user("earlier question".to_string()),
+            ProviderMessage::assistant("earlier answer".to_string(), Vec::new()),
+        ];
+        let progress = RunProgress {
+            history: prior.clone(),
+            ..RunProgress::default()
+        };
+        let initial = progress.request("current question", CancellationToken::default());
+        assert_eq!(initial.prompt, "current question");
+        assert_eq!(initial.history, prior);
+
+        let call = eggplant_agent::ToolCall {
+            id: "read-1".to_string(),
+            name: "read".to_string(),
+            arguments: "{}".to_string(),
+        };
+        let progress = progress
+            .with_tool_round(
+                "current question",
+                "reading".to_string(),
+                vec![call.clone()],
+            )
+            .unwrap()
+            .with_results(vec![ToolResult {
+                call_id: call.id.clone(),
+                status: ToolResultStatus::Success,
+                content: "contents".to_string(),
+                truncated: false,
+            }]);
+        let follow_up = progress.request("", CancellationToken::default());
+
+        assert!(follow_up.prompt.is_empty());
+        assert_eq!(
+            follow_up.history,
+            vec![
+                ProviderMessage::user("earlier question".to_string()),
+                ProviderMessage::assistant("earlier answer".to_string(), Vec::new()),
+                ProviderMessage::user("current question".to_string()),
+                ProviderMessage::assistant("reading".to_string(), vec![call]),
+                ProviderMessage::tool("read-1".to_string(), "contents".to_string()),
+            ]
         );
     }
 

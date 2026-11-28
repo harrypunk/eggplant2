@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
 use eggplant_agent::{
-    AgentContinuation, AgentEvent, AgentProvider, AgentSession, CancellationToken, RunId,
-    SessionId, ThinkingId, ThinkingOption,
+    AgentContinuation, AgentEvent, AgentProvider, AgentSession, CancellationToken, ProviderMessage,
+    RunId, SessionId, ThinkingId, ThinkingOption,
 };
 use eggplant_agent_storage::SessionStore;
 
@@ -125,6 +125,10 @@ impl AgentRuntime {
 
     pub fn session_mut(&mut self) -> &mut AgentSession {
         &mut self.session
+    }
+
+    pub fn provider_history(&self) -> Vec<ProviderMessage> {
+        self.session.provider_history()
     }
 
     pub fn set_provider(&mut self, provider: Arc<dyn AgentProvider>) {

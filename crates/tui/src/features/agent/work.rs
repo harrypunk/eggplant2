@@ -113,6 +113,7 @@ pub(crate) fn submit(context: &mut impl SubmissionContext) -> Option<Effect> {
 fn start_run(context: &mut impl SubmissionContext, accepted: AcceptedSubmission) -> Option<Effect> {
     let surface = context.submission_surface()?;
     let thinking_id = context.runtime().thinking_id();
+    let history = context.runtime().provider_history();
     let editor_context = context.ui().context().cloned();
     let started = context.runtime_mut().begin(
         accepted.prompt.clone(),
@@ -133,6 +134,7 @@ fn start_run(context: &mut impl SubmissionContext, accepted: AcceptedSubmission)
         provider,
         context: context.tool_context()?,
         progress: RunProgress {
+            history,
             thinking_id,
             ..RunProgress::default()
         },
@@ -1009,6 +1011,81 @@ mod tests {
         open(&mut model);
         assert_eq!(model.agent.prompt(), "");
         assert_eq!(model.agent.session().messages().len(), 2);
+    }
+
+    #[test]
+    fn consecutive_prompts_share_session_history_and_advance_run_id() {
+        #[derive(Debug)]
+        struct RecordedRequest {
+            prompt: String,
+            history: Vec<ProviderMessage>,
+        }
+
+        #[derive(Debug)]
+        struct HistoryProvider {
+            requests: Arc<std::sync::Mutex<Vec<RecordedRequest>>>,
+        }
+
+        impl AgentProvider for HistoryProvider {
+            fn stream<'a>(
+                &'a self,
+                request: AgentRequest,
+                mut on_event: Box<dyn FnMut(AgentEvent) + Send + 'a>,
+            ) -> std::pin::Pin<
+                Box<dyn Future<Output = Result<(), eggplant_agent::AgentError>> + Send + 'a>,
+            > {
+                Box::pin(async move {
+                    let answer = format!("answer: {}", request.prompt);
+                    self.requests.lock().unwrap().push(RecordedRequest {
+                        prompt: request.prompt,
+                        history: request.history,
+                    });
+                    on_event(AgentEvent::TextDelta(answer));
+                    on_event(AgentEvent::Complete);
+                    Ok(())
+                })
+            }
+        }
+
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("main.rs");
+        std::fs::write(&path, "fn main() {}\n").unwrap();
+        let requests = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        model.agent.set_provider(Arc::new(HistoryProvider {
+            requests: requests.clone(),
+        }));
+        open_file(&mut model, &path);
+        open(&mut model);
+        let manager = MessageManager::default();
+        let session_id = model.agent.session().id().clone();
+
+        model.agent.set_prompt("first question");
+        let effect = submit(&mut model).unwrap();
+        perform(&manager, &mut model, effect);
+        let first_run = model.agent.session().run().unwrap().id;
+
+        model.agent.set_prompt("second question");
+        let effect = submit(&mut model).unwrap();
+        perform(&manager, &mut model, effect);
+
+        assert_eq!(model.agent.session().id(), &session_id);
+        assert_eq!(
+            model.agent.session().run().unwrap().id,
+            eggplant_agent::RunId(first_run.0 + 1)
+        );
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 2);
+        assert_eq!(requests[0].prompt, "first question");
+        assert!(requests[0].history.is_empty());
+        assert_eq!(requests[1].prompt, "second question");
+        assert_eq!(
+            requests[1].history,
+            vec![
+                ProviderMessage::user("first question".to_string()),
+                ProviderMessage::assistant("answer: first question".to_string(), Vec::new()),
+            ]
+        );
     }
 
     #[test]

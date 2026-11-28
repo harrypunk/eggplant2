@@ -218,6 +218,8 @@ A provider-neutral session owns ordered conversation entries:
 
 Every run has a `RunId`. Streaming events also have a monotonically increasing sequence. Completion/event application requires the current session and matching run identity; late deltas from an old run cannot append to a new conversation.
 
+Consecutive submissions in one running `AgentSession` retain the same `SessionId` and advance `RunId`. A new run's initial provider request contains flattened prior user/answer turns through `AgentRequest::with_prior_history`, with the current prompt kept separate and serialized after them. `AgentSession::provider_history` groups messages by `RunId`, omits turns without answer text, retains partial answers, and never replays thinking. Earlier tool rounds remain run-local rather than pretending the persisted/display transcript is an exact provider replay log. Tool follow-ups within the current run still carry their complete user/assistant/tool history. Startup transcript rehydration, cross-run tool replay, request token budgets, and compaction remain separate resume/context-management slices.
+
 Only one foreground run per session is required initially. A second submission while active is rejected or queued explicitly; it must not silently race the current run.
 
 Use SQLite persistence for finalized messages rather than every live delta. Pi's parent/leaf session tree, compaction, recovery, and branching machinery are not initial requirements. For relational persistence and the SeaORM boundary, see [Agent persistence](agent-persistence.md).
