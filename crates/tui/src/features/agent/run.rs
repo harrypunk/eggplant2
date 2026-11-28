@@ -603,4 +603,54 @@ mod tests {
             RunStatus::Complete
         );
     }
+
+    #[tokio::test]
+    async fn hiding_the_dialog_does_not_fail_an_active_run() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut model =
+            crate::startup::initial_model(Some(directory.path().to_path_buf())).unwrap();
+        crate::agent::dialog::open(&mut model);
+        let resume = Arc::new(Notify::new());
+        let started = model
+            .agent
+            .runtime_mut()
+            .begin("question".to_string(), None, 1)
+            .unwrap();
+        let cancellation = model.agent.runtime_mut().begin_cancellation();
+        let run = ProviderAgentRun {
+            run_id: started.id,
+            prompt: "question".to_string(),
+            cancellation,
+            provider: Arc::new(ControlledProvider {
+                resume: resume.clone(),
+            }),
+            context: ToolContext::default(),
+            progress: RunProgress::default(),
+        };
+        let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+        Box::new(run).execute(sender);
+        let manager = MessageManager::default();
+
+        manager.update(&mut model, receive(&mut receiver).await);
+        assert_eq!(model.agent.session().messages()[1].text, "hello");
+        crate::agent::dialog::close(&mut model);
+        assert!(!model.agent.dialog_open());
+        crate::agent::panel::toggle_panel(&mut model);
+        crate::agent::panel::toggle_panel(&mut model);
+        assert_eq!(
+            model.tools.visibility,
+            crate::data_object::Visibility::Hidden
+        );
+        assert!(model.agent.session().is_running());
+
+        resume.notify_one();
+        manager.update(&mut model, receive(&mut receiver).await);
+        manager.update(&mut model, receive(&mut receiver).await);
+
+        assert_eq!(model.agent.session().messages()[1].text, "hello world");
+        assert_eq!(
+            model.agent.session().run().unwrap().status,
+            RunStatus::Complete
+        );
+    }
 }
