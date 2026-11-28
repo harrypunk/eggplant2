@@ -238,10 +238,62 @@ fn agent_provider(config: &Config) -> color_eyre::Result<Option<Arc<dyn AgentPro
 
 #[cfg(test)]
 mod tests {
-    use eggplant_agent::{MessageRole, RunId, RunStatus, SessionId};
+    use eggplant_agent::{
+        AgentEvent, AgentRequest, AgentStreamFuture, MessageRole, ProviderMessage, RunId,
+        RunStatus, SessionId,
+    };
     use eggplant_agent_storage::{FinalizedRun, MessageRecord, RunRecord, SessionRecord};
 
     use super::*;
+    use crate::manager::{effect::Effect, message_manager::MessageManager};
+
+    async fn execute(
+        manager: &MessageManager,
+        model: &mut Model,
+        effect: Effect,
+        messages: usize,
+    ) -> Option<Effect> {
+        let Effect::Feature(request) = effect else {
+            panic!("expected feature effect");
+        };
+        let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+        request.execute(sender);
+        let mut completion = None;
+        for _ in 0..messages {
+            let message = receiver.recv().await.expect("feature should complete");
+            completion = manager.update(model, message);
+        }
+        completion
+    }
+
+    #[derive(Debug, Clone)]
+    struct RecordedRequest {
+        prompt: String,
+        history: Vec<ProviderMessage>,
+    }
+
+    #[derive(Debug)]
+    struct HistoryProvider {
+        requests: Arc<std::sync::Mutex<Vec<RecordedRequest>>>,
+    }
+
+    impl AgentProvider for HistoryProvider {
+        fn stream<'a>(
+            &'a self,
+            request: AgentRequest,
+            mut on_event: eggplant_agent::AgentEventSink<'a>,
+        ) -> AgentStreamFuture<'a> {
+            Box::pin(async move {
+                self.requests.lock().unwrap().push(RecordedRequest {
+                    prompt: request.prompt,
+                    history: request.history,
+                });
+                on_event(AgentEvent::TextDelta("new answer".to_string()));
+                on_event(AgentEvent::Complete);
+                Ok(())
+            })
+        }
+    }
 
     async fn persist_session(
         store: &SeaOrmSessionStore,
@@ -371,16 +423,64 @@ mod tests {
         assert_eq!(model.agent.runtime().session_title(), Some("title-newer"));
         assert_eq!(model.agent.session().messages().len(), 2);
         assert_eq!(model.agent.runtime().provider_history().len(), 2);
-        let next = model
+        let requests = Arc::new(std::sync::Mutex::new(Vec::new()));
+        model.agent.set_provider(Arc::new(HistoryProvider {
+            requests: requests.clone(),
+        }));
+        model
             .agent
-            .runtime_mut()
-            .begin("next".to_string(), None, 40)
+            .set_provider_metadata("test".to_string(), Some("fake".to_string()));
+        let manager = MessageManager::default();
+        manager.update(
+            &mut model,
+            crate::data_object::Message::InvokeCommand(crate::data_object::CommandId("agent_open")),
+        );
+        model.agent.set_prompt("next");
+        let effect = manager
+            .update(
+                &mut model,
+                crate::data_object::Message::InvokeCommand(crate::data_object::CommandId(
+                    "agent_submit",
+                )),
+            )
             .unwrap();
-        assert_eq!(next.id, RunId(3));
-        model.agent.session_mut().complete(next.id);
+        let storage = execute(&manager, &mut model, effect, 2).await;
+        if let Some(storage) = storage {
+            execute(&manager, &mut model, storage, 1).await;
+        }
+
+        assert_eq!(model.agent.session().run().unwrap().id, RunId(3));
+        let requests = requests.lock().unwrap().clone();
+        assert_eq!(requests.len(), 1);
+        assert_eq!(requests[0].prompt, "next");
+        assert_eq!(
+            requests[0].history,
+            vec![
+                ProviderMessage::user("question-newer".to_string()),
+                ProviderMessage::assistant("answer-newer".to_string(), Vec::new()),
+            ]
+        );
+        let store = model.agent.runtime().session_store().unwrap();
+        let transcript = store
+            .transcript(
+                SessionId::from("newer"),
+                eggplant_agent_storage::TranscriptQuery::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(transcript.runs.len(), 2);
+
         let fresh = model.agent.runtime_mut().new_session().unwrap();
         assert_ne!(fresh.session_id, SessionId::from("newer"));
         assert!(model.agent.session().messages().is_empty());
+        let transcript = store
+            .transcript(
+                SessionId::from("newer"),
+                eggplant_agent_storage::TranscriptQuery::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(transcript.runs.len(), 2);
     }
 
     #[tokio::test]

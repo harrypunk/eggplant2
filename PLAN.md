@@ -1,7 +1,7 @@
 # Eggplant first-edition plan
 
 Last updated: 2026-11-28
-Current baseline: M10, M11.1/M11.2, and M12.1–M12.6 are complete; agent storage uses SeaORM SQLite at `~/.eggplant/ai/data.sqlite` by default
+Current baseline: M10, M11.1/M11.2, and M12.1–M12.7 are complete; M12.8 provider context management is next; agent storage uses SeaORM SQLite at `~/.eggplant/ai/data.sqlite` by default
 
 ## Purpose
 
@@ -585,17 +585,18 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 #### M12.7 — Session continuation polish
 
-**Status: in progress.** Latest-workspace startup continuation and recent-session keyset pagination are implemented; final restart smoke coverage remains.
+**Status: complete.** Startup continuation, keyset pagination, direct restore-by-ID, and restart smoke coverage are implemented. Initial sessions are strictly linear.
 
 - [x] Restore the most recently updated finalized session for the current workspace during startup, with `/new` as the fresh-start path and no provider request while loading. Read failures start empty with a bounded storage warning rather than blocking editing.
 - [x] Add keyset pagination to the recent-session picker without unbounded rendering, numeric-index selection drift, or stale completion replacement; preserve selection by `SessionId`.
 - [x] Support `/restore <session-id>` through generic catalog argument policies and typed invocations, allowing explicit cross-workspace restoration without a new popup or command-specific submission parser. Missing/multiple IDs preserve the draft with usage guidance; runtime revisions reject stale direct completions.
-- [ ] Add restart smoke coverage proving that a restored exchange is visible and sent in the next provider request, the next `RunId` does not overwrite storage, `/new` remains independent, and startup/load failures stay recoverable.
-- [ ] Keep crash/in-flight recovery, pending approvals, durable reasoning parts, and Pi-style branching/session trees outside this slice.
+- [x] Add restart smoke coverage proving that a restored exchange is visible and sent in the next provider request, the next `RunId` does not overwrite storage, `/new` remains independent, and startup/load failures stay recoverable.
+
+**Initial-version boundary:** crash/in-flight recovery, pending approvals, and durable reasoning parts remain separate follow-ups. Branching, forking, and Pi-style session trees are not initial-version goals; sessions remain strictly linear.
 
 #### M12.8 — Provider context management
 
-**Status: planned after M12.7.** Treat durable transcript history, live session state, and provider request context as separate projections.
+**Status: next.** Treat durable transcript history, live session state, and provider request context as separate projections.
 
 - [ ] Introduce a narrow provider-neutral context-budget policy for prior turns, current prompt, and tool history; preserve answer-only history and provider-specific request policies.
 - [ ] Use measured token usage and explicit model-capacity metadata to bound requests deterministically, with visible truncation/omission policy rather than silently deleting durable history or overflowing the model.
