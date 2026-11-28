@@ -7,6 +7,7 @@ use super::{
     AgentDialogState, AgentInputMode, EditorContext, FileReferenceView, PromptCommandMovement,
     PromptCommandState,
     runtime::AgentRuntime,
+    sessions::SessionSelectorState,
     surface::AgentSurface,
     thinking_level::ThinkingSelectorState,
     ui_state::{AgentUiAction, AgentUiState},
@@ -145,6 +146,10 @@ impl AgentState {
 
     pub fn thinking_selector(&self) -> &ThinkingSelectorState {
         self.ui.thinking_selector()
+    }
+
+    pub fn session_selector(&self) -> &SessionSelectorState {
+        self.ui.session_selector()
     }
 
     pub fn context(&self) -> Option<&EditorContext> {

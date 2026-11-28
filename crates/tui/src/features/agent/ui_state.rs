@@ -17,6 +17,7 @@ use super::{
     },
     prompt::AgentPrompt,
     references,
+    sessions::SessionSelectorState,
     surface::AgentSurface,
     thinking_level::ThinkingSelectorState,
 };
@@ -53,6 +54,7 @@ pub(crate) struct AgentUiState {
     dialog: DialogPresentationState,
     panel: PanelPresentationState,
     thinking_selector: ThinkingSelectorState,
+    session_selector: SessionSelectorState,
     context: Option<EditorContext>,
 }
 
@@ -202,6 +204,14 @@ impl AgentUiState {
 
     pub fn thinking_selector_mut(&mut self) -> &mut ThinkingSelectorState {
         &mut self.thinking_selector
+    }
+
+    pub fn session_selector(&self) -> &SessionSelectorState {
+        &self.session_selector
+    }
+
+    pub fn session_selector_mut(&mut self) -> &mut SessionSelectorState {
+        &mut self.session_selector
     }
 
     pub fn dialog_open(&self) -> bool {

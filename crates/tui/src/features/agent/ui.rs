@@ -3,8 +3,8 @@ use ratatui::{Frame, layout::Rect};
 use crate::{
     component::agent::{
         AgentDialog, AgentFooterProps, AgentHelp, AgentModelNotice, AgentPanel, AgentPanelProps,
-        AgentPromptProps, AgentReferenceProps, AgentThinkingSelector, AgentViewProps,
-        ViewportMetrics,
+        AgentPromptProps, AgentReferenceProps, AgentSessionSelector, AgentThinkingSelector,
+        AgentViewProps, ViewportMetrics,
     },
     data_object::{Context, FocusState, FocusTarget, Model},
     ui::{OverlayContribution, OverlayKind, OverlayPlacement, UiRegistry},
@@ -15,7 +15,8 @@ use super::surface::AgentSurface;
 pub fn register_ui(ui: &mut UiRegistry) -> color_eyre::Result<()> {
     ui.register_overlay("agent", dialog_overlay)?;
     ui.register_overlay("agent_help", help_overlay)?;
-    ui.register_overlay("agent_thinking", thinking_overlay)
+    ui.register_overlay("agent_thinking", thinking_overlay)?;
+    ui.register_overlay("agent_sessions", sessions_overlay)
 }
 
 fn dialog_overlay(model: &Model) -> Option<OverlayContribution> {
@@ -108,6 +109,31 @@ fn thinking_overlay(model: &Model) -> Option<OverlayContribution> {
 fn render_thinking(model: &Model, frame: &mut Frame, area: Rect) {
     AgentThinkingSelector::render(
         model.agent.thinking_selector(),
+        model.theme.ui(),
+        frame,
+        area,
+    );
+}
+
+fn sessions_overlay(model: &Model) -> Option<OverlayContribution> {
+    model
+        .modal
+        .is_active(Context::AgentSessionSelector)
+        .then(|| {
+            OverlayContribution::new(
+                "agent_sessions",
+                OverlayKind::Modal,
+                OverlayPlacement::Centered(AgentSessionSelector::size(
+                    model.agent.session_selector(),
+                )),
+                render_sessions,
+            )
+        })
+}
+
+fn render_sessions(model: &Model, frame: &mut Frame, area: Rect) {
+    AgentSessionSelector::render(
+        model.agent.session_selector(),
         model.theme.ui(),
         frame,
         area,

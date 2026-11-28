@@ -55,6 +55,10 @@ impl SubmissionContext for Model {
         super::thinking_level::open(self)
     }
 
+    fn open_session_selector(&mut self) -> Option<Effect> {
+        super::sessions::open(self)
+    }
+
     fn new_session(&mut self) -> Option<Effect> {
         super::sessions::new_session(self)
     }

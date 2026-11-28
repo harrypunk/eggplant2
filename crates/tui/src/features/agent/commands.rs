@@ -136,6 +136,10 @@ pub fn general_action_subscriptions() -> Vec<GeneralActionSubscription> {
             Context::AgentThinkingSelector,
             super::thinking_level::handle_general_action,
         ),
+        GeneralActionSubscription::new(
+            Context::AgentSessionSelector,
+            super::sessions::handle_general_action,
+        ),
     ]
 }
 

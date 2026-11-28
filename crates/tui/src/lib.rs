@@ -483,6 +483,7 @@ pub mod data_object {
         AgentChatDialog,
         AgentApproval,
         AgentThinkingSelector,
+        AgentSessionSelector,
         ProviderLogin,
         ProviderLogout,
         ModelSelector,

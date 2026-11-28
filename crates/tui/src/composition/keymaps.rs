@@ -56,8 +56,8 @@ mod tests {
             .collect::<Vec<_>>();
         let unique = contexts.iter().collect::<HashSet<_>>();
 
-        assert_eq!(contexts.len(), 38);
-        assert_eq!(unique.len(), 38);
+        assert_eq!(contexts.len(), 39);
+        assert_eq!(unique.len(), 39);
     }
 
     #[test]

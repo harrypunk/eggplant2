@@ -32,6 +32,7 @@ pub(crate) use presentation::{dialog::DialogAction, panel::PanelAction};
 pub(crate) use prompt_command::{PromptCommand, PromptCommandMovement, PromptCommandState};
 pub use references::{FileReferenceStatus, FileReferenceView};
 pub use runtime::{AgentApplyOutcome, AgentRuntime, RunStarted, SessionReset, SessionRestored};
+pub use sessions::{SessionSelectorNotice, SessionSelectorPage, SessionSelectorState};
 pub use state::AgentState;
 pub use storage::{LoadedSession, load_session};
 pub use thinking_level::ThinkingSelectorState;
@@ -81,6 +82,12 @@ pub const KEYMAPS: &[ContextKeymap] = &[
             KeymapCapability::ListNavigation,
             KeymapCapability::ModalActions,
         ]),
+    ContextKeymap::new("agent_session_selector", Context::AgentSessionSelector).with_capabilities(
+        &[
+            KeymapCapability::ListNavigation,
+            KeymapCapability::ModalActions,
+        ],
+    ),
     ContextKeymap::new("agent_chat_help", Context::AgentChatHelp)
         .with_commands(&[("agent_help", "?"), ("agent_panel_normal", "esc")]),
     ContextKeymap::new("agent_approval", Context::AgentApproval).with_commands(&[
