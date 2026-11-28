@@ -5101,6 +5101,7 @@ dependencies = [
  "eggplant-agent-openai",
  "eggplant-agent-storage",
  "eggplant-agent-storage-seaorm",
+ "futures-util",
  "grep-matcher",
  "grep-regex",
  "grep-searcher",

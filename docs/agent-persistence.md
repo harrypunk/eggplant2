@@ -52,6 +52,8 @@ Storage writes belong in background effects with request/run identity. Do not ho
 
 The TUI captures a `FinalizedRun` only after complete, failed, or cancelled session state is applied. Live deltas and pending approvals are not persisted as finalized messages. The write effect owns all records, and its completion is accepted only for the matching `SessionId` and `RunId`. Backend failure leaves the provider result intact and produces a bounded storage warning in both Agent views; stale completions cannot clear a newer run's warning.
 
+Headless restoration uses `load_session` over the `SessionStore` interface to collect every transcript page, deduplicate related run/tool rows, and produce a provider-neutral `SessionSnapshot`. `AgentRuntime::restore_session` rejects replacement during active work and applies only finalized snapshots. Restoration preserves `SessionId`, original creation time, finalized run status, ordered messages/tools, and the highest restored `RunId`; the next submission continues after that ID rather than overwriting run 1. Restored assistant text becomes answer-only display parts, with no synthesized thinking, token usage, pending approval, or active continuation. Message/tool memory bounds still apply after computing the next run identity. This is a reusable runtime/storage capability only: startup auto-resume and the interactive session picker are separate follow-ups.
+
 ## Proposed relational schema
 
 Exact types/migrations are an implementation decision, but normalize fields used for filtering and pagination:

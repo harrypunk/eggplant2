@@ -1,10 +1,15 @@
-use std::{path::Path, sync::Arc};
+use std::{collections::BTreeMap, path::Path, sync::Arc};
 
-use eggplant_agent::{CancellationToken, MessageRole, RunId, SessionId};
-use eggplant_agent_storage::{
-    FinalizedRun, MessageRecord, RunRecord, SessionRecord, SessionStore, StorageError,
-    ToolCallRecord,
+use eggplant_agent::{
+    AgentRun, CancellationToken, ChatMessage, MessageRole, RunId, SessionId, SessionSnapshot,
+    ToolEvent,
 };
+use eggplant_agent_storage::{
+    FinalizedRun, MAX_PAGE_LIMIT, MessageRecord, RunRecord, SessionRecord, SessionStore,
+    StorageError, ToolCallRecord, TranscriptQuery,
+};
+
+use futures_util::{TryStreamExt, stream};
 
 use crate::{
     data_object::{Message, Model, StatusMessage},
@@ -118,6 +123,106 @@ fn finalized_run(
     })
 }
 
+#[derive(Debug)]
+pub struct LoadedSession {
+    pub snapshot: SessionSnapshot,
+    pub created_at: i64,
+}
+
+/// Load all finalized transcript pages through the storage port without UI state.
+pub async fn load_session(
+    store: &dyn SessionStore,
+    session_id: SessionId,
+    cancellation: CancellationToken,
+) -> Result<LoadedSession, StorageError> {
+    load_session_page(store, session_id, cancellation, MAX_PAGE_LIMIT).await
+}
+
+async fn load_session_page(
+    store: &dyn SessionStore,
+    session_id: SessionId,
+    cancellation: CancellationToken,
+    page_limit: usize,
+) -> Result<LoadedSession, StorageError> {
+    let page_session_id = session_id.clone();
+    let page_cancellation = cancellation.clone();
+    let pages = stream::try_unfold((None, false), move |(after, done)| {
+        let session_id = page_session_id.clone();
+        let cancellation = page_cancellation.clone();
+        async move {
+            if done {
+                return Ok(None);
+            }
+            if cancellation.is_cancelled() {
+                return Err(StorageError::Cancelled);
+            }
+            let page = store
+                .transcript(
+                    session_id,
+                    TranscriptQuery {
+                        after,
+                        limit: page_limit,
+                    },
+                )
+                .await?;
+            let next = page.next;
+            Ok(Some((page, (next, next.is_none()))))
+        }
+    })
+    .try_collect::<Vec<_>>()
+    .await?;
+
+    let (stored_id, created_at) = pages
+        .last()
+        .map(|page| (page.session.id.clone(), page.session.created_at))
+        .ok_or(StorageError::SessionNotFound(session_id))?;
+    let runs = pages
+        .iter()
+        .flat_map(|page| &page.runs)
+        .map(|run| {
+            (
+                run.id,
+                AgentRun {
+                    id: run.id,
+                    status: run.status.clone(),
+                },
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    let tool_events = pages
+        .iter()
+        .flat_map(|page| &page.tool_calls)
+        .map(|call| {
+            (
+                (call.run_id, call.sequence),
+                ToolEvent {
+                    run_id: call.run_id,
+                    call_id: call.call_id.clone(),
+                    name: call.name.clone(),
+                    arguments: call.arguments.clone(),
+                    result: call.result.clone(),
+                },
+            )
+        })
+        .collect::<BTreeMap<_, _>>()
+        .into_values()
+        .collect();
+    let messages = pages
+        .into_iter()
+        .flat_map(|page| page.messages)
+        .map(|message| ChatMessage::restored(message.role, message.run_id, message.text))
+        .collect();
+    Ok(LoadedSession {
+        snapshot: SessionSnapshot {
+            id: stored_id,
+            run: runs.into_values().next_back(),
+            messages,
+            tool_events,
+        },
+        created_at,
+    })
+}
+
 struct StorageEffect {
     store: Arc<dyn SessionStore>,
     session_id: SessionId,
@@ -208,6 +313,86 @@ mod tests {
         assert_eq!(record.run.completed_at, Some(123));
         assert_eq!(runtime.session_created_at(), created);
         assert_eq!(runtime.run_started_at(run), started);
+    }
+
+    #[test]
+    fn stored_transcript_rehydrates_through_pages_and_continues_run_ids() {
+        let (store, _directory) = crate::test_utils::session_store();
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+            .block_on(async {
+                let mut source = AgentRuntime::default();
+                let first = source
+                    .begin("first question".to_string(), None, 10)
+                    .unwrap()
+                    .id;
+                source.session_mut().append_delta(first, "first answer");
+                let call = eggplant_agent::ToolCall {
+                    id: "read-1".to_string(),
+                    name: "read".to_string(),
+                    arguments: "{}".to_string(),
+                };
+                source.session_mut().record_tool_call(first, &call);
+                source.session_mut().complete_tool_call(
+                    first,
+                    eggplant_agent::ToolResult {
+                        call_id: call.id,
+                        status: eggplant_agent::ToolResultStatus::Success,
+                        content: "contents".to_string(),
+                        truncated: false,
+                    },
+                );
+                source.session_mut().complete(first);
+                store
+                    .finalize_run(
+                        finalized_run(&source, None, 20).unwrap(),
+                        CancellationToken::default(),
+                    )
+                    .await
+                    .unwrap();
+                let second = source
+                    .begin("second question".to_string(), None, 30)
+                    .unwrap()
+                    .id;
+                source.session_mut().append_delta(second, "second answer");
+                source.session_mut().complete(second);
+                store
+                    .finalize_run(
+                        finalized_run(&source, None, 40).unwrap(),
+                        CancellationToken::default(),
+                    )
+                    .await
+                    .unwrap();
+
+                let session_id = source.session().id().clone();
+                let LoadedSession {
+                    snapshot,
+                    created_at,
+                } = load_session_page(
+                    store.as_ref(),
+                    session_id.clone(),
+                    CancellationToken::default(),
+                    1,
+                )
+                .await
+                .unwrap();
+                let mut restored = AgentRuntime::default();
+                let outcome = restored.restore_session(snapshot, created_at).unwrap();
+
+                assert_eq!(outcome.session_id, session_id);
+                assert_eq!(outcome.last_run_id, Some(second));
+                assert_eq!(restored.session_created_at(), Some(10));
+                assert_eq!(restored.session().messages().len(), 4);
+                assert_eq!(restored.session().tool_events().len(), 1);
+                assert_eq!(restored.provider_history().len(), 4);
+                let third = restored
+                    .begin("third question".to_string(), None, 50)
+                    .unwrap();
+                assert_eq!(third.id, RunId(second.0 + 1));
+                assert_eq!(restored.provider_history().len(), 4);
+            });
     }
 
     #[test]

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use eggplant_agent::{
     AgentContinuation, AgentEvent, AgentProvider, AgentSession, CancellationToken, ProviderMessage,
-    RunId, SessionId, ThinkingId, ThinkingOption,
+    RunId, SessionId, SessionRestoreError, SessionSnapshot, ThinkingId, ThinkingOption,
 };
 use eggplant_agent_storage::SessionStore;
 
@@ -51,6 +51,13 @@ pub struct RunStarted {
     pub started_at: i64,
 }
 
+/// Semantic result of replacing a finalized session without presentation side effects.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionRestored {
+    pub session_id: SessionId,
+    pub last_run_id: Option<RunId>,
+}
+
 impl AgentRuntime {
     /// Begin one session run without producing presentation side effects.
     pub fn begin(
@@ -69,6 +76,26 @@ impl AgentRuntime {
             id: run_id,
             started_at: now,
         })
+    }
+
+    pub fn restore_session(
+        &mut self,
+        snapshot: SessionSnapshot,
+        created_at: i64,
+    ) -> Result<SessionRestored, SessionRestoreError> {
+        if self.session.is_running() {
+            return Err(SessionRestoreError::RunInProgress);
+        }
+        let session = AgentSession::restore(snapshot)?;
+        let restored = SessionRestored {
+            session_id: session.id().clone(),
+            last_run_id: session.run().map(|run| run.id),
+        };
+        self.session = session;
+        self.run = None;
+        self.session_created_at = Some(created_at);
+        self.storage_error = None;
+        Ok(restored)
     }
 
     pub fn apply_event(&mut self, run_id: RunId, event: AgentEvent) -> AgentApplyOutcome {
@@ -257,5 +284,29 @@ mod tests {
         assert_eq!(runtime.session_created_at(), Some(123));
         assert!(runtime.session().is_running());
         assert_eq!(runtime.session().run().unwrap().id, first.id);
+    }
+
+    #[test]
+    fn restore_does_not_replace_an_active_session() {
+        let mut runtime = AgentRuntime::default();
+        let session_id = runtime.session().id().clone();
+        let active = runtime.begin("active".to_string(), None, 10).unwrap().id;
+        let snapshot = SessionSnapshot {
+            id: SessionId::from("stored"),
+            run: Some(eggplant_agent::AgentRun {
+                id: RunId(9),
+                status: eggplant_agent::RunStatus::Complete,
+            }),
+            messages: Vec::new(),
+            tool_events: Vec::new(),
+        };
+
+        assert_eq!(
+            runtime.restore_session(snapshot, 1),
+            Err(SessionRestoreError::RunInProgress)
+        );
+        assert_eq!(runtime.session().id(), &session_id);
+        assert_eq!(runtime.session().run().unwrap().id, active);
+        assert!(runtime.session().is_running());
     }
 }
