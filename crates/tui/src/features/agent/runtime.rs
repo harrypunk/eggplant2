@@ -58,6 +58,12 @@ pub struct SessionRestored {
     pub last_run_id: Option<RunId>,
 }
 
+/// Semantic result of starting a clean session.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionReset {
+    pub session_id: SessionId,
+}
+
 impl AgentRuntime {
     /// Begin one session run without producing presentation side effects.
     pub fn begin(
@@ -76,6 +82,23 @@ impl AgentRuntime {
             id: run_id,
             started_at: now,
         })
+    }
+
+    pub fn new_session(&mut self) -> Option<SessionReset> {
+        match self.session.is_running() {
+            true => None,
+            false => {
+                let session = AgentSession::default();
+                let reset = SessionReset {
+                    session_id: session.id().clone(),
+                };
+                self.session = session;
+                self.run = None;
+                self.session_created_at = None;
+                self.storage_error = None;
+                Some(reset)
+            }
+        }
     }
 
     pub fn restore_session(
@@ -284,6 +307,25 @@ mod tests {
         assert_eq!(runtime.session_created_at(), Some(123));
         assert!(runtime.session().is_running());
         assert_eq!(runtime.session().run().unwrap().id, first.id);
+    }
+
+    #[test]
+    fn new_session_resets_only_finalized_conversation_state() {
+        let mut runtime = AgentRuntime::default();
+        let previous_session = runtime.session().id().clone();
+        let first = runtime.begin("first".to_string(), None, 10).unwrap().id;
+        runtime.session_mut().complete(first);
+
+        let reset = runtime.new_session().unwrap();
+        assert_ne!(reset.session_id, previous_session);
+        assert_eq!(runtime.session().id(), &reset.session_id);
+        assert!(runtime.session().messages().is_empty());
+        assert!(runtime.session().run().is_none());
+        assert_eq!(runtime.session_created_at(), None);
+
+        runtime.begin("active".to_string(), None, 20).unwrap();
+        assert_eq!(runtime.new_session(), None);
+        assert!(runtime.session().is_running());
     }
 
     #[test]

@@ -20,6 +20,7 @@ pub(crate) enum DialogAction {
     Suspend,
     Resume,
     RunStarted(RunId),
+    SessionChanged,
     Page {
         page: PageScroll,
         direction: ScrollDirection,
@@ -64,7 +65,7 @@ impl DialogPresentationState {
                     self.lifecycle = AgentDialogState::Open;
                 }
             }
-            DialogAction::RunStarted(_) => self.scroll.bottom(),
+            DialogAction::RunStarted(_) | DialogAction::SessionChanged => self.scroll.bottom(),
             DialogAction::Page {
                 page,
                 direction,

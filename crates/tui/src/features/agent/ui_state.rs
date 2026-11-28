@@ -33,6 +33,7 @@ pub(crate) enum AgentUiAction {
         surface: AgentSurface,
         run_id: RunId,
     },
+    SessionChanged,
     Page {
         surface: AgentSurface,
         page: PageScroll,
@@ -74,6 +75,11 @@ impl AgentUiState {
                     AgentSurface::Dialog => self.dialog.reduce(DialogAction::RunStarted(run_id)),
                     AgentSurface::Panel => self.panel.reduce(PanelAction::RunStarted(run_id)),
                 }
+            }
+            AgentUiAction::SessionChanged => {
+                self.prompt.complete_submission();
+                self.dialog.reduce(DialogAction::SessionChanged);
+                self.panel.reduce(PanelAction::SessionChanged);
             }
             AgentUiAction::Page {
                 surface,
@@ -251,5 +257,36 @@ mod tests {
 
         assert_eq!(state.prompt(), "");
         assert_eq!(state.navigation(AgentSurface::Panel), panel_before);
+    }
+
+    #[test]
+    fn session_changed_clears_prompt_and_resets_both_transcript_views() {
+        let metrics = ViewportMetrics {
+            content_rows: 100,
+            viewport_rows: 20,
+        };
+        let mut state = AgentUiState::default();
+        state.set_prompt("draft");
+        for surface in [AgentSurface::Dialog, AgentSurface::Panel] {
+            state.reduce(AgentUiAction::Page {
+                surface,
+                page: PageScroll::default(),
+                direction: ScrollDirection::Up,
+                metrics,
+            });
+        }
+        let expected = AgentUiState::default();
+
+        state.reduce(AgentUiAction::SessionChanged);
+
+        assert_eq!(state.prompt(), "");
+        assert_eq!(
+            state.navigation(AgentSurface::Dialog),
+            expected.navigation(AgentSurface::Dialog)
+        );
+        assert_eq!(
+            state.navigation(AgentSurface::Panel),
+            expected.navigation(AgentSurface::Panel)
+        );
     }
 }

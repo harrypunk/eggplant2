@@ -190,7 +190,7 @@ The shared form and workflow apply to every table row:
 
 #### Agent slash commands
 
-A leading `/` in the inline dialog or panel Insert input opens a live-filtered command menu above the prompt. The menu derives candidates from the shared prompt state and catalog: `/provider`, `/model`, `/thinking`, and `/logout`.
+A leading `/` in the inline dialog or panel Insert input opens a live-filtered command menu above the prompt. The menu derives candidates from the shared prompt state and catalog: `/provider`, `/model`, `/thinking`, `/new`, and `/logout`.
 
 - Command state remains shared, but view composition projects candidates only to the prompt-active `AgentSurface`. When both presentations are visible, the modal dialog takes precedence; otherwise only the focused panel in Insert mode can show the menu. The inactive presentation retains the shared text without rendering a second menu.
 - Opening or changing the filter selects nothing; Enter preserves incomplete or unknown slash text without executing it.
@@ -199,7 +199,7 @@ A leading `/` in the inline dialog or panel Insert input opens a live-filtered c
 - Enter executes an explicitly selected command or an exact typed command after trimming surrounding whitespace, matching Pi's submission behavior. Editing away a selection therefore does not prevent a complete command from running; slash text is never submitted as a provider message.
 - Executing a command clears the composer and command selection before opening its follow-up UI, matching Pi's accepted-command behavior. Unselected or unknown slash text remains editable.
 - The menu height follows content within the available layout. Its selection-following viewport keeps the selected row visible.
-- `/model` opens the grouped model selector; `/logout` opens provider logout; `/thinking` currently publishes a placeholder notification.
+- `/model` opens the grouped model selector, `/logout` opens provider logout, and `/thinking` opens the provider-specific thinking-option selector. `/new` replaces a finalized in-memory session with a clean `SessionId` and run sequence while retaining provider/storage configuration; active work is never discarded implicitly. The new-session transition dispatches `AgentUiAction::SessionChanged`, clearing the composer and resetting dialog/panel transcript navigation without changing their lifecycle or input mode.
 
 #### Ownership and deferred work
 

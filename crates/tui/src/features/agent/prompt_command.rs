@@ -59,14 +59,16 @@ pub enum PromptCommand {
     ProviderLogin,
     Model,
     Thinking,
+    New,
     Logout,
 }
 
 impl PromptCommand {
-    pub const ALL: [Self; 4] = [
+    pub const ALL: [Self; 5] = [
         Self::ProviderLogin,
         Self::Model,
         Self::Thinking,
+        Self::New,
         Self::Logout,
     ];
 
@@ -75,6 +77,7 @@ impl PromptCommand {
             Self::ProviderLogin => "/provider",
             Self::Model => "/model",
             Self::Thinking => "/thinking",
+            Self::New => "/new",
             Self::Logout => "/logout",
         }
     }
@@ -84,6 +87,7 @@ impl PromptCommand {
             Self::ProviderLogin => "Provider login",
             Self::Model => "Select model",
             Self::Thinking => "Thinking settings",
+            Self::New => "New session",
             Self::Logout => "Log out",
         }
     }
@@ -158,6 +162,7 @@ mod tests {
                 "/thinking",
                 PromptCommand::Thinking,
             ),
+            (PromptCommandMovement::Next, "/new", PromptCommand::New),
             (
                 PromptCommandMovement::Next,
                 "/logout",

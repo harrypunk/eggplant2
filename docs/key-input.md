@@ -181,7 +181,7 @@ Agent slash commands:
 - Enter executes a selected command or an exact typed command after trimming whitespace; incomplete and unknown commands remain unchanged.
 - Tab quick-fills the first match; Ctrl-N/Ctrl-P move selection with wrapping and quick-fill each command.
 - `/provider` opens provider login and restores the originating Agent input when closed.
-- `/model` opens the grouped model selector; `/logout` opens provider logout; `/thinking` opens the provider-specific thinking-option selector.
+- `/model` opens the grouped model selector; `/logout` opens provider logout; `/thinking` opens the provider-specific thinking-option selector; `/new` starts a clean session after the current run is finalized.
 
 Provider login:
 

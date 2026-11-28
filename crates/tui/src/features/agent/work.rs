@@ -22,6 +22,7 @@ pub(crate) trait SubmissionContext {
     fn open_provider_logout(&mut self) -> Option<Effect>;
     fn open_model_selector(&mut self) -> Option<Effect>;
     fn open_thinking_selector(&mut self) -> Option<Effect>;
+    fn new_session(&mut self) -> Option<Effect>;
     fn notify(&mut self, message: String) -> Option<Effect>;
 }
 
@@ -151,6 +152,7 @@ fn execute_prompt_command(
         super::PromptCommand::Logout => context.open_provider_logout(),
         super::PromptCommand::Model => context.open_model_selector(),
         super::PromptCommand::Thinking => context.open_thinking_selector(),
+        super::PromptCommand::New => context.new_session(),
     }
 }
 
@@ -319,6 +321,11 @@ mod tests {
             None
         }
 
+        fn new_session(&mut self) -> Option<Effect> {
+            self.opened = Some(crate::agent::PromptCommand::New);
+            None
+        }
+
         fn notify(&mut self, message: String) -> Option<Effect> {
             self.notifications.push(message);
             None
@@ -424,6 +431,11 @@ mod tests {
         context.opened = None;
         assert!(submit(&mut context).is_none());
         assert_eq!(context.opened, Some(crate::agent::PromptCommand::Thinking));
+
+        context.ui.set_prompt("/new");
+        context.opened = None;
+        assert!(submit(&mut context).is_none());
+        assert_eq!(context.opened, Some(crate::agent::PromptCommand::New));
 
         context.ui.set_prompt("next");
         context

@@ -30,6 +30,7 @@ pub(crate) enum PanelAction {
     ToggleHelp,
     CloseHelp,
     RunStarted(RunId),
+    SessionChanged,
     Page {
         page: PageScroll,
         direction: ScrollDirection,
@@ -86,7 +87,9 @@ impl PanelPresentationState {
             }
             PanelAction::ToggleHelp => self.help_visible = !self.help_visible,
             PanelAction::CloseHelp => self.help_visible = false,
-            PanelAction::RunStarted(_) => self.navigation.follow_bottom(),
+            PanelAction::RunStarted(_) | PanelAction::SessionChanged => {
+                self.navigation.follow_bottom()
+            }
             PanelAction::Page {
                 page,
                 direction,

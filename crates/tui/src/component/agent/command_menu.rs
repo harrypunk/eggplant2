@@ -185,6 +185,9 @@ mod tests {
             AgentCommandMenu::height(Some(&[PromptCommand::ProviderLogin])),
             1
         );
-        assert_eq!(AgentCommandMenu::height(Some(&PromptCommand::ALL)), 4);
+        assert_eq!(
+            AgentCommandMenu::height(Some(&PromptCommand::ALL)),
+            u16::try_from(PromptCommand::ALL.len()).unwrap()
+        );
     }
 }
