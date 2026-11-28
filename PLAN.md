@@ -1,7 +1,7 @@
 # Eggplant first-edition plan
 
 Last updated: 2026-11-28
-Current baseline: M10, M11.1/M11.2, and M12.1–M12.7 are complete; M12.8 provider context management is next; agent storage uses SeaORM SQLite at `~/.eggplant/ai/data.sqlite` by default
+Current baseline: M10, M11.1/M11.2, and M12.1–M12.8 are complete; agent storage uses SeaORM SQLite at `~/.eggplant/ai/data.sqlite` by default
 
 ## Purpose
 
@@ -596,13 +596,14 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 #### M12.8 — Provider context management
 
-**Status: in progress.** Provider-neutral context policies and runtime injection are implemented; capacity-aware request budgeting remains. Treat durable transcript history, live session state, and provider request context as separate projections.
+**Status: complete.** Provider-neutral context policies, complete request measurement, Pi-style estimation, and visible omission/capacity reporting are implemented. Durable transcript history, live session state, and provider request context remain separate projections.
 
 - [x] Introduce a narrow provider-neutral `ConversationContextPolicy` for prior answered turns, with `FullContext`, deterministic whole-turn `BoundedContext`, omission metadata, and runtime policy injection. Current-prompt handling and tool follow-up history remain unchanged.
 - [x] Extend the policy boundary to complete request context, including current prompt and tool history, while preserving answer-only history and provider-specific request policies.
 - [x] Add optional `TokenEstimator` and `ContextCapacity` interfaces, propagate provider metadata and measured usage into projections, and keep unknown token counts explicit. Follow-up tool history remains complete even when over capacity.
-- [ ] Use measured token usage and explicit model-capacity metadata to bound requests deterministically, with visible truncation/omission policy rather than silently deleting durable history or overflowing the model. Supply a production estimator and surface omission/capacity status to the user.
-- [ ] Measure real multi-turn/tool workloads before choosing summarization or compaction. Keep reasoning persistence, provider replay signatures, and compaction metadata as independently reviewed follow-ups.
+- [x] Use measured token usage and explicit model-capacity metadata to bound requests deterministically, with visible truncation/omission policy rather than silently deleting durable history or overflowing the model. Supply a production Pi-style estimator and surface omission/capacity status to the user.
+
+**Deferred:** measure real multi-turn/tool workloads before choosing summarization or compaction. Keep reasoning persistence, provider replay signatures, and compaction metadata as independently reviewed follow-ups.
 
 **M12 exit criteria:** users can chat inline with multi-turn provider context, watch the same session in the tool panel, use bounded read/grep tools, approve safe revision-checked edits, and restore finalized sessions while normal editing remains usable during provider/tool failure. No arbitrary shell, autonomous sub-agent, plugin host, or automatic Git mutation is required. Persistence is an independent storage slice, not a prerequisite for provider chat.
 

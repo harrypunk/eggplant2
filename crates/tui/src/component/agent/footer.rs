@@ -58,6 +58,9 @@ fn stats_line(props: &AgentViewProps<'_>) -> Line<'static> {
 }
 
 fn context_span(props: &AgentViewProps<'_>) -> Span<'static> {
+    if let Some(projection) = props.footer.projection {
+        return projection_span(projection, props.styles);
+    }
     let (text, style) = match (props.session.latest_usage(), props.footer.context_window) {
         (Some(usage), Some(window)) if window > 0 => {
             let percent = usage.total as f64 * 100.0 / window as f64;
@@ -68,6 +71,33 @@ fn context_span(props: &AgentViewProps<'_>) -> Span<'static> {
         }
         (_, Some(window)) => (format!("?/{}", format_tokens(window)), props.styles.muted),
         (_, None) => ("context ?".to_string(), props.styles.muted),
+    };
+    Span::styled(text, style)
+}
+
+fn projection_span(
+    projection: &eggplant_agent::ContextProjection,
+    styles: &UiTheme,
+) -> Span<'static> {
+    let measurement = projection.measurement;
+    let mut text = match (
+        measurement.estimated_input_tokens,
+        measurement.capacity_tokens,
+    ) {
+        (Some(estimate), Some(capacity)) => {
+            format!("~{}/{}", format_tokens(estimate), format_tokens(capacity))
+        }
+        (Some(estimate), None) => format!("~{} tokens", format_tokens(estimate)),
+        (None, Some(capacity)) => format!("?/{}", format_tokens(capacity)),
+        (None, None) => "context ?".to_string(),
+    };
+    if projection.omitted_turns > 0 {
+        text.push_str(&format!(" · omit {}", projection.omitted_turns));
+    }
+    let style = match measurement.fits_capacity {
+        Some(false) => styles.error,
+        _ if projection.omitted_turns > 0 => styles.warning,
+        _ => styles.muted,
     };
     Span::styled(text, style)
 }
@@ -188,5 +218,49 @@ mod tests {
             .collect::<String>();
         assert!(content.contains("↑0 ↓0 · context ?"));
         assert!(content.contains("fake · no model"));
+    }
+
+    #[test]
+    fn renders_projection_estimate_and_omitted_turns() {
+        let session = AgentSession::default();
+        let projection = eggplant_agent::ContextProjection {
+            history: Vec::new(),
+            omitted_turns: 2,
+            measurement: eggplant_agent::ContextMeasurement {
+                input_bytes: 0,
+                estimated_input_tokens: Some(80),
+                measured_input_tokens: None,
+                capacity_tokens: Some(100),
+                fits_capacity: Some(true),
+            },
+        };
+        let prompt = TextInput::default();
+        let theme = Theme::default();
+        let props = AgentViewProps {
+            session: &session,
+            navigation: SurfaceNavigation::default(),
+            prompt: AgentPromptProps::new(&prompt),
+            storage_error: None,
+            model_notice: None,
+            footer: AgentFooterProps::new("openai", Some("gpt-test"), Some(100))
+                .with_projection(Some(&projection)),
+            styles: theme.ui(),
+        };
+        let backend = TestBackend::new(100, 1);
+        let mut terminal = Terminal::new(backend).unwrap();
+
+        terminal
+            .draw(|frame| AgentFooter::render(&props, frame.area(), frame.buffer_mut()))
+            .unwrap();
+
+        let content = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(content.contains("~80/100"));
+        assert!(content.contains("omit 2"));
     }
 }

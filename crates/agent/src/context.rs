@@ -39,9 +39,19 @@ pub struct TokenInput<'a> {
     pub prompt: &'a str,
 }
 
-/// Optional provider-neutral token measurement. Unknown is preferable to an estimate.
+/// Optional provider-neutral token estimation. Unknown is preferable to an unsupported model.
 pub trait TokenEstimator: std::fmt::Debug + Send + Sync {
     fn estimate(&self, input: TokenInput<'_>) -> Option<u64>;
+
+    fn estimate_with_usage(
+        &self,
+        input: TokenInput<'_>,
+        usage: Option<TokenUsage>,
+        usage_run_id: Option<RunId>,
+    ) -> Option<u64> {
+        let _ = (usage, usage_run_id);
+        self.estimate(input)
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -52,6 +62,7 @@ pub struct RequestContext<'a> {
     pub capacity: Option<ContextCapacity>,
     pub estimator: Option<&'a dyn TokenEstimator>,
     pub measured_usage: Option<TokenUsage>,
+    pub usage_run_id: Option<RunId>,
 }
 
 impl<'a> RequestContext<'a> {
@@ -63,6 +74,7 @@ impl<'a> RequestContext<'a> {
             capacity: None,
             estimator: None,
             measured_usage: None,
+            usage_run_id: None,
         }
     }
 
@@ -83,6 +95,11 @@ impl<'a> RequestContext<'a> {
 
     pub fn with_measured_usage(mut self, usage: TokenUsage) -> Self {
         self.measured_usage = Some(usage);
+        self
+    }
+
+    pub fn with_usage_run(mut self, run_id: RunId) -> Self {
+        self.usage_run_id = Some(run_id);
         self
     }
 
@@ -143,6 +160,78 @@ impl ConversationContextPolicy for FullContext {
     }
 }
 
+/// Pi-style context estimation: four characters per token plus valid usage and trailing turns.
+#[derive(Debug, Default)]
+pub struct EstimatedTokens;
+
+impl EstimatedTokens {
+    fn estimate_turn(turn: &ConversationTurn) -> u64 {
+        estimate_text_tokens(&turn.user).saturating_add(estimate_text_tokens(&turn.answer))
+    }
+}
+
+impl TokenEstimator for EstimatedTokens {
+    fn estimate(&self, input: TokenInput<'_>) -> Option<u64> {
+        let history = match input.history.is_empty() {
+            true => input.turns.iter().map(Self::estimate_turn).sum::<u64>(),
+            false => input
+                .history
+                .iter()
+                .map(estimate_provider_message_tokens)
+                .sum::<u64>(),
+        };
+        Some(history.saturating_add(estimate_text_tokens(input.prompt)))
+    }
+
+    fn estimate_with_usage(
+        &self,
+        input: TokenInput<'_>,
+        usage: Option<TokenUsage>,
+        usage_run_id: Option<RunId>,
+    ) -> Option<u64> {
+        if !input.history.is_empty() {
+            return self.estimate(input);
+        }
+        let Some(usage) =
+            usage.filter(|usage| usage.total > 0 || usage.input.saturating_add(usage.output) > 0)
+        else {
+            return self.estimate(input);
+        };
+        let Some(index) = usage_run_id
+            .and_then(|run_id| input.turns.iter().position(|turn| turn.run_id == run_id))
+        else {
+            return self.estimate(input);
+        };
+        let usage_tokens = match usage.total {
+            0 => usage.input.saturating_add(usage.output),
+            total => total,
+        };
+        let trailing = input.turns[index + 1..]
+            .iter()
+            .map(Self::estimate_turn)
+            .sum::<u64>()
+            .saturating_add(estimate_text_tokens(input.prompt));
+        Some(usage_tokens.saturating_add(trailing))
+    }
+}
+
+fn estimate_text_tokens(text: &str) -> u64 {
+    text.len().div_ceil(4) as u64
+}
+
+fn estimate_provider_message_tokens(message: &ProviderMessage) -> u64 {
+    estimate_text_tokens(&message.content).saturating_add(
+        message
+            .tool_calls
+            .iter()
+            .map(|call| {
+                estimate_text_tokens(&call.name)
+                    .saturating_add(estimate_text_tokens(&call.arguments))
+            })
+            .sum::<u64>(),
+    )
+}
+
 /// Deterministic whole-turn limits. Text is never truncated or synthesized.
 #[derive(Debug)]
 pub struct BoundedContext {
@@ -169,7 +258,11 @@ impl BoundedContext {
         }
         match (request.capacity, request.estimator) {
             (Some(capacity), Some(estimator)) => estimator
-                .estimate(request.token_input(turns))
+                .estimate_with_usage(
+                    request.token_input(turns),
+                    request.measured_usage,
+                    request.usage_run_id,
+                )
                 .is_none_or(|tokens| tokens <= capacity.input_tokens),
             _ => true,
         }
@@ -216,14 +309,18 @@ fn measure(
         false => history.iter().map(provider_message_bytes).sum::<usize>(),
     };
     let estimated_input_tokens = request.estimator.and_then(|estimator| {
-        estimator.estimate(TokenInput {
-            turns: match request.history.is_empty() {
-                true => turns,
-                false => &[],
+        estimator.estimate_with_usage(
+            TokenInput {
+                turns: match request.history.is_empty() {
+                    true => turns,
+                    false => &[],
+                },
+                history,
+                prompt: request.prompt,
             },
-            history,
-            prompt: request.prompt,
-        })
+            request.measured_usage,
+            request.usage_run_id,
+        )
     });
     let capacity_tokens = request.capacity.map(|capacity| capacity.input_tokens);
     ContextMeasurement {
@@ -306,6 +403,45 @@ mod tests {
         let projection = BoundedContext::new(2, 1).project(&turns);
         assert_eq!(projection.omitted_turns, 2);
         assert!(projection.history.is_empty());
+    }
+
+    #[test]
+    fn estimated_tokens_follow_pi_usage_and_trailing_policy() {
+        let turns = vec![turn(1, "1234", "12345678"), turn(2, "12345678", "1234")];
+        let estimator = EstimatedTokens;
+        let input = TokenInput {
+            turns: &turns,
+            history: &[],
+            prompt: "next",
+        };
+        assert_eq!(estimator.estimate(input), Some(7));
+        let usage = TokenUsage {
+            input: 80,
+            output: 20,
+            total: 100,
+        };
+        assert_eq!(
+            estimator.estimate_with_usage(input, Some(usage), Some(RunId(1))),
+            Some(104)
+        );
+        assert_eq!(
+            estimator.estimate_with_usage(input, Some(usage), Some(RunId(99))),
+            Some(7)
+        );
+
+        let history = vec![ProviderMessage::user("1234".to_string())];
+        assert_eq!(
+            estimator.estimate_with_usage(
+                TokenInput {
+                    turns: &[],
+                    history: &history,
+                    prompt: "",
+                },
+                Some(usage),
+                Some(RunId(1)),
+            ),
+            Some(1)
+        );
     }
 
     #[derive(Debug)]

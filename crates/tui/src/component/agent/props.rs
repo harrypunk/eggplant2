@@ -1,4 +1,4 @@
-use eggplant_agent::AgentSession;
+use eggplant_agent::{AgentSession, ContextProjection};
 
 use super::AgentPromptProps;
 use super::navigation::SurfaceNavigation;
@@ -22,6 +22,7 @@ pub struct AgentFooterProps<'a> {
     pub provider: &'a str,
     pub model: Option<&'a str>,
     pub context_window: Option<u64>,
+    pub projection: Option<&'a ContextProjection>,
 }
 
 impl<'a> AgentFooterProps<'a> {
@@ -30,7 +31,13 @@ impl<'a> AgentFooterProps<'a> {
             provider,
             model,
             context_window,
+            projection: None,
         }
+    }
+
+    pub fn with_projection(mut self, projection: Option<&'a ContextProjection>) -> Self {
+        self.projection = projection;
+        self
     }
 }
 

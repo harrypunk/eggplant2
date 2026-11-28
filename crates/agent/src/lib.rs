@@ -19,8 +19,8 @@ mod usage;
 pub use cancellation::CancellationToken;
 pub use context::{
     BoundedContext, ContextCapacity, ContextMeasurement, ContextProjection,
-    ConversationContextPolicy, ConversationTurn, FullContext, RequestContext, TokenEstimator,
-    TokenInput,
+    ConversationContextPolicy, ConversationTurn, EstimatedTokens, FullContext, RequestContext,
+    TokenEstimator, TokenInput,
 };
 pub use event::AgentEvent;
 pub use message::{ChatMessage, MessagePart, MessageRole, ProviderMessage, ProviderMessageRole};

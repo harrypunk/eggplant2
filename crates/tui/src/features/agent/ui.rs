@@ -62,7 +62,8 @@ fn view_props(model: &Model, surface: AgentSurface) -> AgentViewProps<'_> {
                 .agent
                 .provider()
                 .and_then(|provider| provider.context_window()),
-        ),
+        )
+        .with_projection(model.agent.runtime().last_context_projection()),
         styles: model.theme.ui(),
     }
 }

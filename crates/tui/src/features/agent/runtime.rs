@@ -18,6 +18,7 @@ pub struct AgentRuntime {
     run: Option<AgentRunState>,
     store: Option<Arc<dyn SessionStore>>,
     context_policy: Arc<dyn ConversationContextPolicy>,
+    last_context: Option<ContextProjection>,
     storage_error: Option<String>,
     session_created_at: Option<i64>,
     session_title: Option<String>,
@@ -35,6 +36,7 @@ impl Default for AgentRuntime {
             run: None,
             store: None,
             context_policy: Arc::new(FullContext),
+            last_context: None,
             storage_error: None,
             session_created_at: None,
             session_title: None,
@@ -110,6 +112,7 @@ impl AgentRuntime {
                 self.session_created_at = None;
                 self.session_title = None;
                 self.storage_error = None;
+                self.last_context = None;
                 self.advance_session_revision();
                 Some(reset)
             }
@@ -153,6 +156,7 @@ impl AgentRuntime {
         self.session_created_at = Some(created_at);
         self.session_title = title;
         self.storage_error = None;
+        self.last_context = None;
         self.advance_session_revision();
         Ok(restored)
     }
@@ -236,6 +240,10 @@ impl AgentRuntime {
             .latest_usage()
             .map_or(request, |usage| request.with_measured_usage(usage));
         let request = self
+            .session
+            .latest_usage_run()
+            .map_or(request, |run_id| request.with_usage_run(run_id));
+        let request = self
             .provider
             .as_ref()
             .and_then(|provider| provider.token_estimator())
@@ -245,11 +253,21 @@ impl AgentRuntime {
 
     pub fn set_context_policy(&mut self, policy: Arc<dyn ConversationContextPolicy>) {
         self.context_policy = policy;
+        self.last_context = None;
+    }
+
+    pub fn record_context_projection(&mut self, projection: ContextProjection) {
+        self.last_context = Some(projection);
+    }
+
+    pub fn last_context_projection(&self) -> Option<&ContextProjection> {
+        self.last_context.as_ref()
     }
 
     pub fn set_provider(&mut self, provider: Arc<dyn AgentProvider>) {
         self.provider_name = "custom".to_string();
         self.provider = Some(provider);
+        self.last_context = None;
     }
 
     pub fn set_provider_metadata(&mut self, name: String, model: Option<String>) {
@@ -261,6 +279,7 @@ impl AgentRuntime {
         self.provider = None;
         self.provider_name = "fake".to_string();
         self.model = None;
+        self.last_context = None;
     }
 
     pub fn provider(&self) -> Option<Arc<dyn AgentProvider>> {
@@ -481,6 +500,10 @@ mod tests {
                 ProviderMessage::assistant("latest".to_string(), Vec::new()),
             ]
         );
+        runtime.record_context_projection(projection.clone());
+        assert_eq!(runtime.last_context_projection(), Some(&projection));
+        runtime.set_context_policy(Arc::new(FullContext));
+        assert!(runtime.last_context_projection().is_none());
     }
 
     #[test]

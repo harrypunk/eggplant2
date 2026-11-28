@@ -1,6 +1,6 @@
 use std::{future::Future, pin::Pin};
 
-use crate::{AgentEvent, AgentRequest, ThinkingOption, TokenEstimator};
+use crate::{AgentEvent, AgentRequest, EstimatedTokens, ThinkingOption, TokenEstimator};
 
 /// Callback boundary for ordered provider events.
 pub type AgentEventSink<'a> = Box<dyn FnMut(AgentEvent) + Send + 'a>;
@@ -28,9 +28,10 @@ pub trait AgentProvider: std::fmt::Debug + Send + Sync {
         None
     }
 
-    /// Optional exact token measurement for the active model; unknown remains explicit.
+    /// Pi-style context estimation by default; providers may opt out or specialize it.
     fn token_estimator(&self) -> Option<&dyn TokenEstimator> {
-        None
+        static ESTIMATOR: EstimatedTokens = EstimatedTokens;
+        Some(&ESTIMATOR)
     }
 
     /// Display options supplied by this provider's reasoning policy.

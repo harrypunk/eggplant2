@@ -178,7 +178,7 @@ Optional `sqlx-mysql` / `sqlx-postgres` features belong only to future deploymen
 4. **Implemented:** filter/search and truncation tests plus corrupt, locked, overflow, migration-failure, and cancellation coverage.
 5. **Implemented:** multi-turn provider history, declarative transcript rehydration, stable session metadata, `/new`, and the generation-safe `/sessions` picker.
 6. **Complete (M12.7):** latest-workspace startup continuation, keyset recent-session pagination, direct restore-by-ID, and restart/resume smoke coverage are implemented. Initial sessions remain strictly linear; branching/forking/session trees are not initial-version goals.
-7. **In progress (M12.8):** provider-neutral request context, optional token estimator/capacity metadata, measured usage, omission/fit reporting, and runtime injection are implemented. A production estimator and user-visible omission/capacity status remain before any compaction evaluation.
+7. **Complete (M12.8):** provider-neutral request context, Pi-style four-character token estimation with usage-plus-trailing accounting, capacity/fit reporting, and footer omission status are implemented. Compaction remains deferred until real workloads justify it.
 8. Deferred: add backend-specific full-text search only with measured requirements.
 9. Deferred: add cloud configuration, migrations policy, TLS/pool limits, and manual deployment smoke tests behind the same `SessionStore` boundary.
 

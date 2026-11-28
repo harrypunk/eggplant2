@@ -116,16 +116,15 @@ pub(crate) fn submit(context: &mut impl SubmissionContext) -> Option<Effect> {
 fn start_run(context: &mut impl SubmissionContext, accepted: AcceptedSubmission) -> Option<Effect> {
     let surface = context.submission_surface()?;
     let thinking_id = context.runtime().thinking_id();
-    let history = context
-        .runtime()
-        .context_projection_for(&accepted.prompt)
-        .history;
+    let projection = context.runtime().context_projection_for(&accepted.prompt);
+    let history = projection.history.clone();
     let editor_context = context.ui().context().cloned();
     let started = context.runtime_mut().begin(
         accepted.prompt.clone(),
         editor_context,
         chrono::Utc::now().timestamp_millis(),
     )?;
+    context.runtime_mut().record_context_projection(projection);
     context.ui_mut().reduce(AgentUiAction::RunStarted {
         surface,
         run_id: started.id,

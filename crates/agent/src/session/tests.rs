@@ -161,6 +161,7 @@ fn accumulates_usage_but_rejects_a_different_run() {
         }
     );
     assert_eq!(session.latest_usage(), Some(second));
+    assert_eq!(session.latest_usage_run(), Some(run));
 }
 
 #[test]

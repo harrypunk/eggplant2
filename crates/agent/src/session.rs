@@ -31,6 +31,7 @@ pub struct AgentSession {
     pending_approval: Option<ToolApproval>,
     usage: TokenUsage,
     latest_usage: Option<TokenUsage>,
+    latest_usage_run: Option<RunId>,
 }
 
 impl AgentSession {
@@ -66,6 +67,7 @@ impl AgentSession {
             pending_approval: None,
             usage: TokenUsage::default(),
             latest_usage: None,
+            latest_usage_run: None,
         })
     }
 
@@ -207,6 +209,7 @@ impl AgentSession {
             Some(run) if run.id == run_id => {
                 self.usage.accumulate(usage);
                 self.latest_usage = Some(usage);
+                self.latest_usage_run = Some(run_id);
                 true
             }
             _ => false,
@@ -219,6 +222,10 @@ impl AgentSession {
 
     pub fn latest_usage(&self) -> Option<TokenUsage> {
         self.latest_usage
+    }
+
+    pub fn latest_usage_run(&self) -> Option<RunId> {
+        self.latest_usage_run
     }
 
     pub fn is_running(&self) -> bool {
