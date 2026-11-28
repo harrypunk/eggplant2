@@ -29,11 +29,11 @@ impl AgentCommandMenu {
         } else {
             commands
                 .iter()
-                .map(|command| command_line(*command, selected == Some(*command), styles))
+                .map(|command| command_line(command, selected.as_ref() == Some(command), styles))
                 .collect()
         };
         let selected =
-            selected.and_then(|selected| commands.iter().position(|command| *command == selected));
+            selected.and_then(|selected| commands.iter().position(|command| command == &selected));
         let lines = picker::visible_lines(lines, selected, area.height);
         Paragraph::new(lines)
             .style(styles.popup_surface())
@@ -41,7 +41,7 @@ impl AgentCommandMenu {
     }
 }
 
-fn command_line<'a>(command: PromptCommand, selected: bool, styles: &UiTheme) -> Line<'a> {
+fn command_line(command: &PromptCommand, selected: bool, styles: &UiTheme) -> Line<'static> {
     let style = if selected {
         styles.base.patch(styles.selection)
     } else {
@@ -49,7 +49,7 @@ fn command_line<'a>(command: PromptCommand, selected: bool, styles: &UiTheme) ->
     };
     Line::from(vec![
         Span::styled(format!("{:<16}", command.name()), style),
-        Span::styled(command.description(), style),
+        Span::styled(command.title().to_string(), style),
     ])
 }
 
@@ -63,7 +63,7 @@ mod tests {
     #[test]
     fn renders_only_commands_and_an_empty_filter_state() {
         let theme = Theme::default();
-        let commands = [PromptCommand::ProviderLogin];
+        let commands = [crate::agent::resolve("/provider").unwrap()];
         let mut terminal = Terminal::new(TestBackend::new(32, 2)).unwrap();
         terminal
             .draw(|frame| {
@@ -107,7 +107,7 @@ mod tests {
     #[test]
     fn selection_is_highlighted_only_after_quick_fill() {
         let theme = Theme::default();
-        let commands = [PromptCommand::ProviderLogin];
+        let commands = [crate::agent::resolve("/provider").unwrap()];
         let mut terminal = Terminal::new(TestBackend::new(32, 1)).unwrap();
         terminal
             .draw(|frame| {
@@ -133,7 +133,7 @@ mod tests {
             .draw(|frame| {
                 AgentCommandMenu::render(
                     &commands,
-                    Some(PromptCommand::ProviderLogin),
+                    Some(crate::agent::resolve("/provider").unwrap()),
                     theme.ui(),
                     frame.area(),
                     frame.buffer_mut(),
@@ -157,8 +157,8 @@ mod tests {
         terminal
             .draw(|frame| {
                 AgentCommandMenu::render(
-                    &PromptCommand::ALL,
-                    Some(PromptCommand::Logout),
+                    &crate::agent::catalog(),
+                    Some(crate::agent::resolve("/logout").unwrap()),
                     theme.ui(),
                     frame.area(),
                     frame.buffer_mut(),
@@ -182,12 +182,12 @@ mod tests {
         assert_eq!(AgentCommandMenu::height(None), 0);
         assert_eq!(AgentCommandMenu::height(Some(&[])), 1);
         assert_eq!(
-            AgentCommandMenu::height(Some(&[PromptCommand::ProviderLogin])),
+            AgentCommandMenu::height(Some(&[crate::agent::resolve("/provider").unwrap()])),
             1
         );
         assert_eq!(
-            AgentCommandMenu::height(Some(&PromptCommand::ALL)),
-            u16::try_from(PromptCommand::ALL.len()).unwrap()
+            AgentCommandMenu::height(Some(&crate::agent::catalog())),
+            u16::try_from(crate::agent::catalog().len()).unwrap()
         );
     }
 }

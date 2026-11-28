@@ -288,7 +288,7 @@ mod tests {
             crate::agent::PanelAction::EnterInsert,
         ));
         model.agent.set_prompt("/p");
-        let provider = Some(vec![crate::agent::PromptCommand::ProviderLogin]);
+        let provider = Some(vec![crate::agent::resolve("/provider").unwrap()]);
         assert_eq!(view_commands(&model, AgentSurface::Panel), provider);
         assert_eq!(view_commands(&model, AgentSurface::Dialog), None);
 

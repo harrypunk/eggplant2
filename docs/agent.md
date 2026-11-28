@@ -190,7 +190,7 @@ The shared form and workflow apply to every table row:
 
 #### Agent slash commands
 
-A leading `/` in the inline dialog or panel Insert input opens a live-filtered command menu above the prompt. The menu derives candidates from the shared prompt state and catalog: `/provider`, `/model`, `/thinking`, `/sessions`, `/new`, and `/logout`.
+A leading `/` in the inline dialog or panel Insert input opens a live-filtered command menu above the prompt. The menu derives candidates from the shared prompt state and catalog: `/provider`, `/model`, `/thinking`, `/sessions`, `/new`, and `/logout`. `prompt_command/catalog.rs` owns `PromptCommandDefinition` values pairing pure name/title/description metadata with lazy effects. Adding a command requires one registration and its feature handler, not an enum variant, name/description match, execution match, or another `SubmissionContext` method. Prompt state and views consume only cloned metadata; execution resolves the selected `CommandId` in the catalog and invokes its handler. Custom catalogs use the same filter/resolve/execute path.
 
 - Command state remains shared, but view composition projects candidates only to the prompt-active `AgentSurface`. When both presentations are visible, the modal dialog takes precedence; otherwise only the focused panel in Insert mode can show the menu. The inactive presentation retains the shared text without rendering a second menu.
 - Opening or changing the filter selects nothing; Enter preserves incomplete or unknown slash text without executing it.

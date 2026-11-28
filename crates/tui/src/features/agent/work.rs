@@ -18,12 +18,7 @@ pub(crate) trait SubmissionContext {
     fn submission_surface(&self) -> Option<AgentSurface>;
     fn project_available(&self) -> bool;
     fn tool_context(&self) -> Option<ToolContext>;
-    fn open_provider_login(&mut self) -> Option<Effect>;
-    fn open_provider_logout(&mut self) -> Option<Effect>;
-    fn open_model_selector(&mut self) -> Option<Effect>;
-    fn open_thinking_selector(&mut self) -> Option<Effect>;
-    fn open_session_selector(&mut self) -> Option<Effect>;
-    fn new_session(&mut self) -> Option<Effect>;
+    fn execute_prompt_command(&mut self, command: super::PromptCommand) -> Option<Effect>;
     fn notify(&mut self, message: String) -> Option<Effect>;
 }
 
@@ -75,7 +70,7 @@ impl Submission {
                 .ui()
                 .command_state()
                 .selected()
-                .or_else(|| super::PromptCommand::from_input(prompt))
+                .or_else(|| super::resolve(prompt))
                 .map_or(Self::Inactive, Self::Command);
         }
         if let Some(rejection) = rejection(context, prompt) {
@@ -148,14 +143,7 @@ fn execute_prompt_command(
     command: super::PromptCommand,
 ) -> Option<Effect> {
     context.ui_mut().complete_prompt_command();
-    match command {
-        super::PromptCommand::ProviderLogin => context.open_provider_login(),
-        super::PromptCommand::Logout => context.open_provider_logout(),
-        super::PromptCommand::Model => context.open_model_selector(),
-        super::PromptCommand::Thinking => context.open_thinking_selector(),
-        super::PromptCommand::Sessions => context.open_session_selector(),
-        super::PromptCommand::New => context.new_session(),
-    }
+    context.execute_prompt_command(command)
 }
 
 pub(crate) fn interrupt(context: &mut impl InterruptionContext) -> Option<Effect> {
@@ -303,33 +291,11 @@ mod tests {
             Some(ToolContext::default())
         }
 
-        fn open_provider_login(&mut self) -> Option<Effect> {
-            self.opened = Some(crate::agent::PromptCommand::ProviderLogin);
-            None
-        }
-
-        fn open_provider_logout(&mut self) -> Option<Effect> {
-            self.opened = Some(crate::agent::PromptCommand::Logout);
-            None
-        }
-
-        fn open_model_selector(&mut self) -> Option<Effect> {
-            self.opened = Some(crate::agent::PromptCommand::Model);
-            None
-        }
-
-        fn open_thinking_selector(&mut self) -> Option<Effect> {
-            self.opened = Some(crate::agent::PromptCommand::Thinking);
-            None
-        }
-
-        fn open_session_selector(&mut self) -> Option<Effect> {
-            self.opened = Some(crate::agent::PromptCommand::Sessions);
-            None
-        }
-
-        fn new_session(&mut self) -> Option<Effect> {
-            self.opened = Some(crate::agent::PromptCommand::New);
+        fn execute_prompt_command(
+            &mut self,
+            command: crate::agent::PromptCommand,
+        ) -> Option<Effect> {
+            self.opened = Some(command);
             None
         }
 
@@ -412,7 +378,7 @@ mod tests {
         assert!(submit(&mut context).is_none());
         assert_eq!(
             context.opened,
-            Some(crate::agent::PromptCommand::ProviderLogin)
+            Some(crate::agent::resolve("/provider").unwrap())
         );
         assert_eq!(context.ui.prompt(), "");
 
@@ -430,24 +396,30 @@ mod tests {
         assert!(submit(&mut context).is_none());
         assert_eq!(
             context.opened,
-            Some(crate::agent::PromptCommand::ProviderLogin)
+            Some(crate::agent::resolve("/provider").unwrap())
         );
         assert_eq!(context.ui.prompt(), "");
 
         context.ui.set_prompt("/thinking");
         context.opened = None;
         assert!(submit(&mut context).is_none());
-        assert_eq!(context.opened, Some(crate::agent::PromptCommand::Thinking));
+        assert_eq!(
+            context.opened,
+            Some(crate::agent::resolve("/thinking").unwrap())
+        );
 
         context.ui.set_prompt("/sessions");
         context.opened = None;
         assert!(submit(&mut context).is_none());
-        assert_eq!(context.opened, Some(crate::agent::PromptCommand::Sessions));
+        assert_eq!(
+            context.opened,
+            Some(crate::agent::resolve("/sessions").unwrap())
+        );
 
         context.ui.set_prompt("/new");
         context.opened = None;
         assert!(submit(&mut context).is_none());
-        assert_eq!(context.opened, Some(crate::agent::PromptCommand::New));
+        assert_eq!(context.opened, Some(crate::agent::resolve("/new").unwrap()));
 
         context.ui.set_prompt("next");
         context
@@ -700,7 +672,7 @@ mod tests {
         assert_eq!(model.agent.prompt(), "/model");
         assert_eq!(
             model.agent.command_state().selected(),
-            Some(crate::agent::PromptCommand::Model)
+            Some(crate::agent::resolve("/model").unwrap())
         );
         submit(&mut model);
         assert!(model.agent.session().run().is_none());

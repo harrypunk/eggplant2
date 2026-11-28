@@ -61,7 +61,7 @@ impl<'a> AgentPromptProps<'a> {
     }
 
     pub fn selected_command(&self) -> Option<PromptCommand> {
-        self.selected_command
+        self.selected_command.clone()
     }
 }
 

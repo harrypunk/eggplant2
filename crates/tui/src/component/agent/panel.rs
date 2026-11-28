@@ -387,7 +387,7 @@ mod tests {
         let props = panel_props(
             &session,
             &prompt,
-            Some(vec![PromptCommand::ProviderLogin]),
+            Some(vec![crate::agent::resolve("/provider").unwrap()]),
             AgentInputMode::Insert,
             FocusState::Focused,
             theme.ui(),

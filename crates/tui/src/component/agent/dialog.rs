@@ -165,7 +165,6 @@ mod tests {
 
     use super::*;
     use crate::{
-        agent::PromptCommand,
         component::agent::{AgentModelNotice, AgentPromptProps, SurfaceNavigation},
         theme::Theme,
     };
@@ -326,8 +325,8 @@ mod tests {
             session: &session,
             navigation: SurfaceNavigation::default(),
             prompt: AgentPromptProps::new(&prompt).with_commands(
-                Some(PromptCommand::ALL.to_vec()),
-                Some(PromptCommand::Logout),
+                Some(crate::agent::catalog()),
+                Some(crate::agent::resolve("/logout").unwrap()),
             ),
             storage_error: None,
             model_notice: None,
@@ -340,7 +339,7 @@ mod tests {
         let [commands, laid_out_input] =
             AgentPromptView::layout(&props.prompt, prompt_area(&props, content), input.height);
 
-        assert_eq!(commands.height, PromptCommand::ALL.len() as u16);
+        assert_eq!(commands.height, crate::agent::catalog().len() as u16);
         assert_eq!(commands.y + commands.height, laid_out_input.y);
         assert_eq!(laid_out_input, input);
         let cursor = AgentDialog::cursor(&props, area).unwrap();

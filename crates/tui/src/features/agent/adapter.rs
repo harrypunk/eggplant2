@@ -39,28 +39,8 @@ impl SubmissionContext for Model {
         super::context::tool_context(self)
     }
 
-    fn open_provider_login(&mut self) -> Option<Effect> {
-        crate::provider_login::open(self)
-    }
-
-    fn open_provider_logout(&mut self) -> Option<Effect> {
-        crate::provider_logout::open(self)
-    }
-
-    fn open_model_selector(&mut self) -> Option<Effect> {
-        crate::model_selector::open(self)
-    }
-
-    fn open_thinking_selector(&mut self) -> Option<Effect> {
-        super::thinking_level::open(self)
-    }
-
-    fn open_session_selector(&mut self) -> Option<Effect> {
-        super::sessions::open(self)
-    }
-
-    fn new_session(&mut self) -> Option<Effect> {
-        super::sessions::new_session(self)
+    fn execute_prompt_command(&mut self, command: super::PromptCommand) -> Option<Effect> {
+        super::execute(self, &command)
     }
 
     fn notify(&mut self, message: String) -> Option<Effect> {

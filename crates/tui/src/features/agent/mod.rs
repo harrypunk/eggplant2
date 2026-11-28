@@ -29,7 +29,11 @@ pub(crate) use dialog::{resume_overlay, suspend_for_overlay};
 pub(crate) use panel::{close_panel_input, focus_panel_input};
 pub use presentation::{dialog::AgentDialogState, panel::AgentInputMode};
 pub(crate) use presentation::{dialog::DialogAction, panel::PanelAction};
-pub(crate) use prompt_command::{PromptCommand, PromptCommandMovement, PromptCommandState};
+pub use prompt_command::{
+    CommandId, PromptCommand, PromptCommandCatalog, PromptCommandDefinition, PromptCommandEffect,
+    catalog,
+};
+pub(crate) use prompt_command::{PromptCommandMovement, PromptCommandState, execute, resolve};
 pub use references::{FileReferenceStatus, FileReferenceView};
 pub use runtime::{AgentApplyOutcome, AgentRuntime, RunStarted, SessionReset, SessionRestored};
 pub use sessions::{SessionSelectorNotice, SessionSelectorPage, SessionSelectorState};
