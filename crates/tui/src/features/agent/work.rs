@@ -21,6 +21,7 @@ pub(crate) trait SubmissionContext {
     fn open_provider_login(&mut self) -> Option<Effect>;
     fn open_provider_logout(&mut self) -> Option<Effect>;
     fn open_model_selector(&mut self) -> Option<Effect>;
+    fn open_thinking_selector(&mut self) -> Option<Effect>;
     fn notify(&mut self, message: String) -> Option<Effect>;
 }
 
@@ -147,9 +148,7 @@ fn execute_prompt_command(
         super::PromptCommand::ProviderLogin => context.open_provider_login(),
         super::PromptCommand::Logout => context.open_provider_logout(),
         super::PromptCommand::Model => context.open_model_selector(),
-        super::PromptCommand::Thinking => {
-            context.notify(format!("{} is not implemented yet", command.description()))
-        }
+        super::PromptCommand::Thinking => context.open_thinking_selector(),
     }
 }
 
@@ -313,6 +312,11 @@ mod tests {
             None
         }
 
+        fn open_thinking_selector(&mut self) -> Option<Effect> {
+            self.opened = Some(crate::agent::PromptCommand::Thinking);
+            None
+        }
+
         fn notify(&mut self, message: String) -> Option<Effect> {
             self.notifications.push(message);
             None
@@ -413,6 +417,11 @@ mod tests {
             Some(crate::agent::PromptCommand::ProviderLogin)
         );
         assert_eq!(context.ui.prompt(), "");
+
+        context.ui.set_prompt("/thinking");
+        context.opened = None;
+        assert!(submit(&mut context).is_none());
+        assert_eq!(context.opened, Some(crate::agent::PromptCommand::Thinking));
 
         context.ui.set_prompt("next");
         context

@@ -3,7 +3,8 @@ use ratatui::{Frame, layout::Rect};
 use crate::{
     component::agent::{
         AgentDialog, AgentFooterProps, AgentHelp, AgentModelNotice, AgentPanel, AgentPanelProps,
-        AgentPromptProps, AgentReferenceProps, AgentViewProps, ViewportMetrics,
+        AgentPromptProps, AgentReferenceProps, AgentThinkingSelector, AgentViewProps,
+        ViewportMetrics,
     },
     data_object::{Context, FocusState, FocusTarget, Model},
     ui::{OverlayContribution, OverlayKind, OverlayPlacement, UiRegistry},
@@ -13,7 +14,8 @@ use super::surface::AgentSurface;
 
 pub fn register_ui(ui: &mut UiRegistry) -> color_eyre::Result<()> {
     ui.register_overlay("agent", dialog_overlay)?;
-    ui.register_overlay("agent_help", help_overlay)
+    ui.register_overlay("agent_help", help_overlay)?;
+    ui.register_overlay("agent_thinking", thinking_overlay)
 }
 
 fn dialog_overlay(model: &Model) -> Option<OverlayContribution> {
@@ -85,6 +87,31 @@ fn help_overlay(model: &Model) -> Option<OverlayContribution> {
 
 fn render_help(model: &Model, frame: &mut Frame, area: Rect) {
     AgentHelp::render(model.theme.ui(), frame, area);
+}
+
+fn thinking_overlay(model: &Model) -> Option<OverlayContribution> {
+    model
+        .modal
+        .is_active(Context::AgentThinkingSelector)
+        .then(|| {
+            OverlayContribution::new(
+                "agent_thinking",
+                OverlayKind::Modal,
+                OverlayPlacement::Centered(AgentThinkingSelector::size(
+                    model.agent.thinking_selector(),
+                )),
+                render_thinking,
+            )
+        })
+}
+
+fn render_thinking(model: &Model, frame: &mut Frame, area: Rect) {
+    AgentThinkingSelector::render(
+        model.agent.thinking_selector(),
+        model.theme.ui(),
+        frame,
+        area,
+    );
 }
 
 fn prompt_commands(model: &Model, surface: AgentSurface) -> Option<Vec<super::PromptCommand>> {

@@ -8,6 +8,7 @@ use super::{
     PromptCommandState,
     runtime::AgentRuntime,
     surface::AgentSurface,
+    thinking_level::ThinkingSelectorState,
     ui_state::{AgentUiAction, AgentUiState},
 };
 use crate::{
@@ -140,6 +141,10 @@ impl AgentState {
     /// Whether an inline workflow exists, including while temporarily suspended.
     pub fn dialog_open(&self) -> bool {
         self.ui.dialog_open()
+    }
+
+    pub fn thinking_selector(&self) -> &ThinkingSelectorState {
+        self.ui.thinking_selector()
     }
 
     pub fn context(&self) -> Option<&EditorContext> {

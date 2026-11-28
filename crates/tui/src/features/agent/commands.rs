@@ -132,6 +132,10 @@ pub fn general_action_subscriptions() -> Vec<GeneralActionSubscription> {
     vec![
         GeneralActionSubscription::new(Context::AgentChatDialog, handle_general_action),
         GeneralActionSubscription::new(Context::AgentChatInsert, handle_general_action),
+        GeneralActionSubscription::new(
+            Context::AgentThinkingSelector,
+            super::thinking_level::handle_general_action,
+        ),
     ]
 }
 

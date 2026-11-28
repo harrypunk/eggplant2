@@ -51,6 +51,10 @@ impl SubmissionContext for Model {
         crate::model_selector::open(self)
     }
 
+    fn open_thinking_selector(&mut self) -> Option<Effect> {
+        super::thinking_level::open(self)
+    }
+
     fn notify(&mut self, message: String) -> Option<Effect> {
         notify(self, message)
     }

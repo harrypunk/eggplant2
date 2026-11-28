@@ -15,6 +15,7 @@ mod runtime;
 mod state;
 mod storage;
 mod surface;
+mod thinking_level;
 mod tools;
 mod ui;
 mod ui_state;
@@ -31,6 +32,7 @@ pub(crate) use prompt_command::{PromptCommand, PromptCommandMovement, PromptComm
 pub use references::{FileReferenceStatus, FileReferenceView};
 pub use runtime::{AgentApplyOutcome, AgentRuntime, RunStarted};
 pub use state::AgentState;
+pub use thinking_level::ThinkingSelectorState;
 pub use ui::register_ui;
 pub(crate) use ui::render_panel;
 pub(crate) use ui_state::AgentUiAction;
@@ -68,6 +70,11 @@ pub const KEYMAPS: &[ContextKeymap] = &[
             ("agent_scroll_up", "pageup"),
             ("agent_scroll_down", "pagedown"),
         ])
+        .with_capabilities(&[
+            KeymapCapability::ListNavigation,
+            KeymapCapability::ModalActions,
+        ]),
+    ContextKeymap::new("agent_thinking_selector", Context::AgentThinkingSelector)
         .with_capabilities(&[
             KeymapCapability::ListNavigation,
             KeymapCapability::ModalActions,
