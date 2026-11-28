@@ -1,6 +1,6 @@
 use std::{future::Future, pin::Pin};
 
-use crate::{AgentEvent, AgentRequest};
+use crate::{AgentEvent, AgentRequest, ThinkingOption};
 
 /// Callback boundary for ordered provider events.
 pub type AgentEventSink<'a> = Box<dyn FnMut(AgentEvent) + Send + 'a>;
@@ -26,6 +26,11 @@ pub trait AgentProvider: std::fmt::Debug + Send + Sync {
     /// Active model context capacity when the frontend configuration supplies it.
     fn context_window(&self) -> Option<u64> {
         None
+    }
+
+    /// Display options supplied by this provider's reasoning policy.
+    fn thinking_options(&self) -> &[ThinkingOption] {
+        &[]
     }
 
     fn stream<'a>(

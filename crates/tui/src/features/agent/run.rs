@@ -87,6 +87,7 @@ pub(crate) struct RunProgress {
     pub(crate) history: Vec<ProviderMessage>,
     pub(crate) tool_calls: usize,
     pub(crate) tool_output: usize,
+    pub(crate) thinking_id: Option<eggplant_agent::ThinkingId>,
 }
 
 #[derive(Default)]
@@ -154,9 +155,13 @@ impl ProviderRound {
 
 impl RunProgress {
     fn request(&self, prompt: &str, cancellation: CancellationToken) -> AgentRequest {
-        match self.history.is_empty() {
+        let request = match self.history.is_empty() {
             true => AgentRequest::new(prompt.to_string(), cancellation),
             false => AgentRequest::follow_up(self.history.clone(), cancellation),
+        };
+        match self.thinking_id.as_ref() {
+            Some(id) => request.with_thinking_id(id.clone()),
+            None => request,
         }
     }
 
@@ -198,6 +203,7 @@ impl RunProgress {
             history,
             tool_calls,
             tool_output,
+            thinking_id,
         } = self;
         require(step < MAX_TOOL_STEPS, "tool step limit reached")?;
         require(
@@ -234,6 +240,7 @@ impl RunProgress {
                 .collect(),
             tool_calls,
             tool_output,
+            thinking_id,
         })
     }
 
@@ -243,6 +250,7 @@ impl RunProgress {
             history,
             tool_calls,
             tool_output,
+            thinking_id,
         } = self;
         let output = results
             .iter()
@@ -260,6 +268,7 @@ impl RunProgress {
                 .collect(),
             tool_calls,
             tool_output: tool_output.saturating_add(output),
+            thinking_id,
         }
     }
 }
@@ -282,6 +291,7 @@ impl From<AgentContinuation> for RunProgress {
             history: continuation.history,
             tool_calls: continuation.tool_calls,
             tool_output: continuation.tool_output,
+            thinking_id: None,
         }
     }
 }
@@ -480,6 +490,25 @@ mod tests {
             .await
             .expect("provider event should arrive")
             .expect("provider channel should remain open")
+    }
+
+    #[test]
+    fn request_preserves_dynamic_thinking_id_through_tool_progress() {
+        let progress = RunProgress {
+            thinking_id: Some(eggplant_agent::ThinkingId::new("medium2026")),
+            ..RunProgress::default()
+        };
+
+        let request = progress.request("question", CancellationToken::default());
+        assert_eq!(
+            request.thinking_id,
+            Some(eggplant_agent::ThinkingId::new("medium2026"))
+        );
+        let progress = progress.with_results(Vec::new());
+        assert_eq!(
+            progress.thinking_id,
+            Some(eggplant_agent::ThinkingId::new("medium2026"))
+        );
     }
 
     #[tokio::test]

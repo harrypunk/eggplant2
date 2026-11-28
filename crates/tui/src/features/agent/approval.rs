@@ -42,13 +42,17 @@ fn resolve_write(model: &mut Model, approved: bool) -> Option<Effect> {
         )
     });
     let cancellation = model.agent.begin_cancellation();
+    let thinking_id = model.agent.runtime().thinking_id();
     let resume = Effect::feature(ProviderAgentRun {
         run_id,
         prompt: String::new(),
         cancellation,
         provider,
         context,
-        progress: RunProgress::from(continuation).with_results(vec![result]),
+        progress: RunProgress {
+            thinking_id,
+            ..RunProgress::from(continuation).with_results(vec![result])
+        },
     });
     transition_to_chat(model);
     Effect::combine(after_edit, Some(resume))

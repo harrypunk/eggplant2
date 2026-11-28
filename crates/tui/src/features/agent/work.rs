@@ -111,6 +111,7 @@ pub(crate) fn submit(context: &mut impl SubmissionContext) -> Option<Effect> {
 
 fn start_run(context: &mut impl SubmissionContext, accepted: AcceptedSubmission) -> Option<Effect> {
     let surface = context.submission_surface()?;
+    let thinking_id = context.runtime().thinking_id();
     let editor_context = context.ui().context().cloned();
     let started = context.runtime_mut().begin(
         accepted.prompt.clone(),
@@ -130,7 +131,10 @@ fn start_run(context: &mut impl SubmissionContext, accepted: AcceptedSubmission)
         cancellation,
         provider,
         context: context.tool_context()?,
-        progress: RunProgress::default(),
+        progress: RunProgress {
+            thinking_id,
+            ..RunProgress::default()
+        },
     }))
 }
 

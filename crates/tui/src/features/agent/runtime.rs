@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use eggplant_agent::{
-    AgentContinuation, AgentEvent, AgentProvider, AgentSession, CancellationToken, RunId, SessionId,
+    AgentContinuation, AgentEvent, AgentProvider, AgentSession, CancellationToken, RunId,
+    SessionId, ThinkingId, ThinkingOption,
 };
 use eggplant_agent_storage::SessionStore;
 
@@ -18,6 +19,7 @@ pub struct AgentRuntime {
     session_created_at: Option<i64>,
     provider_name: String,
     model: Option<String>,
+    thinking_id: Option<ThinkingId>,
 }
 
 impl Default for AgentRuntime {
@@ -31,6 +33,7 @@ impl Default for AgentRuntime {
             session_created_at: None,
             provider_name: "fake".to_string(),
             model: None,
+            thinking_id: None,
         }
     }
 }
@@ -150,6 +153,20 @@ impl AgentRuntime {
 
     pub fn model(&self) -> Option<&str> {
         self.model.as_deref()
+    }
+
+    pub fn thinking_id(&self) -> Option<ThinkingId> {
+        self.thinking_id.clone()
+    }
+
+    pub fn set_thinking_id(&mut self, id: ThinkingId) {
+        self.thinking_id = Some(id);
+    }
+
+    pub fn thinking_options(&self) -> &[ThinkingOption] {
+        self.provider
+            .as_ref()
+            .map_or(&[], |provider| provider.thinking_options())
     }
 
     pub fn set_session_store(&mut self, store: Arc<dyn SessionStore>) {

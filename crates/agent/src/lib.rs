@@ -11,6 +11,7 @@ mod provider;
 mod request;
 mod run;
 mod session;
+mod thinking;
 mod tool;
 mod usage;
 
@@ -21,5 +22,6 @@ pub use provider::{AgentError, AgentEventSink, AgentProvider, AgentStreamFuture}
 pub use request::AgentRequest;
 pub use run::{AgentContinuation, AgentRun, RunId, RunStatus, SessionId};
 pub use session::AgentSession;
+pub use thinking::{ThinkingId, ThinkingOption};
 pub use tool::{ToolApproval, ToolCall, ToolEvent, ToolResult, ToolResultStatus};
 pub use usage::TokenUsage;

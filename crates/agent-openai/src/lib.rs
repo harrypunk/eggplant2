@@ -1,9 +1,15 @@
 //! OpenAI-compatible streaming provider for `eggplant-agent`.
 
-use std::{collections::BTreeSet, fmt, time::Duration};
+mod thinking;
+pub use thinking::{
+    NoThinkingPolicy, ReasoningEffort, ReasoningEffortPolicy, ThinkingRequestPolicy,
+};
+
+use std::{collections::BTreeSet, fmt, sync::Arc, time::Duration};
 
 use eggplant_agent::{
-    AgentError, AgentEvent, AgentProvider, AgentRequest, ProviderMessageRole, TokenUsage, ToolCall,
+    AgentError, AgentEvent, AgentProvider, AgentRequest, ProviderMessageRole, ThinkingOption,
+    TokenUsage, ToolCall,
 };
 use futures_util::StreamExt as _;
 use serde::Deserialize;
@@ -37,6 +43,7 @@ pub struct OpenAiConfig {
     pub context_window: Option<u64>,
     pub api_key_env: String,
     pub api_key: Option<OpenAiApiKey>,
+    pub thinking: Arc<dyn ThinkingRequestPolicy>,
 }
 
 impl Default for OpenAiConfig {
@@ -47,6 +54,7 @@ impl Default for OpenAiConfig {
             context_window: None,
             api_key_env: "OPENAI_API_KEY".to_string(),
             api_key: None,
+            thinking: Arc::new(ReasoningEffortPolicy::standard()),
         }
     }
 }
@@ -176,6 +184,10 @@ impl AgentProvider for OpenAiProvider {
         self.config.context_window
     }
 
+    fn thinking_options(&self) -> &[ThinkingOption] {
+        self.config.thinking.options()
+    }
+
     fn stream<'a>(
         &'a self,
         request: AgentRequest,
@@ -194,13 +206,11 @@ impl AgentProvider for OpenAiProvider {
                 .client
                 .post(self.endpoint())
                 .bearer_auth(api_key)
-                .json(&serde_json::json!({
-                    "model": model,
-                    "messages": request_messages(&request),
-                    "tools": tool_declarations(),
-                    "stream": true,
-                    "stream_options": {"include_usage": true},
-                }))
+                .json(&request_body(
+                    model,
+                    &request,
+                    self.config.thinking.as_ref(),
+                ))
                 .send()
                 .await
                 .map_err(|_| AgentError("OpenAI request failed: transport error".to_string()))?;
@@ -225,6 +235,24 @@ impl AgentProvider for OpenAiProvider {
             Ok(())
         })
     }
+}
+
+fn request_body(
+    model: &str,
+    request: &AgentRequest,
+    thinking: &dyn ThinkingRequestPolicy,
+) -> Value {
+    let mut body = serde_json::json!({
+        "model": model,
+        "messages": request_messages(request),
+        "tools": tool_declarations(),
+        "stream": true,
+        "stream_options": {"include_usage": true},
+    });
+    if let Some(id) = request.thinking_id.as_ref() {
+        thinking.apply(id, &mut body);
+    }
+    body
 }
 
 fn request_messages(request: &AgentRequest) -> Value {
@@ -444,7 +472,7 @@ fn bounded(message: &str) -> String {
 mod tests {
     use std::sync::Arc;
 
-    use eggplant_agent::{CancellationToken, ProviderMessage};
+    use eggplant_agent::{CancellationToken, ProviderMessage, ThinkingId};
 
     use super::*;
 
@@ -560,6 +588,53 @@ mod tests {
     }
 
     #[test]
+    fn selected_thinking_option_adds_reasoning_effort_without_changing_default_requests() {
+        let base = AgentRequest::new("question".to_string(), Default::default());
+        let policy = ReasoningEffortPolicy::standard();
+        let default_body = request_body("model", &base, &policy);
+        assert!(default_body.get("reasoning_effort").is_none());
+
+        let high = base.with_thinking_id(ThinkingId::new("high"));
+        let body = request_body("model", &high, &policy);
+        assert_eq!(body["reasoning_effort"], "high");
+
+        let off = AgentRequest::new("question".to_string(), Default::default())
+            .with_thinking_id(ThinkingId::new("off"));
+        let body = request_body("model", &off, &policy);
+        assert!(body.get("reasoning_effort").is_none());
+
+        assert!(
+            !policy
+                .options()
+                .iter()
+                .any(|option| option.id.as_str() == "xhigh")
+        );
+        let extended = AgentRequest::new("question".to_string(), Default::default())
+            .with_thinking_id(ThinkingId::new("xhigh"));
+        let body = request_body("model", &extended, &policy);
+        assert!(body.get("reasoning_effort").is_none());
+    }
+
+    #[test]
+    fn policy_maps_provider_specific_ids_without_core_variants() {
+        let policy = ReasoningEffortPolicy::new(vec![ReasoningEffort {
+            option: ThinkingOption::new(
+                "medium2026",
+                "Medium 2026",
+                "Provider-specific reasoning mode",
+            ),
+            wire_value: Some("reason-v1".to_string()),
+        }]);
+        let request = AgentRequest::new("question".to_string(), Default::default())
+            .with_thinking_id(ThinkingId::new("medium2026"));
+
+        let body = request_body("model", &request, &policy);
+
+        assert_eq!(policy.options()[0].id, ThinkingId::new("medium2026"));
+        assert_eq!(body["reasoning_effort"], "reason-v1");
+    }
+
+    #[test]
     fn decodes_one_reasoning_field_before_answer_content() {
         let data = br#"{"choices":[{"delta":{"reasoning_content":"plan","reasoning":"duplicate","content":"answer"}}]}"#;
         let mut decoder = SseDecoder::default();
@@ -626,6 +701,7 @@ mod tests {
             api_key_env: key_env.to_string(),
             api_key: None,
             context_window: None,
+            thinking: Arc::new(ReasoningEffortPolicy::standard()),
         })
         .unwrap();
         let events = Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -712,6 +788,7 @@ mod tests {
             api_key_env: key_env.to_string(),
             api_key: None,
             context_window: None,
+            thinking: Arc::new(ReasoningEffortPolicy::standard()),
         })
         .unwrap();
         let result = provider
