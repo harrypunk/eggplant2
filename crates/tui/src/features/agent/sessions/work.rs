@@ -204,10 +204,11 @@ fn complete_restore(
         Ok(LoadedSession {
             snapshot,
             created_at,
+            title,
         }) => match model
             .agent
             .runtime_mut()
-            .restore_session(snapshot, created_at)
+            .restore_session(snapshot, created_at, title)
         {
             Ok(_) => {
                 model.agent.dispatch(AgentUiAction::SessionChanged);

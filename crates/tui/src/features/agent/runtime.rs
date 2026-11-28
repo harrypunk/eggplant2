@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
 use eggplant_agent::{
-    AgentContinuation, AgentEvent, AgentProvider, AgentSession, CancellationToken, ProviderMessage,
-    RunId, SessionId, SessionRestoreError, SessionSnapshot, ThinkingId, ThinkingOption,
+    AgentContinuation, AgentEvent, AgentProvider, AgentSession, CancellationToken, MessageRole,
+    ProviderMessage, RunId, SessionId, SessionRestoreError, SessionSnapshot, ThinkingId,
+    ThinkingOption,
 };
 use eggplant_agent_storage::SessionStore;
 
@@ -17,6 +18,7 @@ pub struct AgentRuntime {
     store: Option<Arc<dyn SessionStore>>,
     storage_error: Option<String>,
     session_created_at: Option<i64>,
+    session_title: Option<String>,
     provider_name: String,
     model: Option<String>,
     thinking_id: Option<ThinkingId>,
@@ -31,6 +33,7 @@ impl Default for AgentRuntime {
             store: None,
             storage_error: None,
             session_created_at: None,
+            session_title: None,
             provider_name: "fake".to_string(),
             model: None,
             thinking_id: None,
@@ -75,8 +78,12 @@ impl AgentRuntime {
         if prompt.trim().is_empty() {
             return None;
         }
+        let title = self.session_title.is_none().then(|| title_text(&prompt));
         let run_id = self.session.begin(prompt)?;
         self.session_created_at.get_or_insert(now);
+        if let Some(title) = title {
+            self.session_title = Some(title);
+        }
         self.run = Some(AgentRunState::new(run_id, now, context));
         Some(RunStarted {
             id: run_id,
@@ -95,6 +102,7 @@ impl AgentRuntime {
                 self.session = session;
                 self.run = None;
                 self.session_created_at = None;
+                self.session_title = None;
                 self.storage_error = None;
                 Some(reset)
             }
@@ -105,11 +113,19 @@ impl AgentRuntime {
         &mut self,
         snapshot: SessionSnapshot,
         created_at: i64,
+        title: Option<String>,
     ) -> Result<SessionRestored, SessionRestoreError> {
         if self.session.is_running() {
             return Err(SessionRestoreError::RunInProgress);
         }
         let session = AgentSession::restore(snapshot)?;
+        let title = title.or_else(|| {
+            session
+                .messages()
+                .iter()
+                .find(|message| message.role == MessageRole::User)
+                .map(|message| title_text(&message.text))
+        });
         let restored = SessionRestored {
             session_id: session.id().clone(),
             last_run_id: session.run().map(|run| run.id),
@@ -117,6 +133,7 @@ impl AgentRuntime {
         self.session = session;
         self.run = None;
         self.session_created_at = Some(created_at);
+        self.session_title = title;
         self.storage_error = None;
         Ok(restored)
     }
@@ -239,6 +256,10 @@ impl AgentRuntime {
         self.session_created_at
     }
 
+    pub(crate) fn session_title(&self) -> Option<&str> {
+        self.session_title.as_deref()
+    }
+
     pub(crate) fn run_started_at(&self, run_id: RunId) -> Option<i64> {
         self.run.as_ref().and_then(|run| run.started_at(run_id))
     }
@@ -294,6 +315,10 @@ impl AgentRuntime {
     }
 }
 
+fn title_text(text: &str) -> String {
+    text.chars().take(160).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -305,6 +330,7 @@ mod tests {
 
         let first = runtime.begin("hello".to_string(), None, 123).unwrap();
         assert_eq!(runtime.session_created_at(), Some(123));
+        assert_eq!(runtime.session_title(), Some("hello"));
         assert!(runtime.session().is_running());
         assert_eq!(runtime.session().run().unwrap().id, first.id);
     }
@@ -322,6 +348,7 @@ mod tests {
         assert!(runtime.session().messages().is_empty());
         assert!(runtime.session().run().is_none());
         assert_eq!(runtime.session_created_at(), None);
+        assert_eq!(runtime.session_title(), None);
 
         runtime.begin("active".to_string(), None, 20).unwrap();
         assert_eq!(runtime.new_session(), None);
@@ -344,7 +371,7 @@ mod tests {
         };
 
         assert_eq!(
-            runtime.restore_session(snapshot, 1),
+            runtime.restore_session(snapshot, 1, None),
             Err(SessionRestoreError::RunInProgress)
         );
         assert_eq!(runtime.session().id(), &session_id);

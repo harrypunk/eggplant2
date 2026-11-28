@@ -86,11 +86,7 @@ fn finalized_run(runtime: &AgentRuntime, workspace: Option<&Path>, now: i64) -> 
         return Finalization::Invalid(FinalizationError::MissingSessionCreatedAt);
     };
     let session_id = session.id().clone();
-    let title = session
-        .messages()
-        .iter()
-        .find(|message| message.role == MessageRole::User)
-        .map(|message| message.text.chars().take(160).collect::<String>());
+    let title = runtime.session_title().map(str::to_string);
     Finalization::Ready(Box::new(FinalizedRun {
         session: SessionRecord {
             id: session_id.clone(),
@@ -182,6 +178,7 @@ fn tool_call_records(
 pub struct LoadedSession {
     pub snapshot: SessionSnapshot,
     pub created_at: i64,
+    pub title: Option<String>,
 }
 
 /// Load all finalized transcript pages through the storage port without UI state.
@@ -227,9 +224,15 @@ async fn load_session_page(
     .try_collect::<Vec<_>>()
     .await?;
 
-    let (stored_id, created_at) = pages
+    let (stored_id, created_at, title) = pages
         .last()
-        .map(|page| (page.session.id.clone(), page.session.created_at))
+        .map(|page| {
+            (
+                page.session.id.clone(),
+                page.session.created_at,
+                page.session.title.clone(),
+            )
+        })
         .ok_or(StorageError::SessionNotFound(session_id))?;
     let runs = pages
         .iter()
@@ -275,6 +278,7 @@ async fn load_session_page(
             tool_events,
         },
         created_at,
+        title,
     })
 }
 
@@ -404,6 +408,7 @@ mod tests {
                     tool_events: Vec::new(),
                 },
                 10,
+                None,
             )
             .unwrap();
 
@@ -475,6 +480,33 @@ mod tests {
     }
 
     #[test]
+    fn title_does_not_follow_bounded_transcript_eviction() {
+        let mut runtime = AgentRuntime::default();
+        (0..51).for_each(|index| {
+            let prompt = match index {
+                0 => "original title".to_string(),
+                _ => format!("prompt-{index}"),
+            };
+            let run = runtime.begin(prompt, None, index).unwrap().id;
+            runtime.session_mut().append_delta(run, "answer");
+            runtime.session_mut().complete(run);
+        });
+        assert_ne!(
+            runtime
+                .session()
+                .messages()
+                .iter()
+                .find(|message| message.role == MessageRole::User)
+                .map(|message| message.text.as_str()),
+            Some("original title")
+        );
+
+        let record = ready(&runtime, 100);
+
+        assert_eq!(record.session.title.as_deref(), Some("original title"));
+    }
+
+    #[test]
     fn stored_transcript_rehydrates_through_pages_and_continues_run_ids() {
         let (store, _directory) = crate::test_utils::session_store();
         tokio::runtime::Builder::new_current_thread()
@@ -523,6 +555,7 @@ mod tests {
                 let LoadedSession {
                     snapshot,
                     created_at,
+                    title,
                 } = load_session_page(
                     store.as_ref(),
                     session_id.clone(),
@@ -532,7 +565,9 @@ mod tests {
                 .await
                 .unwrap();
                 let mut restored = AgentRuntime::default();
-                let outcome = restored.restore_session(snapshot, created_at).unwrap();
+                let outcome = restored
+                    .restore_session(snapshot, created_at, title)
+                    .unwrap();
 
                 assert_eq!(outcome.session_id, session_id);
                 assert_eq!(outcome.last_run_id, Some(second));
@@ -540,10 +575,12 @@ mod tests {
                 assert_eq!(restored.session().messages().len(), 4);
                 assert_eq!(restored.session().tool_events().len(), 1);
                 assert_eq!(restored.provider_history().len(), 4);
+                assert_eq!(restored.session_title(), Some("first question"));
                 let third = restored
                     .begin("third question".to_string(), None, 50)
                     .unwrap();
                 assert_eq!(third.id, RunId(second.0 + 1));
+                assert_eq!(restored.session_title(), Some("first question"));
                 assert_eq!(restored.provider_history().len(), 4);
             });
     }
