@@ -21,13 +21,13 @@ impl AgentSessionSelector {
         let height = match state.page() {
             SessionSelectorPage::Closed => 0,
             SessionSelectorPage::Loading => 8,
-            SessionSelectorPage::Ready | SessionSelectorPage::Restoring => {
-                u16::try_from(state.sessions().len())
-                    .unwrap_or(MAX_SESSION_ROWS)
-                    .min(MAX_SESSION_ROWS)
-                    .saturating_add(7)
-                    .saturating_add(u16::from(state.notice().is_some()))
-            }
+            SessionSelectorPage::Ready
+            | SessionSelectorPage::LoadingMore
+            | SessionSelectorPage::Restoring => u16::try_from(state.sessions().len())
+                .unwrap_or(MAX_SESSION_ROWS)
+                .min(MAX_SESSION_ROWS)
+                .saturating_add(7)
+                .saturating_add(u16::from(state.notice().is_some())),
         };
         Size::new(72, height)
     }
@@ -38,7 +38,9 @@ impl AgentSessionSelector {
             SessionSelectorPage::Loading => {
                 Paragraph::new(operation_lines("Loading recent sessions", styles))
             }
-            SessionSelectorPage::Ready | SessionSelectorPage::Restoring => {
+            SessionSelectorPage::Ready
+            | SessionSelectorPage::LoadingMore
+            | SessionSelectorPage::Restoring => {
                 Paragraph::new(session_lines(state, styles, area.height))
             }
         };
@@ -55,7 +57,7 @@ fn session_lines(
     height: u16,
 ) -> Vec<Line<'static>> {
     let notice_height = u16::from(state.notice().is_some());
-    let viewport = height.saturating_sub(5 + notice_height);
+    let viewport = height.saturating_sub(7 + notice_height);
     let options = state
         .sessions()
         .iter()
@@ -67,6 +69,7 @@ fn session_lines(
         SessionSelectorPage::Restoring => {
             Line::styled("Restoring selected session...", styles.muted)
         }
+        SessionSelectorPage::LoadingMore => Line::styled("Loading older sessions...", styles.muted),
         SessionSelectorPage::Closed | SessionSelectorPage::Loading | SessionSelectorPage::Ready => {
             Line::styled(
                 format!(
@@ -85,7 +88,8 @@ fn session_lines(
         SessionSelectorNotice::Error(message) => Line::styled(message.clone(), styles.error),
     });
     let hints = match state.page() {
-        SessionSelectorPage::Restoring => "Esc close",
+        SessionSelectorPage::Restoring | SessionSelectorPage::LoadingMore => "Esc close",
+        SessionSelectorPage::Ready if state.has_next() => "Enter restore · Tab older · Esc close",
         SessionSelectorPage::Closed | SessionSelectorPage::Loading | SessionSelectorPage::Ready => {
             "Enter restore · Esc close"
         }
@@ -150,6 +154,7 @@ fn operation_lines(label: &'static str, styles: &UiTheme) -> Vec<Line<'static>> 
 #[cfg(test)]
 mod tests {
     use eggplant_agent::SessionId;
+    use eggplant_agent_storage::RecentPage;
     use ratatui::{Terminal, backend::TestBackend};
 
     use super::*;
@@ -169,7 +174,16 @@ mod tests {
     fn bounded_rows_follow_the_active_session() {
         let mut state = SessionSelectorState::default();
         let generation = state.open(None, SessionId::from("session-19"));
-        state.complete_recent(generation, Ok((0..20).map(record).collect::<Vec<_>>()));
+        state.complete_recent(
+            generation,
+            Ok(RecentPage {
+                sessions: (0..20).map(record).collect::<Vec<_>>(),
+                next: Some(eggplant_agent_storage::SessionCursor {
+                    updated_at: 2,
+                    id: SessionId::from("session-19"),
+                }),
+            }),
+        );
         let theme = Theme::default();
         let size = AgentSessionSelector::size(&state);
         let mut terminal = Terminal::new(TestBackend::new(size.width, size.height)).unwrap();
@@ -188,5 +202,6 @@ mod tests {
         assert!(!content.contains("session-00"));
         assert!(content.contains("●"));
         assert!(content.contains("Current: session-19"));
+        assert!(content.contains("Tab older"));
     }
 }

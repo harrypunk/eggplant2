@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use eggplant_agent::{CancellationToken, SessionId, SessionRestoreError};
-use eggplant_agent_storage::{RecentQuery, SessionRecord, SessionStore, StorageError};
+use eggplant_agent_storage::{RecentPage, RecentQuery, SessionCursor, SessionStore, StorageError};
 
 use super::super::storage::{LoadedSession, load_session};
 use crate::{
@@ -20,11 +20,7 @@ pub(crate) fn open(model: &mut Model) -> Option<Effect> {
     let Some(store) = model.agent.runtime().session_store() else {
         return notify(model, "Session storage is not configured");
     };
-    let Some(workspace) = model
-        .workspace
-        .as_ref()
-        .map(|workspace| workspace.root().to_string_lossy().into_owned())
-    else {
+    let Some(workspace) = workspace(model) else {
         return notify(model, "Open a project to restore sessions");
     };
     let active_session = model.agent.session().id().clone();
@@ -41,6 +37,7 @@ pub(crate) fn open(model: &mut Model) -> Option<Effect> {
     Some(Effect::feature(SessionEffect::Recent {
         store,
         workspace,
+        before: None,
         generation,
     }))
 }
@@ -62,7 +59,8 @@ pub(crate) fn handle_general_action(model: &mut Model, action: GeneralAction) ->
             .select_previous(),
         GeneralAction::Activate => return activate(model),
         GeneralAction::Back => return close(model),
-        GeneralAction::FocusNext | GeneralAction::Paste => {}
+        GeneralAction::FocusNext => return load_next(model),
+        GeneralAction::Paste => {}
     }
     None
 }
@@ -81,6 +79,29 @@ fn activate(model: &mut Model) -> Option<Effect> {
     }))
 }
 
+fn load_next(model: &mut Model) -> Option<Effect> {
+    let store = model.agent.runtime().session_store()?;
+    let workspace = workspace(model)?;
+    let (before, generation) = model
+        .agent
+        .ui_mut()
+        .session_selector_mut()
+        .begin_next_page()?;
+    Some(Effect::feature(SessionEffect::Recent {
+        store,
+        workspace,
+        before: Some(before),
+        generation,
+    }))
+}
+
+fn workspace(model: &Model) -> Option<String> {
+    model
+        .workspace
+        .as_ref()
+        .map(|workspace| workspace.root().to_string_lossy().into_owned())
+}
+
 fn notify(model: &mut Model, message: &str) -> Option<Effect> {
     Some(crate::notifications::publish_status(
         model,
@@ -93,6 +114,7 @@ enum SessionEffect {
     Recent {
         store: Arc<dyn SessionStore>,
         workspace: String,
+        before: Option<SessionCursor>,
         generation: u64,
     },
     Restore {
@@ -108,16 +130,20 @@ impl SessionEffect {
             Self::Recent {
                 store,
                 workspace,
+                before,
                 generation,
             } => {
                 let result = store
                     .recent_sessions(RecentQuery {
                         workspace: Some(workspace),
+                        before: before.clone(),
                         ..RecentQuery::default()
                     })
-                    .await
-                    .map(|page| page.sessions);
-                SessionCompletion::Recent { generation, result }
+                    .await;
+                match before {
+                    None => SessionCompletion::RecentInitial { generation, result },
+                    Some(_) => SessionCompletion::RecentNext { generation, result },
+                }
             }
             Self::Restore {
                 store,
@@ -145,9 +171,13 @@ impl FeatureEffect for SessionEffect {
 }
 
 enum SessionCompletion {
-    Recent {
+    RecentInitial {
         generation: u64,
-        result: Result<Vec<SessionRecord>, StorageError>,
+        result: Result<RecentPage, StorageError>,
+    },
+    RecentNext {
+        generation: u64,
+        result: Result<RecentPage, StorageError>,
     },
     Restore {
         generation: u64,
@@ -164,12 +194,20 @@ impl SessionCompletion {
 impl Completion for SessionCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
         match *self {
-            SessionCompletion::Recent { generation, result } => {
+            SessionCompletion::RecentInitial { generation, result } => {
                 model
                     .agent
                     .ui_mut()
                     .session_selector_mut()
                     .complete_recent(generation, result.map_err(bounded_error));
+                None
+            }
+            SessionCompletion::RecentNext { generation, result } => {
+                model
+                    .agent
+                    .ui_mut()
+                    .session_selector_mut()
+                    .complete_next(generation, result.map_err(bounded_error));
                 None
             }
             SessionCompletion::Restore { generation, result } => {
@@ -257,13 +295,14 @@ mod tests {
         session_id: SessionId,
         workspace: String,
         title: &str,
+        updated_at: i64,
     ) {
         let run = RunRecord {
             id: RunId(1),
             session_id: session_id.clone(),
             status: RunStatus::Complete,
             created_at: 10,
-            completed_at: Some(20),
+            completed_at: Some(updated_at),
             provider: "test".to_string(),
             model: Some("fake".to_string()),
             editor_context: None,
@@ -280,7 +319,7 @@ mod tests {
             sequence: sequence as u64,
             role,
             text: text.to_string(),
-            created_at: 20,
+            created_at: updated_at,
         })
         .collect();
         store
@@ -289,7 +328,7 @@ mod tests {
                     session: SessionRecord {
                         id: session_id,
                         created_at: 10,
-                        updated_at: 20,
+                        updated_at,
                         workspace: Some(workspace),
                         title: Some(title.to_string()),
                     },
@@ -317,16 +356,83 @@ mod tests {
             .into_owned();
         let stored = SessionId::from("stored-session");
         runtime().block_on(async {
-            persist(store.as_ref(), stored.clone(), workspace, "Stored session").await;
+            persist(
+                store.as_ref(),
+                stored.clone(),
+                workspace,
+                "Stored session",
+                20,
+            )
+            .await;
             persist(
                 store.as_ref(),
                 SessionId::from("other-workspace"),
                 "/other/workspace".to_string(),
                 "Other workspace",
+                20,
             )
             .await;
         });
         (model, store, directory, stored)
+    }
+
+    fn model_with_recent_sessions(
+        count: usize,
+    ) -> (Model, Arc<SeaOrmSessionStore>, tempfile::TempDir) {
+        let (store, directory) = crate::test_utils::session_store();
+        let mut model =
+            crate::startup::initial_model(Some(directory.path().to_path_buf())).unwrap();
+        model.agent.set_session_store(store.clone());
+        let workspace = model
+            .workspace
+            .as_ref()
+            .unwrap()
+            .root()
+            .to_string_lossy()
+            .into_owned();
+        runtime().block_on(async {
+            for index in 0..count {
+                let id = format!("session-{index:03}");
+                persist(
+                    store.as_ref(),
+                    SessionId::from(id.as_str()),
+                    workspace.clone(),
+                    &id,
+                    100 + index as i64,
+                )
+                .await;
+            }
+        });
+        (model, store, directory)
+    }
+
+    #[test]
+    fn tab_loads_next_keyset_page_and_preserves_selected_identity() {
+        let (mut model, _store, _directory) = model_with_recent_sessions(51);
+        let manager = MessageManager::default();
+        let effect = open(&mut model).unwrap();
+        perform(&manager, &mut model, effect);
+        assert_eq!(model.agent.session_selector().sessions().len(), 50);
+        assert!(model.agent.session_selector().has_next());
+        let selected = model.agent.session_selector().selected().unwrap();
+        let selected_id = model.agent.session_selector().sessions()[selected]
+            .id
+            .clone();
+
+        let effect = load_next(&mut model).unwrap();
+        perform(&manager, &mut model, effect);
+
+        let selector = model.agent.session_selector();
+        assert_eq!(selector.sessions().len(), 51);
+        assert!(!selector.has_next());
+        let selected = selector.selected().unwrap();
+        assert_eq!(selector.sessions()[selected].id, selected_id);
+        let unique = selector
+            .sessions()
+            .iter()
+            .map(|session| &session.id)
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(unique.len(), 51);
     }
 
     #[test]
