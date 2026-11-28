@@ -127,10 +127,7 @@ fn content_layout(props: &AgentPanelProps<'_>, inner: Rect) -> PanelLayout {
 }
 
 fn input_height(props: &AgentPanelProps<'_>, area: Rect) -> u16 {
-    match props.shared.session.pending_approval() {
-        Some(_) => 0,
-        None => AUTO_HEIGHT.input_height(props.shared.prompt.input(), area, TextFlow::Wrapped),
-    }
+    AUTO_HEIGHT.input_height(props.shared.prompt.input(), area, TextFlow::Wrapped)
 }
 
 fn panel_layout(area: Rect, prompt: u16) -> [Rect; 3] {
@@ -197,7 +194,6 @@ fn prompt_cursor(props: &AgentPanelProps<'_>, area: Rect) -> Option<Position> {
 
 #[cfg(test)]
 mod tests {
-    use eggplant_agent::ToolApproval;
     use ratatui::{Terminal, backend::TestBackend};
 
     use super::*;
@@ -402,45 +398,6 @@ mod tests {
         let [command_area, input_area] =
             AgentPromptView::layout(&props.shared.prompt, Rect::new(0, 0, 50, 12), 3);
         assert_eq!(command_area.y + command_area.height, input_area.y);
-    }
-
-    #[test]
-    fn renders_bounded_write_approval_without_an_input() {
-        let theme = Theme::default();
-        let mut session = AgentSession::default();
-        let run = session.begin("change".to_string()).unwrap();
-        let call = eggplant_agent::ToolCall {
-            id: "write-1".to_string(),
-            name: "write".to_string(),
-            arguments: "{}".to_string(),
-        };
-        session.record_tool_call(run, &call);
-        session.request_approval(
-            run,
-            ToolApproval {
-                call,
-                summary: "Replace text in main.rs".to_string(),
-                diff: "--- main.rs\n+++ main.rs\n@@ exact replacement @@\n-before\n+after\n"
-                    .to_string(),
-            },
-        );
-        let prompt = TextInput::default();
-        let rows = render(
-            &panel_props(
-                &session,
-                &prompt,
-                None,
-                AgentInputMode::Normal,
-                FocusState::Unfocused,
-                theme.ui(),
-            ),
-            80,
-            20,
-        );
-        let content = rows.join("\n");
-        assert!(content.contains("Approval: Replace text in main.rs"));
-        assert!(content.contains("before"));
-        assert!(content.contains("after"));
     }
 
     #[test]

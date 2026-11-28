@@ -1,4 +1,4 @@
-use crate::{AgentContinuation, TokenUsage, ToolApproval, ToolCall, ToolResult};
+use crate::{AgentContinuation, TokenUsage, ToolCall, ToolResult};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AgentEvent {
@@ -7,8 +7,8 @@ pub enum AgentEvent {
     ToolCalls(Vec<ToolCall>),
     ToolResults(Vec<ToolResult>),
     Usage(TokenUsage),
-    ApprovalRequired {
-        approval: ToolApproval,
+    MutationRequested {
+        call: ToolCall,
         continuation: AgentContinuation,
     },
     Complete,

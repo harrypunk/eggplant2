@@ -7,10 +7,7 @@ use crate::{
 enum DialogOpenPlan {
     AlreadyOpen,
     ProjectRequired,
-    Ready {
-        context: Option<EditorContext>,
-        modal_context: Context,
-    },
+    Ready { context: Option<EditorContext> },
 }
 
 impl DialogOpenPlan {
@@ -18,17 +15,9 @@ impl DialogOpenPlan {
         match (model.agent.dialog_open(), model.workspace.is_some()) {
             (true, _) => Self::AlreadyOpen,
             (_, false) => Self::ProjectRequired,
-            (false, true) => {
-                let context = super::context::editor_context(model);
-                let modal_context = match model.agent.session().pending_approval() {
-                    Some(_) => Context::AgentApproval,
-                    None => Context::AgentChatDialog,
-                };
-                Self::Ready {
-                    context,
-                    modal_context,
-                }
-            }
+            (false, true) => Self::Ready {
+                context: super::context::editor_context(model),
+            },
         }
     }
 }
@@ -40,10 +29,7 @@ pub(crate) fn open(model: &mut Model) -> Option<Effect> {
         DialogOpenPlan::ProjectRequired => {
             super::adapter::notify(model, "Open a project to use the agent".to_string())
         }
-        DialogOpenPlan::Ready {
-            context,
-            modal_context,
-        } => match model.modal.open(modal_context) {
+        DialogOpenPlan::Ready { context } => match model.modal.open(Context::AgentChatDialog) {
             false => None,
             true => {
                 model.agent.dispatch(AgentUiAction::OpenDialog { context });
@@ -60,9 +46,7 @@ pub(crate) fn close(model: &mut Model) -> Option<Effect> {
             model
                 .agent
                 .dispatch(AgentUiAction::Dialog(DialogAction::Close));
-            [Context::AgentChatDialog, Context::AgentApproval]
-                .into_iter()
-                .for_each(|context| model.modal.close(context));
+            model.modal.close(Context::AgentChatDialog);
             None
         }
     }

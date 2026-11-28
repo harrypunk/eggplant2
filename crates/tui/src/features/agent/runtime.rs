@@ -4,7 +4,7 @@ use eggplant_agent::{
     AgentContinuation, AgentEvent, AgentProvider, AgentSession, CancellationToken, ContextCapacity,
     ContextProjection, ConversationContextPolicy, FullContext, MessageRole, ProviderMessage,
     RequestContext, RunId, SessionId, SessionRestoreError, SessionSnapshot, ThinkingId,
-    ThinkingOption,
+    ThinkingOption, ToolCall,
 };
 use eggplant_agent_storage::SessionStore;
 
@@ -51,7 +51,7 @@ impl Default for AgentRuntime {
 /// Semantic result of reducing one provider event.
 pub enum AgentApplyOutcome {
     None,
-    ApprovalRequired(AgentContinuation),
+    MutationRequested(ToolCall),
 }
 
 /// Runtime outcome emitted after a session run starts.
@@ -191,15 +191,13 @@ impl AgentRuntime {
                 });
                 AgentApplyOutcome::None
             }
-            AgentEvent::ApprovalRequired {
-                approval,
-                continuation,
-            } => {
-                if self.session.request_approval(run_id, approval) {
-                    self.suspend(run_id, continuation.clone());
-                    AgentApplyOutcome::ApprovalRequired(continuation)
-                } else {
-                    AgentApplyOutcome::None
+            AgentEvent::MutationRequested { call, continuation } => {
+                match self.session.tool_call_is_pending(run_id, &call.id) {
+                    true => {
+                        self.suspend(run_id, continuation);
+                        AgentApplyOutcome::MutationRequested(call)
+                    }
+                    false => AgentApplyOutcome::None,
                 }
             }
             AgentEvent::Failed(error) => {

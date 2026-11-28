@@ -38,7 +38,6 @@ pub struct RunId(pub u64);
 pub enum RunStatus {
     Waiting,
     Streaming,
-    WaitingForApproval,
     Complete,
     Failed(String),
     Cancelled,
@@ -46,17 +45,13 @@ pub enum RunStatus {
 
 impl RunStatus {
     pub fn is_running(&self) -> bool {
-        matches!(
-            self,
-            Self::Waiting | Self::Streaming | Self::WaitingForApproval
-        )
+        matches!(self, Self::Waiting | Self::Streaming)
     }
 
     pub fn label(&self) -> &'static str {
         match self {
             Self::Waiting => "Waiting for assistant",
             Self::Streaming => "Streaming",
-            Self::WaitingForApproval => "Waiting for approval",
             Self::Complete => "Complete",
             Self::Failed(_) => "Failed",
             Self::Cancelled => "Cancelled",

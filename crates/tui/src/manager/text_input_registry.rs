@@ -183,7 +183,7 @@ mod tests {
             assert!(!registry.accepts(&context, TextInputEvent::DeleteBackward));
             assert!(!registry.accepts(&context, TextInputEvent::Cursor(TextCursorMovement::Left)));
         });
-        assert!(!registry.accepts(&Context::AgentApproval, TextInputEvent::Insert('x')));
+        assert!(!registry.accepts(&Context::AgentChatHelp, TextInputEvent::Insert('x')));
     }
 
     #[test]

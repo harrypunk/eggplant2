@@ -1,13 +1,20 @@
+use std::path::Path;
+
+use editor::BufferId;
+use eggplant_agent::ToolCall;
+
 use crate::{
     data_object::{Model, StatusMessage},
     manager::effect::Effect,
 };
 
 use super::{
+    mutation::MutationContext,
     runtime::AgentRuntime,
     tools::ToolContext,
     ui_state::AgentUiState,
     work::{InterruptionContext, SubmissionContext},
+    write::{MutationKind, MutationOutcome},
 };
 
 impl SubmissionContext for Model {
@@ -60,12 +67,40 @@ impl InterruptionContext for Model {
         self.agent.runtime_mut()
     }
 
-    fn transition_to_chat(&mut self) {
-        super::approval::transition_to_chat(self);
-    }
-
     fn persist_finalized(&mut self) -> Option<Effect> {
         super::storage::persist_finalized(self)
+    }
+}
+
+impl MutationContext for Model {
+    fn runtime(&self) -> &AgentRuntime {
+        self.agent.runtime()
+    }
+
+    fn runtime_mut(&mut self) -> &mut AgentRuntime {
+        self.agent.runtime_mut()
+    }
+
+    fn tool_context(&self) -> Option<ToolContext> {
+        super::context::tool_context(self)
+    }
+
+    fn apply_mutation(
+        &mut self,
+        kind: MutationKind,
+        root: &Path,
+        call: &ToolCall,
+    ) -> MutationOutcome {
+        kind.apply(&mut self.editor, root, call)
+    }
+
+    fn after_mutation(&mut self, edited: Option<BufferId>) -> Option<Effect> {
+        edited.and_then(|buffer_id| {
+            Effect::combine(
+                crate::buffer::save_if_dirty(self, buffer_id),
+                crate::code_navigation::synchronize_buffer(self, buffer_id),
+            )
+        })
     }
 }
 

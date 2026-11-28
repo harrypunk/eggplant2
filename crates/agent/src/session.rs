@@ -1,7 +1,7 @@
 use crate::{
     AgentRun, ChatMessage, ConversationContextPolicy, ConversationTurn, FullContext, MessagePart,
-    MessageRole, ProviderMessage, RunId, RunStatus, SessionId, TokenUsage, ToolApproval, ToolCall,
-    ToolEvent, ToolResult,
+    MessageRole, ProviderMessage, RunId, RunStatus, SessionId, TokenUsage, ToolCall, ToolEvent,
+    ToolResult,
 };
 
 const MAX_MESSAGES: usize = 100;
@@ -28,7 +28,6 @@ pub struct AgentSession {
     run: Option<AgentRun>,
     messages: Vec<ChatMessage>,
     tool_events: Vec<ToolEvent>,
-    pending_approval: Option<ToolApproval>,
     usage: TokenUsage,
     latest_usage: Option<TokenUsage>,
     latest_usage_run: Option<RunId>,
@@ -64,7 +63,6 @@ impl AgentSession {
             run,
             messages: messages.into_iter().skip(message_skip).collect(),
             tool_events: tool_events.into_iter().skip(tool_skip).collect(),
-            pending_approval: None,
             usage: TokenUsage::default(),
             latest_usage: None,
             latest_usage_run: None,
@@ -104,7 +102,6 @@ impl AgentSession {
             text: prompt,
             parts: Vec::new(),
         });
-        self.pending_approval = None;
         self.run = Some(AgentRun {
             id,
             status: RunStatus::Waiting,
@@ -175,7 +172,6 @@ impl AgentSession {
             return false;
         };
         run.status = RunStatus::Cancelled;
-        self.pending_approval = None;
         true
     }
 
@@ -188,7 +184,6 @@ impl AgentSession {
             return false;
         };
         run.status = status;
-        self.pending_approval = None;
         true
     }
 
@@ -301,46 +296,15 @@ impl AgentSession {
         true
     }
 
-    pub fn request_approval(&mut self, run_id: RunId, approval: ToolApproval) -> bool {
-        let call_pending = self.tool_events.iter().any(|event| {
-            event.run_id == run_id && event.call_id == approval.call.id && event.result.is_none()
-        });
+    pub fn tool_call_is_pending(&self, run_id: RunId, call_id: &str) -> bool {
         let run_ready = self
             .run
             .as_ref()
             .is_some_and(|run| run.id == run_id && run.status.is_running());
-        if !call_pending || !run_ready || self.pending_approval.is_some() {
-            return false;
-        }
-        self.pending_approval = Some(approval);
-        self.run = self.run.take().map(|run| AgentRun {
-            status: RunStatus::WaitingForApproval,
-            ..run
-        });
-        true
-    }
-
-    pub fn resolve_approval(&mut self, run_id: RunId, call_id: &str) -> Option<ToolApproval> {
-        let matches = self
-            .run
-            .as_ref()
-            .is_some_and(|run| run.id == run_id && run.status == RunStatus::WaitingForApproval)
-            && self
-                .pending_approval
-                .as_ref()
-                .is_some_and(|approval| approval.call.id == call_id);
-        if !matches {
-            return None;
-        }
-        self.run = self.run.take().map(|run| AgentRun {
-            status: RunStatus::Streaming,
-            ..run
-        });
-        self.pending_approval.take()
-    }
-
-    pub fn pending_approval(&self) -> Option<&ToolApproval> {
-        self.pending_approval.as_ref()
+        run_ready
+            && self.tool_events.iter().any(|event| {
+                event.run_id == run_id && event.call_id == call_id && event.result.is_none()
+            })
     }
 
     pub fn tool_events(&self) -> &[ToolEvent] {

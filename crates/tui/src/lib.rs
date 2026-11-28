@@ -411,13 +411,13 @@ pub mod data_object {
         #[test]
         fn modal_phase_replacement_preserves_ownership() {
             let mut modal = ModalController::default();
-            assert!(!modal.replace(Context::AgentChatDialog, Context::AgentApproval));
+            assert!(!modal.replace(Context::AgentChatDialog, Context::AgentChatHelp));
 
             assert!(modal.open(Context::AgentChatDialog));
-            assert!(modal.replace(Context::AgentChatDialog, Context::AgentApproval));
-            assert_eq!(modal.active_context(), Some(Context::AgentApproval));
-            assert!(!modal.replace(Context::AgentChatDialog, Context::AgentChatHelp));
-            assert_eq!(modal.active_context(), Some(Context::AgentApproval));
+            assert!(modal.replace(Context::AgentChatDialog, Context::AgentChatHelp));
+            assert_eq!(modal.active_context(), Some(Context::AgentChatHelp));
+            assert!(!modal.replace(Context::AgentChatDialog, Context::ProviderLogin));
+            assert_eq!(modal.active_context(), Some(Context::AgentChatHelp));
         }
     }
 
@@ -481,7 +481,6 @@ pub mod data_object {
         AgentChatInsert,
         AgentChatHelp,
         AgentChatDialog,
-        AgentApproval,
         AgentThinkingSelector,
         AgentSessionSelector,
         ProviderLogin,

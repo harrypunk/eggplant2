@@ -1,6 +1,6 @@
 # AI agent architecture
 
-Status: M12.1–M12.8 are implemented. Multi-turn chat, OpenAI streaming, bounded tools, approved writes, durable linear sessions, session restoration, and Pi-style provider-context estimation with visible omission/capacity reporting are complete. Compaction remains deferred until real workloads justify it.
+Status: M12.1–M12.8 are implemented. Multi-turn chat, OpenAI streaming, bounded tools, automatic writes, durable linear sessions, session restoration, and Pi-style provider-context estimation with visible omission/capacity reporting are complete. Compaction remains deferred until real workloads justify it.
 
 The agent is a primary Eggplant workflow, not a detached chat window or an excuse to bypass editor safety. It should make a small coding task feel like a natural extension of navigation, search, diagnostics, and editing.
 
@@ -10,10 +10,10 @@ Detailed tool contracts live in [Agent tools](agent-tools.md). Implementation or
 
 1. **Inline first:** ask a question or give a task without leaving the current editing context.
 2. **One session, two views:** the inline popup and tool panel render the same conversation and run state.
-3. **Visible work:** streaming text, tool calls, approvals, failures, and cancellation are understandable without reading logs.
+3. **Visible work:** streaming text, tool calls, automatic mutations, failures, and cancellation are understandable without reading logs.
 4. **Small agent loop:** model response → bounded tool call → tool result → model response, with explicit stop conditions.
-5. **Reuse Eggplant:** tools use existing filesystem, search, document, buffer, revision, save, and diff boundaries.
-6. **Untrusted model output:** a model can request a tool; only Eggplant validates and authorizes its execution.
+5. **Reuse Eggplant:** tools use existing filesystem, search, document, buffer, revision, and save boundaries.
+6. **Untrusted model output:** a model can request a tool; Eggplant validates and executes it only under the registered tool contract and editor invariants.
 7. **No second editor:** agent updates use the same Elm-style message/effect loop and preserve one terminal owner.
 
 ## Lessons from Pi
@@ -26,13 +26,14 @@ Adopt these ideas:
 - An agent loop independent of terminal rendering and key handling.
 - Tools described by narrow request/result contracts and executed outside the model abstraction.
 - Session state that can drive interactive, print, or other frontends without encoding terminal policy.
+- Pi core's lack of built-in tool approval prompts: Eggplant's supported `read`/`grep`/`write`/`create` calls execute without per-call or session approval while retaining Eggplant's validation and editor invariants.
 - Useful defaults without requiring sub-agents, plan mode, an extension host, or a general plugin platform in the first slice.
 
 Do not copy:
 
 - Node.js or Pi as a runtime dependency of Eggplant.
 - Pi's extension/package ecosystem, RPC surface, telemetry stack, or terminal toolkit.
-- Pi's lack of a built-in permission boundary. Eggplant must make workspace access and mutations explicit.
+- Unbounded workspace access or any bypass of Eggplant's canonical-path, revision, exact-match, no-overwrite, and save checks merely because approval prompts are absent.
 - A large provider SDK abstraction before one fake provider and one real streaming provider have proven the required interface.
 
 Pi is a reference implementation to learn from, not code to transliterate. Prefer the smallest Rust interfaces that satisfy Eggplant's actual workflows.
@@ -61,7 +62,7 @@ The popup is a modal input workflow owned by the shell's existing context/modal 
 
 - A compact conversation/run summary above the input.
 - A bottom, auto-height Unicode-aware prompt using the shared text-input component; assistant messages remain above it.
-- Streaming/queued/waiting-approval/error status.
+- Streaming/queued/cancelling/error status, with no waiting-for-approval phase.
 - Enter to submit, Escape to hide, and an explicit cancel command for the active run.
 
 Hiding the popup does not cancel the run. Reopening restores the current session. Markdown rendering and the `/sessions` finalized-session picker are implemented. Multiline prompts and prompt history remain later enhancements.
@@ -73,14 +74,14 @@ The existing tools panel gains an Agent view. It is non-modal and shows:
 - Project-scoped conversation messages and streaming assistant text above a bottom, auto-height input. No file or buffer needs to be open; users can write freeform prompts and project-file references such as `@src/main.rs`. `Ctrl-L` focuses panel input and `Ctrl-H` returns to the editor; Enter uses the same submit workflow.
 - Current run state and elapsed activity where useful.
 - Tool call names, concise arguments/summaries, bounded output, and truncation.
-- Pending write approvals and their diffs.
+- Automatic mutation results and validation/save failures, without a separate approval view.
 - Errors and cancellation without losing the previous transcript.
 
 The panel and popup are two presentations of one Agent workflow. Both receive surface-specific `AgentViewProps` projections from one adapter: session, prompt, slash-command and file-reference candidates, storage warning, and theme. `AgentSurface` selects the active workflow for shared submission and commands. `AgentPrompt` owns text editing and composes independent command/reference selection states; `AgentPromptView` owns the shared menu-above-input layout and cursor geometry, so presentation changes do not require parallel prompt implementations. The dialog uses shared props directly and is centered within the editor region at a bounded 88×26 size, leaving the explorer, tools, and surrounding code visible; smaller editor areas clamp the popup. Its assistant area flexes with the remaining height while the prompt retains its measured height. The panel adds only focus and `AgentInputMode`. Neither presentation owns a separate provider connection, session, command catalog, or agent loop. Only panel Normal/Insert modes, focus presentation, and layout differ. Opening the Agent panel focuses its input. Panel Normal supports `i`, `?` help, the configured leader menu, and `Ctrl-H`/`Ctrl-L` navigation; Insert accepts text (including Space), submits with Enter, and returns to Normal with `Esc` without losing panel focus. Help is a separate modal popup, closed with `?` or `Esc`, rather than content in the conversation layout. A focused panel uses a double border and an explicit mode title. Mouse or other future input sources can still request focus directly through the geometry-only focus controller.
 
 ### Markdown responses
 
-Assistant messages render as width-aware Markdown in both the dialog and panel. User prompts remain plain text, while tool events, approvals, and diffs retain their specialized rows. Raw session text is never rewritten by display formatting. The selected package, exact GitHub repository, similarly named crate/custom-license warning, streaming policy, and adapter boundaries are documented in [Markdown rendering](markdown.md).
+Assistant messages render as width-aware Markdown in both the dialog and panel. User prompts remain plain text, while tool calls/results retain bounded plain-text rows. Raw session text is never rewritten by display formatting. The selected package, exact GitHub repository, similarly named crate/custom-license warning, streaming policy, and adapter boundaries are documented in [Markdown rendering](markdown.md).
 
 ### Thinking responses
 
@@ -129,7 +130,7 @@ Typing `@` at a token boundary immediately shows only the current workspace file
 
 `capabilities/file_search.rs` is the single workspace walker and Nucleo matcher extracted from FilePicker. `FileReferenceState` owns only token/session lifecycle, current-buffer ranking, selection, and revision invalidation; FilePicker retains its independent query cache, preview, and open-document workflow. Scan/filter requests carry owned inputs and stale revisions cannot repopulate a dismissed or newer completion session. No `fd` executable, Pi runtime, network access, or second fuzzy-search implementation is required.
 
-`AgentChatDialog`, `AgentApproval`, and `AgentChatHelp` are modal-session contexts, not context-stack entries. `AgentChat` and `AgentChatInsert` are derived from panel focus and `AgentInputMode`. `ModalController` is authoritative for Agent, help, and provider-login overlay visibility as well as modal input ownership. Dialog ↔ approval transitions replace the active modal phase atomically. `AgentDialogState` records only workflow lifecycle (`Closed`, `Open`, or `Suspended`) and is not a second visibility source.
+`AgentChatDialog` and `AgentChatHelp` are modal-session contexts, not context-stack entries. `AgentChat` and `AgentChatInsert` are derived from panel focus and `AgentInputMode`. `ModalController` is authoritative for Agent, help, and provider-login overlay visibility as well as modal input ownership. Automatic mutations do not introduce an approval context or modal transition. `AgentDialogState` records only workflow lifecycle (`Closed`, `Open`, or `Suspended`) and is not a second visibility source.
 
 ### Provider-login UX shell
 
@@ -219,7 +220,7 @@ A provider-neutral session owns ordered conversation entries:
 - User message, including explicitly captured editor context.
 - Assistant text and optional provider metadata.
 - Tool call and tool result, correlated by call ID.
-- Run status: idle, waiting for provider, streaming, waiting for tool approval, cancelling, complete, failed, or cancelled.
+- Run status: idle, waiting for provider, streaming, cancelling, complete, failed, or cancelled. Mutation handoff does not add a waiting-for-approval status.
 
 Every run has a `RunId`. Streaming events also have a monotonically increasing sequence. Completion/event application requires the current session and matching run identity; late deltas from an old run cannot append to a new conversation.
 
@@ -250,7 +251,7 @@ Context is a point-in-time snapshot, not authority to edit. A later mutation mus
 
 ## Runtime boundaries
 
-`commands.rs` owns the typed `AgentCommand` catalog, registration, and dispatch; `adapter.rs` is the small `Model`-aware composition adapter. `state.rs` is the interactive compatibility façade, `runtime.rs` owns session/provider/run/cancellation/storage state without prompt, navigation, Ratatui, or modal dependencies, and `ui_state.rs` reduces typed UI actions over shared prompt/context plus dialog/panel presentation data. `presentation/dialog.rs` and `presentation/panel.rs` own their respective lifecycle/mode/navigation data and reducers; input workflows dispatch actions rather than calling open/close/follow-bottom methods or receiving mutable navigation fields. Runtime `begin` returns a typed `RunStarted` outcome with no UI side effects. Interactive submission dispatches that outcome only to the active transcript reducer, which clears the shared prompt and restores that surface's bottom state; inactive presentations are untouched. A future headless composition can use the runtime without becoming an `AgentSurface` or acquiring scroll/cursor methods. `dialog.rs` owns inline open/close; `panel.rs` owns focus, Normal/Insert, and help. `context.rs` captures editor/workspace inputs, `approval.rs` owns write resolution, and `run.rs` owns provider/tool execution without `Model`. `storage.rs` builds finalized records from runtime state plus an optional workspace root; `Model` remains only the effect/notification adapter. `work.rs` retains submission and interruption policy through consumer-sized `SubmissionContext` and `InterruptionContext` interfaces rather than receiving the global `Model`; only `adapter.rs` supplies concrete surface, workspace, modal, notification, and persistence coordination. Unit tests use a local fake context, while integration tests retain real-adapter coverage.
+`commands.rs` owns the typed `AgentCommand` catalog, registration, and dispatch; `adapter.rs` is the small `Model`-aware composition adapter. `state.rs` is the interactive compatibility façade, `runtime.rs` owns session/provider/run/cancellation/storage state without prompt, navigation, Ratatui, or modal dependencies, and `ui_state.rs` reduces typed UI actions over shared prompt/context plus dialog/panel presentation data. `presentation/dialog.rs` and `presentation/panel.rs` own their respective lifecycle/mode/navigation data and reducers; input workflows dispatch actions rather than calling open/close/follow-bottom methods or receiving mutable navigation fields. Runtime `begin` returns a typed `RunStarted` outcome with no UI side effects. Interactive submission dispatches that outcome only to the active transcript reducer, which clears the shared prompt and restores that surface's bottom state; inactive presentations are untouched. A future headless composition can use the runtime without becoming an `AgentSurface` or acquiring scroll/cursor methods. `dialog.rs` owns inline open/close; `panel.rs` owns focus, Normal/Insert, and help. `context.rs` captures editor/workspace inputs, `mutation.rs` owns main-update `MutationExecutor` coordination through the consumer-sized `MutationContext` interface, `write.rs`/`create.rs` implement `MutationTool` validation and application, and `run.rs` owns provider/tool execution without `Model`. `storage.rs` builds finalized records from runtime state plus an optional workspace root; `Model` remains only the effect/notification adapter. `work.rs` retains submission and interruption policy through consumer-sized `SubmissionContext` and `InterruptionContext` interfaces rather than receiving the global `Model`; only `adapter.rs` supplies concrete surface, workspace, modal, notification, and persistence coordination. Unit tests use a local fake context, while integration tests retain real-adapter coverage.
 
 The intended ownership is:
 
@@ -277,7 +278,7 @@ Provider SDK types must not appear in `Model`, components, filesystem tools, or 
 
 ### Streaming through the existing effect model
 
-A run emits many ordered typed events rather than one final completion. `ProviderAgentRun::execute` forwards each provider event through the existing message sender immediately; there is no provider-specific global `Message` variant, second terminal/event loop, or callback that mutates a view. `AgentRuntime::apply_event` is the presentation-independent reducer for text deltas, usage, tools, completion/failure, and approval outcomes. The TUI completion adapter handles only modal approval and finalized persistence.
+A run emits many ordered typed events rather than one final completion. `ProviderAgentRun::execute` forwards each provider event through the existing message sender immediately; there is no provider-specific global `Message` variant, second terminal/event loop, or callback that mutates a view. `AgentRuntime::apply_event` is the presentation-independent reducer for text deltas, usage, tools, mutation requests, and completion/failure. The TUI completion adapter routes `MutationRequested` through main-update `MutationExecutor` and handles finalized persistence; it does not open an approval modal.
 
 `AgentSession::append_delta` appends to the matching active run and rejects stale or post-completion text. Bottom-following transcript state reveals incoming snapshots, while manual scroll/cursor inspection is not forcibly reset by each delta. Markdown is parsed from the complete immutable text snapshot on render, matching Pi's correctness model rather than maintaining an incremental token tree.
 
@@ -293,7 +294,7 @@ The first loop is intentionally small:
 2. Request a streaming model response.
 3. Append ordered assistant text and tool calls.
 4. Validate a tool call against the registered tool contract.
-5. Execute read-only tools within limits, or request approval for a mutation.
+5. Execute read-only tools within limits. For a mutation that is the sole call in its round, validate captured context and emit `MutationRequested` for automatic main-update execution.
 6. Append a bounded tool result.
 7. Continue until the provider stops, the user cancels, an error occurs, or an output limit is reached.
 
@@ -319,21 +320,24 @@ api_key_env = "OPENAI_API_KEY"
 
 OpenAI-compatible HTTP requests send `User-Agent: eggplant-editor/2.0.0`, derived from the workspace package version. Streaming responses use incremental UTF-8-safe SSE decoding. Deltas arrive through the same provider-neutral session, with an authoritative completion or failure. A response stopped for length fails rather than executing tool calls. The localhost test suite verifies actual HTTP request shape, streaming events, Unicode fragmentation, status errors, and API-key redaction without external network access.
 
-The adapter also declares bounded `read`, `grep`, approved exact-text `write`, and no-overwrite `create` functions and merges incremental `tool_calls` deltas by index. Tool execution receives owned workspace/buffer context, not `Model`. Reads of open buffers include their `BufferId`, revision, and path so a model can construct a write request without hidden editor access. Follow-up requests serialize user, assistant, and tool-role history so the model can consume results without a second conversation or UI event loop. A `[DONE]` completion closes only the current provider round; the overall run completes after the final model response. Following Pi's `runLoop`, there is no arbitrary tool-round or tool-call count: work continues while new calls arrive and stops on natural completion, provider error/abort, an explicit end decision, or user cancellation. Cumulative tool output remains capped at 100 KiB, and invalid or duplicate call IDs are rejected before execution.
+The adapter also declares bounded automatic `read`, `grep`, exact-text `write`, and no-overwrite `create` functions and merges incremental `tool_calls` deltas by index. Tool execution receives owned workspace/buffer context, not `Model`. Reads of open buffers include their `BufferId`, revision, and path so a model can construct a write request without hidden editor access. Follow-up requests serialize user, assistant, and tool-role history so the model can consume results without a second conversation or UI event loop. A `[DONE]` completion closes only the current provider round; the overall run completes after the final model response. Following Pi's `runLoop`, there is no arbitrary tool-round or tool-call count: work continues while new calls arrive and stops on natural completion, provider error/abort, an explicit end decision, or user cancellation. Cumulative tool output remains capped at 100 KiB, and invalid or duplicate call IDs are rejected before execution.
 
-A write or create must be the only call in its round. The worker validates a captured open-buffer snapshot, emits a bounded approval plus an owned `AgentContinuation`, and exits without completing the run. `y` approves once and `n` rejects; `Esc` hides the unchanged approval and `Ctrl-F7` cancels without resuming. The main update path revalidates identity, canonical path, revision, save-in-flight state, and exactly one old-text match before applying one undoable transaction. It then resumes the continuation with fresh snapshots, explicit-ID auto-save/language-sync effects, and an honest result that does not claim the file was saved. `create` additionally rejects existing paths and composes `CreateTarget`/`filesystem::create`, `DocumentFactory::open`, and `EditorSession::create_file_document` before using the same after-edit save flow.
+A write or create must be the only call in its round. The worker validates captured context, emits `MutationRequested` with the call plus an owned `AgentContinuation`, and exits without completing the run. On the main update path, `MutationExecutor` uses `MutationContext` to revalidate and apply through `MutationTool`. Existing-file writes preserve `BufferId`, canonical path, expected revision, exactly one old-text match, and save-in-flight checks before one undoable transaction. Creation revalidates its workspace-relative no-overwrite target and composes `CreateTarget`/`filesystem::create`, `DocumentFactory::open`, and `EditorSession::create_file_document`.
+
+`MutationExecutor` then performs normal explicit-ID auto-save/language synchronization, captures fresh context, records the bounded result, and resumes the provider. There are no approval keys, approval modal, pending approval state, or approval-only diff; `Ctrl-F7` remains ordinary active-run cancellation. Validation, cancellation, mutation, and save failures stay honest. Success means the edit or creation was applied, not that persistence succeeded, and no automatic rollback is claimed.
 
 ## Safety summary
 
 - Read and grep are bounded and workspace-scoped by default.
-- Writes require explicit approval and expected-revision validation.
+- Read/grep/write/create execute automatically without per-call or session approval prompts, following Pi core's lack of built-in prompts.
+- Writes retain explicit `BufferId`, canonical-path, expected-revision, exact-match, and save validation; creation retains no-overwrite validation.
 - Active-buffer UI commands are not unattended editing APIs.
 - No arbitrary shell/process execution in the initial agent.
 - No automatic LSP workspace edits or Git mutations.
 - Tool results and model text are data, never implicit commands to Eggplant.
 - Ordinary editing remains usable when no provider is configured or a run fails.
 
-See [Agent tools](agent-tools.md) for path, result, revision, and approval contracts.
+See [Agent tools](agent-tools.md) for path, result, revision, and automatic mutation contracts.
 
 ## Non-goals for the first implementation
 
@@ -352,7 +356,7 @@ See [Agent tools](agent-tools.md) for path, result, revision, and approval contr
 - Final keybindings after conflict and context tests.
 - Latest-workspace startup continuation, older-session pagination, crash/in-flight recovery, and Pi-style branching/session trees.
 - Token accounting, visible context-budget policy, and compaction after transcript/tool workloads are measured.
-- Multi-file patch and session-review UX after one approved revision-safe write works.
+- Multi-file patch and session-review UX after one automatic revision-safe write works.
 
 Do not resolve these questions by introducing a general framework. Record the chosen behavior when a real consumer requires it.
 
@@ -365,7 +369,7 @@ Use scripted fake providers and fake tool calls to cover:
 - Modal precedence, narrow terminals, Unicode, and bounded transcripts.
 - Provider failure without exposing secrets or losing ordinary editing.
 - Tool argument/path/result validation and iteration limits.
-- Approval rejection, revision conflicts, and save failure without false success.
+- Automatic mutation handoff, revision/exact-match/no-overwrite conflicts, cancellation, and save failure without false success.
 - No real provider credentials or network access in workspace tests.
 
 Real-provider smoke tests remain manual and must not become build requirements.

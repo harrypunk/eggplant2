@@ -1,83 +1,20 @@
-use std::{
-    ops::ControlFlow::{Break, Continue},
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use editor::{BufferId, EditorSession, ExactTextReplacement};
-use eggplant_agent::{ToolApproval, ToolCall, ToolResult, ToolResultStatus};
+use eggplant_agent::{ToolCall, ToolResult, ToolResultStatus};
 use serde::Deserialize;
 
 use super::tools::{self, BufferContext, ToolContext};
 
-#[derive(Debug, Clone, Copy)]
-pub struct DiffPreview {
-    max_bytes: usize,
-    max_lines: usize,
-    truncation_marker: &'static str,
-}
-
-impl DiffPreview {
-    pub const fn new() -> Self {
-        Self {
-            max_bytes: 12 * 1024,
-            max_lines: 120,
-            truncation_marker: "[diff truncated]",
-        }
-    }
-
-    pub fn render(&self, path: &str, old_text: &str, new_text: &str) -> String {
-        let rows = [
-            format!("--- {path}"),
-            format!("+++ {path}"),
-            "@@ exact replacement @@".to_string(),
-        ]
-        .into_iter()
-        .chain(old_text.lines().map(|line| format!("-{line}")))
-        .chain(new_text.lines().map(|line| format!("+{line}")))
-        .collect::<Vec<_>>();
-        let line_truncated = rows.len() > self.max_lines;
-        let output = rows
-            .into_iter()
-            .take(self.max_lines)
-            .map(|row| row + "\n")
-            .try_fold(String::new(), |content, row| {
-                match content.len() + row.len() <= self.max_bytes {
-                    true => Continue(content + row.as_str()),
-                    false => Break(content),
-                }
-            });
-        let (content, byte_truncated) = match output {
-            Continue(content) => (content, false),
-            Break(content) => (content, true),
-        };
-        match line_truncated || byte_truncated {
-            true => content + self.truncation_marker,
-            false => content,
-        }
-    }
-}
-
-pub struct WriteOutcome {
+pub struct MutationOutcome {
     pub result: ToolResult,
     pub edited: Option<BufferId>,
 }
 
 pub trait MutationTool {
-    fn prepare(&self, call: &ToolCall, context: &ToolContext) -> Result<ToolApproval, ToolResult>;
+    fn validate(&self, call: &ToolCall, context: &ToolContext) -> Result<(), ToolResult>;
 
-    fn apply(&self, editor: &mut EditorSession, root: &Path, call: &ToolCall) -> WriteOutcome;
-
-    fn reject(&self, call: &ToolCall) -> WriteOutcome {
-        WriteOutcome {
-            result: ToolResult {
-                call_id: call.id.clone(),
-                status: ToolResultStatus::Rejected,
-                content: "Write rejected by user; no changes were applied.".to_string(),
-                truncated: false,
-            },
-            edited: None,
-        }
-    }
+    fn apply(&self, editor: &mut EditorSession, root: &Path, call: &ToolCall) -> MutationOutcome;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -104,32 +41,25 @@ impl MutationKind {
         }
     }
 
-    pub fn prepare(
-        self,
-        call: &ToolCall,
-        context: &ToolContext,
-    ) -> Result<ToolApproval, ToolResult> {
-        self.tool().prepare(call, context)
+    pub fn validate(self, call: &ToolCall, context: &ToolContext) -> Result<(), ToolResult> {
+        self.tool().validate(call, context)
     }
 
-    pub fn apply(self, editor: &mut EditorSession, root: &Path, call: &ToolCall) -> WriteOutcome {
+    pub fn apply(
+        self,
+        editor: &mut EditorSession,
+        root: &Path,
+        call: &ToolCall,
+    ) -> MutationOutcome {
         self.tool().apply(editor, root, call)
     }
-
-    pub fn reject(self, call: &ToolCall) -> WriteOutcome {
-        self.tool().reject(call)
-    }
 }
 
-pub struct ExactReplacement {
-    diff: DiffPreview,
-}
+pub struct ExactReplacement;
 
 impl ExactReplacement {
     pub const fn new() -> Self {
-        Self {
-            diff: DiffPreview::new(),
-        }
+        Self
     }
 
     fn apply_result(
@@ -218,9 +148,9 @@ impl ExactReplacement {
 }
 
 impl MutationTool for ExactReplacement {
-    fn prepare(&self, call: &ToolCall, context: &ToolContext) -> Result<ToolApproval, ToolResult> {
+    fn validate(&self, call: &ToolCall, context: &ToolContext) -> Result<(), ToolResult> {
         let arguments: WriteArguments = tools::parse_arguments(call, "write")?;
-        let (path, buffer) = self.captured_target(call, context, &arguments)?;
+        let (_, buffer) = self.captured_target(call, context, &arguments)?;
         Self::unique_match(&buffer.snapshot.text, &arguments.old_text)
             .then_some(())
             .ok_or_else(|| {
@@ -228,27 +158,16 @@ impl MutationTool for ExactReplacement {
                     call,
                     "write requires exactly one old-text match in the captured buffer".to_string(),
                 )
-            })?;
-        let relative = tools::display_path(&context.root, &path);
-        Ok(ToolApproval {
-            call: call.clone(),
-            summary: format!(
-                "Replace exact text in {relative} (buffer {}, revision {})",
-                arguments.buffer_id, arguments.expected_revision
-            ),
-            diff: self
-                .diff
-                .render(&relative, &arguments.old_text, &arguments.new_text),
-        })
+            })
     }
 
-    fn apply(&self, editor: &mut EditorSession, root: &Path, call: &ToolCall) -> WriteOutcome {
+    fn apply(&self, editor: &mut EditorSession, root: &Path, call: &ToolCall) -> MutationOutcome {
         match self.apply_result(editor, root, call) {
-            Ok((result, buffer_id)) => WriteOutcome {
+            Ok((result, buffer_id)) => MutationOutcome {
                 result,
                 edited: Some(buffer_id),
             },
-            Err(result) => WriteOutcome {
+            Err(result) => MutationOutcome {
                 result,
                 edited: None,
             },
@@ -296,7 +215,7 @@ mod tests {
     }
 
     #[test]
-    fn preview_is_immutable_bounded_and_requires_a_unique_match() {
+    fn validation_is_immutable_and_requires_a_unique_match() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("main.rs");
         std::fs::write(&path, "before").unwrap();
@@ -311,53 +230,24 @@ mod tests {
             },
         };
         let tool = ExactReplacement::new();
-        let approval = tool
-            .prepare(
-                &call(buffer_id, 2, "before", "after"),
-                &context(&directory, buffer.clone()),
-            )
-            .unwrap();
-        assert!(approval.summary.contains("main.rs"));
-        assert!(approval.diff.contains("-before"));
-        assert!(approval.diff.contains("+after"));
+        tool.validate(
+            &call(buffer_id, 2, "before", "after"),
+            &context(&directory, buffer.clone()),
+        )
+        .unwrap();
+        assert_eq!(
+            std::fs::read_to_string(directory.path().join("main.rs")).unwrap(),
+            "before"
+        );
 
         let mut duplicate = buffer;
         duplicate.snapshot.text = "before before".to_string();
         assert!(
-            tool.prepare(
+            tool.validate(
                 &call(buffer_id, 2, "before", "after"),
                 &context(&directory, duplicate),
             )
             .is_err()
         );
-    }
-
-    #[test]
-    fn diff_caps_lines_without_splitting_utf8() {
-        let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("main.rs");
-        std::fs::write(&path, "old").unwrap();
-        let mut model = Model::default();
-        let buffer_id = create_buffer(&mut model, "old");
-        let old_text = "é🙂\n".repeat(DiffPreview::new().max_lines + 1);
-        let buffer = BufferContext {
-            path,
-            snapshot: BufferTextSnapshot {
-                buffer_id,
-                revision: 2,
-                text: old_text.clone(),
-            },
-        };
-        let tool = ExactReplacement::new();
-        let approval = tool
-            .prepare(
-                &call(buffer_id, 2, &old_text, "new"),
-                &context(&directory, buffer),
-            )
-            .unwrap();
-
-        let preview = DiffPreview::new();
-        assert!(approval.diff.len() <= preview.max_bytes + preview.truncation_marker.len());
-        assert!(approval.diff.ends_with(preview.truncation_marker));
     }
 }

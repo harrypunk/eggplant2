@@ -1,9 +1,8 @@
-use eggplant_agent::ToolApproval;
 use ratatui::{
     Frame,
     buffer::Buffer,
     layout::{Constraint, Layout, Position, Rect},
-    widgets::{Paragraph, Widget, Wrap},
+    widgets::{Paragraph, Widget},
 };
 
 use super::{
@@ -12,7 +11,7 @@ use super::{
     prompt::AgentPromptView,
     props::AgentViewProps,
     status::{RunStatusPresentation, status_text},
-    transcript::{diff_lines, latest_assistant_metrics, render_latest_assistant},
+    transcript::{latest_assistant_metrics, render_latest_assistant},
 };
 use crate::component::{
     popup::{Popup, content_area},
@@ -36,9 +35,6 @@ impl AgentDialog {
     }
 
     pub fn cursor(props: &AgentDialogProps<'_>, area: Rect) -> Option<Position> {
-        if props.session.pending_approval().is_some() {
-            return None;
-        }
         AgentPromptView::cursor(&props.prompt, props.styles, input_area(props, area))
     }
 
@@ -77,39 +73,12 @@ impl AgentDialogContent<'_> {
             buffer,
         );
     }
-
-    fn render_approval(&self, approval: &ToolApproval, area: Rect, buffer: &mut Buffer) {
-        let [status, summary, diff, hints] = Layout::vertical([
-            Constraint::Length(1),
-            Constraint::Length(2),
-            Constraint::Fill(1),
-            Constraint::Length(1),
-        ])
-        .areas(area);
-        Paragraph::new("Waiting for write approval")
-            .style(self.props.styles.action_hint)
-            .render(status, buffer);
-        Paragraph::new(approval.summary.clone())
-            .wrap(Wrap { trim: false })
-            .style(self.props.styles.base)
-            .render(summary, buffer);
-        Paragraph::new(diff_lines(&approval.diff, self.props.styles))
-            .wrap(Wrap { trim: false })
-            .style(self.props.styles.base)
-            .render(diff, buffer);
-        Paragraph::new("y approve once · n reject · Esc hide · Ctrl-F7 cancel")
-            .style(self.props.styles.muted)
-            .render(hints, buffer);
-    }
 }
 
 impl Widget for AgentDialogContent<'_> {
     fn render(self, area: Rect, buffer: &mut Buffer) {
         let [content, footer] = footer_layout(area);
-        match self.props.session.pending_approval() {
-            Some(approval) => self.render_approval(approval, content, buffer),
-            None => self.render_prompt(content, buffer),
-        }
+        self.render_prompt(content, buffer);
         AgentFooter::render(self.props, footer, buffer);
     }
 }
@@ -275,45 +244,6 @@ mod tests {
         assert!(content.contains("No model available"));
         assert!(content.contains("/provider"));
         assert!(content.contains("Space a i"));
-    }
-
-    #[test]
-    fn approval_replaces_prompt_and_hides_cursor() {
-        let theme = Theme::default();
-        let mut session = AgentSession::default();
-        let run = session.begin("change".to_string()).unwrap();
-        let call = eggplant_agent::ToolCall {
-            id: "write-1".to_string(),
-            name: "write".to_string(),
-            arguments: "{}".to_string(),
-        };
-        session.record_tool_call(run, &call);
-        session.request_approval(
-            run,
-            ToolApproval {
-                call,
-                summary: "Replace text in main.rs".to_string(),
-                diff: "--- main.rs\n+++ main.rs\n@@ exact replacement @@\n-before\n+after\n"
-                    .to_string(),
-            },
-        );
-        let prompt = TextInput::default();
-        let props = AgentDialogProps {
-            session: &session,
-            navigation: SurfaceNavigation::default(),
-            prompt: AgentPromptProps::new(&prompt),
-            storage_error: None,
-            model_notice: None,
-            footer: Default::default(),
-            styles: theme.ui(),
-        };
-        let area = Rect::new(0, 0, 90, 24);
-        let content = render(&props, area.width, area.height);
-        assert!(content.contains("Waiting for write approval"));
-        assert!(content.contains("before"));
-        assert!(content.contains("after"));
-        assert!(content.contains("unknown · no model"));
-        assert!(AgentDialog::cursor(&props, area).is_none());
     }
 
     #[test]

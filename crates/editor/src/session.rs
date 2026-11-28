@@ -152,7 +152,7 @@ pub enum ExactTextError {
     NoActiveView,
     #[error("buffer {0} does not exist")]
     UnknownBuffer(BufferId),
-    #[error("buffer {0} path does not match the approved path")]
+    #[error("buffer {0} path does not match the requested path")]
     PathMismatch(BufferId),
     #[error("buffer {buffer_id} revision changed from {expected} to {actual}")]
     RevisionConflict {
@@ -164,7 +164,7 @@ pub enum ExactTextError {
     SaveInProgress(BufferId),
     #[error("old text must be non-empty and differ from new text")]
     InvalidReplacement,
-    #[error("buffer {0} no longer contains exactly one approved old-text match")]
+    #[error("buffer {0} no longer contains exactly one requested old-text match")]
     ExactTextConflict(BufferId),
 }
 
@@ -633,7 +633,7 @@ impl EditorSession {
         Ok(true)
     }
 
-    /// Apply one approved exact-text replacement without changing the active buffer.
+    /// Apply one revision-checked exact-text replacement without changing the active buffer.
     pub fn replace_exact_text(
         &mut self,
         replacement: ExactTextReplacement<'_>,
@@ -645,16 +645,29 @@ impl EditorSession {
             return Err(ExactTextError::SaveInProgress(replacement.buffer_id));
         }
         let active_buffer = self.active_buffer();
-        let view = &mut self
-            .active_view
-            .as_mut()
-            .ok_or(ExactTextError::NoActiveView)?
-            .view;
+        let gutters = self.gutters.clone();
+        let view_area = self.view_area;
         let document = &mut self
             .buffers
             .get_mut(&replacement.buffer_id)
             .ok_or(ExactTextError::UnknownBuffer(replacement.buffer_id))?
             .document;
+        let document_id = document.id();
+        let mut detached_view = (active_buffer != Some(replacement.buffer_id)).then(|| {
+            let mut view = View::new(document_id, gutters);
+            view.area = view_area;
+            view
+        });
+        let view = match detached_view.as_mut() {
+            Some(view) => view,
+            None => {
+                &mut self
+                    .active_view
+                    .as_mut()
+                    .ok_or(ExactTextError::NoActiveView)?
+                    .view
+            }
+        };
         if document.path() != Some(replacement.path) {
             return Err(ExactTextError::PathMismatch(replacement.buffer_id));
         }

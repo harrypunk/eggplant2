@@ -49,16 +49,6 @@ pub fn commands() -> Vec<Command> {
             super::navigation::cursor_down,
         ),
         Command::feature(
-            CommandId("agent_approve"),
-            "approve agent write",
-            super::approval::approve_write,
-        ),
-        Command::feature(
-            CommandId("agent_reject"),
-            "reject agent write",
-            super::approval::reject_write,
-        ),
-        Command::feature(
             CommandId("agent_toggle_panel"),
             "toggle agent tool panel",
             super::panel::toggle_panel,
@@ -246,8 +236,6 @@ mod tests {
             "agent_scroll_down",
             "agent_cursor_up",
             "agent_cursor_down",
-            "agent_approve",
-            "agent_reject",
             "agent_toggle_panel",
             "agent_session_selector_open",
             "agent_thinking_selector_open",

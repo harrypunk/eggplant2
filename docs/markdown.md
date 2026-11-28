@@ -40,7 +40,7 @@ AgentSession / immutable message text
   ↓
 Agent transcript role policy
   ├─ user messages: plain text
-  ├─ tool events and approvals: plain/diff rows
+  ├─ tool calls/results: bounded plain-text rows
   └─ assistant messages: Markdown
        ↓
 component/markdown::PreparedMarkdown

@@ -1,5 +1,3 @@
-use eggplant_agent::{ToolResult, ToolResultStatus};
-
 use crate::manager::effect::Effect;
 
 use super::{
@@ -29,7 +27,6 @@ pub(crate) trait SubmissionContext {
 pub(crate) trait InterruptionContext {
     fn runtime(&self) -> &AgentRuntime;
     fn runtime_mut(&mut self) -> &mut AgentRuntime;
-    fn transition_to_chat(&mut self);
     fn persist_finalized(&mut self) -> Option<Effect>;
 }
 
@@ -155,32 +152,9 @@ fn execute_prompt_command(
 }
 
 pub(crate) fn interrupt(context: &mut impl InterruptionContext) -> Option<Effect> {
-    let pending = context.runtime().session().pending_approval().cloned();
-    let run_id = context.runtime().session().run().map(|run| run.id);
     context.runtime().cancel_active();
     context.runtime_mut().session_mut().cancel();
-    run_id
-        .zip(pending)
-        .map(|(run_id, approval)| {
-            (
-                run_id,
-                ToolResult {
-                    call_id: approval.call.id,
-                    status: ToolResultStatus::Cancelled,
-                    content: "Write approval cancelled; no changes were applied.".to_string(),
-                    truncated: false,
-                },
-            )
-        })
-        .into_iter()
-        .for_each(|(run_id, result)| {
-            context
-                .runtime_mut()
-                .session_mut()
-                .complete_tool_call(run_id, result);
-        });
     context.runtime_mut().clear_suspension();
-    context.transition_to_chat();
     context.persist_finalized()
 }
 
@@ -194,12 +168,11 @@ mod tests {
 
     use eggplant_agent::{
         AgentEvent, AgentProvider, AgentRequest, CancellationToken, MessageRole, ProviderMessage,
-        RunStatus,
+        RunStatus, ToolResultStatus,
     };
     use eggplant_agent_storage::SessionStore as _;
 
     use super::*;
-    use crate::agent::approval::{approve_write, reject_write};
     use crate::{
         agent::{
             commands::{command_next, command_quick_fill, handle_general_action, handle_input},
@@ -267,7 +240,6 @@ mod tests {
         opened: Option<crate::agent::PromptCommand>,
         argument: Option<String>,
         notifications: Vec<String>,
-        chat_restored: bool,
         finalized: bool,
     }
 
@@ -322,10 +294,6 @@ mod tests {
 
         fn runtime_mut(&mut self) -> &mut AgentRuntime {
             &mut self.runtime
-        }
-
-        fn transition_to_chat(&mut self) {
-            self.chat_restored = true;
         }
 
         fn persist_finalized(&mut self) -> Option<Effect> {
@@ -462,7 +430,6 @@ mod tests {
             context.runtime.session().run().unwrap().status,
             RunStatus::Cancelled
         );
-        assert!(context.chat_restored);
         assert!(context.finalized);
     }
 
@@ -1497,6 +1464,49 @@ mod tests {
         }
     }
 
+    #[derive(Debug)]
+    struct MutationSequenceProvider {
+        calls: Vec<eggplant_agent::ToolCall>,
+        requests: Arc<std::sync::atomic::AtomicUsize>,
+    }
+
+    impl MutationSequenceProvider {
+        fn new(
+            calls: Vec<eggplant_agent::ToolCall>,
+        ) -> (Self, Arc<std::sync::atomic::AtomicUsize>) {
+            let requests = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+            (
+                Self {
+                    calls,
+                    requests: requests.clone(),
+                },
+                requests,
+            )
+        }
+    }
+
+    impl AgentProvider for MutationSequenceProvider {
+        fn stream<'a>(
+            &'a self,
+            _request: AgentRequest,
+            mut on_event: Box<dyn FnMut(AgentEvent) + Send + 'a>,
+        ) -> std::pin::Pin<
+            Box<dyn Future<Output = Result<(), eggplant_agent::AgentError>> + Send + 'a>,
+        > {
+            Box::pin(async move {
+                let round = self
+                    .requests
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                match self.calls.get(round) {
+                    Some(call) => on_event(AgentEvent::ToolCalls(vec![call.clone()])),
+                    None => on_event(AgentEvent::TextDelta("mutations resolved".to_string())),
+                }
+                on_event(AgentEvent::Complete);
+                Ok(())
+            })
+        }
+    }
+
     fn write_call(model: &Model, buffer_id: editor::BufferId) -> eggplant_agent::ToolCall {
         let snapshot = model.editor.buffer_text_snapshot(buffer_id).unwrap();
         let root = model.workspace.as_ref().unwrap().root();
@@ -1516,25 +1526,28 @@ mod tests {
         }
     }
 
-    fn begin_write(model: &mut Model) {
+    fn begin_write(model: &mut Model) -> Vec<editor::BufferId> {
         let manager = MessageManager::default();
         open(model);
         model.agent.set_prompt("write main.rs");
         let effect = submit(model).unwrap();
-        perform(&manager, model, effect);
+        let effect = perform(&manager, model, effect).expect("automatic mutation effects");
+        let saves = perform_resolution(model, effect);
         assert_eq!(
             model.agent.session().run().unwrap().status,
-            RunStatus::WaitingForApproval
+            RunStatus::Complete
         );
+        saves
     }
 
     fn perform_resolution(model: &mut Model, effect: Effect) -> Vec<editor::BufferId> {
         match effect {
             Effect::Save(request) => vec![request.buffer_id()],
-            Effect::Feature(request) => {
-                MessageManager::default().update(model, request.perform());
-                Vec::new()
-            }
+            Effect::Feature(request) => MessageManager::default()
+                .update(model, request.perform())
+                .into_iter()
+                .flat_map(|effect| perform_resolution(model, effect))
+                .collect(),
             Effect::Batch(effects) => effects
                 .into_iter()
                 .flat_map(|effect| perform_resolution(model, effect))
@@ -1544,7 +1557,7 @@ mod tests {
     }
 
     #[test]
-    fn approval_is_required_once_before_an_undoable_write_and_resume() {
+    fn write_executes_automatically_and_resumes_with_an_undoable_edit() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("main.rs");
         std::fs::write(&path, "before").unwrap();
@@ -1552,39 +1565,20 @@ mod tests {
         let buffer = open_file(&mut model, &path);
         let (provider, seen, requests) = WriteProvider::new(write_call(&model, buffer), false);
         model.agent.set_provider(Arc::new(provider));
-        begin_write(&mut model);
 
-        assert!(
-            model
-                .modal
-                .is_active(crate::data_object::Context::AgentApproval)
-        );
-        assert_eq!(
-            model.editor.buffer_text_snapshot(buffer).unwrap().text,
-            "before"
-        );
-        assert_eq!(requests.load(std::sync::atomic::Ordering::Relaxed), 1);
-
-        let effect = approve_write(&mut model).unwrap();
-        let saves = perform_resolution(&mut model, effect);
+        let saves = begin_write(&mut model);
 
         assert_eq!(saves, vec![buffer]);
         assert_eq!(
             model.editor.buffer_text_snapshot(buffer).unwrap().text,
             "after"
         );
-        assert_eq!(
-            model.agent.session().run().unwrap().status,
-            RunStatus::Complete
-        );
         assert_eq!(requests.load(std::sync::atomic::Ordering::Relaxed), 2);
-        assert!(model.agent.session().pending_approval().is_none());
         assert!(
             model
                 .modal
                 .is_active(crate::data_object::Context::AgentChatDialog)
         );
-        assert!(approve_write(&mut model).is_none());
         assert!(seen.lock().unwrap().iter().any(|message| {
             message.role == eggplant_agent::ProviderMessageRole::Tool
                 && message.content.contains("not claimed to be saved")
@@ -1592,95 +1586,87 @@ mod tests {
     }
 
     #[test]
-    fn rejection_and_cancellation_do_not_mutate_or_implicitly_resume() {
+    fn consecutive_create_and_write_rounds_execute_without_interaction() {
         let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("main.rs");
-        std::fs::write(&path, "before").unwrap();
-        let mut rejected = initial_model(Some(directory.path().to_path_buf())).unwrap();
-        let buffer = open_file(&mut rejected, &path);
-        let (provider, seen, requests) = WriteProvider::new(write_call(&rejected, buffer), false);
-        rejected.agent.set_provider(Arc::new(provider));
-        begin_write(&mut rejected);
-        let effect = reject_write(&mut rejected).unwrap();
-        assert!(perform_resolution(&mut rejected, effect).is_empty());
+        let main_path = directory.path().join("main.rs");
+        let created_path = directory.path().join("nested/numbers.py");
+        std::fs::write(&main_path, "before").unwrap();
+        let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let main = open_file(&mut model, &main_path);
+        let create = eggplant_agent::ToolCall {
+            id: "create-1".to_string(),
+            name: "create".to_string(),
+            arguments: serde_json::json!({
+                "path": "nested/numbers.py",
+                "content": "print('numbers')\n",
+            })
+            .to_string(),
+        };
+        let (provider, requests) =
+            MutationSequenceProvider::new(vec![create, write_call(&model, main)]);
+        model.agent.set_provider(Arc::new(provider));
 
+        let saves = begin_write(&mut model);
+
+        let created = model
+            .editor
+            .file_buffer_ids()
+            .into_iter()
+            .find(|buffer| model.editor.buffer_path(*buffer) == Some(created_path.as_path()))
+            .expect("created buffer");
+        assert_eq!(saves.len(), 2);
+        assert!(saves.contains(&created));
+        assert!(saves.contains(&main));
         assert_eq!(
-            rejected.editor.buffer_text_snapshot(buffer).unwrap().text,
-            "before"
+            model.editor.buffer_text_snapshot(created).unwrap().text,
+            "print('numbers')\n"
         );
         assert_eq!(
-            rejected.agent.session().run().unwrap().status,
+            model.editor.buffer_text_snapshot(main).unwrap().text,
+            "after"
+        );
+        assert_eq!(requests.load(std::sync::atomic::Ordering::Relaxed), 3);
+        assert_eq!(
+            model.agent.session().run().unwrap().status,
             RunStatus::Complete
-        );
-        assert_eq!(requests.load(std::sync::atomic::Ordering::Relaxed), 2);
-        assert!(seen.lock().unwrap().iter().any(|message| {
-            message.role == eggplant_agent::ProviderMessageRole::Tool
-                && message.content.contains("rejected")
-        }));
-
-        let mut cancelled = initial_model(Some(directory.path().to_path_buf())).unwrap();
-        let (session_store, _storage_directory) = crate::test_utils::session_store();
-        cancelled.agent.set_session_store(session_store);
-        let buffer = open_file(&mut cancelled, &path);
-        let (provider, _seen, requests) = WriteProvider::new(write_call(&cancelled, buffer), false);
-        cancelled.agent.set_provider(Arc::new(provider));
-        begin_write(&mut cancelled);
-        let storage = interrupt(&mut cancelled).unwrap();
-        perform(&MessageManager::default(), &mut cancelled, storage);
-
-        assert_eq!(
-            cancelled.editor.buffer_text_snapshot(buffer).unwrap().text,
-            "before"
-        );
-        assert_eq!(
-            cancelled.agent.session().run().unwrap().status,
-            RunStatus::Cancelled
-        );
-        assert_eq!(requests.load(std::sync::atomic::Ordering::Relaxed), 1);
-        assert!(approve_write(&mut cancelled).is_none());
-        assert_eq!(
-            cancelled.agent.session().tool_events()[0]
-                .result
-                .as_ref()
-                .unwrap()
-                .status,
-            ToolResultStatus::Cancelled
         );
     }
 
     #[test]
-    fn hiding_and_reopening_preserves_the_identical_approval() {
+    fn cancellation_before_mutation_completion_does_not_mutate_or_resume() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("main.rs");
         std::fs::write(&path, "before").unwrap();
         let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
+        let (session_store, _storage_directory) = crate::test_utils::session_store();
+        model.agent.set_session_store(session_store);
         let buffer = open_file(&mut model, &path);
         let (provider, _seen, requests) = WriteProvider::new(write_call(&model, buffer), false);
         model.agent.set_provider(Arc::new(provider));
-        begin_write(&mut model);
-        let approval = model.agent.session().pending_approval().unwrap().clone();
-
-        close(&mut model);
-        assert!(!model.agent.dialog_open());
-        assert_eq!(model.agent.session().pending_approval(), Some(&approval));
-        assert_eq!(
-            model.editor.buffer_text_snapshot(buffer).unwrap().text,
-            "before"
-        );
-
         open(&mut model);
-        assert!(model.agent.dialog_open());
-        assert!(
-            model
-                .modal
-                .is_active(crate::data_object::Context::AgentApproval)
-        );
-        assert_eq!(model.agent.session().pending_approval(), Some(&approval));
-        assert_eq!(requests.load(std::sync::atomic::Ordering::Relaxed), 1);
+        model.agent.set_prompt("write main.rs");
+        let effect = submit(&mut model).unwrap();
+        let Effect::Feature(request) = effect else {
+            panic!("expected provider effect");
+        };
+        let completion = request.perform();
+
+        let storage = interrupt(&mut model).unwrap();
+        perform(&MessageManager::default(), &mut model, storage);
+        let manager = MessageManager::default();
+        if let Some(effect) = manager.update(&mut model, completion) {
+            assert!(perform_resolution(&mut model, effect).is_empty());
+        }
+
         assert_eq!(
             model.editor.buffer_text_snapshot(buffer).unwrap().text,
             "before"
         );
+        assert_eq!(
+            model.agent.session().run().unwrap().status,
+            RunStatus::Cancelled
+        );
+        assert_eq!(requests.load(std::sync::atomic::Ordering::Relaxed), 1);
     }
 
     #[test]
@@ -1692,7 +1678,13 @@ mod tests {
         let buffer = open_file(&mut model, &path);
         let (provider, seen, _requests) = WriteProvider::new(write_call(&model, buffer), false);
         model.agent.set_provider(Arc::new(provider));
-        begin_write(&mut model);
+        open(&mut model);
+        model.agent.set_prompt("write main.rs");
+        let effect = submit(&mut model).unwrap();
+        let Effect::Feature(request) = effect else {
+            panic!("expected provider effect");
+        };
+        let completion = request.perform();
         model.editor.enter_insert_mode();
         model
             .editor
@@ -1702,7 +1694,9 @@ mod tests {
             .unwrap();
         model.editor.enter_normal_mode();
 
-        let effect = approve_write(&mut model).unwrap();
+        let effect = MessageManager::default()
+            .update(&mut model, completion)
+            .expect("mutation result and resume");
         assert!(perform_resolution(&mut model, effect).is_empty());
 
         assert_eq!(
@@ -1739,10 +1733,7 @@ mod tests {
         let second = open_file(&mut model, &second_path);
         let (provider, seen, requests) = WriteProvider::new(write_call(&model, first), true);
         model.agent.set_provider(Arc::new(provider));
-        begin_write(&mut model);
-
-        let effect = approve_write(&mut model).unwrap();
-        let saves = perform_resolution(&mut model, effect);
+        let saves = begin_write(&mut model);
 
         assert_eq!(saves, vec![first]);
         assert_eq!(model.editor.active_buffer(), Some(second));

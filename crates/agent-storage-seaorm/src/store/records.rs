@@ -248,7 +248,6 @@ fn run_status_parts(status: RunStatus) -> (&'static str, Option<String>) {
     match status {
         RunStatus::Waiting => ("waiting", None),
         RunStatus::Streaming => ("streaming", None),
-        RunStatus::WaitingForApproval => ("waiting_for_approval", None),
         RunStatus::Complete => ("complete", None),
         RunStatus::Failed(error) => ("failed", Some(error)),
         RunStatus::Cancelled => ("cancelled", None),
@@ -259,7 +258,8 @@ fn parse_run_status(status: String, error: Option<String>) -> Result<RunStatus, 
     match status.as_str() {
         "waiting" => Ok(RunStatus::Waiting),
         "streaming" => Ok(RunStatus::Streaming),
-        "waiting_for_approval" => Ok(RunStatus::WaitingForApproval),
+        // Approval was never a finalized state. Treat any legacy interrupted row as cancelled.
+        "waiting_for_approval" => Ok(RunStatus::Cancelled),
         "complete" => Ok(RunStatus::Complete),
         "failed" => error
             .map(RunStatus::Failed)

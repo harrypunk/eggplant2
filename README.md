@@ -14,7 +14,7 @@ The current application is intentionally lightweight: it is not a full IDE, a Vi
 - A separate **VCS addon** for branch display, switching/creation, changed files, staging, commits, and inline diffs.
 - Narrow boundaries for AI commands instead of direct widget or Helix access.
 
-The **inline AI agent supports fake and OpenAI-compatible providers**, editable `path:line` prompts, shared popup/panel conversations, ordered streaming/interrupt behavior, environment-based credentials, bounded `read`/`grep` tools, per-call-approved revision-safe exact-text writes and no-overwrite new-file creation, multi-turn provider history, and durable finalized-session storage. Startup restores the latest workspace session, `/sessions` switches between saved conversations, `/restore <session-id>` explicitly restores any stored session, and `/new` starts a clean session. SeaORM SQLite is the default local store at `~/.eggplant/ai/data.sqlite`; cloud backends are not bundled.
+The **inline AI agent supports fake and OpenAI-compatible providers**, editable `path:line` prompts, shared popup/panel conversations, ordered streaming/interrupt behavior, environment-based credentials, bounded automatic `read`/`grep` tools, approval-free revision-safe exact-text writes and no-overwrite new-file creation, multi-turn provider history, and durable finalized-session storage. Startup restores the latest workspace session, `/sessions` switches between saved conversations, `/restore <session-id>` explicitly restores any stored session, and `/new` starts a clean session. SeaORM SQLite is the default local store at `~/.eggplant/ai/data.sqlite`; cloud backends are not bundled.
 
 ## Run
 
@@ -50,7 +50,7 @@ The VCS integration is an **addon**, not a requirement of the core editor. Editi
 - [Editor design](docs/editor-design.md) — core document, buffer, viewport, and persistence invariants.
 - [Feature architecture](docs/feature-architecture.md) — extension ownership and dependency rules.
 - [AI agent architecture](docs/agent.md) — inline chat, shared session, streaming, and runtime boundaries.
-- [Agent tools](docs/agent-tools.md) — bounded read/grep and approved revision-safe write contracts.
+- [Agent tools](docs/agent-tools.md) — bounded read/grep and automatic revision-safe write/create contracts.
 - [Agent persistence](docs/agent-persistence.md) — SQLite storage, SeaORM adapter boundary, search, and cloud rollout.
 - [Language services](docs/lsp.md) — lightweight LSP navigation, diagnostics, and runtime ownership.
 - [External language-server configuration](docs/language-configuration.md) — user-configured external tools and provider-neutral interfaces.

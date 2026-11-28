@@ -2,7 +2,7 @@ use std::{future::Future, pin::Pin, sync::Arc};
 
 use eggplant_agent::{
     AgentContinuation, AgentEvent, AgentProvider, AgentRequest, CancellationToken, ProviderMessage,
-    RunId, ToolApproval, ToolResult, ToolResultStatus,
+    RunId, ToolResult, ToolResultStatus,
 };
 
 use super::{EditorContext, tools::ToolContext};
@@ -107,7 +107,7 @@ pub(crate) enum RoundAction {
 
 enum ToolExecution {
     Results(Vec<ToolResult>),
-    Approval(ToolApproval),
+    Mutation(eggplant_agent::ToolCall),
 }
 
 impl ProviderRound {
@@ -145,7 +145,7 @@ impl ProviderRound {
                     },
                     None,
                 ),
-                AgentEvent::ToolResults(_) | AgentEvent::ApprovalRequired { .. } => (self, None),
+                AgentEvent::ToolResults(_) | AgentEvent::MutationRequested { .. } => (self, None),
             },
         }
     }
@@ -332,9 +332,9 @@ impl ProviderAgentRun {
                                 }
                             }
                         }
-                        ToolExecution::Approval(approval) => {
-                            emit(AgentEvent::ApprovalRequired {
-                                approval,
+                        ToolExecution::Mutation(call) => {
+                            emit(AgentEvent::MutationRequested {
+                                call,
                                 continuation: progress.into(),
                             });
                         }
@@ -374,11 +374,11 @@ impl ProviderAgentRun {
                 if super::write::MutationKind::from_call(call).is_some()
                     && !self.cancellation.is_cancelled() =>
             {
-                let prepared = super::write::MutationKind::from_call(call)
+                let validated = super::write::MutationKind::from_call(call)
                     .expect("mutation was checked")
-                    .prepare(call, &self.context);
-                match prepared {
-                    Ok(approval) => ToolExecution::Approval(approval),
+                    .validate(call, &self.context);
+                match validated {
+                    Ok(()) => ToolExecution::Mutation(call.clone()),
                     Err(result) => ToolExecution::Results(vec![super::tools::bound_result(
                         result,
                         MAX_TOOL_OUTPUT.saturating_sub(output_used),

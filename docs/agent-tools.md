@@ -1,6 +1,6 @@
 # Agent tools
 
-Status: bounded `read` and `grep` plus approved revision-safe exact-text `write` are implemented through provider tool calls. Broader mutations remain deferred.
+Status: bounded `read` and `grep` plus revision-safe exact-text `write` and no-overwrite `create` are implemented through provider tool calls. All four execute automatically without built-in approval prompts; broader mutations remain deferred.
 
 The model sees small, stable tools. Eggplant owns validation and execution. Tools reuse existing capabilities where those capabilities already enforce the required invariant, and introduce a narrow adapter where an agent-safe precondition is missing.
 
@@ -13,7 +13,7 @@ The model sees small, stable tools. Eggplant owns validation and execution. Tool
 | Workspace traversal/search | `capabilities/search.rs`, `features/project_grep/work.rs`, `capabilities/filesystem.rs` | Reuse smart-case regex, ignore policy, and traversal, extracting a public bounded core where current functions are private. Do not invoke external grep. |
 | Editor mutation | `editor/src/session.rs`, `active_editor/editing.rs`, `features/editing/target.rs` | Use `replace_exact_text` for explicit-buffer/path/revision/exact-text transactions. Existing commands remain active-buffer UI editing, not an agent API. |
 | Save/reload | `editor/src/save.rs`, `session.rs`, `shell/buffer.rs`, `features/external_sync.rs` | Compose the same after-edit/save/completion and conflict protections; coordinate explicit-ID saves for non-active buffers. |
-| Approval diff UI | `features/vcs/diff.rs`, `buffer_diff.rs` | Reuse presentation/identity patterns, not `vcs::diff` itself. Proposed-before/after buffer diffs need a small bounded text-diff adapter. |
+| File creation | `capabilities/filesystem.rs`, `editor/src/session.rs` | Reuse `CreateTarget`/no-overwrite creation and `create_file_document`; do not add an agent-specific filesystem writer. |
 
 These are boundaries to reuse, not permission to reach through private feature state or make optional VCS a dependency of the agent.
 
@@ -30,12 +30,11 @@ Every tool invocation has:
 Every result has:
 
 - The same call ID.
-- Success, validation failure, execution failure, rejection, or cancellation status.
+- Success, error, or cancellation status for new executions. `ToolResultStatus::Rejected` remains only for historical/storage compatibility; new executions do not use it.
 - Bounded text/structured content suitable for the provider.
 - A truncation indicator when output was limited.
-- Optional UI-only detail such as a diff, without sending unnecessary data to the provider.
 
-Tool call IDs are correlation identities, not authorization tokens. A valid ID does not make an unsafe request valid. Persist only bounded tool arguments/results when session storage is added; large artifacts need a separate reference model. See [Agent persistence](agent-persistence.md).
+There is no separate approval payload, pending approval state, or approval-only diff. Tool call IDs are correlation identities, not authorization tokens. A valid ID does not make an unsafe request valid. Persist only bounded tool arguments/results when session storage is added; large artifacts need a separate reference model. See [Agent persistence](agent-persistence.md).
 
 ## Shared validation
 
@@ -44,7 +43,7 @@ Before execution:
 1. Check that the tool name and argument shape are supported.
 2. Resolve the target against the fixed workspace root.
 3. Canonicalize existing paths and validate symlink/parent rules.
-4. Enforce workspace scope unless a separate, explicit user grant applies.
+4. Enforce the fixed workspace scope; current tools provide no per-call/session approval or grant that widens it.
 5. Reject unsupported file types, invalid UTF-8 where text is required, and over-limit input.
 6. Revalidate the expected buffer/document revision immediately before mutation.
 
@@ -98,64 +97,56 @@ The first mutation tool is narrow: replace exactly one non-overlapping old-text 
 ### Inputs
 
 - Explicit `BufferId` and canonical path.
-- Expected document revision captured before approval.
-- Exact old text or a well-defined range plus expected text.
+- Expected document revision captured in the worker's owned context.
+- Exact old text.
 - Replacement text.
 - A user-visible reason/summary supplied by the workflow, not trusted as validation.
 
 ### Required sequence
 
-1. Compute a preview/diff without changing the buffer.
-2. Present the path, summary, and bounded diff in the Agent panel or approval popup.
-3. Wait for explicit user approval of this call.
-4. On the main update path, revalidate buffer identity, canonical path, expected revision, and exact old text/range.
-5. Apply one undoable editor transaction through the editor adapter.
-6. Run the normal after-edit/auto-save/language-sync path. If the target is not the active buffer, coordinate persistence and synchronization explicitly by `BufferId`/path rather than relying on active-document behavior.
-7. Report success only after the transaction is accepted; report save failure separately and never claim the edit was rolled back automatically.
+1. The worker validates the captured open-buffer snapshot, canonical path, expected revision, and exactly one old-text match without changing the buffer.
+2. With the write as the only call in its round, the worker emits `MutationRequested` plus an owned provider-neutral `AgentContinuation` and exits without completing the run. It never blocks on a UI channel.
+3. On the main update path, `MutationExecutor` uses `MutationContext` to revalidate current buffer identity, canonical path, expected revision, exact old text, and save-in-flight state.
+4. `MutationTool` applies one undoable editor transaction through the editor adapter, or returns an honest error without changing user text.
+5. Eggplant runs the normal after-edit/auto-save/language-sync path. If the target is not the active buffer, it coordinates persistence and synchronization explicitly by `BufferId`/path rather than relying on active-document behavior.
+6. `MutationExecutor` captures fresh context and resumes the provider with the bounded result, so subsequent reads cannot reuse pre-write text. Success means the transaction was accepted, not that persistence succeeded; save failures remain visible and never imply automatic rollback.
 
-If the revision or exact text changed, reject with a conflict. The model may request a fresh read and try again; it cannot force the write. A save already in flight for the target is also a retryable conflict, and switching the active buffer alone is not a conflict.
+If the revision or exact text changed, Eggplant returns a conflict error. The model may request a fresh read and try again; it cannot force the write. A save already in flight for the target is also a retryable conflict, and switching the active buffer alone is not a conflict.
 
-The worker suspends with an owned provider-neutral continuation rather than blocking on a UI channel. Each write must be the only call in its round. `y` accepts exactly once, `n` resumes with an explicit rejection, `Esc` hides the identical pending request, and `Ctrl-F7` records cancellation without resuming. Acceptance applies one transaction on the main update path, schedules auto-save and language synchronization by explicit `BufferId`, and resumes with fresh snapshots so subsequent reads cannot reuse pre-write text. Success means the edit was accepted, not that persistence succeeded; normal save failures remain visible and never imply rollback.
+There is no approval step in this sequence: no `y`/`n` handling, mutation-specific `Esc` behavior, pending approval state, approval modal, or approval-only diff. `Ctrl-F7` retains its ordinary active-run cancellation meaning.
 
 ### New-file creation
 
-`create` accepts only a workspace-relative path and full text content. It rejects existing paths and directories, then composes the existing `CreateTarget`/`filesystem::create` no-overwrite path, `DocumentFactory::open` syntax-aware buffer creation, and `EditorSession::create_file_document` full-text initialization. Approval uses the same single-mutation-per-round and rejection behavior as exact replacement. The resulting buffer uses the ordinary after-edit auto-save/language-sync pipeline, so nested paths and first-save persistence need no agent-specific filesystem writer. Existing-file `write` retains its exact old-text/revision contract. `MutationKind` provides typed dispatch to the `MutationTool` implementations, while `DiffPreview` owns preview line/byte/marker policy rather than module-level free functions and constants.
+`create` accepts only a workspace-relative path and full text content. It rejects existing paths and directories, then composes the existing `CreateTarget`/`filesystem::create` no-overwrite path, `DocumentFactory::open` syntax-aware buffer creation, and `EditorSession::create_file_document` full-text initialization. It uses the same automatic single-mutation-per-round `MutationRequested`/`MutationExecutor` flow as exact replacement. The resulting buffer uses the ordinary after-edit auto-save/language-sync pipeline, so nested paths and first-save persistence need no agent-specific filesystem writer. Existing-file `write` retains its exact old-text/revision contract. `MutationKind` provides typed dispatch to the `MutationTool` implementations.
 
 ### What not to do
 
 - Do not invoke Normal/Insert active-buffer key commands as an unattended API.
 - Do not write directly with unrestricted `std::fs::write` for an open buffer.
 - Do not bypass auto-save, external-modification conflict checks, or dirty-buffer state.
-- Do not silently expand approval to later writes, other paths, Git operations, or shell commands.
+- Do not let one automatic mutation weaken validation for later calls, other paths, Git operations, or shell commands.
 - Do not accept a model-generated `BufferId`/revision as authoritative without matching it to current editor state.
 
 Where existing “write” functionality is filesystem-oriented rather than revision-aware editing, add the narrow editor adapter instead of forcing the agent through an unsafe API.
 
-## Approval model
+## Automatic execution model
 
-Read/grep inside the workspace may run without per-call approval, subject to limits. Mutations require approval by default.
+Following Pi core's lack of built-in tool approval prompts, `read`/`grep` and `write`/`create` execute automatically after validation. Eggplant has no per-call or session approval setting, `y`/`n` approval keys, approval modal, pending approval state, or approval-only diff. Automatic execution does not relax canonical workspace paths, `BufferId`/revision/exact-match checks, no-overwrite creation, save ordering, or cancellation.
 
-An approval applies to one tool call ID plus an immutable summary of:
-
-- Tool name and target.
-- Expected revision or filesystem precondition.
-- Proposed change/diff.
-
-Any change to those values requires a new approval. Hiding a popup, switching buffers, or starting another run must not accidentally approve the request. Rejection and cancellation append explicit tool results so the model can respond appropriately.
-
-A future user setting may relax read-only approval, but unrestricted “allow all tools” is not required for the first version.
+Validation and execution failures produce honest error results; cancellation remains explicit. `ToolResultStatus::Rejected` is retained only for historical/storage compatibility; new executions never produce it. Legacy `waiting_for_approval` storage rows restore as cancelled rather than as active continuations.
 
 ## Tool execution and agent loop
 
-Read-only tools execute as bounded effects and return typed results to the owning agent runtime. Mutation tools have two phases:
+Read-only tools execute as bounded effects and return typed results to the owning agent runtime. Mutation tools hand off from captured worker context to the main update path:
 
 ```text
-model tool request
-  → validate and compute preview
-  → pending approval in AgentSession
-  → user accepts/rejects
-  → revalidate and execute or append rejection
-  → bounded tool result to provider
+model tool request (sole call in the round)
+  → worker validates captured context
+  → MutationRequested + owned AgentContinuation
+  → main-update MutationExecutor through MutationContext
+  → MutationTool revalidates and applies, or returns an error
+  → explicit-ID save/language sync + fresh context capture
+  → bounded tool result resumes the provider
 ```
 
 The agent loop follows Pi's `packages/agent/src/agent-loop.ts`: there is no fixed tool-step or tool-call limit. It continues while new calls arrive and stops on natural completion, error/abort, an explicit end decision, or user cancellation. Output-size, validation, path/revision, and cancellation policies provide the safety boundaries instead of an arbitrary round cutoff.
@@ -168,7 +159,6 @@ Set concrete defaults during implementation and test their boundaries. The contr
 - Lines and context per result.
 - Grep matches and total output.
 - Transcript entries and retained tool detail.
-- Diff size shown in approval UI.
 - Cumulative tool output and provider input.
 
 Limits should produce useful truncation metadata. Do not simply cut a UTF-8 string at an arbitrary byte or hide the fact that content was omitted.
@@ -186,7 +176,6 @@ Limits should produce useful truncation metadata. Do not simply cut a UTF-8 stri
 | Cumulative provider tool output | 100 KiB per run; another tool round after exhaustion fails explicitly |
 | Retained tool events | 50 entries; results correlate with both call ID and current `RunId` |
 | Panel preview | Two lines and 240 characters, plus an explicit truncation indicator |
-| Approval diff | 120 lines and 12 KiB, with an explicit `[diff truncated]` marker |
 
 Workspace grep uses the shared ignore policy and sorted path traversal. It processes one bounded file at a time rather than retaining all workspace text. A provider-round `Complete` event is not emitted to the session until the run has no further tool work; failed or cancelled rounds never execute queued calls.
 
@@ -201,7 +190,7 @@ The following require separate review and should not appear as accepted no-ops i
 - Network fetch, browser, credential, or secret-reading tools.
 - Third-party dynamic tool loading.
 
-Each needs its own path, approval, output, and failure semantics. A general `run_command` tool must not become a shortcut around those contracts.
+Each needs its own path, validation, output, and failure semantics. A general `run_command` tool must not become a shortcut around those contracts.
 
 ## Required tests
 
@@ -212,7 +201,7 @@ For each tool, cover:
 - Workspace escape, absolute path abuse, symlink parent escape, and sensitive-file denial.
 - Empty results, Unicode, large files, result caps, and truncation metadata.
 - Cancellation and stale run/request completion.
-- Approval rejection and approval/input mismatch.
+- `MutationRequested` continuation identity and captured-context/main-update validation mismatches.
 - Buffer/path/revision/exact-text conflicts.
 - Save failure and honest user/provider result reporting.
 - Preservation of ordinary editing when provider or tool execution fails.

@@ -516,7 +516,7 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 ### Milestone 12: Inline AI agent
 
-**Status: M12.1–M12.6 complete. Inline chat, multi-turn OpenAI streaming, bounded read/grep, approved writes, durable SQLite sessions, and interactive finalized-session restoration are implemented. M12.7 is the next reviewable phase.**
+**Status: M12.1–M12.8 complete. Inline chat, multi-turn OpenAI streaming, bounded read/grep, automatic writes, durable SQLite sessions, interactive finalized-session restoration, and provider context management are implemented.**
 
 **Goal:** make agent chat and bounded coding tools a first-class inline workflow without creating a second editor, bypassing persistence, or adopting a general agent/plugin framework. Read [AI agent architecture](docs/agent.md) and [Agent tools](docs/agent-tools.md) before implementation.
 
@@ -527,7 +527,7 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 - Preserve one Elm event/update/effect loop and one terminal owner. Stream ordered, run-scoped events through a focused effect adapter without provider-specific global messages.
 - Keep the independently publishable `eggplant-agent` crate free of TUI, filesystem, editor, Helix, Ratatui, and provider-SDK dependencies. Frontends own presentation/effects; providers own model I/O.
 - Capture explicit buffer/path/revision context at submission; never treat active-buffer UI commands as an unattended editing API.
-- Model output is untrusted. Eggplant validates every tool, requires mutation approval, and never executes tool calls from a length-truncated response. Workspace/path/revision/save invariants remain mandatory.
+- Model output is untrusted. Following Pi core's lack of built-in tool approval prompts, Eggplant validates and automatically executes supported `read`/`grep`/`write`/`create` calls without per-call or session approval. It never executes tool calls from a length-truncated response. Workspace/path/revision/save invariants remain mandatory.
 - Tests use scripted fake providers and temporary directories; no real model, network, or credentials are build requirements.
 
 #### M12.1 — Shared session and fake streaming UI
@@ -553,13 +553,13 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 - [x] Render concise tool activity/output/truncation in the shared Agent panel without leaking secrets or unbounded content.
 - [x] Test path/symlink escapes, invalid arguments, Unicode, large results, cancellation, stale calls, and iteration/output limits.
 
-#### M12.4 — Approved revision-safe writes
+#### M12.4 — Automatic revision-safe writes
 
-- [x] Start with exact-text/range replacement in an existing open buffer identified by `BufferId`, canonical path, and expected revision, plus no-overwrite creation of new text files through the shared document/save pipeline.
-- [x] Compute a bounded diff and require one immutable per-call approval before mutation; any changed input requires new approval.
-- [x] Revalidate identity/revision/exact text on the main update path and apply one undoable editor transaction through existing after-edit/save/sync behavior; coordinate non-active-buffer persistence explicitly by ID/path.
-- [x] Report rejection, conflict, cancellation, and save failure honestly; never claim an automatic rollback or silently widen approval.
-- [x] Defer whole-file creation/delete/rename, multi-file patches, shell commands, LSP workspace edits, and Git mutations to separately reviewed tools. New-file creation is implemented; delete/rename/copy remain deferred.
+- [x] Start with exact-text replacement in an existing open buffer identified by `BufferId`, canonical path, and expected revision, plus no-overwrite creation of new text files through the shared document/save pipeline.
+- [x] Execute `write`/`create` automatically without per-call/session approval, approval keys/modals, pending approval state, or approval-only diffs. Keep each mutation as the only call in its provider round.
+- [x] Validate captured context in the worker, emit `MutationRequested` with an owned continuation, then use main-update `MutationExecutor`/`MutationContext` to revalidate and apply through `MutationTool`. Preserve identity/revision/exact-text and no-overwrite checks, one undoable editor transaction, explicit-ID after-edit/save/language sync, fresh context capture, and provider resumption.
+- [x] Report validation conflicts, cancellation, and save failure honestly; never claim an automatic rollback or unconditional save success.
+- [x] Defer delete/rename, multi-file patches, shell commands, LSP workspace edits, and Git mutations to separately reviewed tools. New-file creation is implemented; delete/rename/copy remain deferred.
 
 #### M12.5 — Scalable session persistence
 
@@ -568,7 +568,7 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 - [x] Define provider-neutral finalized session/run/message/tool records and a narrow `SessionStore` port with startup injection before composition supplies the relational adapter.
 - [x] Persist finalized messages through the existing update/effect path with session/run identity; do not make rendering wait on storage I/O.
 - [x] Add a separate SeaORM SQLite adapter with versioned migrations, transactions, batched transcript reads, and keyset pagination; keep SeaORM out of `eggplant-agent`.
-- [x] Normalize filter/index fields and bound result text, diff previews, and tool artifacts. Use backend-specific full-text implementations only behind the storage port.
+- [x] Normalize filter/index fields and bound result text and tool artifacts. Use backend-specific full-text implementations only behind the storage port.
 - [x] Test temporary SQLite stores, truncation, locked/corrupt stores, migration failure, cancellation, and ordinary editing without a configured store.
 - [x] Keep MySQL/PostgreSQL cloud deployment separate and unbundled: future adapters must preserve `SessionStore`, secret references, TLS validation, pool/timeouts, explicit migration policy, and manual deployment smoke tests. No cloud drivers or credentials are required in workspace tests.
 
@@ -592,7 +592,7 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 - [x] Support `/restore <session-id>` through generic catalog argument policies and typed invocations, allowing explicit cross-workspace restoration without a new popup or command-specific submission parser. Missing/multiple IDs preserve the draft with usage guidance; runtime revisions reject stale direct completions.
 - [x] Add restart smoke coverage proving that a restored exchange is visible and sent in the next provider request, the next `RunId` does not overwrite storage, `/new` remains independent, and startup/load failures stay recoverable.
 
-**Initial-version boundary:** crash/in-flight recovery, pending approvals, and durable reasoning parts remain separate follow-ups. Branching, forking, and Pi-style session trees are not initial-version goals; sessions remain strictly linear.
+**Initial-version boundary:** crash/in-flight recovery and durable reasoning parts remain separate follow-ups. There is no pending-approval workflow; legacy `waiting_for_approval` storage rows restore as cancelled. Branching, forking, and Pi-style session trees are not initial-version goals; sessions remain strictly linear.
 
 #### M12.8 — Provider context management
 
@@ -605,7 +605,7 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 **Deferred:** measure real multi-turn/tool workloads before choosing summarization or compaction. Keep reasoning persistence, provider replay signatures, and compaction metadata as independently reviewed follow-ups.
 
-**M12 exit criteria:** users can chat inline with multi-turn provider context, watch the same session in the tool panel, use bounded read/grep tools, approve safe revision-checked edits, and restore finalized sessions while normal editing remains usable during provider/tool failure. No arbitrary shell, autonomous sub-agent, plugin host, or automatic Git mutation is required. Persistence is an independent storage slice, not a prerequisite for provider chat.
+**M12 exit criteria:** users can chat inline with multi-turn provider context, watch the same session in the tool panel, use bounded read/grep tools, execute revision-checked edits and no-overwrite creation automatically, and restore finalized sessions while normal editing remains usable during provider/tool failure. No arbitrary shell, autonomous sub-agent, plugin host, or automatic Git mutation is required. Persistence is an independent storage slice, not a prerequisite for provider chat.
 
 ## TBD — much later editions
 

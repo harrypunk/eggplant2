@@ -209,16 +209,15 @@ Provider logout:
 
 The focus controller itself remains geometry-only; keyboard maps decide which mode emits focus commands.
 
-### Agent write approval
+### Agent automatic mutations
+
+Agent `read`/`grep` and `write`/`create` calls have no per-call or session approval mode, `y`/`n` approval keys, mutation-specific `Esc` binding, or approval modal. Valid writes and creations execute automatically, one mutation call per provider round, with normal main-update validation and save invariants.
 
 | Action | Default binding |
 | --- | --- |
-| Approve one immutable exact-text write | `y` |
-| Reject the write and resume the model | `n` |
-| Hide the unchanged approval without resolving it | `Esc` |
-| Cancel the run without applying or resuming the write | `Ctrl-F7` |
+| Interrupt the active run, including an automatic tool workflow | `Ctrl-F7` |
 
-Approval mode has no printable prompt input and no cursor. Reopening with `Ctrl-I` restores the pending approval. Revision/exact-text conflicts return an error to the model without changing user text.
+`Ctrl-F7` is run interruption, not an approval rejection. Revision/exact-text conflicts return an error to the model without changing user text; save failures are reported separately.
 
 ### Current-buffer grep
 
@@ -385,7 +384,7 @@ Contexts opt into opening the menu through `KeymapCapability::LeaderMenu`; `Even
 
 `InputRouting` resolves input in three layers at the composition root. `ApplicationInputRouting` gives the active `ModalController` session priority, followed by the top of `context_stack`, then delegates to the active page. `EventManager` and `MessageManager` receive this router through the same injected interface; the manager layer no longer owns page, focus, buffer, or tool policy.
 
-A modal session owns both presentation and input identity through `ModalController::active_context`. Every `ModalController` workflow uses this single owner without duplicating its context in the stack. Agent dialog ↔ approval uses `ModalController::replace` to change phases without releasing input ownership.
+A modal session owns both presentation and input identity through `ModalController::active_context`. Every `ModalController` workflow uses this single owner without duplicating its context in the stack. Agent dialog and help use modal sessions; automatic tool mutations do not change the active modal or input context.
 
 The stack provides transient LIFO routing underneath the active modal only for genuine stack-owned workflows: `BufferNavigation`, `LineJump`, `ViewAlign`, `EditorChange`, `EditorYank`, `VcsResetMenu`, and `VcsBranchMenu`. The VCS menu entries are page-local menus, not `ModalController` popups; transitioning from one to its popup removes the menu entry before acquiring the modal. Push a stack-owned workflow's context on entry and pop that same context on exit. `ContextStack` owns the LIFO mechanics and `pop_if` removes only a matching top frame; it never removes an older workflow or synchronizes shell state. Features consume explicit `RoutedInput`, their own workflow state, or narrow owner policies such as the editing target's Normal-input availability. There is no global `input_context` compatibility function. Composition adapters may resolve route-origin metadata through `InputRouting`.
 

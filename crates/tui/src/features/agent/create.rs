@@ -1,24 +1,20 @@
 use std::path::Path;
 
 use editor::{DocumentFactory, EditorSession};
-use eggplant_agent::{ToolApproval, ToolCall, ToolResult, ToolResultStatus};
+use eggplant_agent::{ToolCall, ToolResult, ToolResultStatus};
 use serde::Deserialize;
 
 use super::{
     tools::{self, ToolContext},
-    write::{DiffPreview, MutationTool, WriteOutcome},
+    write::{MutationOutcome, MutationTool},
 };
 use crate::filesystem::{self, CreateTarget};
 
-pub struct FileCreation {
-    diff: DiffPreview,
-}
+pub struct FileCreation;
 
 impl FileCreation {
     pub const fn new() -> Self {
-        Self {
-            diff: DiffPreview::new(),
-        }
+        Self
     }
 
     fn apply_result(
@@ -78,26 +74,19 @@ impl FileCreation {
 }
 
 impl MutationTool for FileCreation {
-    fn prepare(&self, call: &ToolCall, context: &ToolContext) -> Result<ToolApproval, ToolResult> {
+    fn validate(&self, call: &ToolCall, context: &ToolContext) -> Result<(), ToolResult> {
         let arguments: CreateArguments = tools::parse_arguments(call, "create")?;
-        let target = self.target(call, &context.root, &arguments.path)?;
-        let relative = target.relative().to_path_buf();
-        Ok(ToolApproval {
-            call: call.clone(),
-            summary: format!("Create new file {}", relative.display()),
-            diff: self
-                .diff
-                .render(&relative.to_string_lossy(), "", &arguments.content),
-        })
+        self.target(call, &context.root, &arguments.path)
+            .map(|_| ())
     }
 
-    fn apply(&self, editor: &mut EditorSession, root: &Path, call: &ToolCall) -> WriteOutcome {
+    fn apply(&self, editor: &mut EditorSession, root: &Path, call: &ToolCall) -> MutationOutcome {
         match self.apply_result(editor, root, call) {
-            Ok((result, buffer_id)) => WriteOutcome {
+            Ok((result, buffer_id)) => MutationOutcome {
                 result,
                 edited: Some(buffer_id),
             },
-            Err(result) => WriteOutcome {
+            Err(result) => MutationOutcome {
                 result,
                 edited: None,
             },
@@ -137,9 +126,8 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let call = call("nested/numbers.py", "print('numbers')\n");
         let tool = FileCreation::new();
-        let approval = tool.prepare(&call, &context(&directory)).unwrap();
-        assert!(approval.summary.contains("nested/numbers.py"));
-        assert!(approval.diff.contains("+print('numbers')"));
+        tool.validate(&call, &context(&directory)).unwrap();
+        assert!(!directory.path().join("nested/numbers.py").exists());
         let mut model = Model::default();
 
         let outcome = tool.apply(&mut model.editor, directory.path(), &call);
@@ -169,7 +157,7 @@ mod tests {
         std::fs::write(&path, "original").unwrap();
         let call = call("main.rs", "replacement");
         let tool = FileCreation::new();
-        assert!(tool.prepare(&call, &context(&directory)).is_err());
+        assert!(tool.validate(&call, &context(&directory)).is_err());
         let mut model = Model::default();
 
         let outcome = tool.apply(&mut model.editor, directory.path(), &call);
@@ -180,13 +168,15 @@ mod tests {
     }
 
     #[test]
-    fn rejection_creates_no_file() {
+    fn validation_creates_no_file() {
         let directory = tempfile::tempdir().unwrap();
         let tool = FileCreation::new();
-        let outcome = tool.reject(&call("numbers.py", "print('numbers')"));
+        tool.validate(
+            &call("numbers.py", "print('numbers')"),
+            &context(&directory),
+        )
+        .unwrap();
 
-        assert_eq!(outcome.result.status, ToolResultStatus::Rejected);
-        assert!(outcome.edited.is_none());
         assert!(!directory.path().join("numbers.py").exists());
     }
 }

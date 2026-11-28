@@ -29,5 +29,5 @@ pub use request::AgentRequest;
 pub use run::{AgentContinuation, AgentRun, RunId, RunStatus, SessionId};
 pub use session::{AgentSession, SessionRestoreError, SessionSnapshot};
 pub use thinking::{ThinkingId, ThinkingOption};
-pub use tool::{ToolApproval, ToolCall, ToolEvent, ToolResult, ToolResultStatus};
+pub use tool::{ToolCall, ToolEvent, ToolResult, ToolResultStatus};
 pub use usage::TokenUsage;

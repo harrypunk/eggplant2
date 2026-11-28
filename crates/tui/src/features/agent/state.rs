@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use eggplant_agent::{AgentContinuation, AgentProvider, AgentSession, CancellationToken, RunId};
+use eggplant_agent::{AgentProvider, AgentSession, CancellationToken};
 use eggplant_agent_storage::SessionStore;
 
 use super::{
@@ -210,9 +210,5 @@ impl AgentState {
 
     pub fn begin_cancellation(&mut self) -> CancellationToken {
         self.runtime.begin_cancellation()
-    }
-
-    pub(crate) fn take_suspension(&mut self, run_id: RunId) -> Option<AgentContinuation> {
-        self.runtime.take_suspension(run_id)
     }
 }

@@ -1,10 +1,10 @@
 mod adapter;
-mod approval;
 mod commands;
 mod completion;
 mod context;
 mod create;
 mod dialog;
+mod mutation;
 mod navigation;
 mod panel;
 mod presentation;
@@ -98,12 +98,6 @@ pub const KEYMAPS: &[ContextKeymap] = &[
     ),
     ContextKeymap::new("agent_chat_help", Context::AgentChatHelp)
         .with_commands(&[("agent_help", "?"), ("agent_panel_normal", "esc")]),
-    ContextKeymap::new("agent_approval", Context::AgentApproval).with_commands(&[
-        ("agent_close", "esc"),
-        ("agent_approve", "y"),
-        ("agent_reject", "n"),
-        ("agent_interrupt", "ctrl-f7"),
-    ]),
 ];
 
 use crate::{

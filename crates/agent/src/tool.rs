@@ -24,13 +24,6 @@ pub struct ToolResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ToolApproval {
-    pub call: ToolCall,
-    pub summary: String,
-    pub diff: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ToolEvent {
     pub run_id: RunId,
     pub call_id: String,

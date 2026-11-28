@@ -644,29 +644,6 @@ mod tests {
             manager.translate(event, &model),
             Some(Message::TextInput(TextInputEvent::Insert('x')))
         ));
-
-        assert!(
-            model
-                .modal
-                .replace(Context::AgentChatDialog, Context::AgentApproval)
-        );
-        for (key, modifiers, command) in [
-            (KeyCode::Char('y'), KeyModifiers::NONE, "agent_approve"),
-            (KeyCode::Char('n'), KeyModifiers::NONE, "agent_reject"),
-            (KeyCode::Esc, KeyModifiers::NONE, "agent_close"),
-            (KeyCode::F(7), KeyModifiers::CONTROL, "agent_interrupt"),
-        ] {
-            let event = Event::Key(KeyEvent::new(key, modifiers));
-            assert!(matches!(
-                manager.translate(event, &model),
-                Some(Message::InvokeCommand(actual)) if actual == CommandId(command)
-            ));
-        }
-        let event = Event::Key(KeyEvent::new(KeyCode::Char('x'), KeyModifiers::NONE));
-        assert!(!matches!(
-            manager.translate(event, &model),
-            Some(Message::TextInput(TextInputEvent::Insert(_)))
-        ));
     }
 
     #[test]

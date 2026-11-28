@@ -146,7 +146,7 @@ Features depend on narrow shell/editor capabilities rather than each other's con
 - Buffer switching asks the explorer-reveal capability to synchronize the active file; buffer state remains editor-owned.
 - Theme selection replaces only resolved theme state; it does not touch editor or explorer state.
 - Search may request read-only snapshots and document-open navigation, but cannot bypass text-file acceptance or auto-save.
-- Future automated editing must name an explicit `BufferId` and expected revision; active-buffer UI commands are not a safe unattended-agent API. See [Agent tools](agent-tools.md) for the proposed approval and mutation contract.
+- Agent automated editing must name an explicit `BufferId` and expected revision; active-buffer UI commands are not a safe unattended-agent API. `write`/`create` execute automatically without approval prompts, while main-update validation preserves the mutation invariants. See [Agent tools](agent-tools.md) for the automatic mutation contract.
 
 Introduce capabilities at existing seams, not as a preemptive service layer covering every possible future operation.
 

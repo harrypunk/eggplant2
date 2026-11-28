@@ -88,7 +88,7 @@ fn tool_results_match_their_run_and_survive_cancellation() {
 }
 
 #[test]
-fn approval_is_single_shot_and_bound_to_run_and_call() {
+fn pending_tool_identity_is_bound_to_an_active_run_and_call() {
     let mut session = AgentSession::default();
     let run = session.begin("change".to_string()).unwrap();
     let call = ToolCall {
@@ -96,41 +96,12 @@ fn approval_is_single_shot_and_bound_to_run_and_call() {
         name: "write".to_string(),
         arguments: "{}".to_string(),
     };
-    let approval = ToolApproval {
-        call: call.clone(),
-        summary: "Replace text".to_string(),
-        diff: "-old\n+new".to_string(),
-    };
+    assert!(!session.tool_call_is_pending(run, &call.id));
     assert!(session.record_tool_call(run, &call));
-    assert!(session.request_approval(run, approval.clone()));
-    assert!(!session.request_approval(run, approval.clone()));
-    assert_eq!(session.run().unwrap().status, RunStatus::WaitingForApproval);
-    assert!(session.resolve_approval(run, "another-call").is_none());
-    assert_eq!(session.resolve_approval(run, &call.id), Some(approval));
-    assert_eq!(session.run().unwrap().status, RunStatus::Streaming);
-    assert!(session.pending_approval().is_none());
-}
-
-#[test]
-fn cancellation_discards_pending_approval() {
-    let mut session = AgentSession::default();
-    let run = session.begin("change".to_string()).unwrap();
-    let call = ToolCall {
-        id: "write-1".to_string(),
-        name: "write".to_string(),
-        arguments: "{}".to_string(),
-    };
-    assert!(session.record_tool_call(run, &call));
-    assert!(session.request_approval(
-        run,
-        ToolApproval {
-            call,
-            summary: "Replace text".to_string(),
-            diff: String::new(),
-        }
-    ));
+    assert!(session.tool_call_is_pending(run, &call.id));
+    assert!(!session.tool_call_is_pending(run, "another-call"));
     assert!(session.cancel());
-    assert!(session.pending_approval().is_none());
+    assert!(!session.tool_call_is_pending(run, &call.id));
     assert_eq!(session.run().unwrap().status, RunStatus::Cancelled);
 }
 

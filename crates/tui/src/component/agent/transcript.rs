@@ -1,5 +1,5 @@
 use eggplant_agent::{
-    AgentSession, ChatMessage, MessagePart, MessageRole, ToolApproval, ToolEvent, ToolResultStatus,
+    AgentSession, ChatMessage, MessagePart, MessageRole, ToolEvent, ToolResultStatus,
 };
 use ratatui::{
     buffer::Buffer,
@@ -44,14 +44,9 @@ fn transcript_blocks(session: &AgentSession, width: u16, styles: &UiTheme) -> Ve
         .map(|event| tool_event_line(event, styles))
         .collect::<Vec<_>>();
     let tools = spaced_plain_section(tools, styles);
-    let approval = session
-        .pending_approval()
-        .and_then(|approval| spaced_plain_section(approval_lines(approval, styles), styles));
-
     messages
         .into_iter()
         .chain(tools.into_iter().flatten())
-        .chain(approval.into_iter().flatten())
         .collect()
 }
 
@@ -448,33 +443,6 @@ fn tool_preview(content: &str) -> String {
         .join(" · ")
         .chars()
         .take(240)
-        .collect()
-}
-
-fn approval_lines(approval: &ToolApproval, styles: &UiTheme) -> Vec<Line<'static>> {
-    let mut lines = vec![Line::styled(
-        format!("Approval: {}", approval.summary),
-        styles.action_hint,
-    )];
-    lines.extend(diff_lines(&approval.diff, styles));
-    lines.push(Line::styled(
-        "Resolve in the Agent popup: y approve · n reject",
-        styles.muted,
-    ));
-    lines
-}
-
-pub(super) fn diff_lines(diff: &str, styles: &UiTheme) -> Vec<Line<'static>> {
-    diff.lines()
-        .map(|line| {
-            let style = match line {
-                line if line.starts_with('+') => styles.diff_add,
-                line if line.starts_with('-') => styles.diff_remove,
-                line if line.starts_with("@@") => styles.diff_hunk,
-                _ => styles.muted,
-            };
-            Line::styled(line.to_string(), style)
-        })
         .collect()
 }
 

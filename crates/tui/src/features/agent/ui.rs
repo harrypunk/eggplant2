@@ -20,9 +20,7 @@ pub fn register_ui(ui: &mut UiRegistry) -> color_eyre::Result<()> {
 }
 
 fn dialog_overlay(model: &Model) -> Option<OverlayContribution> {
-    (model.modal.is_active(Context::AgentChatDialog)
-        || model.modal.is_active(Context::AgentApproval))
-    .then(|| {
+    model.modal.is_active(Context::AgentChatDialog).then(|| {
         OverlayContribution::new(
             "agent",
             OverlayKind::Modal,

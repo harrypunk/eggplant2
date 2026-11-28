@@ -336,7 +336,7 @@ fn tool_declarations() -> Value {
             "type": "function",
             "function": {
                 "name": "write",
-                "description": "Request one approved exact-text replacement in an open buffer. Read the buffer first for its ID and revision. This must be the only tool call in its round.",
+                "description": "Apply one exact-text replacement in an open buffer. Read the buffer first for its ID and revision. This must be the only tool call in its round.",
                 "parameters": {
                     "type": "object",
                     "additionalProperties": false,
