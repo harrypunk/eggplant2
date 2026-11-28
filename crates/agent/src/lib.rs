@@ -16,7 +16,7 @@ mod usage;
 
 pub use cancellation::CancellationToken;
 pub use event::AgentEvent;
-pub use message::{ChatMessage, MessageRole, ProviderMessage, ProviderMessageRole};
+pub use message::{ChatMessage, MessagePart, MessageRole, ProviderMessage, ProviderMessageRole};
 pub use provider::{AgentError, AgentEventSink, AgentProvider, AgentStreamFuture};
 pub use request::AgentRequest;
 pub use run::{AgentContinuation, AgentRun, RunId, RunStatus, SessionId};

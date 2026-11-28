@@ -52,8 +52,22 @@ pub enum MessageRole {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MessagePart {
+    Thinking(String),
+    Answer(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChatMessage {
     pub role: MessageRole,
     pub run_id: RunId,
+    /// Answer text for assistant messages; original text for user messages.
     pub text: String,
+    pub(crate) parts: Vec<MessagePart>,
+}
+
+impl ChatMessage {
+    pub fn parts(&self) -> &[MessagePart] {
+        &self.parts
+    }
 }

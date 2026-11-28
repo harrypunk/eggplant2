@@ -74,6 +74,10 @@ impl AgentRuntime {
                 self.session.append_delta(run_id, &delta);
                 AgentApplyOutcome::None
             }
+            AgentEvent::ThinkingDelta(delta) => {
+                self.session.append_thinking_delta(run_id, &delta);
+                AgentApplyOutcome::None
+            }
             AgentEvent::Usage(usage) => {
                 self.session.record_usage(run_id, usage);
                 AgentApplyOutcome::None

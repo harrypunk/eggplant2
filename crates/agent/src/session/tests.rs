@@ -17,6 +17,31 @@ fn streams_ordered_text_and_rejects_stale_events() {
 }
 
 #[test]
+fn thinking_and_answer_parts_preserve_order_and_coalesce_adjacent_deltas() {
+    let mut session = AgentSession::default();
+    let run = session.begin("explain this".to_string()).unwrap();
+    assert!(session.append_thinking_delta(run, "plan"));
+    assert!(session.append_thinking_delta(run, " more"));
+    assert!(session.append_delta(run, "result"));
+    assert!(session.append_thinking_delta(run, "check"));
+    assert!(session.append_delta(run, "!"));
+    assert!(session.complete(run));
+    assert!(!session.append_thinking_delta(run, "late"));
+
+    let message = &session.messages()[1];
+    assert_eq!(message.text, "result!");
+    assert_eq!(
+        message.parts(),
+        &[
+            MessagePart::Thinking("plan more".to_string()),
+            MessagePart::Answer("result".to_string()),
+            MessagePart::Thinking("check".to_string()),
+            MessagePart::Answer("!".to_string()),
+        ]
+    );
+}
+
+#[test]
 fn cancel_preserves_partial_text_and_blocks_later_deltas() {
     let mut session = AgentSession::default();
     let run = session.begin("write".to_string()).unwrap();

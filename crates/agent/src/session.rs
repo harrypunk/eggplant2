@@ -1,6 +1,6 @@
 use crate::{
-    AgentRun, ChatMessage, MessageRole, RunId, RunStatus, SessionId, TokenUsage, ToolApproval,
-    ToolCall, ToolEvent, ToolResult,
+    AgentRun, ChatMessage, MessagePart, MessageRole, RunId, RunStatus, SessionId, TokenUsage,
+    ToolApproval, ToolCall, ToolEvent, ToolResult,
 };
 
 const MAX_MESSAGES: usize = 100;
@@ -34,6 +34,7 @@ impl AgentSession {
             role: MessageRole::User,
             run_id: id,
             text: prompt,
+            parts: Vec::new(),
         });
         self.pending_approval = None;
         self.run = Some(AgentRun {
@@ -44,29 +45,44 @@ impl AgentSession {
     }
 
     pub fn append_delta(&mut self, id: RunId, delta: &str) -> bool {
-        let Some(run) = self
-            .run
-            .as_mut()
-            .filter(|run| run.id == id && run.status.is_running())
-        else {
+        let Some(message) = self.assistant_message(id) else {
             return false;
         };
+        message.text.push_str(delta);
+        append_part(message, MessagePart::Answer(delta.to_string()));
+        true
+    }
+
+    pub fn append_thinking_delta(&mut self, id: RunId, delta: &str) -> bool {
+        let Some(message) = self.assistant_message(id) else {
+            return false;
+        };
+        append_part(message, MessagePart::Thinking(delta.to_string()));
+        true
+    }
+
+    fn assistant_message(&mut self, id: RunId) -> Option<&mut ChatMessage> {
+        let run = self
+            .run
+            .as_mut()
+            .filter(|run| run.id == id && run.status.is_running())?;
         run.status = RunStatus::Streaming;
-        if let Some(message) = self
+        if !self
             .messages
-            .iter_mut()
-            .rev()
-            .find(|message| message.run_id == id && message.role == MessageRole::Assistant)
+            .iter()
+            .any(|message| message.run_id == id && message.role == MessageRole::Assistant)
         {
-            message.text.push_str(delta);
-        } else {
             self.push(ChatMessage {
                 role: MessageRole::Assistant,
                 run_id: id,
-                text: delta.to_string(),
+                text: String::new(),
+                parts: Vec::new(),
             });
         }
-        true
+        self.messages
+            .iter_mut()
+            .rev()
+            .find(|message| message.run_id == id && message.role == MessageRole::Assistant)
     }
 
     pub fn complete(&mut self, id: RunId) -> bool {
@@ -222,6 +238,20 @@ impl AgentSession {
 
     pub fn tool_events(&self) -> &[ToolEvent] {
         &self.tool_events
+    }
+}
+
+fn append_part(message: &mut ChatMessage, part: MessagePart) {
+    let appended = match (message.parts.last_mut(), &part) {
+        (Some(MessagePart::Thinking(current)), MessagePart::Thinking(delta))
+        | (Some(MessagePart::Answer(current)), MessagePart::Answer(delta)) => {
+            current.push_str(delta);
+            true
+        }
+        _ => false,
+    };
+    if !appended {
+        message.parts.push(part);
     }
 }
 

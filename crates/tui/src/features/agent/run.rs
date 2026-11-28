@@ -123,6 +123,7 @@ impl ProviderRound {
                     },
                     Some(AgentEvent::TextDelta(delta)),
                 ),
+                AgentEvent::ThinkingDelta(delta) => (self, Some(AgentEvent::ThinkingDelta(delta))),
                 AgentEvent::ToolCalls(calls) => (
                     Self {
                         calls: self.calls.into_iter().chain(calls).collect(),
