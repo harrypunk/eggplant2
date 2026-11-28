@@ -162,3 +162,30 @@ fn accumulates_usage_but_rejects_a_different_run() {
     );
     assert_eq!(session.latest_usage(), Some(second));
 }
+
+#[test]
+fn provider_history_flattens_answered_turns_without_replaying_thinking() {
+    let mut session = AgentSession::default();
+    let first = session.begin("first question".to_string()).unwrap();
+    session.append_thinking_delta(first, "hidden reasoning");
+    session.append_delta(first, "first answer");
+    session.complete(first);
+
+    let failed = session.begin("unanswered failure".to_string()).unwrap();
+    session.fail(failed, "provider failed".to_string());
+
+    let cancelled = session.begin("partial question".to_string()).unwrap();
+    session.append_delta(cancelled, "partial answer");
+    session.cancel();
+
+    let expected = vec![
+        ProviderMessage::user("first question".to_string()),
+        ProviderMessage::assistant("first answer".to_string(), Vec::new()),
+        ProviderMessage::user("partial question".to_string()),
+        ProviderMessage::assistant("partial answer".to_string(), Vec::new()),
+    ];
+    assert_eq!(session.provider_history(), expected);
+
+    session.begin("active question".to_string()).unwrap();
+    assert_eq!(session.provider_history(), expected);
+}

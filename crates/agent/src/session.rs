@@ -1,6 +1,6 @@
 use crate::{
-    AgentRun, ChatMessage, MessagePart, MessageRole, RunId, RunStatus, SessionId, TokenUsage,
-    ToolApproval, ToolCall, ToolEvent, ToolResult,
+    AgentRun, ChatMessage, MessagePart, MessageRole, ProviderMessage, RunId, RunStatus, SessionId,
+    TokenUsage, ToolApproval, ToolCall, ToolEvent, ToolResult,
 };
 
 const MAX_MESSAGES: usize = 100;
@@ -124,6 +124,29 @@ impl AgentSession {
 
     pub fn messages(&self) -> &[ChatMessage] {
         &self.messages
+    }
+
+    /// Flattened answer-only history for a new provider run.
+    ///
+    /// Turns without answer text are omitted, while partial answers are retained. Thinking and
+    /// earlier tool rounds are display/run-local data, not cross-run provider replay data.
+    pub fn provider_history(&self) -> Vec<ProviderMessage> {
+        self.messages
+            .chunk_by(|left, right| left.run_id == right.run_id)
+            .filter_map(|turn| {
+                let user = turn
+                    .iter()
+                    .find(|message| message.role == MessageRole::User)?;
+                let answer = turn.iter().find(|message| {
+                    message.role == MessageRole::Assistant && !message.text.is_empty()
+                })?;
+                Some([
+                    ProviderMessage::user(user.text.clone()),
+                    ProviderMessage::assistant(answer.text.clone(), Vec::new()),
+                ])
+            })
+            .flatten()
+            .collect()
     }
 
     pub fn run(&self) -> Option<&AgentRun> {

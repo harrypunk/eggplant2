@@ -259,7 +259,7 @@ fn request_messages(request: &AgentRequest) -> Value {
     if request.history.is_empty() {
         return serde_json::json!([{"role": "user", "content": request.prompt}]);
     }
-    request
+    let mut messages = request
         .history
         .iter()
         .map(|message| {
@@ -291,7 +291,11 @@ fn request_messages(request: &AgentRequest) -> Value {
             }
             value
         })
-        .collect()
+        .collect::<Vec<_>>();
+    if !request.prompt.is_empty() {
+        messages.push(serde_json::json!({"role": "user", "content": request.prompt}));
+    }
+    Value::Array(messages)
 }
 
 fn tool_declarations() -> Value {
@@ -544,6 +548,25 @@ mod tests {
         let messages = request_messages(&request).to_string();
         assert!(messages.contains("\"role\":\"tool\""));
         assert!(messages.contains("\"tool_call_id\":\"call-1\""));
+    }
+
+    #[test]
+    fn new_prompt_follows_prior_history() {
+        let request =
+            AgentRequest::new("second question".to_string(), CancellationToken::default())
+                .with_prior_history(vec![
+                    ProviderMessage::user("first question".to_string()),
+                    ProviderMessage::assistant("first answer".to_string(), Vec::new()),
+                ]);
+
+        assert_eq!(
+            request_messages(&request),
+            serde_json::json!([
+                {"role": "user", "content": "first question"},
+                {"role": "assistant", "content": "first answer"},
+                {"role": "user", "content": "second question"},
+            ])
+        );
     }
 
     #[test]

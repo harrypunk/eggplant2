@@ -2,7 +2,9 @@ use crate::{CancellationToken, ProviderMessage, ThinkingId};
 
 #[derive(Debug)]
 pub struct AgentRequest {
+    /// Current user prompt for a new run; empty for a complete-history follow-up.
     pub prompt: String,
+    /// Prior turns for a new prompt, or complete history for a follow-up.
     pub history: Vec<ProviderMessage>,
     pub cancellation: CancellationToken,
     /// Provider-specific reasoning option; absent preserves the provider default.
@@ -26,6 +28,11 @@ impl AgentRequest {
             cancellation,
             thinking_id: None,
         }
+    }
+
+    pub fn with_prior_history(mut self, history: Vec<ProviderMessage>) -> Self {
+        self.history = history;
+        self
     }
 
     pub fn with_thinking_id(mut self, id: ThinkingId) -> Self {
