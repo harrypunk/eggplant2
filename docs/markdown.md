@@ -1,6 +1,6 @@
 # Markdown rendering
 
-Assistant responses are Markdown snapshots rendered for display only. Provider history, persisted messages, tool input, and user drafts retain their original text.
+Assistant responses are Markdown snapshots rendered for display only. Thinking parts use the same parser and width-aware layout with a muted italic semantic role; reasoning content and visibility remain independent of answer Markdown. Provider history, persisted messages, tool input, and user drafts retain their original text.
 
 ## Dependency identity: do not confuse these crates
 

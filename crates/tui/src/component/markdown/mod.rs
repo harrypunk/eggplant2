@@ -18,15 +18,49 @@ pub enum MarkdownError {
     Layout(LayoutError),
 }
 
+enum MarkdownRole {
+    Answer,
+    Thinking,
+}
+
 impl PreparedMarkdown {
     pub fn parse(source: &str, width: u16, theme: &UiTheme) -> Result<Self, MarkdownError> {
+        Self::parse_with_role(source, width, theme, MarkdownRole::Answer)
+    }
+
+    pub fn parse_thinking(
+        source: &str,
+        width: u16,
+        theme: &UiTheme,
+    ) -> Result<Self, MarkdownError> {
+        Self::parse_with_role(source, width, theme, MarkdownRole::Thinking)
+    }
+
+    fn parse_with_role(
+        source: &str,
+        width: u16,
+        theme: &UiTheme,
+        role: MarkdownRole,
+    ) -> Result<Self, MarkdownError> {
         let document = Document::parse(source).map_err(MarkdownError::Parse)?;
+        let (text, heading, code) = match role {
+            MarkdownRole::Answer => (
+                theme.base,
+                theme.action_hint.add_modifier(Modifier::BOLD),
+                theme.file_path,
+            ),
+            MarkdownRole::Thinking => (
+                theme.muted.add_modifier(Modifier::ITALIC),
+                theme.muted.add_modifier(Modifier::BOLD | Modifier::ITALIC),
+                theme.muted.add_modifier(Modifier::ITALIC),
+            ),
+        };
         let options = LayoutOptions {
             theme: Theme {
-                text: theme.base,
-                heading: theme.action_hint.add_modifier(Modifier::BOLD),
+                text,
+                heading,
                 link: theme.file_path.add_modifier(Modifier::UNDERLINED),
-                code: theme.file_path,
+                code,
                 diagram: theme.action_hint,
                 muted: theme.muted,
                 selected: theme.selection,
@@ -122,6 +156,18 @@ mod tests {
                 .iter()
                 .all(|cell| { cell.style().add_modifier.contains(Modifier::BOLD) })
         );
+    }
+
+    #[test]
+    fn thinking_markdown_uses_the_semantic_muted_italic_style() {
+        let theme = EditorTheme::from_name("tokyonight").unwrap();
+        let markdown = PreparedMarkdown::parse_thinking("plan", 20, theme.ui()).unwrap();
+        let mut buffer = Buffer::empty(Rect::new(0, 0, 20, 1));
+        markdown.render(Rect::new(0, 0, 20, 1), 0, &mut buffer);
+
+        let style = buffer.content()[0].style();
+        assert!(style.add_modifier.contains(Modifier::ITALIC), "{style:?}");
+        assert_eq!(style.fg, theme.ui().muted.fg, "{style:?}");
     }
 
     #[test]

@@ -82,6 +82,12 @@ The panel and popup are two presentations of one Agent workflow. Both receive su
 
 Assistant messages render as width-aware Markdown in both the dialog and panel. User prompts remain plain text, while tool events, approvals, and diffs retain their specialized rows. Raw session text is never rewritten by display formatting. The selected package, exact GitHub repository, similarly named crate/custom-license warning, streaming policy, and adapter boundaries are documented in [Markdown rendering](markdown.md).
 
+### Thinking responses
+
+Provider-exposed reasoning is carried by `AgentEvent::ThinkingDelta` and stored in ordered `MessagePart::{Thinking, Answer}` content. Adjacent same-kind deltas coalesce, answer-only `ChatMessage.text` remains unchanged for provider history, and stale reasoning is rejected with other late deltas. OpenAI-compatible SSE decoding accepts the first non-empty visible field among `reasoning_content`, `reasoning`, and `reasoning_text`, then emits answer content in order.
+
+Both Agent surfaces render visible-by-default thinking before/between answer parts using the shared Markdown layout with muted italic semantic styling. No reasoning is synthesized when a provider emits none. Visibility controls, durable reasoning-part records, opaque provider replay signatures, and redacted reasoning are independent follow-ups; hiding or formatting reasoning must never become a generation or provider-history policy.
+
 ### Transcript navigation
 
 The dialog and panel Insert support PageUp/PageDown without introducing another editing mode. Panel Normal starts its transcript cursor at the bottom, follows streaming while in that state, moves with `j`/`k`, and reveals the cursor during page or line movement. The selected visual row receives cursor-line styling and a focused panel publishes the terminal cursor at that row; Insert keeps only the prompt cursor. Re-entering Normal resets navigation to bottom. A successfully started prompt restores the active transcript to bottom so the new exchange is visible; empty, rejected, or failed-to-begin submissions preserve the current viewport.

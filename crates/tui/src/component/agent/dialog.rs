@@ -233,6 +233,30 @@ mod tests {
     }
 
     #[test]
+    fn renders_thinking_before_the_latest_answer() {
+        let theme = Theme::default();
+        let mut session = AgentSession::default();
+        let run = session.begin("question".to_string()).unwrap();
+        session.append_thinking_delta(run, "plan");
+        session.append_delta(run, "answer");
+        let prompt = TextInput::default();
+        let props = AgentDialogProps {
+            session: &session,
+            navigation: SurfaceNavigation::default(),
+            prompt: AgentPromptProps::new(&prompt),
+            storage_error: None,
+            model_notice: None,
+            footer: Default::default(),
+            styles: theme.ui(),
+        };
+
+        let content = render(&props, 70, 20);
+        assert!(content.contains("Thinking"));
+        assert!(content.contains("plan"));
+        assert!(content.contains("answer"));
+    }
+
+    #[test]
     fn no_model_hint_is_rendered_with_login_guidance() {
         let theme = Theme::default();
         let session = AgentSession::default();

@@ -307,6 +307,30 @@ mod tests {
     }
 
     #[test]
+    fn thinking_is_rendered_before_answer_markdown() {
+        let theme = Theme::default();
+        let mut session = AgentSession::default();
+        let run = session.begin("question".to_string()).unwrap();
+        session.append_thinking_delta(run, "**plan**");
+        session.append_delta(run, "answer");
+        let prompt = TextInput::default();
+        let props = panel_props(
+            &session,
+            &prompt,
+            None,
+            AgentInputMode::Normal,
+            FocusState::Focused,
+            theme.ui(),
+        );
+
+        let content = render(&props, 60, 22).join("\n");
+        assert!(content.contains("Agent: ▾ Thinking"), "{content}");
+        assert!(content.contains("plan"));
+        assert!(content.contains("answer"));
+        assert!(!content.contains("**plan**"));
+    }
+
+    #[test]
     fn wrapped_markdown_transcript_stays_bottom_anchored() {
         let theme = Theme::default();
         let mut session = AgentSession::default();

@@ -1,10 +1,10 @@
 use eggplant_agent::{
-    AgentSession, ChatMessage, MessageRole, ToolApproval, ToolEvent, ToolResultStatus,
+    AgentSession, ChatMessage, MessagePart, MessageRole, ToolApproval, ToolEvent, ToolResultStatus,
 };
 use ratatui::{
     buffer::Buffer,
     layout::{Position, Rect},
-    style::Style,
+    style::{Modifier, Style},
     text::{Line, Span},
     widgets::{Paragraph, Widget, Wrap},
 };
@@ -68,12 +68,12 @@ fn message_blocks(messages: &[ChatMessage], width: u16, styles: &UiTheme) -> Vec
                 (index > 0)
                     .then(|| PreparedBlock::spacer(styles))
                     .into_iter()
-                    .chain(std::iter::once(PreparedBlock::message(
+                    .chain(PreparedBlock::message(
                         message,
                         width,
                         RolePrefix::for_role(message.role, styles),
                         styles,
-                    )))
+                    ))
             })
             .collect(),
     }
@@ -104,7 +104,7 @@ pub(super) fn render_latest_assistant(
         .iter()
         .rev()
         .find(|message| message.role == MessageRole::Assistant)
-        .map(|message| vec![PreparedBlock::message(message, area.width, None, styles)])
+        .map(|message| PreparedBlock::message(message, area.width, None, styles))
         .unwrap_or_default();
     let offset = scroll.offset(block_metrics(&blocks, area));
     render_blocks(&blocks, area, offset, None, styles, buffer);
@@ -128,7 +128,7 @@ pub(super) fn latest_assistant_metrics(
         .iter()
         .rev()
         .find(|message| message.role == MessageRole::Assistant)
-        .map(|message| vec![PreparedBlock::message(message, area.width, None, styles)])
+        .map(|message| PreparedBlock::message(message, area.width, None, styles))
         .unwrap_or_default();
     block_metrics(&blocks, area)
 }
@@ -173,26 +173,71 @@ impl PreparedBlock {
         width: u16,
         prefix: Option<RolePrefix>,
         styles: &UiTheme,
-    ) -> Self {
+    ) -> Vec<Self> {
         match message.role {
-            MessageRole::User => Self::plain(user_lines(&message.text, styles), styles),
+            MessageRole::User => vec![Self::plain(user_lines(&message.text, styles), styles)],
+            MessageRole::Assistant if message.parts().is_empty() => {
+                vec![Self::answer(&message.text, width, prefix, styles)]
+            }
             MessageRole::Assistant => {
-                let prefix = prefix.filter(|prefix| width > prefix.width());
-                let markdown_width = prefix
-                    .as_ref()
-                    .map_or(width, |prefix| width.saturating_sub(prefix.width()));
-                let fallback_prefix = prefix.as_ref().map_or("", |_| "Agent: ");
-                match PreparedMarkdown::parse(&message.text, markdown_width, styles) {
-                    Ok(markdown) if markdown.line_count() > 0 => {
-                        Self::Markdown { markdown, prefix }
-                    }
-                    _ => Self::plain(
-                        plain_message_lines(&message.text, fallback_prefix, styles.action_hint),
-                        styles,
-                    ),
-                }
+                let mut prefix = prefix;
+                message
+                    .parts()
+                    .iter()
+                    .flat_map(|part| {
+                        let part_prefix = prefix.take();
+                        match part {
+                            MessagePart::Thinking(text) => {
+                                Self::thinking(text, width, part_prefix, styles)
+                            }
+                            MessagePart::Answer(text) => {
+                                vec![Self::answer(text, width, part_prefix, styles)]
+                            }
+                        }
+                    })
+                    .collect()
             }
         }
+    }
+
+    fn answer(text: &str, width: u16, prefix: Option<RolePrefix>, styles: &UiTheme) -> Self {
+        let prefix = prefix.filter(|prefix| width > prefix.width());
+        let markdown_width = prefix
+            .as_ref()
+            .map_or(width, |prefix| width.saturating_sub(prefix.width()));
+        let fallback_prefix = prefix.as_ref().map_or("", |_| "Agent: ");
+        match PreparedMarkdown::parse(text, markdown_width, styles) {
+            Ok(markdown) if markdown.line_count() > 0 => Self::Markdown { markdown, prefix },
+            _ => Self::plain(
+                plain_message_lines(text, fallback_prefix, styles.action_hint),
+                styles,
+            ),
+        }
+    }
+
+    fn thinking(text: &str, width: u16, prefix: Option<RolePrefix>, styles: &UiTheme) -> Vec<Self> {
+        let thinking_style = styles.muted.add_modifier(Modifier::ITALIC);
+        let mut header_spans = Vec::new();
+        if let Some(prefix) = prefix {
+            header_spans.push(Span::styled(prefix.text, prefix.style));
+        }
+        header_spans.push(Span::styled("▾ Thinking", thinking_style));
+        let header = Self::plain(vec![Line::from(header_spans)], styles);
+
+        let prefix = (width > 2).then_some(RolePrefix {
+            text: "  ",
+            style: styles.muted,
+        });
+        let body = match PreparedMarkdown::parse_thinking(text, width.saturating_sub(2), styles) {
+            Ok(markdown) if markdown.line_count() > 0 => Self::Markdown { markdown, prefix },
+            _ => Self::plain(
+                text.split('\n')
+                    .map(|line| Line::styled(format!("  {line}"), thinking_style))
+                    .collect(),
+                styles,
+            ),
+        };
+        vec![header, body]
     }
 
     fn plain(lines: Vec<Line<'static>>, styles: &UiTheme) -> Self {
