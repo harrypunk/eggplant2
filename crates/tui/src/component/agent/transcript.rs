@@ -165,6 +165,26 @@ impl RolePrefix {
     fn width(&self) -> u16 {
         UnicodeWidthStr::width(self.text).min(usize::from(u16::MAX)) as u16
     }
+
+    fn content_area(&self, area: Rect) -> Rect {
+        let width = self.width();
+        Rect {
+            x: area.x.saturating_add(width),
+            width: area.width.saturating_sub(width),
+            ..area
+        }
+    }
+
+    fn render(&self, area: Rect, buffer: &mut Buffer) {
+        Paragraph::new(Line::from(Span::styled(self.text, self.style))).render(
+            Rect {
+                width: self.width(),
+                height: 1,
+                ..area
+            },
+            buffer,
+        );
+    }
 }
 
 impl PreparedBlock {
@@ -266,26 +286,15 @@ impl PreparedBlock {
                     .render(area, buffer);
             }
             Self::Markdown { markdown, prefix } => {
-                let prefix_width = prefix.as_ref().map_or(0, RolePrefix::width);
-                let content = Rect {
-                    x: area.x.saturating_add(prefix_width),
-                    width: area.width.saturating_sub(prefix_width),
-                    ..area
-                };
+                let content = prefix
+                    .as_ref()
+                    .map_or(area, |prefix| prefix.content_area(area));
                 markdown.render(content, top_clip, buffer);
-                if top_clip == 0
-                    && area.height > 0
-                    && let Some(prefix) = prefix
-                {
-                    Paragraph::new(Line::from(Span::styled(prefix.text, prefix.style))).render(
-                        Rect {
-                            width: prefix_width,
-                            height: 1,
-                            ..area
-                        },
-                        buffer,
-                    );
-                }
+                prefix
+                    .as_ref()
+                    .filter(|_| top_clip == 0 && area.height > 0)
+                    .into_iter()
+                    .for_each(|prefix| prefix.render(area, buffer));
             }
         }
     }
@@ -307,6 +316,48 @@ fn block_metrics(blocks: &[PreparedBlock], area: Rect) -> ViewportMetrics {
     }
 }
 
+struct PositionedBlock<'a> {
+    block: &'a PreparedBlock,
+    range: std::ops::Range<usize>,
+}
+
+struct VisibleBlock<'a> {
+    block: &'a PreparedBlock,
+    area: Rect,
+    top_clip: usize,
+}
+
+impl<'a> PositionedBlock<'a> {
+    fn visible(self, area: Rect, offset: usize) -> Option<VisibleBlock<'a>> {
+        let viewport_end = offset.saturating_add(usize::from(area.height));
+        let visible_start = self.range.start.max(offset);
+        let visible_end = self.range.end.min(viewport_end);
+        (visible_start < visible_end).then_some(VisibleBlock {
+            block: self.block,
+            area: Rect {
+                y: area.y + visible_start.saturating_sub(offset) as u16,
+                height: visible_end.saturating_sub(visible_start) as u16,
+                ..area
+            },
+            top_clip: offset.saturating_sub(self.range.start),
+        })
+    }
+}
+
+fn positioned_blocks(
+    blocks: &[PreparedBlock],
+    width: u16,
+) -> impl Iterator<Item = PositionedBlock<'_>> {
+    blocks.iter().scan(0usize, move |start, block| {
+        let block_start = *start;
+        *start = start.saturating_add(block.height(width));
+        Some(PositionedBlock {
+            block,
+            range: block_start..*start,
+        })
+    })
+}
+
 fn render_blocks(
     blocks: &[PreparedBlock],
     area: Rect,
@@ -315,29 +366,13 @@ fn render_blocks(
     styles: &UiTheme,
     buffer: &mut Buffer,
 ) {
+    positioned_blocks(blocks, area.width)
+        .filter_map(|block| block.visible(area, offset))
+        .for_each(|visible| {
+            visible.block.render(visible.area, visible.top_clip, buffer);
+        });
+
     let viewport_end = offset.saturating_add(usize::from(area.height));
-    let mut start = 0usize;
-
-    for block in blocks {
-        let end = start.saturating_add(block.height(area.width));
-        if end <= offset {
-            start = end;
-            continue;
-        }
-        if start >= viewport_end {
-            break;
-        }
-        let top_clip = offset.saturating_sub(start);
-        let visible_start = start.saturating_add(top_clip);
-        let visible_end = end.min(viewport_end);
-        let y = area
-            .y
-            .saturating_add(visible_start.saturating_sub(offset) as u16);
-        let height = visible_end.saturating_sub(visible_start) as u16;
-        block.render(Rect { y, height, ..area }, top_clip, buffer);
-        start = end;
-    }
-
     if let Some(row) = cursor.filter(|row| *row >= offset && *row < viewport_end) {
         buffer.set_style(
             Rect {
@@ -426,4 +461,35 @@ pub(super) fn diff_lines(diff: &str, styles: &UiTheme) -> Vec<Line<'static>> {
             Line::styled(line.to_string(), style)
         })
         .collect()
+}
+
+#[cfg(test)]
+mod viewport_tests {
+    use super::*;
+
+    #[test]
+    fn visible_blocks_clip_viewport_intersections() {
+        let block = PreparedBlock::Plain {
+            lines: Vec::new(),
+            base: Style::default(),
+        };
+        let area = Rect::new(10, 20, 40, 5);
+        let visible = |range| {
+            PositionedBlock {
+                block: &block,
+                range,
+            }
+            .visible(area, 8)
+        };
+
+        let top = visible(3..10).unwrap();
+        assert_eq!(top.area, Rect::new(10, 20, 40, 2));
+        assert_eq!(top.top_clip, 5);
+
+        let bottom = visible(10..20).unwrap();
+        assert_eq!(bottom.area, Rect::new(10, 22, 40, 3));
+        assert_eq!(bottom.top_clip, 0);
+        assert!(visible(0..3).is_none());
+        assert!(visible(13..20).is_none());
+    }
 }
