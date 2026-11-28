@@ -9,7 +9,7 @@ use std::{collections::BTreeSet, fmt, sync::Arc, time::Duration};
 
 use eggplant_agent::{
     AgentError, AgentEvent, AgentProvider, AgentRequest, ProviderMessageRole, ThinkingOption,
-    TokenUsage, ToolCall,
+    TokenUsage, ToolCall, ToolDescriptor,
 };
 use futures_util::StreamExt as _;
 use serde::Deserialize;
@@ -44,6 +44,7 @@ pub struct OpenAiConfig {
     pub api_key_env: String,
     pub api_key: Option<OpenAiApiKey>,
     pub thinking: Arc<dyn ThinkingRequestPolicy>,
+    pub tools: Vec<ToolDescriptor>,
 }
 
 impl Default for OpenAiConfig {
@@ -55,6 +56,7 @@ impl Default for OpenAiConfig {
             api_key_env: "OPENAI_API_KEY".to_string(),
             api_key: None,
             thinking: Arc::new(ReasoningEffortPolicy::standard()),
+            tools: Vec::new(),
         }
     }
 }
@@ -62,6 +64,11 @@ impl Default for OpenAiConfig {
 impl OpenAiConfig {
     pub fn with_api_key(mut self, api_key: impl Into<String>) -> Self {
         self.api_key = Some(OpenAiApiKey::new(api_key));
+        self
+    }
+
+    pub fn with_tools(mut self, tools: Vec<ToolDescriptor>) -> Self {
+        self.tools = tools;
         self
     }
 }
@@ -210,6 +217,7 @@ impl AgentProvider for OpenAiProvider {
                     model,
                     &request,
                     self.config.thinking.as_ref(),
+                    &self.config.tools,
                 ))
                 .send()
                 .await
@@ -241,11 +249,12 @@ fn request_body(
     model: &str,
     request: &AgentRequest,
     thinking: &dyn ThinkingRequestPolicy,
+    tools: &[ToolDescriptor],
 ) -> Value {
     let mut body = serde_json::json!({
         "model": model,
         "messages": request_messages(request),
-        "tools": tool_declarations(),
+        "tools": OpenAiToolDeclarations { tools }.render(),
         "stream": true,
         "stream_options": {"include_usage": true},
     });
@@ -298,76 +307,26 @@ fn request_messages(request: &AgentRequest) -> Value {
     Value::Array(messages)
 }
 
-fn tool_declarations() -> Value {
-    serde_json::json!([
-        {
-            "type": "function",
-            "function": {
-                "name": "read",
-                "description": "Read a bounded range from one workspace text file",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "path": {"type": "string", "description": "Workspace-relative file path"},
-                        "offset": {"type": "integer", "minimum": 1},
-                        "limit": {"type": "integer", "minimum": 1, "maximum": 200}
-                    },
-                    "required": ["path"]
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "grep",
-                "description": "Search workspace text with a smart-case regex",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "query": {"type": "string"},
-                        "path": {"type": "string", "description": "Optional workspace-relative file path"},
-                        "context": {"type": "integer", "minimum": 0, "maximum": 2}
-                    },
-                    "required": ["query"]
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "write",
-                "description": "Apply one exact-text replacement in an open buffer. Read the buffer first for its ID and revision. This must be the only tool call in its round.",
-                "parameters": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "properties": {
-                        "buffer_id": {"type": "integer", "minimum": 1},
-                        "path": {"type": "string", "description": "Workspace-relative canonical buffer path"},
-                        "expected_revision": {"type": "integer"},
-                        "old_text": {"type": "string", "minLength": 1},
-                        "new_text": {"type": "string"}
-                    },
-                    "required": ["buffer_id", "path", "expected_revision", "old_text", "new_text"]
-                }
-            }
-        },
-        {
-            "type": "function",
-            "function": {
-                "name": "create",
-                "description": "Create one new text file without overwriting an existing path. Read the workspace first. This must be the only tool call in its round.",
-                "parameters": {
-                    "type": "object",
-                    "additionalProperties": false,
-                    "properties": {
-                        "path": {"type": "string", "description": "Workspace-relative path for the new file"},
-                        "content": {"type": "string", "description": "Complete UTF-8 text content for the new file"}
-                    },
-                    "required": ["path", "content"]
-                }
-            }
-        }
-    ])
+struct OpenAiToolDeclarations<'a> {
+    tools: &'a [ToolDescriptor],
+}
+
+impl OpenAiToolDeclarations<'_> {
+    fn render(&self) -> Value {
+        self.tools
+            .iter()
+            .map(|tool| {
+                serde_json::json!({
+                    "type": "function",
+                    "function": {
+                        "name": tool.id.as_str(),
+                        "description": tool.description,
+                        "parameters": tool.parameters,
+                    }
+                })
+            })
+            .collect()
+    }
 }
 
 #[derive(Default)]
@@ -630,16 +589,16 @@ mod tests {
     fn selected_thinking_option_adds_reasoning_effort_without_changing_default_requests() {
         let base = AgentRequest::new("question".to_string(), Default::default());
         let policy = ReasoningEffortPolicy::standard();
-        let default_body = request_body("model", &base, &policy);
+        let default_body = request_body("model", &base, &policy, &[]);
         assert!(default_body.get("reasoning_effort").is_none());
 
         let high = base.with_thinking_id(ThinkingId::new("high"));
-        let body = request_body("model", &high, &policy);
+        let body = request_body("model", &high, &policy, &[]);
         assert_eq!(body["reasoning_effort"], "high");
 
         let off = AgentRequest::new("question".to_string(), Default::default())
             .with_thinking_id(ThinkingId::new("off"));
-        let body = request_body("model", &off, &policy);
+        let body = request_body("model", &off, &policy, &[]);
         assert!(body.get("reasoning_effort").is_none());
 
         assert!(
@@ -650,7 +609,7 @@ mod tests {
         );
         let extended = AgentRequest::new("question".to_string(), Default::default())
             .with_thinking_id(ThinkingId::new("xhigh"));
-        let body = request_body("model", &extended, &policy);
+        let body = request_body("model", &extended, &policy, &[]);
         assert!(body.get("reasoning_effort").is_none());
     }
 
@@ -667,10 +626,30 @@ mod tests {
         let request = AgentRequest::new("question".to_string(), Default::default())
             .with_thinking_id(ThinkingId::new("medium2026"));
 
-        let body = request_body("model", &request, &policy);
+        let body = request_body("model", &request, &policy, &[]);
 
         assert_eq!(policy.options()[0].id, ThinkingId::new("medium2026"));
         assert_eq!(body["reasoning_effort"], "reason-v1");
+    }
+
+    #[test]
+    fn request_uses_only_injected_tool_descriptors() {
+        let request = AgentRequest::new("question".to_string(), Default::default());
+        let policy = ReasoningEffortPolicy::standard();
+        let tools = vec![ToolDescriptor::new(
+            "custom",
+            "Custom tool",
+            serde_json::json!({"type": "object", "additionalProperties": false}),
+        )];
+
+        let body = request_body("model", &request, &policy, &tools);
+
+        assert_eq!(body["tools"].as_array().unwrap().len(), 1);
+        assert_eq!(body["tools"][0]["function"]["name"], "custom");
+        assert_eq!(
+            body["tools"][0]["function"]["parameters"]["additionalProperties"],
+            false
+        );
     }
 
     #[test]
@@ -741,6 +720,11 @@ mod tests {
             api_key: None,
             context_window: None,
             thinking: Arc::new(ReasoningEffortPolicy::standard()),
+            tools: vec![ToolDescriptor::new(
+                "write",
+                "Write text",
+                serde_json::json!({"type": "object"}),
+            )],
         })
         .unwrap();
         let events = Arc::new(std::sync::Mutex::new(Vec::new()));
@@ -828,6 +812,11 @@ mod tests {
             api_key: None,
             context_window: None,
             thinking: Arc::new(ReasoningEffortPolicy::standard()),
+            tools: vec![ToolDescriptor::new(
+                "write",
+                "Write text",
+                serde_json::json!({"type": "object"}),
+            )],
         })
         .unwrap();
         let result = provider

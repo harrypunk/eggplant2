@@ -1,7 +1,4 @@
-use std::path::Path;
-
-use editor::BufferId;
-use eggplant_agent::ToolCall;
+use editor::{DocumentFactory, EditorChange, ExactTextReplacement};
 
 use crate::{
     data_object::{Model, StatusMessage},
@@ -9,12 +6,12 @@ use crate::{
 };
 
 use super::{
-    mutation::MutationContext,
+    execution::ToolExecutionContext,
+    host::{AgentEditorError, AgentHost, CreateTextFile},
     runtime::AgentRuntime,
     tools::ToolContext,
     ui_state::AgentUiState,
     work::{InterruptionContext, SubmissionContext},
-    write::{MutationKind, MutationOutcome},
 };
 
 impl SubmissionContext for Model {
@@ -72,7 +69,7 @@ impl InterruptionContext for Model {
     }
 }
 
-impl MutationContext for Model {
+impl ToolExecutionContext for Model {
     fn runtime(&self) -> &AgentRuntime {
         self.agent.runtime()
     }
@@ -85,22 +82,48 @@ impl MutationContext for Model {
         super::context::tool_context(self)
     }
 
-    fn apply_mutation(
-        &mut self,
-        kind: MutationKind,
-        root: &Path,
-        call: &ToolCall,
-    ) -> MutationOutcome {
-        kind.apply(&mut self.editor, root, call)
+    fn host(&mut self) -> &mut dyn AgentHost {
+        self
     }
 
-    fn after_mutation(&mut self, edited: Option<BufferId>) -> Option<Effect> {
-        edited.and_then(|buffer_id| {
+    fn after_edit(&mut self, change: Option<EditorChange>) -> Option<Effect> {
+        change.and_then(|change| {
             Effect::combine(
-                crate::buffer::save_if_dirty(self, buffer_id),
-                crate::code_navigation::synchronize_buffer(self, buffer_id),
+                crate::buffer::save_if_dirty(self, change.buffer_id),
+                crate::code_navigation::synchronize_buffer(self, change.buffer_id),
             )
         })
+    }
+}
+
+impl AgentHost for Model {
+    fn replace_exact_text(
+        &mut self,
+        request: ExactTextReplacement<'_>,
+    ) -> Result<EditorChange, AgentEditorError> {
+        self.editor
+            .replace_exact_text(request)
+            .map_err(|error| AgentEditorError::new(error.to_string()))
+    }
+
+    fn create_text_file(
+        &mut self,
+        request: CreateTextFile,
+    ) -> Result<EditorChange, AgentEditorError> {
+        let relative = request.target().relative().to_path_buf();
+        let path =
+            crate::filesystem::create(request.root(), request.target()).map_err(|error| {
+                AgentEditorError::new(format!(
+                    "failed to create `{}`: {error}",
+                    relative.display()
+                ))
+            })?;
+        let document = DocumentFactory::new()
+            .open(&path)
+            .map_err(|error| AgentEditorError::new(error.to_string()))?;
+        self.editor
+            .create_file_document(document, request.content())
+            .map_err(|error| AgentEditorError::new(error.to_string()))
     }
 }
 

@@ -809,6 +809,7 @@ dependencies = [
 name = "eggplant-agent"
 version = "2.0.0"
 dependencies = [
+ "serde_json",
  "uuid",
 ]
 

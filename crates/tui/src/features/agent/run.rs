@@ -5,7 +5,7 @@ use eggplant_agent::{
     RunId, ToolResult, ToolResultStatus,
 };
 
-use super::{EditorContext, tools::ToolContext};
+use super::{EditorContext, registry::ToolRegistry, tools::ToolContext};
 use crate::manager::effect::{FeatureCompletion, FeatureEffect};
 
 /// Identity and lifecycle data owned by one foreground provider run.
@@ -75,6 +75,7 @@ pub(crate) struct ProviderAgentRun {
     pub(crate) prompt: String,
     pub(crate) cancellation: CancellationToken,
     pub(crate) provider: Arc<dyn AgentProvider>,
+    pub(crate) tools: Arc<ToolRegistry>,
     pub(crate) context: ToolContext,
     pub(crate) progress: RunProgress,
 }
@@ -107,7 +108,7 @@ pub(crate) enum RoundAction {
 
 enum ToolExecution {
     Results(Vec<ToolResult>),
-    Mutation(eggplant_agent::ToolCall),
+    MainThread(eggplant_agent::ToolCall),
 }
 
 impl ProviderRound {
@@ -145,7 +146,9 @@ impl ProviderRound {
                     },
                     None,
                 ),
-                AgentEvent::ToolResults(_) | AgentEvent::MutationRequested { .. } => (self, None),
+                AgentEvent::ToolResults(_) | AgentEvent::MainThreadToolRequested { .. } => {
+                    (self, None)
+                }
             },
         }
     }
@@ -170,6 +173,7 @@ impl RunProgress {
         round: ProviderRound,
         result: Result<(), eggplant_agent::AgentError>,
         cancelled: bool,
+        tools: &ToolRegistry,
     ) -> RoundAction {
         let ProviderRound {
             text,
@@ -184,10 +188,12 @@ impl RunProgress {
             (Some(error), _, _) => RoundAction::Stop(Some(AgentEvent::Failed(error))),
             (None, true, _) => RoundAction::Stop(None),
             (None, false, true) => RoundAction::Stop(Some(AgentEvent::Complete)),
-            (None, false, false) => match self.with_tool_round(prompt, text, calls.clone()) {
-                Ok(progress) => RoundAction::Tools(progress, calls),
-                Err(error) => RoundAction::Stop(Some(AgentEvent::Failed(error))),
-            },
+            (None, false, false) => {
+                match self.with_tool_round(prompt, text, calls.clone(), tools) {
+                    Ok(progress) => RoundAction::Tools(progress, calls),
+                    Err(error) => RoundAction::Stop(Some(AgentEvent::Failed(error))),
+                }
+            }
         }
     }
 
@@ -196,6 +202,7 @@ impl RunProgress {
         prompt: &str,
         text: String,
         calls: Vec<eggplant_agent::ToolCall>,
+        tools: &ToolRegistry,
     ) -> Result<Self, String> {
         let Self {
             step,
@@ -205,25 +212,7 @@ impl RunProgress {
             thinking_id,
         } = self;
         require(tool_output < MAX_TOOL_OUTPUT, "tool output limit reached")?;
-        let call_ids = calls
-            .iter()
-            .map(|call| call.id.as_str())
-            .collect::<std::collections::HashSet<_>>();
-        let valid = call_ids.len() == calls.len()
-            && calls.iter().all(|call| {
-                !call.id.is_empty()
-                    && !call.name.is_empty()
-                    && call.arguments.len() <= super::tools::MAX_ARGUMENT_BYTES
-            });
-        require(valid, "provider emitted an invalid tool call")?;
-        let writes = calls
-            .iter()
-            .filter(|call| super::write::MutationKind::from_call(call).is_some())
-            .count();
-        require(
-            writes == 0 || (writes == 1 && calls.len() == 1),
-            "write must be the only tool call in its round",
-        )?;
+        tools.validate_round(&calls)?;
         let history = match step {
             0 => history
                 .into_iter()
@@ -318,6 +307,7 @@ impl ProviderAgentRun {
                 round,
                 result,
                 self.cancellation.is_cancelled(),
+                &self.tools,
             ) {
                 RoundAction::Stop(event) => event.into_iter().for_each(&mut *emit),
                 RoundAction::Tools(progress, calls) => {
@@ -332,8 +322,8 @@ impl ProviderAgentRun {
                                 }
                             }
                         }
-                        ToolExecution::Mutation(call) => {
-                            emit(AgentEvent::MutationRequested {
+                        ToolExecution::MainThread(call) => {
+                            emit(AgentEvent::MainThreadToolRequested {
                                 call,
                                 continuation: progress.into(),
                             });
@@ -370,19 +360,17 @@ impl ProviderAgentRun {
         output_used: usize,
     ) -> ToolExecution {
         match calls {
-            [call]
-                if super::write::MutationKind::from_call(call).is_some()
-                    && !self.cancellation.is_cancelled() =>
-            {
-                let validated = super::write::MutationKind::from_call(call)
-                    .expect("mutation was checked")
-                    .validate(call, &self.context);
-                match validated {
-                    Ok(()) => ToolExecution::Mutation(call.clone()),
-                    Err(result) => ToolExecution::Results(vec![super::tools::bound_result(
-                        result,
-                        MAX_TOOL_OUTPUT.saturating_sub(output_used),
-                    )]),
+            [call] if !self.cancellation.is_cancelled() => {
+                match self.tools.prepare(call, &self.context) {
+                    super::registry::PreparedTool::MainThread(_) => {
+                        ToolExecution::MainThread(call.clone())
+                    }
+                    super::registry::PreparedTool::Immediate(result) => {
+                        ToolExecution::Results(vec![super::tools::bound_result(
+                            result,
+                            MAX_TOOL_OUTPUT.saturating_sub(output_used),
+                        )])
+                    }
                 }
             }
             _ => ToolExecution::Results(
@@ -395,7 +383,13 @@ impl ProviderAgentRun {
                             content: "cancelled".to_string(),
                             truncated: false,
                         },
-                        false => super::tools::execute(call, &self.context),
+                        false => match self.tools.prepare(call, &self.context) {
+                            super::registry::PreparedTool::Immediate(result) => result,
+                            super::registry::PreparedTool::MainThread(_) => super::tools::error(
+                                call,
+                                "main-thread tool must be the only call in its round".to_string(),
+                            ),
+                        },
                     })
                     .scan(output_used, |used, result| {
                         let result = super::tools::bound_result(
@@ -541,6 +535,7 @@ mod tests {
                 "current question",
                 "reading".to_string(),
                 vec![call.clone()],
+                &ToolRegistry::standard(),
             )
             .unwrap()
             .with_results(vec![ToolResult {
@@ -581,6 +576,7 @@ mod tests {
             provider: Arc::new(ControlledProvider {
                 resume: resume.clone(),
             }),
+            tools: Arc::new(ToolRegistry::standard()),
             context: ToolContext::default(),
             progress: RunProgress::default(),
         };
@@ -626,6 +622,7 @@ mod tests {
             provider: Arc::new(ControlledProvider {
                 resume: resume.clone(),
             }),
+            tools: Arc::new(ToolRegistry::standard()),
             context: ToolContext::default(),
             progress: RunProgress::default(),
         };

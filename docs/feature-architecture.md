@@ -146,7 +146,9 @@ Features depend on narrow shell/editor capabilities rather than each other's con
 - Buffer switching asks the explorer-reveal capability to synchronize the active file; buffer state remains editor-owned.
 - Theme selection replaces only resolved theme state; it does not touch editor or explorer state.
 - Search may request read-only snapshots and document-open navigation, but cannot bypass text-file acceptance or auto-save.
-- Agent automated editing must name an explicit `BufferId` and expected revision; active-buffer UI commands are not a safe unattended-agent API. `write`/`create` execute automatically without approval prompts, while main-update validation preserves the mutation invariants. See [Agent tools](agent-tools.md) for the automatic mutation contract.
+- Agent automated editing must name an explicit `BufferId` and expected revision; active-buffer UI commands are not a safe unattended-agent API. Agent tools implement `AgentTool` and register once in the TUI `ToolRegistry`, which drives execution and supplies the same provider-neutral descriptors to OpenAI. Read/grep prepare immediate results, while write/create use the generic main-thread handoff and high-level `AgentHost`. `write`/`create` execute automatically without approval prompts, while fresh main-update preparation preserves path/revision/exact-match/no-overwrite and save invariants. See [Agent tools](agent-tools.md) for the automatic execution contract.
+
+With existing `AgentHost` capabilities, adding an agent tool requires its implementation, one registry registration, and tests/docs—not changes to `AgentEvent`, `RunStatus`, UI, storage, or provider adapters. A genuinely new host capability extends only `AgentHost` and its `Model` composition adapter at the host boundary; the generic executor, session, UI, storage, and provider layers remain unchanged.
 
 Introduce capabilities at existing seams, not as a preemptive service layer covering every possible future operation.
 

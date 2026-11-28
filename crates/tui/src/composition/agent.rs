@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use color_eyre::eyre::{bail, eyre};
-use eggplant_agent::{AgentProvider, CancellationToken};
+use eggplant_agent::{AgentProvider, CancellationToken, ToolDescriptor};
 use eggplant_agent_openai::{OpenAiConfig, OpenAiProvider};
 use eggplant_agent_storage::{
     ModelCatalogStore, ProviderCredentialStore, RecentQuery, SessionStore,
@@ -12,19 +12,24 @@ use eggplant_agent_storage_seaorm::{
 
 use super::openai::OpenAiFactory;
 use crate::{
-    agent::{LoadedSession, load_session},
+    agent::{LoadedSession, load_session, registry::ToolRegistry},
     config::{Config, default_agent_database_path},
     data_object::Model,
 };
 
 /// Configure agent persistence and the statically selected provider before terminal startup.
 pub async fn configure(config: &Config, model: &mut Model) -> color_eyre::Result<()> {
+    model
+        .agent
+        .runtime_mut()
+        .set_tool_registry(Arc::new(ToolRegistry::standard()));
     model.openai_factory = Some(Arc::new(OpenAiFactory::new(
         config.features.agent.context_window,
+        model.agent.runtime().tool_descriptors(),
     )));
     configure_store(config, model).await?;
     restore_latest_workspace_session(model).await;
-    if let Some(provider) = agent_provider(config)? {
+    if let Some(provider) = agent_provider(config, model.agent.runtime().tool_descriptors())? {
         let model_id = config
             .features
             .agent
@@ -211,12 +216,16 @@ async fn connect_model_catalog_store(
     Ok(Arc::new(store))
 }
 
-fn agent_provider(config: &Config) -> color_eyre::Result<Option<Arc<dyn AgentProvider>>> {
+fn agent_provider(
+    config: &Config,
+    tools: Vec<ToolDescriptor>,
+) -> color_eyre::Result<Option<Arc<dyn AgentProvider>>> {
     match config.features.agent.provider.as_deref() {
         None | Some("fake") => Ok(None),
         Some("openai") => {
             let mut provider_config = OpenAiConfig {
                 context_window: config.features.agent.context_window,
+                tools,
                 ..OpenAiConfig::default()
             };
             if let Some(model) = &config.features.agent.model {
@@ -601,7 +610,7 @@ mod tests {
         config.features.agent.provider = Some("openai".to_string());
         config.features.agent.context_window = Some(64_000);
 
-        let provider = agent_provider(&config).unwrap().unwrap();
+        let provider = agent_provider(&config, Vec::new()).unwrap().unwrap();
 
         assert_eq!(provider.context_window(), Some(64_000));
     }

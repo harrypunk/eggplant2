@@ -1588,6 +1588,39 @@ fn create_file_document_initializes_full_text_and_history() {
     assert_eq!(created.revision, 1);
 }
 
+#[test]
+fn create_then_inactive_exact_replacement_isolates_view_history() {
+    let directory = tempfile::tempdir().unwrap();
+    let main_path = directory.path().join("main.txt");
+    let created_path = directory.path().join("created.py");
+    std::fs::write(&main_path, "before").unwrap();
+    let mut session = EditorSession::new();
+    let main = open_file(&mut session, &main_path);
+    let revision = session.buffer_version(main).unwrap();
+    let created_document = DocumentFactory::new().open(&created_path).unwrap();
+    let created = session
+        .create_file_document(created_document, "print('numbers')\n")
+        .unwrap();
+
+    let changed = session
+        .replace_exact_text(ExactTextReplacement {
+            buffer_id: main,
+            path: &main_path,
+            expected_revision: revision,
+            old_text: "before",
+            new_text: "after",
+        })
+        .unwrap();
+
+    assert_eq!(changed.buffer_id, main);
+    assert_eq!(changed.path, main_path);
+    assert_eq!(session.active_buffer(), Some(created.buffer_id));
+    assert_eq!(session.buffer_text_snapshot(main).unwrap().text, "after");
+    session.activate_buffer(main).unwrap();
+    assert!(session.active_editor().unwrap().undo().unwrap());
+    assert_eq!(session.buffer_text_snapshot(main).unwrap().text, "before");
+}
+
 #[tokio::test]
 async fn missing_file_is_created_by_the_first_save() {
     let directory = tempfile::tempdir().unwrap();

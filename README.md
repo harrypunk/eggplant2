@@ -42,6 +42,8 @@ crates/
 
 Eggplant uses selected Helix primitives without adopting Helix's terminal application, keymaps, or editor controller. One Elm-style event/update/effect loop owns state transitions, while background work returns completion messages.
 
+Agent tools use provider-neutral IDs, JSON Schema descriptors, and concurrency metadata from `crates/agent`. One TUI `ToolRegistry` drives both execution and the descriptors injected into OpenAI-compatible providers. Read/grep execute immediately; exact replacement and file creation revalidate on the main thread through the high-level `AgentHost`, then use common explicit-ID auto-save and language-synchronization effects. No approval modal or provider-side hardcoded tool catalog is involved.
+
 The VCS integration is an **addon**, not a requirement of the core editor. Editing and persistence do not depend on Git or on the VCS page.
 
 ## Documentation

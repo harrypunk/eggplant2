@@ -1,4 +1,4 @@
-use super::{mutation::MutationExecutor, run::AgentCompletion, runtime::AgentApplyOutcome};
+use super::{execution::ToolExecutor, run::AgentCompletion, runtime::AgentApplyOutcome};
 use crate::{
     data_object::Model,
     manager::effect::{Completion, Effect},
@@ -7,14 +7,15 @@ use crate::{
 impl Completion for AgentCompletion {
     fn update(self: Box<Self>, model: &mut Model) -> Option<Effect> {
         let run_id = self.run_id;
-        let mutation = self.events.into_iter().find_map(|event| {
+        let tools = model.agent.runtime().tools();
+        let execution = self.events.into_iter().find_map(|event| {
             match model.agent.runtime_mut().apply_event(run_id, event) {
-                AgentApplyOutcome::MutationRequested(call) => Some(call),
+                AgentApplyOutcome::MainThreadToolRequested(call) => Some(call),
                 AgentApplyOutcome::None => None,
             }
         });
-        let mutation =
-            mutation.and_then(|call| MutationExecutor::new(model, run_id, call).execute());
-        Effect::combine(mutation, super::storage::persist_finalized(model))
+        let execution =
+            execution.and_then(|call| ToolExecutor::new(model, tools, run_id, call).execute());
+        Effect::combine(execution, super::storage::persist_finalized(model))
     }
 }

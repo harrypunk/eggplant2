@@ -209,9 +209,9 @@ Provider logout:
 
 The focus controller itself remains geometry-only; keyboard maps decide which mode emits focus commands.
 
-### Agent automatic mutations
+### Agent automatic tool execution
 
-Agent `read`/`grep` and `write`/`create` calls have no per-call or session approval mode, `y`/`n` approval keys, mutation-specific `Esc` binding, or approval modal. Valid writes and creations execute automatically, one mutation call per provider round, with normal main-update validation and save invariants.
+Agent `read`/`grep` and `write`/`create` calls have no per-call or session approval mode, `y`/`n` approval keys, tool-specific `Esc` binding, or approval modal. Read/grep produce immediate results. `write` and `create` are exclusive: each must be the only call in its provider round, then executes automatically through the generic main-thread executor and `AgentHost` after fresh context validation, with normal save invariants.
 
 | Action | Default binding |
 | --- | --- |

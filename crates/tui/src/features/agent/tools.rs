@@ -5,7 +5,9 @@ use std::{
 };
 
 use editor::{BufferTextSnapshot, read_text_file_bounded};
-use eggplant_agent::{ToolCall, ToolResult, ToolResultStatus};
+use eggplant_agent::{ToolCall, ToolDescriptor, ToolResult, ToolResultStatus};
+
+use super::registry::{AgentTool, PreparedTool};
 use serde::Deserialize;
 
 use crate::search::TextSearcher;
@@ -28,19 +30,90 @@ pub struct ToolContext {
     pub buffers: Vec<BufferContext>,
 }
 
+#[derive(Debug)]
+pub struct ReadTool {
+    descriptor: ToolDescriptor,
+}
+
+impl ReadTool {
+    pub fn new() -> Self {
+        Self {
+            descriptor: ToolDescriptor::new(
+                "read",
+                "Read a bounded range from one workspace text file",
+                serde_json::json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "path": {"type": "string", "description": "Workspace-relative file path"},
+                        "offset": {"type": "integer", "minimum": 1},
+                        "limit": {"type": "integer", "minimum": 1, "maximum": 200}
+                    },
+                    "required": ["path"]
+                }),
+            ),
+        }
+    }
+}
+
+impl AgentTool for ReadTool {
+    fn descriptor(&self) -> &ToolDescriptor {
+        &self.descriptor
+    }
+
+    fn prepare(&self, call: &ToolCall, context: &ToolContext) -> Result<PreparedTool, ToolResult> {
+        Ok(PreparedTool::Immediate(self.read(call, context)))
+    }
+}
+
+#[derive(Debug)]
+pub struct GrepTool {
+    descriptor: ToolDescriptor,
+}
+
+impl GrepTool {
+    pub fn new() -> Self {
+        Self {
+            descriptor: ToolDescriptor::new(
+                "grep",
+                "Search workspace text with a smart-case regex",
+                serde_json::json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "query": {"type": "string"},
+                        "path": {"type": "string", "description": "Optional workspace-relative file path"},
+                        "context": {"type": "integer", "minimum": 0, "maximum": 2}
+                    },
+                    "required": ["query"]
+                }),
+            ),
+        }
+    }
+}
+
+impl AgentTool for GrepTool {
+    fn descriptor(&self) -> &ToolDescriptor {
+        &self.descriptor
+    }
+
+    fn prepare(&self, call: &ToolCall, context: &ToolContext) -> Result<PreparedTool, ToolResult> {
+        Ok(PreparedTool::Immediate(self.grep(call, context)))
+    }
+}
+
 struct SourceText<'a> {
     text: Cow<'a, str>,
     buffer: Option<&'a BufferTextSnapshot>,
 }
 
-pub fn execute(call: &ToolCall, context: &ToolContext) -> ToolResult {
-    match call.arguments.len() > MAX_ARGUMENT_BYTES {
-        true => error(call, "tool arguments exceed the byte limit".to_string()),
-        false => match call.name.as_str() {
-            "read" => read(call, context),
-            "grep" => grep(call, context),
-            _ => error(call, format!("unknown tool `{}`", call.name)),
-        },
+#[cfg(test)]
+fn execute(call: &ToolCall, context: &ToolContext) -> ToolResult {
+    match super::registry::ToolRegistry::standard().prepare(call, context) {
+        PreparedTool::Immediate(result) => result,
+        PreparedTool::MainThread(_) => {
+            panic!("read/grep test unexpectedly prepared a main-thread tool")
+        }
     }
 }
 
@@ -52,55 +125,64 @@ struct ReadArguments {
     limit: Option<usize>,
 }
 
-fn read(call: &ToolCall, context: &ToolContext) -> ToolResult {
-    read_result(call, context).unwrap_or_else(|result| result)
-}
+impl ReadTool {
+    fn read(&self, call: &ToolCall, context: &ToolContext) -> ToolResult {
+        self.read_result(call, context)
+            .unwrap_or_else(|result| result)
+    }
 
-fn read_result(call: &ToolCall, context: &ToolContext) -> Result<ToolResult, ToolResult> {
-    let arguments: ReadArguments = parse_arguments(call, "read")?;
-    let offset = arguments.offset.unwrap_or(1);
-    let limit = arguments.limit.unwrap_or(100);
-    (offset > 0 && (1..=200).contains(&limit))
-        .then_some(())
-        .ok_or_else(|| {
-            error(
-                call,
-                "read offset must be at least 1 and limit must be between 1 and 200".to_string(),
+    fn read_result(
+        &self,
+        call: &ToolCall,
+        context: &ToolContext,
+    ) -> Result<ToolResult, ToolResult> {
+        let arguments: ReadArguments = parse_arguments(call, "read")?;
+        let offset = arguments.offset.unwrap_or(1);
+        let limit = arguments.limit.unwrap_or(100);
+        (offset > 0 && (1..=200).contains(&limit))
+            .then_some(())
+            .ok_or_else(|| {
+                error(
+                    call,
+                    "read offset must be at least 1 and limit must be between 1 and 200"
+                        .to_string(),
+                )
+            })?;
+        let path =
+            resolve(&context.root, &arguments.path).map_err(|message| error(call, message))?;
+        let source = source_text(&path, context).map_err(|message| error(call, message))?;
+        let metadata = source.buffer.map(|snapshot| {
+            format!(
+                "buffer:{} revision:{} path:{}\n",
+                snapshot.buffer_id,
+                snapshot.revision,
+                display_path(&context.root, &path)
             )
-        })?;
-    let path = resolve(&context.root, &arguments.path).map_err(|message| error(call, message))?;
-    let source = source_text(&path, context).map_err(|message| error(call, message))?;
-    let metadata = source.buffer.map(|snapshot| {
-        format!(
-            "buffer:{} revision:{} path:{}\n",
-            snapshot.buffer_id,
-            snapshot.revision,
-            display_path(&context.root, &path)
-        )
-    });
-    let output = metadata
-        .into_iter()
-        .chain(
-            source
-                .text
-                .lines()
-                .enumerate()
-                .skip(offset - 1)
-                .take(limit)
-                .map(|(index, line)| format!("{}:{}\n", index + 1, line)),
-        )
-        .try_fold(String::new(), |content, row| {
-            match content.len() + row.len() <= MAX_OUTPUT {
-                true => Continue(content + row.as_str()),
-                false => Break(content),
-            }
         });
-    let (content, output_truncated) = match output {
-        Continue(content) => (content, false),
-        Break(content) => (content, true),
-    };
-    let range_truncated = (offset - 1).saturating_add(limit) < source.text.lines().count();
-    Ok(success(call, content, output_truncated || range_truncated))
+        let output = metadata
+            .into_iter()
+            .chain(
+                source
+                    .text
+                    .lines()
+                    .enumerate()
+                    .skip(offset - 1)
+                    .take(limit)
+                    .map(|(index, line)| format!("{}:{}\n", index + 1, line)),
+            )
+            .try_fold(String::new(), |content, row| {
+                match content.len() + row.len() <= MAX_OUTPUT {
+                    true => Continue(content + row.as_str()),
+                    false => Break(content),
+                }
+            });
+        let (content, output_truncated) = match output {
+            Continue(content) => (content, false),
+            Break(content) => (content, true),
+        };
+        let range_truncated = (offset - 1).saturating_add(limit) < source.text.lines().count();
+        Ok(success(call, content, output_truncated || range_truncated))
+    }
 }
 
 #[derive(Deserialize)]
@@ -157,123 +239,134 @@ impl GrepOutput {
     }
 }
 
-fn grep(call: &ToolCall, context: &ToolContext) -> ToolResult {
-    grep_result(call, context).unwrap_or_else(|result| result)
-}
-
-fn grep_result(call: &ToolCall, context: &ToolContext) -> Result<ToolResult, ToolResult> {
-    let arguments: GrepArguments = parse_arguments(call, "grep")?;
-    (!arguments.query.is_empty())
-        .then_some(())
-        .ok_or_else(|| error(call, "grep requires a non-empty query".to_string()))?;
-    let context_lines = arguments.context.unwrap_or(0);
-    (context_lines <= 2)
-        .then_some(())
-        .ok_or_else(|| error(call, "grep context must be between 0 and 2".to_string()))?;
-    let searcher = TextSearcher::new(&arguments.query).map_err(|message| error(call, message))?;
-    let output = match arguments.path {
-        Some(path) => grep_path(call, context, &searcher, &path, context_lines),
-        None => grep_workspace(call, context, &searcher, context_lines),
-    }?;
-    let output = output.or_no_matches();
-    Ok(success(call, output.content, output.truncated))
-}
-
-fn grep_path(
-    call: &ToolCall,
-    context: &ToolContext,
-    searcher: &TextSearcher,
-    path: &str,
-    context_lines: usize,
-) -> Result<GrepOutput, ToolResult> {
-    let path = resolve(&context.root, path).map_err(|message| error(call, message))?;
-    let text = source_text(&path, context).map_err(|message| error(call, message))?;
-    search_file(
-        searcher,
-        &display_path(&context.root, &path),
-        &text.text,
-        context_lines,
-        GrepOutput::default(),
-    )
-    .map_err(|message| error(call, message))
-}
-
-fn grep_workspace(
-    call: &ToolCall,
-    context: &ToolContext,
-    searcher: &TextSearcher,
-    context_lines: usize,
-) -> Result<GrepOutput, ToolResult> {
-    let mut walk = crate::filesystem::workspace_walk(&context.root);
-    walk.sort_by_file_path(|left, right| left.cmp(right));
-    let output = walk
-        .build()
-        .filter_map(Result::ok)
-        .filter(|entry| entry.depth() > 0 && entry.file_type().is_some_and(|kind| kind.is_file()))
-        .try_fold(GrepOutput::default(), |output, entry| {
-            match output.truncated {
-                true => Break(Ok(output)),
-                false => {
-                    let path = entry.path();
-                    let next = match source_text(path, context) {
-                        Ok(text) => search_file(
-                            searcher,
-                            &display_path(&context.root, path),
-                            &text.text,
-                            context_lines,
-                            output,
-                        ),
-                        Err(_) => Ok(output),
-                    };
-                    match next {
-                        Ok(output) if output.truncated => Break(Ok(output)),
-                        Ok(output) => Continue(output),
-                        Err(message) => Break(Err(message)),
-                    }
-                }
-            }
-        });
-    match output {
-        Continue(output) => Ok(output),
-        Break(output) => output.map_err(|message| error(call, message)),
+impl GrepTool {
+    fn grep(&self, call: &ToolCall, context: &ToolContext) -> ToolResult {
+        self.grep_result(call, context)
+            .unwrap_or_else(|result| result)
     }
-}
 
-fn search_file(
-    searcher: &TextSearcher,
-    display: &str,
-    text: &str,
-    context_lines: usize,
-    output: GrepOutput,
-) -> Result<GrepOutput, String> {
-    let lines = text.lines().collect::<Vec<_>>();
-    let output = searcher
-        .search(text)?
-        .into_iter()
-        .try_fold(output, |output, matched_line| {
-            match output.matched >= MAX_GREP_MATCHES {
-                true => Break(output.truncated()),
-                false => {
-                    let start = matched_line.line.saturating_sub(context_lines);
-                    let end = matched_line
-                        .line
-                        .saturating_add(context_lines + 1)
-                        .min(lines.len());
-                    let rows = (start..end)
-                        .map(|index| format!("{display}:{}:{}\n", index + 1, lines[index]));
-                    match rows
-                        .into_iter()
-                        .try_fold(output, |output, row| output.with_row(row))
-                    {
-                        Continue(output) => Continue(output.with_match()),
-                        Break(output) => Break(output),
+    fn grep_result(
+        &self,
+        call: &ToolCall,
+        context: &ToolContext,
+    ) -> Result<ToolResult, ToolResult> {
+        let arguments: GrepArguments = parse_arguments(call, "grep")?;
+        (!arguments.query.is_empty())
+            .then_some(())
+            .ok_or_else(|| error(call, "grep requires a non-empty query".to_string()))?;
+        let context_lines = arguments.context.unwrap_or(0);
+        (context_lines <= 2)
+            .then_some(())
+            .ok_or_else(|| error(call, "grep context must be between 0 and 2".to_string()))?;
+        let searcher =
+            TextSearcher::new(&arguments.query).map_err(|message| error(call, message))?;
+        let output = match arguments.path {
+            Some(path) => self.grep_path(call, context, &searcher, &path, context_lines),
+            None => self.grep_workspace(call, context, &searcher, context_lines),
+        }?;
+        let output = output.or_no_matches();
+        Ok(success(call, output.content, output.truncated))
+    }
+
+    fn grep_path(
+        &self,
+        call: &ToolCall,
+        context: &ToolContext,
+        searcher: &TextSearcher,
+        path: &str,
+        context_lines: usize,
+    ) -> Result<GrepOutput, ToolResult> {
+        let path = resolve(&context.root, path).map_err(|message| error(call, message))?;
+        let text = source_text(&path, context).map_err(|message| error(call, message))?;
+        Self::search_file(
+            searcher,
+            &display_path(&context.root, &path),
+            &text.text,
+            context_lines,
+            GrepOutput::default(),
+        )
+        .map_err(|message| error(call, message))
+    }
+
+    fn grep_workspace(
+        &self,
+        call: &ToolCall,
+        context: &ToolContext,
+        searcher: &TextSearcher,
+        context_lines: usize,
+    ) -> Result<GrepOutput, ToolResult> {
+        let mut walk = crate::filesystem::workspace_walk(&context.root);
+        walk.sort_by_file_path(|left, right| left.cmp(right));
+        let output = walk
+            .build()
+            .filter_map(Result::ok)
+            .filter(|entry| {
+                entry.depth() > 0 && entry.file_type().is_some_and(|kind| kind.is_file())
+            })
+            .try_fold(GrepOutput::default(), |output, entry| {
+                match output.truncated {
+                    true => Break(Ok(output)),
+                    false => {
+                        let path = entry.path();
+                        let next = match source_text(path, context) {
+                            Ok(text) => Self::search_file(
+                                searcher,
+                                &display_path(&context.root, path),
+                                &text.text,
+                                context_lines,
+                                output,
+                            ),
+                            Err(_) => Ok(output),
+                        };
+                        match next {
+                            Ok(output) if output.truncated => Break(Ok(output)),
+                            Ok(output) => Continue(output),
+                            Err(message) => Break(Err(message)),
+                        }
                     }
                 }
-            }
-        });
-    Ok(match output {
-        Continue(output) | Break(output) => output,
-    })
+            });
+        match output {
+            Continue(output) => Ok(output),
+            Break(output) => output.map_err(|message| error(call, message)),
+        }
+    }
+
+    fn search_file(
+        searcher: &TextSearcher,
+        display: &str,
+        text: &str,
+        context_lines: usize,
+        output: GrepOutput,
+    ) -> Result<GrepOutput, String> {
+        let lines = text.lines().collect::<Vec<_>>();
+        let output =
+            searcher.search(text)?.into_iter().try_fold(
+                output,
+                |output, matched_line| match output.matched >= MAX_GREP_MATCHES {
+                    true => Break(output.truncated()),
+                    false => {
+                        let start = matched_line.line.saturating_sub(context_lines);
+                        let end = matched_line
+                            .line
+                            .saturating_add(context_lines + 1)
+                            .min(lines.len());
+                        let rows = (start..end)
+                            .map(|index| format!("{display}:{}:{}\n", index + 1, lines[index]));
+                        match rows
+                            .into_iter()
+                            .try_fold(output, |output, row| output.with_row(row))
+                        {
+                            Continue(output) => Continue(output.with_match()),
+                            Break(output) => Break(output),
+                        }
+                    }
+                },
+            );
+        Ok(match output {
+            Continue(output) | Break(output) => output,
+        })
+    }
 }
 
 pub(super) fn parse_arguments<T: for<'de> Deserialize<'de>>(

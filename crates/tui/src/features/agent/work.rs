@@ -134,6 +134,7 @@ fn start_run(context: &mut impl SubmissionContext, accepted: AcceptedSubmission)
         prompt: accepted.prompt,
         cancellation,
         provider,
+        tools: context.runtime().tools(),
         context: context.tool_context()?,
         progress: RunProgress {
             history,
@@ -181,6 +182,7 @@ mod tests {
                 close_panel_input, enter_insert_mode, enter_normal_mode, focus_panel_input,
                 toggle_help, toggle_panel,
             },
+            registry::ToolRegistry,
         },
         component::text_input::TextInputEvent,
         data_object::{Context, GeneralAction, Model, Visibility},
@@ -1465,12 +1467,12 @@ mod tests {
     }
 
     #[derive(Debug)]
-    struct MutationSequenceProvider {
+    struct ToolSequenceProvider {
         calls: Vec<eggplant_agent::ToolCall>,
         requests: Arc<std::sync::atomic::AtomicUsize>,
     }
 
-    impl MutationSequenceProvider {
+    impl ToolSequenceProvider {
         fn new(
             calls: Vec<eggplant_agent::ToolCall>,
         ) -> (Self, Arc<std::sync::atomic::AtomicUsize>) {
@@ -1485,7 +1487,7 @@ mod tests {
         }
     }
 
-    impl AgentProvider for MutationSequenceProvider {
+    impl AgentProvider for ToolSequenceProvider {
         fn stream<'a>(
             &'a self,
             _request: AgentRequest,
@@ -1603,7 +1605,7 @@ mod tests {
             .to_string(),
         };
         let (provider, requests) =
-            MutationSequenceProvider::new(vec![create, write_call(&model, main)]);
+            ToolSequenceProvider::new(vec![create, write_call(&model, main)]);
         model.agent.set_provider(Arc::new(provider));
 
         let saves = begin_write(&mut model);
@@ -1717,7 +1719,7 @@ mod tests {
         );
         assert!(seen.lock().unwrap().iter().any(|message| {
             message.role == eggplant_agent::ProviderMessageRole::Tool
-                && message.content.contains("revision changed")
+                && message.content.contains("revision")
         }));
     }
 
@@ -1850,7 +1852,7 @@ mod tests {
             }],
             ..ProviderRound::default()
         };
-        let action = progress.prepare("read", round, Ok(()), false);
+        let action = progress.prepare("read", round, Ok(()), false, &ToolRegistry::standard());
 
         assert!(matches!(
             action,

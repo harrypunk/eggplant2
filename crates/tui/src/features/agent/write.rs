@@ -1,103 +1,41 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use editor::{BufferId, EditorSession, ExactTextReplacement};
-use eggplant_agent::{ToolCall, ToolResult, ToolResultStatus};
+use editor::BufferId;
+use eggplant_agent::{ToolCall, ToolDescriptor, ToolResult, ToolResultStatus};
 use serde::Deserialize;
 
-use super::tools::{self, BufferContext, ToolContext};
+use super::{
+    host::AgentHost,
+    registry::{AgentTool, MainThreadTool, PreparedTool, ToolOutcome},
+    tools::{self, BufferContext, ToolContext},
+};
 
-pub struct MutationOutcome {
-    pub result: ToolResult,
-    pub edited: Option<BufferId>,
+#[derive(Debug)]
+pub struct ExactReplacement {
+    descriptor: ToolDescriptor,
 }
-
-pub trait MutationTool {
-    fn validate(&self, call: &ToolCall, context: &ToolContext) -> Result<(), ToolResult>;
-
-    fn apply(&self, editor: &mut EditorSession, root: &Path, call: &ToolCall) -> MutationOutcome;
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum MutationKind {
-    ExactReplacement,
-    FileCreation,
-}
-
-impl MutationKind {
-    pub fn from_call(call: &ToolCall) -> Option<Self> {
-        match call.name.as_str() {
-            "write" => Some(Self::ExactReplacement),
-            "create" => Some(Self::FileCreation),
-            _ => None,
-        }
-    }
-
-    fn tool(self) -> &'static dyn MutationTool {
-        static EXACT_REPLACEMENT: ExactReplacement = ExactReplacement::new();
-        static FILE_CREATION: super::create::FileCreation = super::create::FileCreation::new();
-        match self {
-            Self::ExactReplacement => &EXACT_REPLACEMENT,
-            Self::FileCreation => &FILE_CREATION,
-        }
-    }
-
-    pub fn validate(self, call: &ToolCall, context: &ToolContext) -> Result<(), ToolResult> {
-        self.tool().validate(call, context)
-    }
-
-    pub fn apply(
-        self,
-        editor: &mut EditorSession,
-        root: &Path,
-        call: &ToolCall,
-    ) -> MutationOutcome {
-        self.tool().apply(editor, root, call)
-    }
-}
-
-pub struct ExactReplacement;
 
 impl ExactReplacement {
-    pub const fn new() -> Self {
-        Self
-    }
-
-    fn apply_result(
-        &self,
-        editor: &mut EditorSession,
-        root: &Path,
-        call: &ToolCall,
-    ) -> Result<(ToolResult, BufferId), ToolResult> {
-        let arguments: WriteArguments = tools::parse_arguments(call, "write")?;
-        Self::validate_replacement(call, &arguments)?;
-        let path =
-            tools::resolve(root, &arguments.path).map_err(|message| tools::error(call, message))?;
-        let buffer_id = BufferId::from_raw(arguments.buffer_id);
-        let applied = editor
-            .replace_exact_text(ExactTextReplacement {
-                buffer_id,
-                path: &path,
-                expected_revision: arguments.expected_revision,
-                old_text: &arguments.old_text,
-                new_text: &arguments.new_text,
-            })
-            .map_err(|error| tools::error(call, error.to_string()))?;
-        let relative = tools::display_path(root, &path);
-        Ok((
-            ToolResult {
-                call_id: call.id.clone(),
-                status: ToolResultStatus::Success,
-                content: format!(
-                    "Applied exact replacement to {relative}; revision is now {}. Automatic save and language synchronization are handled separately; the file is not claimed to be saved.",
-                    applied.revision
-                )
-                .chars()
-                .take(512)
-                .collect(),
-                truncated: false,
-            },
-            buffer_id,
-        ))
+    pub fn new() -> Self {
+        Self {
+            descriptor: ToolDescriptor::new(
+                "write",
+                "Apply one exact-text replacement in an open buffer. Read the buffer first for its ID and revision. This must be the only tool call in its round.",
+                serde_json::json!({
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "buffer_id": {"type": "integer", "minimum": 1},
+                        "path": {"type": "string", "description": "Workspace-relative canonical buffer path"},
+                        "expected_revision": {"type": "integer"},
+                        "old_text": {"type": "string", "minLength": 1},
+                        "new_text": {"type": "string"}
+                    },
+                    "required": ["buffer_id", "path", "expected_revision", "old_text", "new_text"]
+                }),
+            )
+            .exclusive(),
+        }
     }
 
     fn captured_target<'a>(
@@ -142,15 +80,18 @@ impl ExactReplacement {
     }
 
     fn unique_match(text: &str, old_text: &str) -> bool {
-        let matches = text.match_indices(old_text).take(2).collect::<Vec<_>>();
-        matches.len() == 1
+        text.match_indices(old_text).take(2).count() == 1
     }
 }
 
-impl MutationTool for ExactReplacement {
-    fn validate(&self, call: &ToolCall, context: &ToolContext) -> Result<(), ToolResult> {
+impl AgentTool for ExactReplacement {
+    fn descriptor(&self) -> &ToolDescriptor {
+        &self.descriptor
+    }
+
+    fn prepare(&self, call: &ToolCall, context: &ToolContext) -> Result<PreparedTool, ToolResult> {
         let arguments: WriteArguments = tools::parse_arguments(call, "write")?;
-        let (_, buffer) = self.captured_target(call, context, &arguments)?;
+        let (path, buffer) = self.captured_target(call, context, &arguments)?;
         Self::unique_match(&buffer.snapshot.text, &arguments.old_text)
             .then_some(())
             .ok_or_else(|| {
@@ -158,20 +99,64 @@ impl MutationTool for ExactReplacement {
                     call,
                     "write requires exactly one old-text match in the captured buffer".to_string(),
                 )
-            })
+            })?;
+        let relative = tools::display_path(&context.root, &path);
+        Ok(PreparedTool::MainThread(Box::new(
+            PreparedExactReplacement {
+                call: call.clone(),
+                buffer_id: BufferId::from_raw(arguments.buffer_id),
+                path,
+                relative,
+                expected_revision: arguments.expected_revision,
+                old_text: arguments.old_text,
+                new_text: arguments.new_text,
+            },
+        )))
     }
+}
 
-    fn apply(&self, editor: &mut EditorSession, root: &Path, call: &ToolCall) -> MutationOutcome {
-        match self.apply_result(editor, root, call) {
-            Ok((result, buffer_id)) => MutationOutcome {
-                result,
-                edited: Some(buffer_id),
-            },
-            Err(result) => MutationOutcome {
-                result,
-                edited: None,
-            },
-        }
+#[derive(Debug)]
+struct PreparedExactReplacement {
+    call: ToolCall,
+    buffer_id: BufferId,
+    path: PathBuf,
+    relative: String,
+    expected_revision: i32,
+    old_text: String,
+    new_text: String,
+}
+
+impl PreparedExactReplacement {
+    fn execute_result(self, host: &mut dyn AgentHost) -> Result<ToolOutcome, ToolResult> {
+        let change = host
+            .replace_exact_text(editor::ExactTextReplacement {
+                buffer_id: self.buffer_id,
+                path: &self.path,
+                expected_revision: self.expected_revision,
+                old_text: &self.old_text,
+                new_text: &self.new_text,
+            })
+            .map_err(|error| tools::error(&self.call, error.to_string()))?;
+        let result = ToolResult {
+            call_id: self.call.id,
+            status: ToolResultStatus::Success,
+            content: format!(
+                "Applied exact replacement to {}; revision is now {}. Automatic save and language synchronization are handled separately; the file is not claimed to be saved.",
+                self.relative, change.revision
+            )
+            .chars()
+            .take(512)
+            .collect(),
+            truncated: false,
+        };
+        Ok(ToolOutcome::edited(result, change))
+    }
+}
+
+impl MainThreadTool for PreparedExactReplacement {
+    fn execute(self: Box<Self>, host: &mut dyn AgentHost) -> ToolOutcome {
+        self.execute_result(host)
+            .unwrap_or_else(ToolOutcome::immediate)
     }
 }
 
@@ -215,7 +200,7 @@ mod tests {
     }
 
     #[test]
-    fn validation_is_immutable_and_requires_a_unique_match() {
+    fn preparation_is_immutable_and_requires_a_unique_match() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("main.rs");
         std::fs::write(&path, "before").unwrap();
@@ -230,11 +215,13 @@ mod tests {
             },
         };
         let tool = ExactReplacement::new();
-        tool.validate(
-            &call(buffer_id, 2, "before", "after"),
-            &context(&directory, buffer.clone()),
-        )
-        .unwrap();
+        let prepared = tool
+            .prepare(
+                &call(buffer_id, 2, "before", "after"),
+                &context(&directory, buffer.clone()),
+            )
+            .unwrap();
+        assert!(matches!(prepared, PreparedTool::MainThread(_)));
         assert_eq!(
             std::fs::read_to_string(directory.path().join("main.rs")).unwrap(),
             "before"
@@ -243,7 +230,7 @@ mod tests {
         let mut duplicate = buffer;
         duplicate.snapshot.text = "before before".to_string();
         assert!(
-            tool.validate(
+            tool.prepare(
                 &call(buffer_id, 2, "before", "after"),
                 &context(&directory, duplicate),
             )

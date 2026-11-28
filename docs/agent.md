@@ -220,7 +220,7 @@ A provider-neutral session owns ordered conversation entries:
 - User message, including explicitly captured editor context.
 - Assistant text and optional provider metadata.
 - Tool call and tool result, correlated by call ID.
-- Run status: idle, waiting for provider, streaming, cancelling, complete, failed, or cancelled. Mutation handoff does not add a waiting-for-approval status.
+- Run status: idle, waiting for provider, streaming, cancelling, complete, failed, or cancelled. Main-thread tool handoff does not add a waiting-for-approval status.
 
 Every run has a `RunId`. Streaming events also have a monotonically increasing sequence. Completion/event application requires the current session and matching run identity; late deltas from an old run cannot append to a new conversation.
 
@@ -247,11 +247,13 @@ The inline prompt may capture an owned, visible context snapshot:
 
 Do not copy the whole workspace or every open buffer into each prompt. Tools retrieve additional content on demand. Show the user what context will be sent, and provide a way to submit without active-buffer content.
 
-Context is a point-in-time snapshot, not authority to edit. A later mutation must revalidate `BufferId` and expected revision on the main update path.
+Context is a point-in-time snapshot, not authority to edit. A later main-thread tool must revalidate `BufferId` and expected revision against fresh context on the main update path.
 
 ## Runtime boundaries
 
-`commands.rs` owns the typed `AgentCommand` catalog, registration, and dispatch; `adapter.rs` is the small `Model`-aware composition adapter. `state.rs` is the interactive compatibility façade, `runtime.rs` owns session/provider/run/cancellation/storage state without prompt, navigation, Ratatui, or modal dependencies, and `ui_state.rs` reduces typed UI actions over shared prompt/context plus dialog/panel presentation data. `presentation/dialog.rs` and `presentation/panel.rs` own their respective lifecycle/mode/navigation data and reducers; input workflows dispatch actions rather than calling open/close/follow-bottom methods or receiving mutable navigation fields. Runtime `begin` returns a typed `RunStarted` outcome with no UI side effects. Interactive submission dispatches that outcome only to the active transcript reducer, which clears the shared prompt and restores that surface's bottom state; inactive presentations are untouched. A future headless composition can use the runtime without becoming an `AgentSurface` or acquiring scroll/cursor methods. `dialog.rs` owns inline open/close; `panel.rs` owns focus, Normal/Insert, and help. `context.rs` captures editor/workspace inputs, `mutation.rs` owns main-update `MutationExecutor` coordination through the consumer-sized `MutationContext` interface, `write.rs`/`create.rs` implement `MutationTool` validation and application, and `run.rs` owns provider/tool execution without `Model`. `storage.rs` builds finalized records from runtime state plus an optional workspace root; `Model` remains only the effect/notification adapter. `work.rs` retains submission and interruption policy through consumer-sized `SubmissionContext` and `InterruptionContext` interfaces rather than receiving the global `Model`; only `adapter.rs` supplies concrete surface, workspace, modal, notification, and persistence coordination. Unit tests use a local fake context, while integration tests retain real-adapter coverage.
+`commands.rs` owns the typed `AgentCommand` catalog, registration, and dispatch; `adapter.rs` is the small `Model`-aware composition adapter. `state.rs` is the interactive compatibility façade, `runtime.rs` owns session/provider/run/cancellation/storage state without prompt, navigation, Ratatui, or modal dependencies, and `ui_state.rs` reduces typed UI actions over shared prompt/context plus dialog/panel presentation data. `presentation/dialog.rs` and `presentation/panel.rs` own their respective lifecycle/mode/navigation data and reducers; input workflows dispatch actions rather than calling open/close/follow-bottom methods or receiving mutable navigation fields. Runtime `begin` returns a typed `RunStarted` outcome with no UI side effects. Interactive submission dispatches that outcome only to the active transcript reducer, which clears the shared prompt and restores that surface's bottom state; inactive presentations are untouched. A future headless composition can use the runtime without becoming an `AgentSurface` or acquiring scroll/cursor methods. `dialog.rs` owns inline open/close; `panel.rs` owns focus, Normal/Insert, and help.
+
+`context.rs` captures editor/workspace inputs. `registry.rs` defines `AgentTool`, `PreparedTool`, `MainThreadTool`, and `ToolRegistry`; the standard registration list contains `ReadTool`, `GrepTool`, `ExactReplacement`, and `FileCreation` once. `tools.rs` implements read/grep and shared tool bounds/context, while `write.rs`/`create.rs` implement exact replacement and file creation. `run.rs` owns provider/tool rounds without `Model` and uses registry lookup rather than tool-name match dispatch. `execution.rs` owns main-update `ToolExecutor` coordination through the consumer-sized `ToolExecutionContext` interface, and `host.rs` defines the high-level `AgentHost` used by prepared main-thread tools. `storage.rs` builds finalized records from runtime state plus an optional workspace root. `work.rs` retains submission and interruption policy through consumer-sized `SubmissionContext` and `InterruptionContext` interfaces rather than receiving the global `Model`; only `adapter.rs` supplies concrete surface, workspace, modal, notification, host, after-edit, and persistence coordination. Unit tests use local fake contexts, while integration tests retain real-adapter coverage.
 
 The intended ownership is:
 
@@ -278,7 +280,7 @@ Provider SDK types must not appear in `Model`, components, filesystem tools, or 
 
 ### Streaming through the existing effect model
 
-A run emits many ordered typed events rather than one final completion. `ProviderAgentRun::execute` forwards each provider event through the existing message sender immediately; there is no provider-specific global `Message` variant, second terminal/event loop, or callback that mutates a view. `AgentRuntime::apply_event` is the presentation-independent reducer for text deltas, usage, tools, mutation requests, and completion/failure. The TUI completion adapter routes `MutationRequested` through main-update `MutationExecutor` and handles finalized persistence; it does not open an approval modal.
+A run emits many ordered typed events rather than one final completion. `ProviderAgentRun::execute` forwards each provider event through the existing message sender immediately; there is no provider-specific global `Message` variant, second terminal/event loop, or callback that mutates a view. `AgentRuntime::apply_event` is the presentation-independent reducer for text deltas, usage, tools, generic main-thread tool requests, and completion/failure. The TUI completion adapter routes `MainThreadToolRequested` through main-update `ToolExecutor` and handles finalized persistence; it does not open an approval modal.
 
 `AgentSession::append_delta` appends to the matching active run and rejects stale or post-completion text. Bottom-following transcript state reveals incoming snapshots, while manual scroll/cursor inspection is not forcibly reset by each delta. Markdown is parsed from the complete immutable text snapshot on render, matching Pi's correctness model rather than maintaining an incremental token tree.
 
@@ -293,8 +295,8 @@ The first loop is intentionally small:
 1. Append user input and captured context.
 2. Request a streaming model response.
 3. Append ordered assistant text and tool calls.
-4. Validate a tool call against the registered tool contract.
-5. Execute read-only tools within limits. For a mutation that is the sole call in its round, validate captured context and emit `MutationRequested` for automatic main-update execution.
+4. Validate the provider round and resolve each call through `ToolRegistry`; unknown tool IDs produce error results.
+5. Execute `PreparedTool::Immediate` results within limits. For a main-thread tool, validate captured context and emit generic `MainThreadToolRequested` with an owned continuation; an `Exclusive` tool must be the sole call in its round.
 6. Append a bounded tool result.
 7. Continue until the provider stops, the user cancels, an error occurs, or an output limit is reached.
 
@@ -320,24 +322,35 @@ api_key_env = "OPENAI_API_KEY"
 
 OpenAI-compatible HTTP requests send `User-Agent: eggplant-editor/2.0.0`, derived from the workspace package version. Streaming responses use incremental UTF-8-safe SSE decoding. Deltas arrive through the same provider-neutral session, with an authoritative completion or failure. A response stopped for length fails rather than executing tool calls. The localhost test suite verifies actual HTTP request shape, streaming events, Unicode fragmentation, status errors, and API-key redaction without external network access.
 
-The adapter also declares bounded automatic `read`, `grep`, exact-text `write`, and no-overwrite `create` functions and merges incremental `tool_calls` deltas by index. Tool execution receives owned workspace/buffer context, not `Model`. Reads of open buffers include their `BufferId`, revision, and path so a model can construct a write request without hidden editor access. Follow-up requests serialize user, assistant, and tool-role history so the model can consume results without a second conversation or UI event loop. A `[DONE]` completion closes only the current provider round; the overall run completes after the final model response. Following Pi's `runLoop`, there is no arbitrary tool-round or tool-call count: work continues while new calls arrive and stops on natural completion, provider error/abort, an explicit end decision, or user cancellation. Cumulative tool output remains capped at 100 KiB, and invalid or duplicate call IDs are rejected before execution.
+### Unified tool declarations and execution
 
-A write or create must be the only call in its round. The worker validates captured context, emits `MutationRequested` with the call plus an owned `AgentContinuation`, and exits without completing the run. On the main update path, `MutationExecutor` uses `MutationContext` to revalidate and apply through `MutationTool`. Existing-file writes preserve `BufferId`, canonical path, expected revision, exactly one old-text match, and save-in-flight checks before one undoable transaction. Creation revalidates its workspace-relative no-overwrite target and composes `CreateTarget`/`filesystem::create`, `DocumentFactory::open`, and `EditorSession::create_file_document`.
+`crates/agent` owns provider-neutral `ToolId`, `ToolDescriptor`, and `ToolConcurrency::{Shared, Exclusive}` values. A descriptor carries its ID, description, JSON Schema `parameters`, and concurrency without depending on OpenAI or the TUI. The production runtime builds one standard TUI `ToolRegistry` containing `ReadTool`, `GrepTool`, `ExactReplacement`, and `FileCreation`. Registration rejects duplicate/empty IDs and empty descriptions; round validation rejects invalid or duplicate call IDs, oversized arguments, and any `Exclusive` call combined with another call. The same registry supplies descriptors and prepares executions. Neither `run.rs` nor `tools.rs` dispatches implementations by matching tool-name strings, and an unknown ID returns a tool error result.
 
-`MutationExecutor` then performs normal explicit-ID auto-save/language synchronization, captures fresh context, records the bounded result, and resumes the provider. There are no approval keys, approval modal, pending approval state, or approval-only diff; `Ctrl-F7` remains ordinary active-run cancellation. Validation, cancellation, mutation, and save failures stay honest. Success means the edit or creation was applied, not that persistence succeeded, and no automatic rollback is claimed.
+`AgentTool::prepare` yields `PreparedTool::{Immediate, MainThread}` (or an error result). Read/grep produce immediate results. Exact replacement and file creation are `Exclusive` and prepare `MainThreadTool` values after validating the worker's captured context. The worker then emits generic `AgentEvent::MainThreadToolRequested` with the `ToolCall` plus an owned `AgentContinuation` and exits without completing the run; neither the event nor the continuation is mutation-specific.
+
+On the main update path, `execution.rs`'s `ToolExecutor` uses `ToolExecutionContext` to verify the pending call, take its continuation, capture fresh `ToolContext`, and re-prepare the call through the same registry. It executes the resulting main-thread operation, records the tool result, applies common after-edit effects, captures fresh context for the follow-up, and resumes the provider. Re-preparation is intentional: current path/revision/exact-match/no-overwrite state is checked again rather than trusting a prepared worker snapshot. Existing-file writes also retain save-in-flight checks and one undoable transaction.
+
+A prepared `MainThreadTool` receives only the high-level `AgentHost`, which hides Helix views, documents, and history. The `Model` composition in `adapter.rs` implements that host: exact replacement delegates to `EditorSession`, while creation owns `CreateTarget`/`filesystem::create`, `DocumentFactory::open`, and `EditorSession::create_file_document` details. `EditorSession` uses detached view state internally for inactive exact replacements, so agent tools do not manage views or activate another buffer. A successful edit returns `EditorChange { buffer_id, path, revision }`; `ToolExecutor` uses that outcome to invoke the adapter's common explicit-ID auto-save/language-synchronization effects.
+
+`OpenAiConfig` accepts an injected `Vec<ToolDescriptor>` directly or through `with_tools`. Composition passes the runtime registry's descriptors to both statically configured providers and `OpenAiFactory`. The OpenAI adapter renders only those injected IDs, descriptions, and JSON Schema parameters—its default is an empty list, with no hardcoded `read`/`grep`/`write`/`create` declarations. It still merges incremental `tool_calls` deltas by index; declaration rendering does not execute tools.
+
+Tool execution receives owned workspace/buffer context, not `Model`. Reads of open buffers include their `BufferId`, revision, and path so a model can construct a write request without hidden editor access. Follow-up requests serialize user, assistant, and tool-role history so the model can consume results without a second conversation or UI event loop. A `[DONE]` completion closes only the current provider round; the overall run completes after the final model response. Following Pi's `runLoop`, there is no arbitrary tool-round or tool-call count: work continues while new calls arrive and stops on natural completion, provider error/abort, an explicit end decision, or user cancellation. Cumulative tool output remains capped at 100 KiB, and invalid or duplicate call IDs are rejected before execution.
+
+There are no approval keys, approval modal, pending approval state, or approval-only diff; `Ctrl-F7` remains ordinary active-run cancellation. Validation, cancellation, execution, and save failures stay honest. Success means the edit or creation was applied, not that persistence succeeded, and no automatic rollback or unconditional save is claimed.
 
 ## Safety summary
 
 - Read and grep are bounded and workspace-scoped by default.
 - Read/grep/write/create execute automatically without per-call or session approval prompts, following Pi core's lack of built-in prompts.
-- Writes retain explicit `BufferId`, canonical-path, expected-revision, exact-match, and save validation; creation retains no-overwrite validation.
+- `Exclusive` tools execute alone in a provider round; currently both `write` and `create` are exclusive.
+- Writes retain explicit `BufferId`, canonical-path, expected-revision, exact-match, and save validation; creation retains no-overwrite validation. Fresh main-update preparation repeats these checks before execution.
 - Active-buffer UI commands are not unattended editing APIs.
 - No arbitrary shell/process execution in the initial agent.
 - No automatic LSP workspace edits or Git mutations.
 - Tool results and model text are data, never implicit commands to Eggplant.
 - Ordinary editing remains usable when no provider is configured or a run fails.
 
-See [Agent tools](agent-tools.md) for path, result, revision, and automatic mutation contracts.
+See [Agent tools](agent-tools.md) for registry, path, result, revision, host-boundary, and automatic execution contracts.
 
 ## Non-goals for the first implementation
 
@@ -368,8 +381,9 @@ Use scripted fake providers and fake tool calls to cover:
 - Popup hide/reopen and shared popup/panel state.
 - Modal precedence, narrow terminals, Unicode, and bounded transcripts.
 - Provider failure without exposing secrets or losing ordinary editing.
-- Tool argument/path/result validation and iteration limits.
-- Automatic mutation handoff, revision/exact-match/no-overwrite conflicts, cancellation, and save failure without false success.
+- Tool argument/path/result validation, unknown IDs, duplicate registrations, exclusive-round rules, and output limits.
+- Generic `MainThreadToolRequested` continuation identity, fresh-context re-preparation, revision/exact-match/no-overwrite conflicts, cancellation, and save failure without false success.
+- OpenAI request declarations containing exactly the injected registry descriptors.
 - No real provider credentials or network access in workspace tests.
 
 Real-provider smoke tests remain manual and must not become build requirements.

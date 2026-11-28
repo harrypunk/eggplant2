@@ -551,13 +551,14 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 - [x] Implement workspace-scoped `read` using existing regular-file/text acceptance and owned open-buffer snapshots where current text is needed.
 - [x] Implement `grep` through existing smart-case search, project traversal, ignore rules, binary rejection, and deterministic result caps; extract a public bounded core rather than calling private `search_project` as if it were a finished agent API.
 - [x] Render concise tool activity/output/truncation in the shared Agent panel without leaking secrets or unbounded content.
-- [x] Test path/symlink escapes, invalid arguments, Unicode, large results, cancellation, stale calls, and iteration/output limits.
+- [x] Test path/symlink escapes, invalid arguments, Unicode, large results, cancellation, stale calls, and output limits.
 
 #### M12.4 — Automatic revision-safe writes
 
 - [x] Start with exact-text replacement in an existing open buffer identified by `BufferId`, canonical path, and expected revision, plus no-overwrite creation of new text files through the shared document/save pipeline.
-- [x] Execute `write`/`create` automatically without per-call/session approval, approval keys/modals, pending approval state, or approval-only diffs. Keep each mutation as the only call in its provider round.
-- [x] Validate captured context in the worker, emit `MutationRequested` with an owned continuation, then use main-update `MutationExecutor`/`MutationContext` to revalidate and apply through `MutationTool`. Preserve identity/revision/exact-text and no-overwrite checks, one undoable editor transaction, explicit-ID after-edit/save/language sync, fresh context capture, and provider resumption.
+- [x] Execute `write`/`create` automatically without per-call/session approval, approval keys/modals, pending approval state, or approval-only diffs. Keep each `Exclusive` tool (currently `write` and `create`) as the only call in its provider round.
+- [x] Define provider-neutral `ToolId`, `ToolDescriptor`, `ToolConcurrency::{Shared, Exclusive}`, and JSON Schema parameters in `eggplant-agent`. Build one TUI `ToolRegistry` containing `ReadTool`, `GrepTool`, `ExactReplacement`, and `FileCreation`; use it for both execution and injected OpenAI declarations, reject duplicate registrations and invalid/exclusive rounds, and return errors for unknown tools without name-match dispatch.
+- [x] Let `AgentTool::prepare` yield immediate read/grep results or generic main-thread write/create operations. Emit `MainThreadToolRequested` with an owned continuation; on main update, `ToolExecutor`/`ToolExecutionContext` re-prepares against fresh context, executes through `AgentHost`, records the result, applies common `EditorChange` after-edit effects, captures fresh context, and resumes the provider. Preserve identity/revision/exact-text and no-overwrite checks, one undoable editor transaction, and explicit-ID save/language sync.
 - [x] Report validation conflicts, cancellation, and save failure honestly; never claim an automatic rollback or unconditional save success.
 - [x] Defer delete/rename, multi-file patches, shell commands, LSP workspace edits, and Git mutations to separately reviewed tools. New-file creation is implemented; delete/rename/copy remain deferred.
 

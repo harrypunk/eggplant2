@@ -7,7 +7,7 @@ pub enum AgentEvent {
     ToolCalls(Vec<ToolCall>),
     ToolResults(Vec<ToolResult>),
     Usage(TokenUsage),
-    MutationRequested {
+    MainThreadToolRequested {
         call: ToolCall,
         continuation: AgentContinuation,
     },

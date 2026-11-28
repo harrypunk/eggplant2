@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use eggplant_agent::AgentProvider;
+use eggplant_agent::{AgentProvider, ToolDescriptor};
 use eggplant_agent_openai::{OpenAiConfig, OpenAiProvider};
 use eggplant_agent_storage::{ProviderAuthType, ProviderCredential};
 
@@ -9,22 +9,31 @@ use crate::capabilities::openai::{OpenAiCatalogFuture, OpenAiProviderFactory};
 #[derive(Debug)]
 pub struct OpenAiFactory {
     context_window: Option<u64>,
+    tools: Vec<ToolDescriptor>,
 }
 
 impl OpenAiFactory {
-    pub fn new(context_window: Option<u64>) -> Self {
-        Self { context_window }
+    pub fn new(context_window: Option<u64>, tools: Vec<ToolDescriptor>) -> Self {
+        Self {
+            context_window,
+            tools,
+        }
     }
 }
 
 impl OpenAiProviderFactory for OpenAiFactory {
     fn list_models(&self, credential: ProviderCredential) -> OpenAiCatalogFuture<'_> {
         Box::pin(async move {
-            OpenAiProvider::new(openai_config(credential, None, self.context_window)?)
-                .map_err(|error| error.0)?
-                .list_models()
-                .await
-                .map_err(|error| error.0)
+            OpenAiProvider::new(openai_config(
+                credential,
+                None,
+                self.context_window,
+                self.tools.clone(),
+            )?)
+            .map_err(|error| error.0)?
+            .list_models()
+            .await
+            .map_err(|error| error.0)
         })
     }
 
@@ -33,9 +42,13 @@ impl OpenAiProviderFactory for OpenAiFactory {
         credential: ProviderCredential,
         model: String,
     ) -> Result<Arc<dyn AgentProvider>, String> {
-        let provider =
-            OpenAiProvider::new(openai_config(credential, Some(model), self.context_window)?)
-                .map_err(|error| error.0)?;
+        let provider = OpenAiProvider::new(openai_config(
+            credential,
+            Some(model),
+            self.context_window,
+            self.tools.clone(),
+        )?)
+        .map_err(|error| error.0)?;
         Ok(Arc::new(provider))
     }
 }
@@ -44,6 +57,7 @@ fn openai_config(
     credential: ProviderCredential,
     model: Option<String>,
     context_window: Option<u64>,
+    tools: Vec<ToolDescriptor>,
 ) -> Result<OpenAiConfig, String> {
     if credential.auth_type != ProviderAuthType::ApiKey {
         return Err("OpenAI-compatible login requires an API key".to_string());
@@ -58,6 +72,7 @@ fn openai_config(
         base_url,
         model,
         context_window,
+        tools,
         ..OpenAiConfig::default()
     };
     Ok(config.with_api_key(api_key))

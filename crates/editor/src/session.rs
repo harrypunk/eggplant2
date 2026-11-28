@@ -2,7 +2,7 @@ use std::{
     collections::{BTreeMap, HashSet},
     fmt,
     ops::Bound,
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 use helix_view::{
@@ -135,14 +135,10 @@ pub struct ExactTextReplacement<'a> {
     pub new_text: &'a str,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AppliedTextEdit {
-    pub revision: i32,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct CreatedDocument {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EditorChange {
     pub buffer_id: BufferId,
+    pub path: PathBuf,
     pub revision: i32,
 }
 
@@ -637,7 +633,7 @@ impl EditorSession {
     pub fn replace_exact_text(
         &mut self,
         replacement: ExactTextReplacement<'_>,
-    ) -> Result<AppliedTextEdit, ExactTextError> {
+    ) -> Result<EditorChange, ExactTextError> {
         if replacement.old_text.is_empty() || replacement.old_text == replacement.new_text {
             return Err(ExactTextError::InvalidReplacement);
         }
@@ -707,7 +703,11 @@ impl EditorSession {
         if active_buffer == Some(replacement.buffer_id) {
             view.ensure_cursor_in_view(document, self.scrolloff);
         }
-        Ok(AppliedTextEdit { revision })
+        Ok(EditorChange {
+            buffer_id: replacement.buffer_id,
+            path: replacement.path.to_path_buf(),
+            revision,
+        })
     }
 
     /// Initialize a newly opened file-backed document with full text and edit history.
@@ -715,7 +715,7 @@ impl EditorSession {
         &mut self,
         document: Document,
         text: &str,
-    ) -> Result<CreatedDocument, ExactTextError> {
+    ) -> Result<EditorChange, ExactTextError> {
         let buffer_id = self.insert_document(document);
         let view = self
             .active_view
@@ -738,8 +738,13 @@ impl EditorSession {
                 .ok_or(ExactTextError::ExactTextConflict(buffer_id))?;
             document.append_changes_to_history(&mut view.view);
         }
-        Ok(CreatedDocument {
+        let path = document
+            .path()
+            .map(Path::to_path_buf)
+            .ok_or(ExactTextError::PathMismatch(buffer_id))?;
+        Ok(EditorChange {
             buffer_id,
+            path,
             revision: document.version(),
         })
     }

@@ -8,7 +8,7 @@ use eggplant_agent::{
 };
 use eggplant_agent_storage::SessionStore;
 
-use super::{EditorContext, run::AgentRunState};
+use super::{EditorContext, registry::ToolRegistry, run::AgentRunState};
 
 /// Runtime state and lifecycle operations independent of Agent presentation.
 #[derive(Debug)]
@@ -18,6 +18,7 @@ pub struct AgentRuntime {
     run: Option<AgentRunState>,
     store: Option<Arc<dyn SessionStore>>,
     context_policy: Arc<dyn ConversationContextPolicy>,
+    tools: Arc<ToolRegistry>,
     last_context: Option<ContextProjection>,
     storage_error: Option<String>,
     session_created_at: Option<i64>,
@@ -36,6 +37,7 @@ impl Default for AgentRuntime {
             run: None,
             store: None,
             context_policy: Arc::new(FullContext),
+            tools: Arc::new(ToolRegistry::standard()),
             last_context: None,
             storage_error: None,
             session_created_at: None,
@@ -51,7 +53,7 @@ impl Default for AgentRuntime {
 /// Semantic result of reducing one provider event.
 pub enum AgentApplyOutcome {
     None,
-    MutationRequested(ToolCall),
+    MainThreadToolRequested(ToolCall),
 }
 
 /// Runtime outcome emitted after a session run starts.
@@ -191,11 +193,11 @@ impl AgentRuntime {
                 });
                 AgentApplyOutcome::None
             }
-            AgentEvent::MutationRequested { call, continuation } => {
+            AgentEvent::MainThreadToolRequested { call, continuation } => {
                 match self.session.tool_call_is_pending(run_id, &call.id) {
                     true => {
                         self.suspend(run_id, continuation);
-                        AgentApplyOutcome::MutationRequested(call)
+                        AgentApplyOutcome::MainThreadToolRequested(call)
                     }
                     false => AgentApplyOutcome::None,
                 }
@@ -247,6 +249,18 @@ impl AgentRuntime {
             .and_then(|provider| provider.token_estimator())
             .map_or(request, |estimator| request.with_estimator(estimator));
         self.context_policy.project_request(request)
+    }
+
+    pub(crate) fn tools(&self) -> Arc<ToolRegistry> {
+        self.tools.clone()
+    }
+
+    pub(crate) fn tool_descriptors(&self) -> Vec<eggplant_agent::ToolDescriptor> {
+        self.tools.descriptors()
+    }
+
+    pub(crate) fn set_tool_registry(&mut self, tools: Arc<ToolRegistry>) {
+        self.tools = tools;
     }
 
     pub fn set_context_policy(&mut self, policy: Arc<dyn ConversationContextPolicy>) {
