@@ -343,7 +343,7 @@ impl SseDecoder {
                 continue;
             };
             let data = trim_ascii_start(data);
-            if let Some(event) = decode_event(self, data) {
+            for event in decode_events(self, data) {
                 on_event(event);
             }
         }
@@ -357,23 +357,25 @@ fn trim_ascii_start(mut value: &[u8]) -> &[u8] {
     value
 }
 
-fn decode_event(decoder: &mut SseDecoder, data: &[u8]) -> Option<AgentEvent> {
+fn decode_events(decoder: &mut SseDecoder, data: &[u8]) -> Vec<AgentEvent> {
     if data == b"[DONE]" {
-        return Some(AgentEvent::Complete);
+        return vec![AgentEvent::Complete];
     }
-    let value: Value = serde_json::from_slice(data).ok()?;
+    let Ok(value) = serde_json::from_slice::<Value>(data) else {
+        return Vec::new();
+    };
     if let Some(message) = value["error"]["message"].as_str() {
-        return Some(AgentEvent::Failed(bounded(message)));
+        return vec![AgentEvent::Failed(bounded(message))];
     }
     if let Some(usage) = decode_usage(&value) {
-        return Some(AgentEvent::Usage(usage));
+        return vec![AgentEvent::Usage(usage)];
     }
     let choice = &value["choices"][0];
     if choice["finish_reason"].as_str() == Some("length") {
         std::mem::take(&mut decoder.pending);
-        return Some(AgentEvent::Failed(
+        return vec![AgentEvent::Failed(
             "OpenAI response stopped for length".to_string(),
-        ));
+        )];
     }
     if let Some(calls) = choice["delta"]["tool_calls"].as_array() {
         for (position, call) in calls.iter().enumerate() {
@@ -392,14 +394,26 @@ fn decode_event(decoder: &mut SseDecoder, data: &[u8]) -> Option<AgentEvent> {
     }
     let finished = choice["finish_reason"].as_str();
     if finished == Some("tool_calls") || (finished == Some("stop") && !decoder.pending.is_empty()) {
-        return Some(AgentEvent::ToolCalls(
+        return vec![AgentEvent::ToolCalls(
             std::mem::take(&mut decoder.pending).into_values().collect(),
-        ));
+        )];
     }
-    choice["delta"]["content"]
-        .as_str()
-        .filter(|content| !content.is_empty())
-        .map(|content| AgentEvent::TextDelta(content.to_string()))
+
+    let delta = &choice["delta"];
+    let thinking = ["reasoning_content", "reasoning", "reasoning_text"]
+        .into_iter()
+        .find_map(|field| delta[field].as_str())
+        .filter(|content| !content.is_empty());
+    thinking
+        .map(|content| AgentEvent::ThinkingDelta(content.to_string()))
+        .into_iter()
+        .chain(
+            delta["content"]
+                .as_str()
+                .filter(|content| !content.is_empty())
+                .map(|content| AgentEvent::TextDelta(content.to_string())),
+        )
+        .collect()
 }
 
 fn decode_usage(value: &Value) -> Option<TokenUsage> {
@@ -531,15 +545,30 @@ mod tests {
     fn length_stop_and_server_errors_do_not_execute_or_emit_content() {
         let length = br#"{"choices":[{"delta":{"content":"partial"},"finish_reason":"length"}]}"#;
         let mut decoder = SseDecoder::default();
-        assert!(matches!(
-            decode_event(&mut decoder, length),
-            Some(AgentEvent::Failed(message)) if message == "OpenAI response stopped for length"
-        ));
+        assert_eq!(
+            decode_events(&mut decoder, length),
+            vec![AgentEvent::Failed(
+                "OpenAI response stopped for length".to_string()
+            )]
+        );
 
         let error = br#"{"error":{"message":"invalid request"}}"#;
         assert_eq!(
-            decode_event(&mut decoder, error),
-            Some(AgentEvent::Failed("invalid request".to_string()))
+            decode_events(&mut decoder, error),
+            vec![AgentEvent::Failed("invalid request".to_string())]
+        );
+    }
+
+    #[test]
+    fn decodes_one_reasoning_field_before_answer_content() {
+        let data = br#"{"choices":[{"delta":{"reasoning_content":"plan","reasoning":"duplicate","content":"answer"}}]}"#;
+        let mut decoder = SseDecoder::default();
+        assert_eq!(
+            decode_events(&mut decoder, data),
+            vec![
+                AgentEvent::ThinkingDelta("plan".to_string()),
+                AgentEvent::TextDelta("answer".to_string()),
+            ]
         );
     }
 
