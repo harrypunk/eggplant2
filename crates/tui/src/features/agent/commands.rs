@@ -64,6 +64,16 @@ pub fn commands() -> Vec<Command> {
             super::panel::toggle_panel,
         ),
         Command::feature(
+            CommandId("agent_session_selector_open"),
+            "select saved agent session",
+            super::sessions::open,
+        ),
+        Command::feature(
+            CommandId("agent_thinking_selector_open"),
+            "select agent thinking options",
+            super::thinking_level::open,
+        ),
+        Command::feature(
             CommandId("agent_panel_close"),
             "leave agent panel input",
             close_panel,
@@ -239,6 +249,8 @@ mod tests {
             "agent_approve",
             "agent_reject",
             "agent_toggle_panel",
+            "agent_session_selector_open",
+            "agent_thinking_selector_open",
             "agent_panel_close",
             "agent_insert",
             "agent_panel_normal",

@@ -111,6 +111,9 @@ Set `features.agent.context_window` to the active model's token capacity to disp
 | Submit prompt | `Enter` |
 | Interrupt active run | `Ctrl-F7` |
 | Toggle shared Agent tool panel | `Space a t` |
+| Select provider model | `Space a m` |
+| Select saved session | `Space a s` |
+| Select thinking options | `Space a k` |
 | Open provider login | `Space a i` (`Space a p` alias) |
 | Open provider logout | `Space a o` |
 | Focus Agent panel input | `Ctrl-L` |

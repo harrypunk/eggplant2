@@ -142,6 +142,9 @@ const GIT_CONTEXT: CommandMenuContext = CommandMenuContext {
 static AI_CONTEXT: CommandMenuContext = CommandMenuContext::new(
     "ai",
     &[
+        CommandMenuItem::action('m', "model", CommandId("model_selector_open")),
+        CommandMenuItem::action('s', "sessions", CommandId("agent_session_selector_open")),
+        CommandMenuItem::action('k', "thinking", CommandId("agent_thinking_selector_open")),
         CommandMenuItem::action('i', "login", CommandId("provider_login_open")),
         CommandMenuItem::action('p', "provider login", CommandId("provider_login_open")),
         CommandMenuItem::action('o', "logout", CommandId("provider_logout_open")),
@@ -387,6 +390,27 @@ mod tests {
         assert_eq!(
             menu.handle_key(KeyCode::Char('p')),
             CommandMenuOutcome::Action(CommandId("provider_login_open"))
+        );
+
+        menu.start();
+        menu.handle_key(KeyCode::Char('a'));
+        assert_eq!(
+            menu.handle_key(KeyCode::Char('m')),
+            CommandMenuOutcome::Action(CommandId("model_selector_open"))
+        );
+
+        menu.start();
+        menu.handle_key(KeyCode::Char('a'));
+        assert_eq!(
+            menu.handle_key(KeyCode::Char('s')),
+            CommandMenuOutcome::Action(CommandId("agent_session_selector_open"))
+        );
+
+        menu.start();
+        menu.handle_key(KeyCode::Char('a'));
+        assert_eq!(
+            menu.handle_key(KeyCode::Char('k')),
+            CommandMenuOutcome::Action(CommandId("agent_thinking_selector_open"))
         );
 
         menu.start();

@@ -20,6 +20,9 @@ Available in Normal and Explorer contexts unless noted otherwise.
 | Toggle editor text wrapping | `Space u w` |
 | Toggle cursor-line background | `Space u c` |
 | Toggle agent tool panel | `Space a t` |
+| Select provider model | `Space a m` |
+| Select saved session | `Space a s` |
+| Select thinking options | `Space a k` |
 | Open provider login | `Space a i` (`Space a p` alias) |
 | Open provider logout | `Space a o` |
 | Focus Agent panel input | `Ctrl-L` |

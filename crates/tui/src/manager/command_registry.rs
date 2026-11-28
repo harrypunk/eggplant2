@@ -120,6 +120,7 @@ impl CommandRegistry {
             crate::agent::commands,
             crate::provider_login::commands,
             crate::provider_logout::commands,
+            crate::model_selector::commands,
             crate::welcome::commands,
         ];
 
