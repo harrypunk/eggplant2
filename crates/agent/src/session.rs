@@ -1,6 +1,7 @@
 use crate::{
-    AgentRun, ChatMessage, MessagePart, MessageRole, ProviderMessage, RunId, RunStatus, SessionId,
-    TokenUsage, ToolApproval, ToolCall, ToolEvent, ToolResult,
+    AgentRun, ChatMessage, ConversationContextPolicy, ConversationTurn, FullContext, MessagePart,
+    MessageRole, ProviderMessage, RunId, RunStatus, SessionId, TokenUsage, ToolApproval, ToolCall,
+    ToolEvent, ToolResult,
 };
 
 const MAX_MESSAGES: usize = 100;
@@ -171,11 +172,9 @@ impl AgentSession {
         &self.messages
     }
 
-    /// Flattened answer-only history for a new provider run.
-    ///
-    /// Turns without answer text are omitted, while partial answers are retained. Thinking and
-    /// earlier tool rounds are display/run-local data, not cross-run provider replay data.
-    pub fn provider_history(&self) -> Vec<ProviderMessage> {
+    /// Answered turns without answer text are omitted, while partial answers are retained.
+    /// Thinking and earlier tool rounds are not cross-run provider replay data.
+    pub fn answered_turns(&self) -> Vec<ConversationTurn> {
         self.messages
             .chunk_by(|left, right| left.run_id == right.run_id)
             .filter_map(|turn| {
@@ -185,13 +184,17 @@ impl AgentSession {
                 let answer = turn.iter().find(|message| {
                     message.role == MessageRole::Assistant && !message.text.is_empty()
                 })?;
-                Some([
-                    ProviderMessage::user(user.text.clone()),
-                    ProviderMessage::assistant(answer.text.clone(), Vec::new()),
-                ])
+                Some(ConversationTurn {
+                    run_id: user.run_id,
+                    user: user.text.clone(),
+                    answer: answer.text.clone(),
+                })
             })
-            .flatten()
             .collect()
+    }
+
+    pub fn provider_history(&self) -> Vec<ProviderMessage> {
+        FullContext.project(&self.answered_turns()).history
     }
 
     pub fn run(&self) -> Option<&AgentRun> {

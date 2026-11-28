@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use eggplant_agent::{
-    AgentContinuation, AgentEvent, AgentProvider, AgentSession, CancellationToken, MessageRole,
-    ProviderMessage, RunId, SessionId, SessionRestoreError, SessionSnapshot, ThinkingId,
-    ThinkingOption,
+    AgentContinuation, AgentEvent, AgentProvider, AgentSession, CancellationToken,
+    ContextProjection, ConversationContextPolicy, FullContext, MessageRole, ProviderMessage, RunId,
+    SessionId, SessionRestoreError, SessionSnapshot, ThinkingId, ThinkingOption,
 };
 use eggplant_agent_storage::SessionStore;
 
@@ -16,6 +16,7 @@ pub struct AgentRuntime {
     provider: Option<Arc<dyn AgentProvider>>,
     run: Option<AgentRunState>,
     store: Option<Arc<dyn SessionStore>>,
+    context_policy: Arc<dyn ConversationContextPolicy>,
     storage_error: Option<String>,
     session_created_at: Option<i64>,
     session_title: Option<String>,
@@ -32,6 +33,7 @@ impl Default for AgentRuntime {
             provider: None,
             run: None,
             store: None,
+            context_policy: Arc::new(FullContext),
             storage_error: None,
             session_created_at: None,
             session_title: None,
@@ -211,7 +213,15 @@ impl AgentRuntime {
     }
 
     pub fn provider_history(&self) -> Vec<ProviderMessage> {
-        self.session.provider_history()
+        self.context_projection().history
+    }
+
+    pub fn context_projection(&self) -> ContextProjection {
+        self.context_policy.project(&self.session.answered_turns())
+    }
+
+    pub fn set_context_policy(&mut self, policy: Arc<dyn ConversationContextPolicy>) {
+        self.context_policy = policy;
     }
 
     pub fn set_provider(&mut self, provider: Arc<dyn AgentProvider>) {
@@ -358,6 +368,29 @@ mod tests {
         assert_eq!(runtime.session_title(), Some("hello"));
         assert!(runtime.session().is_running());
         assert_eq!(runtime.session().run().unwrap().id, first.id);
+    }
+
+    #[test]
+    fn injected_context_policy_projects_history_without_presentation_state() {
+        let mut runtime = AgentRuntime::default();
+        let first = runtime.begin("first".to_string(), None, 10).unwrap().id;
+        runtime.session_mut().append_delta(first, "first answer");
+        runtime.session_mut().complete(first);
+        let second = runtime.begin("second".to_string(), None, 20).unwrap().id;
+        runtime.session_mut().append_delta(second, "second answer");
+        runtime.session_mut().complete(second);
+        runtime.set_context_policy(Arc::new(eggplant_agent::BoundedContext::new(1, usize::MAX)));
+
+        let projection = runtime.context_projection();
+
+        assert_eq!(projection.omitted_turns, 1);
+        assert_eq!(
+            projection.history,
+            vec![
+                ProviderMessage::user("second".to_string()),
+                ProviderMessage::assistant("second answer".to_string(), Vec::new()),
+            ]
+        );
     }
 
     #[test]

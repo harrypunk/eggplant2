@@ -1,6 +1,6 @@
 # AI agent architecture
 
-Status: M12.1–M12.7 are implemented. Multi-turn chat, OpenAI streaming, bounded tools, approved writes, durable linear sessions, `/new`, `/sessions`, startup continuation, pagination, and `/restore <session-id>` are complete. M12.8 is next: provider context budgets before any compaction.
+Status: M12.1–M12.7 are implemented. Multi-turn chat, OpenAI streaming, bounded tools, approved writes, durable linear sessions, `/new`, `/sessions`, startup continuation, pagination, and `/restore <session-id>` are complete. M12.8 is in progress: provider-neutral context policies are implemented; capacity-aware request budgeting comes before any compaction.
 
 The agent is a primary Eggplant workflow, not a detached chat window or an excuse to bypass editor safety. It should make a small coding task feel like a natural extension of navigation, search, diagnostics, and editing.
 
@@ -222,6 +222,10 @@ A provider-neutral session owns ordered conversation entries:
 Every run has a `RunId`. Streaming events also have a monotonically increasing sequence. Completion/event application requires the current session and matching run identity; late deltas from an old run cannot append to a new conversation.
 
 Consecutive submissions in one running `AgentSession` retain the same `SessionId` and advance `RunId`. A new run's initial provider request contains flattened prior user/answer turns through `AgentRequest::with_prior_history`, with the current prompt kept separate and serialized after them. `AgentSession::provider_history` groups messages by `RunId`, omits turns without answer text, retains partial answers, and never replays thinking. Earlier tool rounds remain run-local rather than pretending the persisted/display transcript is an exact provider replay log. Tool follow-ups within the current run still carry their complete user/assistant/tool history. Headless finalized-session restoration is available through the storage/runtime snapshot boundary; `/sessions` exposes it interactively. Startup automatic restoration, cross-run tool replay, request token budgets, and compaction remain separate resume/context-management slices.
+
+### Provider context projections
+
+`AgentSession::answered_turns` groups answered user/assistant exchanges by `RunId`. `ConversationContextPolicy` consumes those provider-neutral turns and returns a `ContextProjection` containing history and `omitted_turns`; it never includes the current prompt or synthesizes reasoning. `FullContext` preserves existing behavior. `BoundedContext` selects the latest complete turns under explicit turn/byte limits without truncating text, and reports omissions separately. These byte limits are deterministic safety bounds, not token estimates or compaction. `AgentRuntime::set_context_policy` injects the policy for headless or interactive composition; the default remains `FullContext`, and tool follow-ups within a run keep their complete history.
 
 Only one foreground run per session is required initially. A second submission while active is rejected or queued explicitly; it must not silently race the current run.
 

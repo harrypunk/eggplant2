@@ -596,9 +596,10 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 #### M12.8 — Provider context management
 
-**Status: next.** Treat durable transcript history, live session state, and provider request context as separate projections.
+**Status: in progress.** Provider-neutral context policies and runtime injection are implemented; capacity-aware request budgeting remains. Treat durable transcript history, live session state, and provider request context as separate projections.
 
-- [ ] Introduce a narrow provider-neutral context-budget policy for prior turns, current prompt, and tool history; preserve answer-only history and provider-specific request policies.
+- [x] Introduce a narrow provider-neutral `ConversationContextPolicy` for prior answered turns, with `FullContext`, deterministic whole-turn `BoundedContext`, omission metadata, and runtime policy injection. Current-prompt handling and tool follow-up history remain unchanged.
+- [ ] Extend the policy boundary to complete request context, including current prompt and tool history, while preserving answer-only history and provider-specific request policies.
 - [ ] Use measured token usage and explicit model-capacity metadata to bound requests deterministically, with visible truncation/omission policy rather than silently deleting durable history or overflowing the model.
 - [ ] Measure real multi-turn/tool workloads before choosing summarization or compaction. Keep reasoning persistence, provider replay signatures, and compaction metadata as independently reviewed follow-ups.
 

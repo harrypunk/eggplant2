@@ -5,6 +5,7 @@
 //! model I/O.
 
 mod cancellation;
+mod context;
 mod event;
 mod message;
 mod provider;
@@ -16,6 +17,9 @@ mod tool;
 mod usage;
 
 pub use cancellation::CancellationToken;
+pub use context::{
+    BoundedContext, ContextProjection, ConversationContextPolicy, ConversationTurn, FullContext,
+};
 pub use event::AgentEvent;
 pub use message::{ChatMessage, MessagePart, MessageRole, ProviderMessage, ProviderMessageRole};
 pub use provider::{AgentError, AgentEventSink, AgentProvider, AgentStreamFuture};
