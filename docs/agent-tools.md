@@ -117,6 +117,10 @@ If the revision or exact text changed, reject with a conflict. The model may req
 
 The worker suspends with an owned provider-neutral continuation rather than blocking on a UI channel. Each write must be the only call in its round. `y` accepts exactly once, `n` resumes with an explicit rejection, `Esc` hides the identical pending request, and `Ctrl-F7` records cancellation without resuming. Acceptance applies one transaction on the main update path, schedules auto-save and language synchronization by explicit `BufferId`, and resumes with fresh snapshots so subsequent reads cannot reuse pre-write text. Success means the edit was accepted, not that persistence succeeded; normal save failures remain visible and never imply rollback.
 
+### New-file creation
+
+`create` accepts only a workspace-relative path and full text content. It rejects existing paths and directories, then composes the existing `CreateTarget`/`filesystem::create` no-overwrite path, `DocumentFactory::open` syntax-aware buffer creation, and `EditorSession::create_file_document` full-text initialization. Approval uses the same single-mutation-per-round and rejection behavior as exact replacement. The resulting buffer uses the ordinary after-edit auto-save/language-sync pipeline, so nested paths and first-save persistence need no agent-specific filesystem writer. Existing-file `write` retains its exact old-text/revision contract.
+
 ### What not to do
 
 - Do not invoke Normal/Insert active-buffer key commands as an unattended API.
@@ -191,7 +195,7 @@ Workspace grep uses the shared ignore policy and sorted path traversal. It proce
 The following require separate review and should not appear as accepted no-ops in the first tool registry:
 
 - Arbitrary shell/process execution.
-- New-file/delete/rename/copy operations.
+- Delete/rename/copy operations.
 - Multi-file patches and automatic LSP workspace edits.
 - Git stage/commit/reset/branch/merge operations.
 - Network fetch, browser, credential, or secret-reading tools.

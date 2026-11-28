@@ -350,6 +350,22 @@ fn tool_declarations() -> Value {
                     "required": ["buffer_id", "path", "expected_revision", "old_text", "new_text"]
                 }
             }
+        },
+        {
+            "type": "function",
+            "function": {
+                "name": "create",
+                "description": "Create one new text file without overwriting an existing path. Read the workspace first. This must be the only tool call in its round.",
+                "parameters": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "path": {"type": "string", "description": "Workspace-relative path for the new file"},
+                        "content": {"type": "string", "description": "Complete UTF-8 text content for the new file"}
+                    },
+                    "required": ["path", "content"]
+                }
+            }
         }
     ])
 }

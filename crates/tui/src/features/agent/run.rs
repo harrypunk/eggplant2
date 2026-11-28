@@ -216,7 +216,10 @@ impl RunProgress {
                     && call.arguments.len() <= super::tools::MAX_ARGUMENT_BYTES
             });
         require(valid, "provider emitted an invalid tool call")?;
-        let writes = calls.iter().filter(|call| call.name == "write").count();
+        let writes = calls
+            .iter()
+            .filter(|call| super::write::is_mutation(call))
+            .count();
         require(
             writes == 0 || (writes == 1 && calls.len() == 1),
             "write must be the only tool call in its round",
@@ -367,13 +370,26 @@ impl ProviderAgentRun {
         output_used: usize,
     ) -> ToolExecution {
         match calls {
-            [call] if call.name == "write" && !self.cancellation.is_cancelled() => {
-                match super::write::prepare(call, &self.context) {
-                    Ok(approval) => ToolExecution::Approval(approval),
-                    Err(result) => ToolExecution::Results(vec![super::tools::bound_result(
-                        result,
-                        MAX_TOOL_OUTPUT.saturating_sub(output_used),
-                    )]),
+            [call] if super::write::is_mutation(call) && !self.cancellation.is_cancelled() => {
+                match call.name.as_str() {
+                    super::create::TOOL_NAME => {
+                        match super::create::prepare(call, &self.context.root) {
+                            Ok(approval) => ToolExecution::Approval(approval),
+                            Err(result) => {
+                                ToolExecution::Results(vec![super::tools::bound_result(
+                                    result,
+                                    MAX_TOOL_OUTPUT.saturating_sub(output_used),
+                                )])
+                            }
+                        }
+                    }
+                    _ => match super::write::prepare(call, &self.context) {
+                        Ok(approval) => ToolExecution::Approval(approval),
+                        Err(result) => ToolExecution::Results(vec![super::tools::bound_result(
+                            result,
+                            MAX_TOOL_OUTPUT.saturating_sub(output_used),
+                        )]),
+                    },
                 }
             }
             _ => ToolExecution::Results(

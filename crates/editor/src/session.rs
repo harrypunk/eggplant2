@@ -140,6 +140,12 @@ pub struct AppliedTextEdit {
     pub revision: i32,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CreatedDocument {
+    pub buffer_id: BufferId,
+    pub revision: i32,
+}
+
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum ExactTextError {
     #[error("no active editor view")]
@@ -689,6 +695,40 @@ impl EditorSession {
             view.ensure_cursor_in_view(document, self.scrolloff);
         }
         Ok(AppliedTextEdit { revision })
+    }
+
+    /// Initialize a newly opened file-backed document with full text and edit history.
+    pub fn create_file_document(
+        &mut self,
+        document: Document,
+        text: &str,
+    ) -> Result<CreatedDocument, ExactTextError> {
+        let buffer_id = self.insert_document(document);
+        let view = self
+            .active_view
+            .as_mut()
+            .ok_or(ExactTextError::NoActiveView)?;
+        let document = &mut self
+            .buffers
+            .get_mut(&buffer_id)
+            .ok_or(ExactTextError::UnknownBuffer(buffer_id))?
+            .document;
+        if document.text() != text {
+            let transaction = helix_core::Transaction::change(
+                document.text(),
+                [(0, document.text().len_chars(), Some(text.into()))].into_iter(),
+            );
+            document.ensure_view_init(view.view.id);
+            document
+                .apply(&transaction, view.view.id)
+                .then_some(())
+                .ok_or(ExactTextError::ExactTextConflict(buffer_id))?;
+            document.append_changes_to_history(&mut view.view);
+        }
+        Ok(CreatedDocument {
+            buffer_id,
+            revision: document.version(),
+        })
     }
 
     /// Prepare an asynchronous save of one buffer's current snapshot.

@@ -1565,6 +1565,29 @@ async fn large_file_viewport_edit_and_save() {
     assert!(std::fs::read_to_string(path).unwrap().ends_with("\ntail"));
 }
 
+#[test]
+fn create_file_document_initializes_full_text_and_history() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("new.py");
+    let mut session = EditorSession::new();
+    let document = DocumentFactory::new().open(&path).unwrap();
+
+    let created = session
+        .create_file_document(document, "print('hello')\n")
+        .unwrap();
+
+    assert_eq!(created.buffer_id.as_raw(), 1);
+    assert_eq!(
+        session
+            .buffer_text_snapshot(created.buffer_id)
+            .unwrap()
+            .text,
+        "print('hello')\n"
+    );
+    assert_eq!(session.buffer_path(created.buffer_id).unwrap(), &path);
+    assert_eq!(created.revision, 1);
+}
+
 #[tokio::test]
 async fn missing_file_is_created_by_the_first_save() {
     let directory = tempfile::tempdir().unwrap();

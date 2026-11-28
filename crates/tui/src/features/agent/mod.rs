@@ -3,6 +3,7 @@ mod approval;
 mod commands;
 mod completion;
 mod context;
+mod create;
 mod dialog;
 mod navigation;
 mod panel;

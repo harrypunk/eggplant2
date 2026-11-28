@@ -555,11 +555,11 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 #### M12.4 — Approved revision-safe writes
 
-- [x] Start with exact-text/range replacement in an existing open buffer identified by `BufferId`, canonical path, and expected revision.
+- [x] Start with exact-text/range replacement in an existing open buffer identified by `BufferId`, canonical path, and expected revision, plus no-overwrite creation of new text files through the shared document/save pipeline.
 - [x] Compute a bounded diff and require one immutable per-call approval before mutation; any changed input requires new approval.
 - [x] Revalidate identity/revision/exact text on the main update path and apply one undoable editor transaction through existing after-edit/save/sync behavior; coordinate non-active-buffer persistence explicitly by ID/path.
 - [x] Report rejection, conflict, cancellation, and save failure honestly; never claim an automatic rollback or silently widen approval.
-- [x] Defer whole-file creation/delete/rename, multi-file patches, shell commands, LSP workspace edits, and Git mutations to separately reviewed tools.
+- [x] Defer whole-file creation/delete/rename, multi-file patches, shell commands, LSP workspace edits, and Git mutations to separately reviewed tools. New-file creation is implemented; delete/rename/copy remain deferred.
 
 #### M12.5 — Scalable session persistence
 

@@ -13,6 +13,12 @@ const MAX_DIFF_BYTES: usize = 12 * 1024;
 const MAX_DIFF_LINES: usize = 120;
 const TRUNCATION_MARKER: &str = "[diff truncated]";
 
+pub const TOOL_NAME: &str = "write";
+
+pub(super) fn is_mutation(call: &ToolCall) -> bool {
+    matches!(call.name.as_str(), TOOL_NAME | super::create::TOOL_NAME)
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct WriteArguments {
@@ -156,7 +162,7 @@ fn unique_match(text: &str, old_text: &str) -> bool {
     matches.len() == 1
 }
 
-fn bounded_diff(path: &str, old_text: &str, new_text: &str) -> String {
+pub(super) fn bounded_diff(path: &str, old_text: &str, new_text: &str) -> String {
     let rows = [
         format!("--- {path}"),
         format!("+++ {path}"),
