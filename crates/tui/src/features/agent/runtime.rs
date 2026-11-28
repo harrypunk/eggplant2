@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use eggplant_agent::{
-    AgentContinuation, AgentProvider, AgentSession, CancellationToken, RunId, SessionId,
+    AgentContinuation, AgentEvent, AgentProvider, AgentSession, CancellationToken, RunId, SessionId,
 };
 use eggplant_agent_storage::SessionStore;
 
@@ -35,6 +35,12 @@ impl Default for AgentRuntime {
     }
 }
 
+/// Semantic result of reducing one provider event.
+pub enum AgentApplyOutcome {
+    None,
+    ApprovalRequired(AgentContinuation),
+}
+
 /// Runtime outcome emitted after a session run starts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RunStarted {
@@ -60,6 +66,50 @@ impl AgentRuntime {
             id: run_id,
             started_at: now,
         })
+    }
+
+    pub fn apply_event(&mut self, run_id: RunId, event: AgentEvent) -> AgentApplyOutcome {
+        match event {
+            AgentEvent::TextDelta(delta) => {
+                self.session.append_delta(run_id, &delta);
+                AgentApplyOutcome::None
+            }
+            AgentEvent::Usage(usage) => {
+                self.session.record_usage(run_id, usage);
+                AgentApplyOutcome::None
+            }
+            AgentEvent::Complete => {
+                self.session.complete(run_id);
+                AgentApplyOutcome::None
+            }
+            AgentEvent::ToolCalls(calls) => {
+                calls.into_iter().for_each(|call| {
+                    self.session.record_tool_call(run_id, &call);
+                });
+                AgentApplyOutcome::None
+            }
+            AgentEvent::ToolResults(results) => {
+                results.into_iter().for_each(|result| {
+                    self.session.complete_tool_call(run_id, result);
+                });
+                AgentApplyOutcome::None
+            }
+            AgentEvent::ApprovalRequired {
+                approval,
+                continuation,
+            } => {
+                if self.session.request_approval(run_id, approval) {
+                    self.suspend(run_id, continuation.clone());
+                    AgentApplyOutcome::ApprovalRequired(continuation)
+                } else {
+                    AgentApplyOutcome::None
+                }
+            }
+            AgentEvent::Failed(error) => {
+                self.session.fail(run_id, error);
+                AgentApplyOutcome::None
+            }
+        }
     }
 
     pub fn session(&self) -> &AgentSession {

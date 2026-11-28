@@ -439,3 +439,87 @@ pub(crate) struct AgentCompletion {
     pub(crate) run_id: RunId,
     pub(crate) events: Vec<AgentEvent>,
 }
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use eggplant_agent::RunStatus;
+    use tokio::sync::Notify;
+
+    use super::*;
+    use crate::{data_object::Model, manager::message_manager::MessageManager};
+
+    #[derive(Debug)]
+    struct ControlledProvider {
+        resume: Arc<Notify>,
+    }
+
+    impl AgentProvider for ControlledProvider {
+        fn stream<'a>(
+            &'a self,
+            _request: AgentRequest,
+            mut on_event: Box<dyn FnMut(AgentEvent) + Send + 'a>,
+        ) -> Pin<Box<dyn Future<Output = Result<(), eggplant_agent::AgentError>> + Send + 'a>>
+        {
+            Box::pin(async move {
+                on_event(AgentEvent::TextDelta("hello".to_string()));
+                self.resume.notified().await;
+                on_event(AgentEvent::TextDelta(" world".to_string()));
+                on_event(AgentEvent::Complete);
+                Ok(())
+            })
+        }
+    }
+
+    async fn receive(
+        receiver: &mut tokio::sync::mpsc::UnboundedReceiver<crate::data_object::Message>,
+    ) -> crate::data_object::Message {
+        tokio::time::timeout(Duration::from_secs(1), receiver.recv())
+            .await
+            .expect("provider event should arrive")
+            .expect("provider channel should remain open")
+    }
+
+    #[tokio::test]
+    async fn async_execution_publishes_text_before_the_run_completes() {
+        let resume = Arc::new(Notify::new());
+        let mut model = Model::default();
+        let started = model
+            .agent
+            .runtime_mut()
+            .begin("question".to_string(), None, 1)
+            .unwrap();
+        let cancellation = model.agent.runtime_mut().begin_cancellation();
+        let run = ProviderAgentRun {
+            run_id: started.id,
+            prompt: "question".to_string(),
+            cancellation,
+            provider: Arc::new(ControlledProvider {
+                resume: resume.clone(),
+            }),
+            context: ToolContext::default(),
+            progress: RunProgress::default(),
+        };
+        let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
+        Box::new(run).execute(sender);
+        let manager = MessageManager::default();
+
+        manager.update(&mut model, receive(&mut receiver).await);
+        assert_eq!(model.agent.session().messages()[1].text, "hello");
+        assert_eq!(
+            model.agent.session().run().unwrap().status,
+            RunStatus::Streaming
+        );
+        assert!(receiver.try_recv().is_err());
+
+        resume.notify_one();
+        manager.update(&mut model, receive(&mut receiver).await);
+        assert_eq!(model.agent.session().messages()[1].text, "hello world");
+        manager.update(&mut model, receive(&mut receiver).await);
+        assert_eq!(
+            model.agent.session().run().unwrap().status,
+            RunStatus::Complete
+        );
+    }
+}

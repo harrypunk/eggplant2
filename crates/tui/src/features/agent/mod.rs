@@ -29,7 +29,7 @@ pub use presentation::{dialog::AgentDialogState, panel::AgentInputMode};
 pub(crate) use presentation::{dialog::DialogAction, panel::PanelAction};
 pub(crate) use prompt_command::{PromptCommand, PromptCommandMovement, PromptCommandState};
 pub use references::{FileReferenceStatus, FileReferenceView};
-pub use runtime::AgentRuntime;
+pub use runtime::{AgentApplyOutcome, AgentRuntime, RunStarted};
 pub use state::AgentState;
 pub use ui::register_ui;
 pub(crate) use ui::render_panel;

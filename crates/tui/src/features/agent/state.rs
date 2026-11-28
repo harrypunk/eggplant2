@@ -202,14 +202,6 @@ impl AgentState {
         self.runtime.begin_cancellation()
     }
 
-    pub fn cancel_active(&self) {
-        self.runtime.cancel_active();
-    }
-
-    pub(crate) fn suspend(&mut self, run_id: RunId, continuation: AgentContinuation) {
-        self.runtime.suspend(run_id, continuation);
-    }
-
     pub(crate) fn take_suspension(&mut self, run_id: RunId) -> Option<AgentContinuation> {
         self.runtime.take_suspension(run_id)
     }

@@ -258,16 +258,13 @@ Provider SDK types must not appear in `Model`, components, filesystem tools, or 
 
 ### Streaming through the existing effect model
 
-A run may emit many typed events rather than one final completion. Its effect adapter can forward ordered run events through the existing message sender, subject to these rules:
+A run emits many ordered typed events rather than one final completion. `ProviderAgentRun::execute` forwards each provider event through the existing message sender immediately; there is no provider-specific global `Message` variant, second terminal/event loop, or callback that mutates a view. `AgentRuntime::apply_event` is the presentation-independent reducer for text deltas, usage, tools, completion/failure, and approval outcomes. The TUI completion adapter handles only modal approval and finalized persistence.
 
-- No provider-specific global `Message` variants or runtime match arms.
-- No independent terminal/event loop.
-- Coalesce high-frequency text deltas if needed; never reorder tool-call boundaries.
-- Bound queued output and provider/tool result sizes.
-- Cancellation stops further work and stale events are ignored.
-- Hiding UI never owns the worker lifetime.
+`AgentSession::append_delta` appends to the matching active run and rejects stale or post-completion text. Bottom-following transcript state reveals incoming snapshots, while manual scroll/cursor inspection is not forcibly reset by each delta. Markdown is parsed from the complete immutable text snapshot on render, matching Pi's correctness model rather than maintaining an incremental token tree.
 
-If the current one-shot `FeatureEffect` envelope is insufficient, introduce a focused streaming adapter at that boundary rather than pretending a stream is a single completion.
+The synchronous `FeatureEffect::perform` helper intentionally buffers events for deterministic one-shot tests. The asynchronous `execute` path is the real streaming path; a controlled-provider async test proves that partial assistant text reaches the session and becomes `Streaming` before the provider is released to emit its final text and `Complete`.
+
+Queued output and provider/tool results remain bounded, cancellation stops further work, stale events are ignored, and hiding UI never owns the worker lifetime. Coalescing high-frequency deltas is a future measurement-driven optimization and must never reorder tool-call boundaries.
 
 ## Agent loop
 
