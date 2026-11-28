@@ -39,8 +39,11 @@ impl SubmissionContext for Model {
         super::context::tool_context(self)
     }
 
-    fn execute_prompt_command(&mut self, command: super::PromptCommand) -> Option<Effect> {
-        super::execute(self, &command)
+    fn execute_prompt_command(
+        &mut self,
+        invocation: super::PromptCommandInvocation,
+    ) -> Option<Effect> {
+        super::execute(self, &invocation)
     }
 
     fn notify(&mut self, message: String) -> Option<Effect> {

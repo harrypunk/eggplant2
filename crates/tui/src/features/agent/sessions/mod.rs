@@ -1,6 +1,7 @@
 mod state;
 mod work;
 pub use state::{SessionSelectorNotice, SessionSelectorPage, SessionSelectorState};
+pub(crate) use work::restore_by_id;
 pub(super) use work::{handle_general_action, open};
 
 use crate::{

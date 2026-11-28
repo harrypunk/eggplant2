@@ -19,6 +19,7 @@ pub struct AgentRuntime {
     storage_error: Option<String>,
     session_created_at: Option<i64>,
     session_title: Option<String>,
+    session_revision: u64,
     provider_name: String,
     model: Option<String>,
     thinking_id: Option<ThinkingId>,
@@ -34,6 +35,7 @@ impl Default for AgentRuntime {
             storage_error: None,
             session_created_at: None,
             session_title: None,
+            session_revision: 0,
             provider_name: "fake".to_string(),
             model: None,
             thinking_id: None,
@@ -81,6 +83,7 @@ impl AgentRuntime {
         let title = self.session_title.is_none().then(|| title_text(&prompt));
         let run_id = self.session.begin(prompt)?;
         self.session_created_at.get_or_insert(now);
+        self.advance_session_revision();
         if let Some(title) = title {
             self.session_title = Some(title);
         }
@@ -104,9 +107,21 @@ impl AgentRuntime {
                 self.session_created_at = None;
                 self.session_title = None;
                 self.storage_error = None;
+                self.advance_session_revision();
                 Some(reset)
             }
         }
+    }
+
+    pub(crate) fn begin_session_restore(&mut self) -> Result<u64, SessionRestoreError> {
+        match self.session.is_running() {
+            true => Err(SessionRestoreError::RunInProgress),
+            false => Ok(self.advance_session_revision()),
+        }
+    }
+
+    pub(crate) fn is_current_session_revision(&self, revision: u64) -> bool {
+        self.session_revision == revision
     }
 
     pub fn restore_session(
@@ -135,6 +150,7 @@ impl AgentRuntime {
         self.session_created_at = Some(created_at);
         self.session_title = title;
         self.storage_error = None;
+        self.advance_session_revision();
         Ok(restored)
     }
 
@@ -285,6 +301,11 @@ impl AgentRuntime {
         }
         self.storage_error = result.err();
         self.storage_error.clone()
+    }
+
+    fn advance_session_revision(&mut self) -> u64 {
+        self.session_revision = self.session_revision.wrapping_add(1);
+        self.session_revision
     }
 
     pub fn begin_cancellation(&mut self) -> CancellationToken {

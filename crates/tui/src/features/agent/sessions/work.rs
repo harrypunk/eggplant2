@@ -42,6 +42,23 @@ pub(crate) fn open(model: &mut Model) -> Option<Effect> {
     }))
 }
 
+pub(crate) fn restore_by_id(model: &mut Model, session_id: SessionId) -> Option<Effect> {
+    let Some(store) = model.agent.runtime().session_store() else {
+        return notify(model, "Session storage is not configured");
+    };
+    match model.agent.runtime_mut().begin_session_restore() {
+        Ok(revision) => Some(Effect::feature(SessionEffect::RestoreById {
+            store,
+            session_id,
+            revision,
+        })),
+        Err(SessionRestoreError::RunInProgress) => notify(
+            model,
+            "Finish or interrupt the active run before restoring a session",
+        ),
+    }
+}
+
 pub(super) fn close(model: &mut Model) -> Option<Effect> {
     let return_context = model.agent.ui_mut().session_selector_mut().close();
     model.modal.close(Context::AgentSessionSelector);
@@ -110,6 +127,14 @@ fn notify(model: &mut Model, message: &str) -> Option<Effect> {
     ))
 }
 
+fn notify_error(model: &mut Model, message: &str) -> Option<Effect> {
+    Some(crate::notifications::publish_status(
+        model,
+        StatusMessage::error(message.to_string()),
+        Some("Agent"),
+    ))
+}
+
 enum SessionEffect {
     Recent {
         store: Arc<dyn SessionStore>,
@@ -121,6 +146,11 @@ enum SessionEffect {
         store: Arc<dyn SessionStore>,
         session_id: SessionId,
         generation: u64,
+    },
+    RestoreById {
+        store: Arc<dyn SessionStore>,
+        session_id: SessionId,
+        revision: u64,
     },
 }
 
@@ -154,6 +184,15 @@ impl SessionEffect {
                     load_session(store.as_ref(), session_id, CancellationToken::default()).await;
                 SessionCompletion::Restore { generation, result }
             }
+            Self::RestoreById {
+                store,
+                session_id,
+                revision,
+            } => {
+                let result =
+                    load_session(store.as_ref(), session_id, CancellationToken::default()).await;
+                SessionCompletion::RestoreById { revision, result }
+            }
         }
     }
 }
@@ -181,6 +220,10 @@ enum SessionCompletion {
     },
     Restore {
         generation: u64,
+        result: Result<LoadedSession, StorageError>,
+    },
+    RestoreById {
+        revision: u64,
         result: Result<LoadedSession, StorageError>,
     },
 }
@@ -212,6 +255,9 @@ impl Completion for SessionCompletion {
             }
             SessionCompletion::Restore { generation, result } => {
                 complete_restore(model, generation, result)
+            }
+            SessionCompletion::RestoreById { revision, result } => {
+                complete_direct_restore(model, revision, result)
             }
         }
     }
@@ -259,6 +305,40 @@ fn complete_restore(
                 );
                 None
             }
+        },
+    }
+}
+
+fn complete_direct_restore(
+    model: &mut Model,
+    revision: u64,
+    result: Result<LoadedSession, StorageError>,
+) -> Option<Effect> {
+    if !model.agent.runtime().is_current_session_revision(revision) {
+        return None;
+    }
+    match result {
+        Err(error) => notify_error(
+            model,
+            &format!("Session restore failed: {}", bounded_error(error)),
+        ),
+        Ok(LoadedSession {
+            snapshot,
+            created_at,
+            title,
+        }) => match model
+            .agent
+            .runtime_mut()
+            .restore_session(snapshot, created_at, title)
+        {
+            Ok(_) => {
+                model.agent.dispatch(AgentUiAction::SessionChanged);
+                None
+            }
+            Err(SessionRestoreError::RunInProgress) => notify_error(
+                model,
+                "Finish or interrupt the active run before restoring a session",
+            ),
         },
     }
 }
@@ -494,6 +574,34 @@ mod tests {
 
         assert_eq!(model.agent.session().id(), &original);
         assert_ne!(model.agent.session().id(), &stored);
+        assert!(model.agent.session().messages().is_empty());
+    }
+
+    #[test]
+    fn direct_restore_allows_an_explicit_other_workspace_session() {
+        let (mut model, _store, _directory, _stored) = model_with_sessions();
+        let manager = MessageManager::default();
+        let effect = restore_by_id(&mut model, SessionId::from("other-workspace")).unwrap();
+
+        perform(&manager, &mut model, effect);
+
+        assert_eq!(
+            model.agent.session().id(),
+            &SessionId::from("other-workspace")
+        );
+        assert_eq!(model.agent.session().messages().len(), 2);
+    }
+
+    #[test]
+    fn stale_direct_restore_does_not_replace_a_newer_session() {
+        let (mut model, _store, _directory, stored) = model_with_sessions();
+        let manager = MessageManager::default();
+        let effect = restore_by_id(&mut model, stored).unwrap();
+        let fresh = model.agent.runtime_mut().new_session().unwrap().session_id;
+
+        perform(&manager, &mut model, effect);
+
+        assert_eq!(model.agent.session().id(), &fresh);
         assert!(model.agent.session().messages().is_empty());
     }
 }

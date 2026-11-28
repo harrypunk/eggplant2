@@ -14,7 +14,7 @@ The current application is intentionally lightweight: it is not a full IDE, a Vi
 - A separate **VCS addon** for branch display, switching/creation, changed files, staging, commits, and inline diffs.
 - Narrow boundaries for AI commands instead of direct widget or Helix access.
 
-The **inline AI agent supports fake and OpenAI-compatible providers**, editable `path:line` prompts, shared popup/panel conversations, ordered streaming/interrupt behavior, environment-based credentials, bounded `read`/`grep` tools, per-call-approved revision-safe exact-text writes, multi-turn provider history, and durable finalized-session storage. Startup restores the latest workspace session, `/sessions` switches between saved conversations, and `/new` starts a clean session. SeaORM SQLite is the default local store at `~/.eggplant/ai/data.sqlite`; cloud backends are not bundled.
+The **inline AI agent supports fake and OpenAI-compatible providers**, editable `path:line` prompts, shared popup/panel conversations, ordered streaming/interrupt behavior, environment-based credentials, bounded `read`/`grep` tools, per-call-approved revision-safe exact-text writes, multi-turn provider history, and durable finalized-session storage. Startup restores the latest workspace session, `/sessions` switches between saved conversations, `/restore <session-id>` explicitly restores any stored session, and `/new` starts a clean session. SeaORM SQLite is the default local store at `~/.eggplant/ai/data.sqlite`; cloud backends are not bundled.
 
 ## Run
 

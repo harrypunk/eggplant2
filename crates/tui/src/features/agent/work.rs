@@ -18,7 +18,10 @@ pub(crate) trait SubmissionContext {
     fn submission_surface(&self) -> Option<AgentSurface>;
     fn project_available(&self) -> bool;
     fn tool_context(&self) -> Option<ToolContext>;
-    fn execute_prompt_command(&mut self, command: super::PromptCommand) -> Option<Effect>;
+    fn execute_prompt_command(
+        &mut self,
+        invocation: super::PromptCommandInvocation,
+    ) -> Option<Effect>;
     fn notify(&mut self, message: String) -> Option<Effect>;
 }
 
@@ -32,7 +35,7 @@ pub(crate) trait InterruptionContext {
 
 enum Submission {
     Inactive,
-    Command(super::PromptCommand),
+    Command(super::PromptCommandInvocation),
     Rejected(SubmissionRejection),
     Accepted(AcceptedSubmission),
 }
@@ -42,15 +45,19 @@ enum SubmissionRejection {
     AlreadyRunning,
     MissingProject,
     MissingProvider,
+    Command(String),
 }
 
 impl SubmissionRejection {
-    fn message(self) -> &'static str {
+    fn message(self) -> String {
         match self {
-            Self::EmptyPrompt => "Enter a prompt",
-            Self::AlreadyRunning => "Agent is already running",
-            Self::MissingProject => "Open a project to use the agent",
-            Self::MissingProvider => "No model available; use /provider or Space a i to log in",
+            Self::EmptyPrompt => "Enter a prompt".to_string(),
+            Self::AlreadyRunning => "Agent is already running".to_string(),
+            Self::MissingProject => "Open a project to use the agent".to_string(),
+            Self::MissingProvider => {
+                "No model available; use /provider or Space a i to log in".to_string()
+            }
+            Self::Command(message) => message,
         }
     }
 }
@@ -66,12 +73,11 @@ impl Submission {
         }
         let prompt = context.ui().prompt().trim();
         if prompt.starts_with('/') {
-            return context
-                .ui()
-                .command_state()
-                .selected()
-                .or_else(|| super::resolve(prompt))
-                .map_or(Self::Inactive, Self::Command);
+            return match super::submission(prompt, context.ui().command_state().selected()) {
+                Some(Ok(invocation)) => Self::Command(invocation),
+                Some(Err(error)) => Self::Rejected(SubmissionRejection::Command(error.to_string())),
+                None => Self::Inactive,
+            };
         }
         if let Some(rejection) = rejection(context, prompt) {
             return Self::Rejected(rejection);
@@ -102,7 +108,7 @@ pub(crate) fn submit(context: &mut impl SubmissionContext) -> Option<Effect> {
     match Submission::evaluate(context) {
         Submission::Inactive => None,
         Submission::Command(command) => execute_prompt_command(context, command),
-        Submission::Rejected(rejection) => context.notify(rejection.message().to_string()),
+        Submission::Rejected(rejection) => context.notify(rejection.message()),
         Submission::Accepted(accepted) => start_run(context, accepted),
     }
 }
@@ -140,10 +146,10 @@ fn start_run(context: &mut impl SubmissionContext, accepted: AcceptedSubmission)
 
 fn execute_prompt_command(
     context: &mut impl SubmissionContext,
-    command: super::PromptCommand,
+    invocation: super::PromptCommandInvocation,
 ) -> Option<Effect> {
     context.ui_mut().complete_prompt_command();
-    context.execute_prompt_command(command)
+    context.execute_prompt_command(invocation)
 }
 
 pub(crate) fn interrupt(context: &mut impl InterruptionContext) -> Option<Effect> {
@@ -257,6 +263,7 @@ mod tests {
         active: bool,
         project: bool,
         opened: Option<crate::agent::PromptCommand>,
+        argument: Option<String>,
         notifications: Vec<String>,
         chat_restored: bool,
         finalized: bool,
@@ -293,9 +300,10 @@ mod tests {
 
         fn execute_prompt_command(
             &mut self,
-            command: crate::agent::PromptCommand,
+            invocation: crate::agent::PromptCommandInvocation,
         ) -> Option<Effect> {
-            self.opened = Some(command);
+            self.argument = invocation.argument().map(str::to_string);
+            self.opened = Some(invocation.command().clone());
             None
         }
 
@@ -415,6 +423,27 @@ mod tests {
             context.opened,
             Some(crate::agent::resolve("/sessions").unwrap())
         );
+
+        context.ui.set_prompt("/restore ses-react2");
+        context.opened = None;
+        context.argument = None;
+        assert!(submit(&mut context).is_none());
+        assert_eq!(
+            context.opened,
+            Some(crate::agent::resolve("/restore").unwrap())
+        );
+        assert_eq!(context.argument.as_deref(), Some("ses-react2"));
+        assert_eq!(context.ui.prompt(), "");
+
+        context.ui.set_prompt("/restore");
+        context.opened = None;
+        context.argument = None;
+        context.notifications.clear();
+        assert!(submit(&mut context).is_none());
+        assert_eq!(context.ui.prompt(), "/restore");
+        assert_eq!(context.opened, None);
+        assert_eq!(context.argument, None);
+        assert_eq!(context.notifications, ["Usage: /restore <session-id>"]);
 
         context.ui.set_prompt("/new");
         context.opened = None;

@@ -589,6 +589,7 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 - [x] Restore the most recently updated finalized session for the current workspace during startup, with `/new` as the fresh-start path and no provider request while loading. Read failures start empty with a bounded storage warning rather than blocking editing.
 - [x] Add keyset pagination to the recent-session picker without unbounded rendering, numeric-index selection drift, or stale completion replacement; preserve selection by `SessionId`.
+- [x] Support `/restore <session-id>` through generic catalog argument policies and typed invocations, allowing explicit cross-workspace restoration without a new popup or command-specific submission parser. Missing/multiple IDs preserve the draft with usage guidance; runtime revisions reject stale direct completions.
 - [ ] Add restart smoke coverage proving that a restored exchange is visible and sent in the next provider request, the next `RunId` does not overwrite storage, `/new` remains independent, and startup/load failures stay recoverable.
 - [ ] Keep crash/in-flight recovery, pending approvals, durable reasoning parts, and Pi-style branching/session trees outside this slice.
 

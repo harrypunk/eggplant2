@@ -112,6 +112,7 @@ mod tests {
                 "/sessions",
                 command("/sessions"),
             ),
+            (PromptCommandMovement::Next, "/restore", command("/restore")),
             (PromptCommandMovement::Next, "/new", command("/new")),
             (PromptCommandMovement::Next, "/logout", command("/logout")),
             (

@@ -7,6 +7,27 @@ impl CommandId {
     }
 }
 
+/// Parsed command input used by the generic submission and execution path.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromptCommandInvocation {
+    command: PromptCommand,
+    argument: Option<String>,
+}
+
+impl PromptCommandInvocation {
+    pub(crate) fn new(command: PromptCommand, argument: Option<String>) -> Self {
+        Self { command, argument }
+    }
+
+    pub fn command(&self) -> &PromptCommand {
+        &self.command
+    }
+
+    pub fn argument(&self) -> Option<&str> {
+        self.argument.as_deref()
+    }
+}
+
 /// Pure prompt-command metadata used by completion state and views.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PromptCommand {
