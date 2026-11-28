@@ -154,7 +154,7 @@ model tool request
   → bounded tool result to provider
 ```
 
-The agent loop must have a maximum step count and maximum cumulative tool output. Repeated invalid calls, path escapes, revision conflicts, and truncation count toward stop conditions rather than creating infinite retries.
+The agent loop follows Pi's `packages/agent/src/agent-loop.ts`: there is no fixed tool-step or tool-call limit. It continues while new calls arrive and stops on natural completion, error/abort, an explicit end decision, or user cancellation. Output-size, validation, path/revision, and cancellation policies provide the safety boundaries instead of an arbitrary round cutoff.
 
 ## Result bounds
 
@@ -165,7 +165,7 @@ Set concrete defaults during implementation and test their boundaries. The contr
 - Grep matches and total output.
 - Transcript entries and retained tool detail.
 - Diff size shown in approval UI.
-- Tool calls per run and cumulative provider input.
+- Cumulative tool output and provider input.
 
 Limits should produce useful truncation metadata. Do not simply cut a UTF-8 string at an arbitrary byte or hide the fact that content was omitted.
 
@@ -178,7 +178,7 @@ Limits should produce useful truncation metadata. Do not simply cut a UTF-8 stri
 | `read` range | One-based offset; 1–200 lines per call |
 | `grep` results | Smart-case regex compiled once; 50 matching lines and 0–2 context lines |
 | Tool result | 50 KiB per call, with a UTF-8-safe `[truncated]` marker |
-| Run tool activity | Three execution rounds and eight calls |
+| Run tool activity | No fixed round/call count; natural completion or cancellation |
 | Cumulative provider tool output | 100 KiB per run; another tool round after exhaustion fails explicitly |
 | Retained tool events | 50 entries; results correlate with both call ID and current `RunId` |
 | Panel preview | Two lines and 240 characters, plus an explicit truncation indicator |

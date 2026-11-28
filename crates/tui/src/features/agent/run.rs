@@ -68,8 +68,6 @@ impl AgentRunState {
     }
 }
 
-const MAX_TOOL_STEPS: usize = 3;
-const MAX_TOOL_CALLS: usize = 8;
 pub(crate) const MAX_TOOL_OUTPUT: usize = 100 * 1024;
 
 pub(crate) struct ProviderAgentRun {
@@ -206,11 +204,6 @@ impl RunProgress {
             tool_output,
             thinking_id,
         } = self;
-        require(step < MAX_TOOL_STEPS, "tool step limit reached")?;
-        require(
-            tool_calls + calls.len() <= MAX_TOOL_CALLS,
-            "tool call limit reached",
-        )?;
         require(tool_output < MAX_TOOL_OUTPUT, "tool output limit reached")?;
         let call_ids = calls
             .iter()

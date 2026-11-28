@@ -1863,9 +1863,11 @@ mod tests {
     }
 
     #[test]
-    fn repeated_tool_requests_stop_at_the_step_limit() {
+    fn repeated_tool_requests_continue_past_three_rounds() {
         #[derive(Debug)]
-        struct RepeatingProvider;
+        struct RepeatingProvider {
+            requests: Arc<std::sync::atomic::AtomicUsize>,
+        }
 
         impl AgentProvider for RepeatingProvider {
             fn stream<'a>(
@@ -1876,11 +1878,20 @@ mod tests {
                 Box<dyn Future<Output = Result<(), eggplant_agent::AgentError>> + Send + 'a>,
             > {
                 Box::pin(async move {
-                    on_event(AgentEvent::ToolCalls(vec![eggplant_agent::ToolCall {
-                        id: "read-1".to_string(),
-                        name: "read".to_string(),
-                        arguments: r#"{"path":"main.rs"}"#.to_string(),
-                    }]));
+                    let round = self
+                        .requests
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+                        + 1;
+                    if round <= 3 {
+                        on_event(AgentEvent::ToolCalls(vec![eggplant_agent::ToolCall {
+                            id: "read-1".to_string(),
+                            name: "read".to_string(),
+                            arguments: r#"{"path":"main.rs"}"#.to_string(),
+                        }]));
+                    } else {
+                        on_event(AgentEvent::TextDelta("done".to_string()));
+                        on_event(AgentEvent::Complete);
+                    }
                     Ok(())
                 })
             }
@@ -1889,8 +1900,11 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("main.rs");
         std::fs::write(&path, "hello").unwrap();
+        let requests = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let mut model = initial_model(Some(directory.path().to_path_buf())).unwrap();
-        model.agent.set_provider(Arc::new(RepeatingProvider));
+        model.agent.set_provider(Arc::new(RepeatingProvider {
+            requests: requests.clone(),
+        }));
         open_file(&mut model, &path);
         let manager = MessageManager::default();
         open(&mut model);
@@ -1900,7 +1914,9 @@ mod tests {
 
         assert_eq!(
             model.agent.session().run().unwrap().status,
-            RunStatus::Failed("tool step limit reached".to_string())
+            RunStatus::Complete
         );
+        assert_eq!(requests.load(std::sync::atomic::Ordering::Relaxed), 4);
+        assert_eq!(model.agent.session().tool_events().len(), 3);
     }
 }

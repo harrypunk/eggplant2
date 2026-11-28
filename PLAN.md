@@ -547,7 +547,7 @@ Implement and review M8.1–M8.7 independently. Update the current keymap table 
 
 #### M12.3 — Read and grep tools
 
-- [x] Add stable tool request/result correlation and the bounded model → tool → result → model loop with a maximum step count.
+- [x] Add stable tool request/result correlation and the bounded model → tool → result → model loop, with cancellation and bounded tool output rather than an arbitrary step count.
 - [x] Implement workspace-scoped `read` using existing regular-file/text acceptance and owned open-buffer snapshots where current text is needed.
 - [x] Implement `grep` through existing smart-case search, project traversal, ignore rules, binary rejection, and deterministic result caps; extract a public bounded core rather than calling private `search_project` as if it were a finished agent API.
 - [x] Render concise tool activity/output/truncation in the shared Agent panel without leaking secrets or unbounded content.
