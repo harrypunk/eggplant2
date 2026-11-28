@@ -342,7 +342,9 @@ mod tests {
         };
         model.tools.active_tool = Some(crate::tools::ToolKind::Diagnostics);
         model.tools.visibility = Visibility::Displayed;
-        model.agent.enter_insert_mode();
+        model.agent.dispatch(crate::agent::AgentUiAction::Panel(
+            crate::agent::PanelAction::EnterInsert,
+        ));
         model
             .agent
             .handle_input_event(crate::component::text_input::TextInputEvent::Insert('x'));

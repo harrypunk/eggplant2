@@ -6,6 +6,7 @@ mod context;
 mod dialog;
 mod navigation;
 mod panel;
+mod presentation;
 mod prompt;
 mod prompt_command;
 mod references;
@@ -24,12 +25,15 @@ pub(crate) use commands::handle_input;
 pub use commands::{commands, general_action_subscriptions, handle_general_action};
 pub(crate) use dialog::{resume_overlay, suspend_for_overlay};
 pub(crate) use panel::{close_panel_input, focus_panel_input};
+pub use presentation::{dialog::AgentDialogState, panel::AgentInputMode};
+pub(crate) use presentation::{dialog::DialogAction, panel::PanelAction};
 pub(crate) use prompt_command::{PromptCommand, PromptCommandMovement, PromptCommandState};
 pub use references::{FileReferenceStatus, FileReferenceView};
 pub use runtime::AgentRuntime;
 pub use state::AgentState;
 pub use ui::register_ui;
 pub(crate) use ui::render_panel;
+pub(crate) use ui_state::AgentUiAction;
 
 pub const KEYMAPS: &[ContextKeymap] = &[
     ContextKeymap::new("agent_chat_dialog", Context::AgentChatDialog)
@@ -90,28 +94,4 @@ pub struct EditorContext {
     pub path: std::path::PathBuf,
     pub revision: i32,
     pub line: usize,
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub enum AgentInputMode {
-    #[default]
-    Normal,
-    Insert,
-}
-
-impl AgentInputMode {
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::Normal => "Normal",
-            Self::Insert => "Insert",
-        }
-    }
-}
-
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub enum AgentDialogState {
-    #[default]
-    Closed,
-    Open,
-    Suspended,
 }

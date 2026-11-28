@@ -1,4 +1,4 @@
-use super::EditorContext;
+use super::{AgentUiAction, DialogAction, EditorContext};
 use crate::{
     data_object::{Context, Model},
     manager::effect::Effect,
@@ -46,7 +46,7 @@ pub(crate) fn open(model: &mut Model) -> Option<Effect> {
         } => match model.modal.open(modal_context) {
             false => None,
             true => {
-                model.agent.open_dialog(context);
+                model.agent.dispatch(AgentUiAction::OpenDialog { context });
                 None
             }
         },
@@ -57,7 +57,9 @@ pub(crate) fn close(model: &mut Model) -> Option<Effect> {
     match model.agent.dialog_open() {
         false => None,
         true => {
-            model.agent.close_dialog();
+            model
+                .agent
+                .dispatch(AgentUiAction::Dialog(DialogAction::Close));
             [Context::AgentChatDialog, Context::AgentApproval]
                 .into_iter()
                 .for_each(|context| model.modal.close(context));
@@ -86,7 +88,9 @@ pub(crate) fn suspend_for_overlay(model: &mut Model) -> Option<Context> {
     match suspension(model) {
         OverlayTransition::Skip | OverlayTransition::Resume => None,
         OverlayTransition::Suspend => {
-            model.agent.suspend_dialog();
+            model
+                .agent
+                .dispatch(AgentUiAction::Dialog(DialogAction::Suspend));
             model.modal.close(Context::AgentChatDialog);
             Some(Context::AgentChatDialog)
         }
@@ -104,7 +108,9 @@ pub(crate) fn resume_overlay(model: &mut Model, context: Option<Context>) {
         _ => OverlayTransition::Skip,
     };
     match transition {
-        OverlayTransition::Resume => model.agent.resume_dialog(),
+        OverlayTransition::Resume => model
+            .agent
+            .dispatch(AgentUiAction::Dialog(DialogAction::Resume)),
         OverlayTransition::Skip | OverlayTransition::Suspend => {}
     }
 }

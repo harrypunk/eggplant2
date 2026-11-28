@@ -68,9 +68,13 @@ mod tests {
         model.tools.visibility = Visibility::Displayed;
         assert_eq!(input_context(&model), Some(Context::AgentChat));
 
-        model.agent.enter_insert_mode();
+        model.agent.dispatch(crate::agent::AgentUiAction::Panel(
+            crate::agent::PanelAction::EnterInsert,
+        ));
         assert_eq!(input_context(&model), Some(Context::AgentChatInsert));
-        model.agent.enter_normal_mode();
+        model.agent.dispatch(crate::agent::AgentUiAction::Panel(
+            crate::agent::PanelAction::EnterNormal,
+        ));
         assert_eq!(input_context(&model), Some(Context::AgentChat));
 
         model.current_focus = FocusTarget::Editor;

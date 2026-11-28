@@ -1,3 +1,4 @@
+use super::{AgentUiAction, PanelAction};
 use crate::{
     data_object::{AppPage, Context, FocusTarget, Model, Visibility},
     manager::effect::Effect,
@@ -30,20 +31,24 @@ pub(crate) fn focus_panel_input(model: &mut Model) -> Option<Effect> {
         return super::adapter::notify(model, "Open a project to use the agent".to_string());
     }
     close_help(model);
-    model.agent.prepare_panel();
+    model.agent.dispatch(AgentUiAction::PreparePanel);
     model.current_focus = FocusTarget::ToolsPanel;
     None
 }
 
 pub(crate) fn enter_insert_mode(model: &mut Model) -> Option<Effect> {
     if normal_input_available(model) {
-        model.agent.enter_insert_mode();
+        model
+            .agent
+            .dispatch(AgentUiAction::Panel(PanelAction::EnterInsert));
     }
     None
 }
 
 pub(crate) fn enter_normal_mode(model: &mut Model) -> Option<Effect> {
-    model.agent.enter_normal_mode();
+    model
+        .agent
+        .dispatch(AgentUiAction::Panel(PanelAction::EnterNormal));
     None
 }
 
@@ -54,19 +59,23 @@ pub(crate) fn toggle_help(model: &mut Model) -> Option<Effect> {
     if !normal_input_available(model) || !model.modal.open(Context::AgentChatHelp) {
         return None;
     }
-    model.agent.toggle_help();
+    model
+        .agent
+        .dispatch(AgentUiAction::Panel(PanelAction::ToggleHelp));
     None
 }
 
 pub(crate) fn close_help(model: &mut Model) -> Option<Effect> {
-    model.agent.close_help();
+    model
+        .agent
+        .dispatch(AgentUiAction::Panel(PanelAction::CloseHelp));
     model.modal.close(Context::AgentChatHelp);
     None
 }
 
 pub(crate) fn close_panel_input(model: &mut Model) {
     close_help(model);
-    model.agent.prepare_panel();
+    model.agent.dispatch(AgentUiAction::PreparePanel);
     crate::focus::focus_editor(model);
 }
 

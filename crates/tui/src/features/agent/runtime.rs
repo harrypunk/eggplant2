@@ -35,6 +35,13 @@ impl Default for AgentRuntime {
     }
 }
 
+/// Runtime outcome emitted after a session run starts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RunStarted {
+    pub id: RunId,
+    pub started_at: i64,
+}
+
 impl AgentRuntime {
     /// Begin one session run without producing presentation side effects.
     pub fn begin(
@@ -42,14 +49,17 @@ impl AgentRuntime {
         prompt: String,
         context: Option<EditorContext>,
         now: i64,
-    ) -> Option<RunId> {
+    ) -> Option<RunStarted> {
         if prompt.trim().is_empty() {
             return None;
         }
         let run_id = self.session.begin(prompt)?;
         self.session_created_at.get_or_insert(now);
         self.run = Some(AgentRunState::new(run_id, now, context));
-        Some(run_id)
+        Some(RunStarted {
+            id: run_id,
+            started_at: now,
+        })
     }
 
     pub fn session(&self) -> &AgentSession {
@@ -171,6 +181,6 @@ mod tests {
         let first = runtime.begin("hello".to_string(), None, 123).unwrap();
         assert_eq!(runtime.session_created_at(), Some(123));
         assert!(runtime.session().is_running());
-        assert_eq!(runtime.session().run().unwrap().id, first);
+        assert_eq!(runtime.session().run().unwrap().id, first.id);
     }
 }

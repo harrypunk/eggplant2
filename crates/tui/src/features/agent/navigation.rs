@@ -3,7 +3,7 @@ use crate::{
     data_object::Model, manager::effect::Effect,
 };
 
-use super::{AgentInputMode, surface::AgentSurface};
+use super::{AgentUiAction, surface::AgentSurface};
 
 pub(super) fn page_up(model: &mut Model) -> Option<Effect> {
     page(model, ScrollDirection::Up)
@@ -24,42 +24,22 @@ pub(super) fn cursor_down(model: &mut Model) -> Option<Effect> {
 fn page(model: &mut Model, direction: ScrollDirection) -> Option<Effect> {
     let page = model.page_scroll;
     let (surface, metrics) = metrics_for_active_surface(model)?;
-    match surface {
-        AgentSurface::Dialog => {
-            model
-                .agent
-                .dialog_scroll_mut()
-                .scroll(page, direction, metrics);
-        }
-        AgentSurface::Panel => match model.agent.panel_mode() {
-            AgentInputMode::Normal => {
-                model
-                    .agent
-                    .panel_navigation_mut()
-                    .page(page, direction, metrics);
-            }
-            AgentInputMode::Insert => {
-                model
-                    .agent
-                    .panel_navigation_mut()
-                    .scroll(page, direction, metrics);
-            }
-        },
-    }
+    model.agent.dispatch(AgentUiAction::Page {
+        surface,
+        page,
+        direction,
+        metrics,
+    });
     None
 }
 
 fn cursor(model: &mut Model, direction: ScrollDirection) -> Option<Effect> {
-    if model.agent.panel_mode() != AgentInputMode::Normal {
-        return None;
-    }
     let Some((AgentSurface::Panel, metrics)) = metrics_for_active_surface(model) else {
         return None;
     };
     model
         .agent
-        .panel_navigation_mut()
-        .move_cursor(direction, metrics);
+        .dispatch(AgentUiAction::MoveCursor { direction, metrics });
     None
 }
 
@@ -74,7 +54,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        agent::{dialog, panel, ui},
+        agent::{AgentInputMode, PanelAction, dialog, panel, ui},
         data_object::Visibility,
         tools::ToolKind,
     };
@@ -97,6 +77,19 @@ mod tests {
         );
         model.agent.session_mut().complete(run);
         (model, directory)
+    }
+
+    fn start_prompt(model: &mut Model, surface: AgentSurface) {
+        let context = model.agent.context().cloned();
+        let started = model
+            .agent
+            .runtime_mut()
+            .begin("next question".to_string(), context, 123)
+            .unwrap();
+        model.agent.dispatch(AgentUiAction::RunStarted {
+            surface,
+            run_id: started.id,
+        });
     }
 
     #[test]
@@ -155,10 +148,14 @@ mod tests {
         assert!(moved.cursor_row(metrics).unwrap() < last - 1);
         assert!(moved.offset(metrics) < metrics.max_offset());
 
-        model.agent.enter_insert_mode();
+        model
+            .agent
+            .dispatch(AgentUiAction::Panel(PanelAction::EnterInsert));
         cursor_down(&mut model);
         assert_eq!(model.agent.navigation(AgentSurface::Panel).panel(), moved);
-        model.agent.enter_normal_mode();
+        model
+            .agent
+            .dispatch(AgentUiAction::Panel(PanelAction::EnterNormal));
         let reset = model.agent.navigation(AgentSurface::Panel).panel();
         assert_eq!(reset.cursor_row(metrics), Some(last));
         assert_eq!(reset.offset(metrics), metrics.max_offset());
@@ -171,7 +168,7 @@ mod tests {
         page_up(&mut model);
         model.agent.set_prompt("next question");
 
-        model.agent.begin_prompt().unwrap();
+        start_prompt(&mut model, AgentSurface::Dialog);
 
         let metrics = ui::navigation_metrics(&model, AgentSurface::Dialog);
         assert_eq!(
@@ -188,11 +185,13 @@ mod tests {
     fn panel_submission_restores_bottom_without_leaving_insert_mode() {
         let (mut model, _directory) = model();
         panel::focus_panel_input(&mut model);
-        model.agent.enter_insert_mode();
+        model
+            .agent
+            .dispatch(AgentUiAction::Panel(PanelAction::EnterInsert));
         page_up(&mut model);
         model.agent.set_prompt("next question");
 
-        model.agent.begin_prompt().unwrap();
+        start_prompt(&mut model, AgentSurface::Panel);
 
         let metrics = ui::navigation_metrics(&model, AgentSurface::Panel);
         let navigation = model.agent.navigation(AgentSurface::Panel).panel();

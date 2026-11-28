@@ -5,11 +5,14 @@ use eggplant_agent_storage::SessionStore;
 
 use super::{
     AgentDialogState, AgentInputMode, EditorContext, FileReferenceView, PromptCommandMovement,
-    PromptCommandState, runtime::AgentRuntime, surface::AgentSurface, ui_state::AgentUiState,
+    PromptCommandState,
+    runtime::AgentRuntime,
+    surface::AgentSurface,
+    ui_state::{AgentUiAction, AgentUiState},
 };
 use crate::{
     component::{
-        agent::{PageScrollState, PanelNavigation, SurfaceNavigation},
+        agent::SurfaceNavigation,
         text_input::{TextInput, TextInputEvent},
     },
     file_search::FileEntry,
@@ -39,6 +42,10 @@ impl AgentState {
 
     pub(crate) fn ui_mut(&mut self) -> &mut AgentUiState {
         &mut self.ui
+    }
+
+    pub(crate) fn dispatch(&mut self, action: AgentUiAction) {
+        self.ui.reduce(action);
     }
 
     pub fn prompt(&self) -> &str {
@@ -122,32 +129,8 @@ impl AgentState {
         self.ui.navigation(surface)
     }
 
-    pub fn dialog_scroll_mut(&mut self) -> &mut PageScrollState {
-        self.ui.dialog_scroll_mut()
-    }
-
-    pub fn panel_navigation_mut(&mut self) -> &mut PanelNavigation {
-        self.ui.panel_navigation_mut()
-    }
-
     pub fn help_visible(&self) -> bool {
         self.ui.help_visible()
-    }
-
-    pub fn enter_insert_mode(&mut self) {
-        self.ui.enter_insert_mode();
-    }
-
-    pub fn enter_normal_mode(&mut self) {
-        self.ui.enter_normal_mode();
-    }
-
-    pub fn toggle_help(&mut self) {
-        self.ui.toggle_help();
-    }
-
-    pub fn close_help(&mut self) {
-        self.ui.close_help();
     }
 
     pub fn dialog_state(&self) -> AgentDialogState {
@@ -159,28 +142,8 @@ impl AgentState {
         self.ui.dialog_open()
     }
 
-    pub fn suspend_dialog(&mut self) {
-        self.ui.suspend_dialog();
-    }
-
-    pub fn resume_dialog(&mut self) {
-        self.ui.resume_dialog();
-    }
-
     pub fn context(&self) -> Option<&EditorContext> {
         self.ui.context()
-    }
-
-    pub fn prepare_panel(&mut self) {
-        self.ui.prepare_panel();
-    }
-
-    pub fn open_dialog(&mut self, context: Option<EditorContext>) {
-        self.ui.open_dialog(context);
-    }
-
-    pub fn close_dialog(&mut self) {
-        self.ui.close_dialog();
     }
 
     pub fn handle_input_event(&mut self, event: TextInputEvent) {
@@ -189,17 +152,6 @@ impl AgentState {
 
     pub fn backspace(&mut self) {
         self.ui.backspace();
-    }
-
-    pub fn begin_prompt(&mut self) -> Option<RunId> {
-        let prompt = self.ui.submission_text()?;
-        let run_id = self.runtime.begin(
-            prompt,
-            self.ui.context().cloned(),
-            chrono::Utc::now().timestamp_millis(),
-        )?;
-        self.ui.complete_successful_submission();
-        Some(run_id)
     }
 
     pub fn complete_prompt_command(&mut self) {

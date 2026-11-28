@@ -798,7 +798,9 @@ mod tests {
             ));
         }
 
-        model.agent.enter_insert_mode();
+        model.agent.dispatch(crate::agent::AgentUiAction::Panel(
+            crate::agent::PanelAction::EnterInsert,
+        ));
         let event = Event::Key(KeyEvent::new(KeyCode::Char(' '), KeyModifiers::NONE));
         assert!(matches!(
             manager.translate(event, &model),
@@ -860,7 +862,9 @@ mod tests {
             assert!(manager.translate(event, &model).is_none());
         }
 
-        model.agent.enter_normal_mode();
+        model.agent.dispatch(crate::agent::AgentUiAction::Panel(
+            crate::agent::PanelAction::EnterNormal,
+        ));
         assert!(model.modal.open(Context::AgentChatHelp));
         for (key, command) in [
             (KeyCode::Char('?'), "agent_help"),

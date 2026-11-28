@@ -196,7 +196,7 @@ mod tests {
     #[test]
     fn finalized_record_uses_runtime_timestamps_without_ui_state() {
         let mut runtime = AgentRuntime::default();
-        let run = runtime.begin("question".to_string(), None, 10).unwrap();
+        let run = runtime.begin("question".to_string(), None, 10).unwrap().id;
         runtime.session_mut().complete(run);
         let created = runtime.session_created_at();
         let started = runtime.run_started_at(run);

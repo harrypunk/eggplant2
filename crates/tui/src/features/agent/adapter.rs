@@ -27,8 +27,8 @@ impl SubmissionContext for Model {
         self.agent.ui_mut()
     }
 
-    fn submission_active(&self) -> bool {
-        super::surface::active(self).is_some()
+    fn submission_surface(&self) -> Option<super::surface::AgentSurface> {
+        super::surface::active(self)
     }
 
     fn project_available(&self) -> bool {

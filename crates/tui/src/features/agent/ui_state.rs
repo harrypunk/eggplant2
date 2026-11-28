@@ -1,6 +1,9 @@
+use eggplant_agent::RunId;
+
 use crate::{
+    capabilities::page_scroll::{PageScroll, ScrollDirection},
     component::{
-        agent::{PageScrollState, PanelNavigation, SurfaceNavigation},
+        agent::{SurfaceNavigation, ViewportMetrics},
         text_input::{TextInput, TextInputEvent},
     },
     file_search::FileEntry,
@@ -8,28 +11,93 @@ use crate::{
 
 use super::{
     AgentDialogState, AgentInputMode, EditorContext, PromptCommandMovement, PromptCommandState,
-    prompt::AgentPrompt, references, surface::AgentSurface,
+    presentation::{
+        dialog::{DialogAction, DialogPresentationState},
+        panel::{PanelAction, PanelPresentationState},
+    },
+    prompt::AgentPrompt,
+    references,
+    surface::AgentSurface,
 };
 
-/// Interactive-only Agent state. Runtime execution never depends on this type.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum AgentUiAction {
+    OpenDialog {
+        context: Option<EditorContext>,
+    },
+    PreparePanel,
+    Dialog(DialogAction),
+    Panel(PanelAction),
+    RunStarted {
+        surface: AgentSurface,
+        run_id: RunId,
+    },
+    Page {
+        surface: AgentSurface,
+        page: PageScroll,
+        direction: ScrollDirection,
+        metrics: ViewportMetrics,
+    },
+    MoveCursor {
+        direction: ScrollDirection,
+        metrics: ViewportMetrics,
+    },
+}
+
+/// Shared interactive data plus independently reduced dialog/panel presentations.
 #[derive(Debug, Default)]
 pub(crate) struct AgentUiState {
     prompt: AgentPrompt,
-    dialog: AgentDialogState,
-    panel_mode: AgentInputMode,
-    dialog_scroll: PageScrollState,
-    panel_navigation: PanelNavigation,
-    help_visible: bool,
+    dialog: DialogPresentationState,
+    panel: PanelPresentationState,
     context: Option<EditorContext>,
 }
 
 impl AgentUiState {
-    pub fn prompt(&self) -> &str {
-        self.prompt.value()
+    pub fn reduce(&mut self, action: AgentUiAction) {
+        match action {
+            AgentUiAction::OpenDialog { context } => {
+                self.context = context;
+                self.dialog.reduce(DialogAction::Open);
+            }
+            AgentUiAction::PreparePanel => {
+                self.context = None;
+                self.panel.reduce(PanelAction::Prepare);
+            }
+            AgentUiAction::Dialog(action) => self.dialog.reduce(action),
+            AgentUiAction::Panel(action) => self.panel.reduce(action),
+            AgentUiAction::RunStarted { surface, run_id } => {
+                self.prompt.complete_submission();
+                match surface {
+                    AgentSurface::Dialog => self.dialog.reduce(DialogAction::RunStarted(run_id)),
+                    AgentSurface::Panel => self.panel.reduce(PanelAction::RunStarted(run_id)),
+                }
+            }
+            AgentUiAction::Page {
+                surface,
+                page,
+                direction,
+                metrics,
+            } => match surface {
+                AgentSurface::Dialog => self.dialog.reduce(DialogAction::Page {
+                    page,
+                    direction,
+                    metrics,
+                }),
+                AgentSurface::Panel => self.panel.reduce(PanelAction::Page {
+                    page,
+                    direction,
+                    metrics,
+                }),
+            },
+            AgentUiAction::MoveCursor { direction, metrics } => self
+                .panel
+                .reduce(PanelAction::MoveCursor { direction, metrics }),
+        }
     }
 
-    pub fn submission_text(&self) -> Option<String> {
-        self.prompt.submission_text()
+    pub fn prompt(&self) -> &str {
+        self.prompt.value()
     }
 
     pub fn prompt_state(&self) -> &TextInput {
@@ -98,92 +166,34 @@ impl AgentUiState {
     }
 
     pub fn panel_mode(&self) -> AgentInputMode {
-        self.panel_mode
+        self.panel.mode()
     }
 
     pub fn panel_input_context(&self) -> crate::data_object::Context {
-        match self.panel_mode {
-            AgentInputMode::Normal => crate::data_object::Context::AgentChat,
-            AgentInputMode::Insert => crate::data_object::Context::AgentChatInsert,
-        }
+        self.panel.input_context()
     }
 
     pub fn navigation(&self, surface: AgentSurface) -> SurfaceNavigation {
         match surface {
-            AgentSurface::Dialog => SurfaceNavigation::Dialog(self.dialog_scroll),
-            AgentSurface::Panel => SurfaceNavigation::Panel(self.panel_navigation),
+            AgentSurface::Dialog => SurfaceNavigation::Dialog(self.dialog.scroll()),
+            AgentSurface::Panel => SurfaceNavigation::Panel(self.panel.navigation()),
         }
-    }
-
-    pub fn dialog_scroll_mut(&mut self) -> &mut PageScrollState {
-        &mut self.dialog_scroll
-    }
-
-    pub fn panel_navigation_mut(&mut self) -> &mut PanelNavigation {
-        &mut self.panel_navigation
     }
 
     pub fn help_visible(&self) -> bool {
-        self.help_visible
-    }
-
-    pub fn enter_insert_mode(&mut self) {
-        self.panel_mode = AgentInputMode::Insert;
-        self.help_visible = false;
-    }
-
-    pub fn enter_normal_mode(&mut self) {
-        self.panel_mode = AgentInputMode::Normal;
-        self.panel_navigation.enter_normal();
-    }
-
-    pub fn toggle_help(&mut self) {
-        self.help_visible = !self.help_visible;
-    }
-
-    pub fn close_help(&mut self) {
-        self.help_visible = false;
+        self.panel.help_visible()
     }
 
     pub fn dialog_state(&self) -> AgentDialogState {
-        self.dialog
+        self.dialog.lifecycle()
     }
 
     pub fn dialog_open(&self) -> bool {
-        self.dialog != AgentDialogState::Closed
-    }
-
-    pub fn suspend_dialog(&mut self) {
-        if self.dialog == AgentDialogState::Open {
-            self.dialog = AgentDialogState::Suspended;
-        }
-    }
-
-    pub fn resume_dialog(&mut self) {
-        if self.dialog == AgentDialogState::Suspended {
-            self.dialog = AgentDialogState::Open;
-        }
+        self.dialog.is_open()
     }
 
     pub fn context(&self) -> Option<&EditorContext> {
         self.context.as_ref()
-    }
-
-    pub fn prepare_panel(&mut self) {
-        self.context = None;
-        self.panel_mode = AgentInputMode::Normal;
-        self.panel_navigation.enter_normal();
-        self.help_visible = false;
-    }
-
-    pub fn open_dialog(&mut self, context: Option<EditorContext>) {
-        self.context = context;
-        self.dialog_scroll.bottom();
-        self.dialog = AgentDialogState::Open;
-    }
-
-    pub fn close_dialog(&mut self) {
-        self.dialog = AgentDialogState::Closed;
     }
 
     pub fn handle_input_event(&mut self, event: TextInputEvent) {
@@ -194,13 +204,42 @@ impl AgentUiState {
         self.prompt.backspace();
     }
 
-    pub fn complete_successful_submission(&mut self) {
-        self.dialog_scroll.bottom();
-        self.panel_navigation.follow_bottom();
-        self.prompt.complete_submission();
-    }
-
     pub fn complete_prompt_command(&mut self) {
         self.prompt.complete_submission();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::agent::AgentRuntime;
+
+    #[test]
+    fn run_started_reduces_only_the_active_transcript() {
+        let metrics = ViewportMetrics {
+            content_rows: 100,
+            viewport_rows: 20,
+        };
+        let mut state = AgentUiState::default();
+        state.set_prompt("next");
+        state.reduce(AgentUiAction::Page {
+            surface: AgentSurface::Panel,
+            page: PageScroll::default(),
+            direction: ScrollDirection::Up,
+            metrics,
+        });
+        let panel_before = state.navigation(AgentSurface::Panel);
+        let run_id = AgentRuntime::default()
+            .begin("next".to_string(), None, 123)
+            .unwrap()
+            .id;
+
+        state.reduce(AgentUiAction::RunStarted {
+            surface: AgentSurface::Dialog,
+            run_id,
+        });
+
+        assert_eq!(state.prompt(), "");
+        assert_eq!(state.navigation(AgentSurface::Panel), panel_before);
     }
 }

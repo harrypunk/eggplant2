@@ -2,7 +2,12 @@ use eggplant_agent::{ToolResult, ToolResultStatus};
 
 use crate::manager::effect::Effect;
 
-use super::{runtime::AgentRuntime, tools::ToolContext, ui_state::AgentUiState};
+use super::{
+    runtime::AgentRuntime,
+    surface::AgentSurface,
+    tools::ToolContext,
+    ui_state::{AgentUiAction, AgentUiState},
+};
 
 /// Root-supplied capabilities needed to accept and dispatch an Agent submission.
 pub(crate) trait SubmissionContext {
@@ -10,7 +15,7 @@ pub(crate) trait SubmissionContext {
     fn runtime_mut(&mut self) -> &mut AgentRuntime;
     fn ui(&self) -> &AgentUiState;
     fn ui_mut(&mut self) -> &mut AgentUiState;
-    fn submission_active(&self) -> bool;
+    fn submission_surface(&self) -> Option<AgentSurface>;
     fn project_available(&self) -> bool;
     fn tool_context(&self) -> Option<ToolContext>;
     fn open_provider_login(&mut self) -> Option<Effect>;
@@ -58,7 +63,7 @@ struct AcceptedSubmission {
 
 impl Submission {
     fn evaluate(context: &impl SubmissionContext) -> Self {
-        if !context.submission_active() {
+        if context.submission_surface().is_none() {
             return Self::Inactive;
         }
         let prompt = context.ui().prompt().trim();
@@ -105,13 +110,18 @@ pub(crate) fn submit(context: &mut impl SubmissionContext) -> Option<Effect> {
 }
 
 fn start_run(context: &mut impl SubmissionContext, accepted: AcceptedSubmission) -> Option<Effect> {
+    let surface = context.submission_surface()?;
     let editor_context = context.ui().context().cloned();
-    let run_id = context.runtime_mut().begin(
+    let started = context.runtime_mut().begin(
         accepted.prompt.clone(),
         editor_context,
         chrono::Utc::now().timestamp_millis(),
     )?;
-    context.ui_mut().complete_successful_submission();
+    context.ui_mut().reduce(AgentUiAction::RunStarted {
+        surface,
+        run_id: started.id,
+    });
+    let run_id = started.id;
     let provider = context.runtime().provider()?;
     let cancellation = context.runtime_mut().begin_cancellation();
     Some(Effect::feature(ProviderAgentRun {
@@ -272,8 +282,8 @@ mod tests {
             &mut self.ui
         }
 
-        fn submission_active(&self) -> bool {
-            self.active
+        fn submission_surface(&self) -> Option<AgentSurface> {
+            self.active.then_some(AgentSurface::Dialog)
         }
 
         fn project_available(&self) -> bool {
@@ -722,14 +732,20 @@ mod tests {
 
         model
             .agent
-            .open_dialog(crate::agent::context::editor_context(&model));
-        model.agent.prepare_panel();
+            .dispatch(crate::agent::AgentUiAction::OpenDialog {
+                context: crate::agent::context::editor_context(&model),
+            });
+        model
+            .agent
+            .dispatch(crate::agent::AgentUiAction::PreparePanel);
         assert_eq!(model.agent.prompt(), "explain @main.rs");
 
         model.agent.handle_input_event(TextInputEvent::Insert('?'));
         model
             .agent
-            .open_dialog(crate::agent::context::editor_context(&model));
+            .dispatch(crate::agent::AgentUiAction::OpenDialog {
+                context: crate::agent::context::editor_context(&model),
+            });
         assert_eq!(model.agent.prompt(), "explain @main.rs?");
     }
 
@@ -869,7 +885,13 @@ mod tests {
             .unwrap();
         model.agent.set_prompt("next");
 
-        assert!(model.agent.begin_prompt().is_none());
+        assert!(
+            model
+                .agent
+                .runtime_mut()
+                .begin("next".to_string(), None, 123)
+                .is_none()
+        );
         assert_eq!(model.agent.prompt(), "next");
     }
 

@@ -109,6 +109,7 @@ impl AgentPrompt {
         }
     }
 
+    #[cfg(test)]
     pub fn submission_text(&self) -> Option<String> {
         let prompt = self.input.trim().to_string();
         (!prompt.is_empty()).then_some(prompt)

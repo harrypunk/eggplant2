@@ -195,7 +195,9 @@ mod tests {
         };
         model.tools.active_tool = Some(crate::tools::ToolKind::Agent);
         model.tools.visibility = crate::data_object::Visibility::Displayed;
-        model.agent.enter_insert_mode();
+        model.agent.dispatch(crate::agent::AgentUiAction::Panel(
+            crate::agent::PanelAction::EnterInsert,
+        ));
 
         registry.handle(
             &mut model,

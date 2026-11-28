@@ -37,12 +37,16 @@ mod tests {
     #[test]
     fn selects_the_workflow_not_its_presentation_details() {
         let mut model = Model::default();
-        model.agent.open_dialog(Some(crate::agent::EditorContext {
-            buffer: editor::BufferId::from_raw(1),
-            path: std::path::PathBuf::from("/workspace/main.rs"),
-            revision: 1,
-            line: 1,
-        }));
+        model
+            .agent
+            .dispatch(crate::agent::AgentUiAction::OpenDialog {
+                context: Some(crate::agent::EditorContext {
+                    buffer: editor::BufferId::from_raw(1),
+                    path: std::path::PathBuf::from("/workspace/main.rs"),
+                    revision: 1,
+                    line: 1,
+                }),
+            });
         assert!(model.modal.open(Context::AgentChatDialog));
         assert_eq!(active(&model), Some(AgentSurface::Dialog));
 
@@ -52,7 +56,9 @@ mod tests {
         model.tools.visibility = Visibility::Displayed;
         assert_eq!(active(&model), Some(AgentSurface::Panel));
 
-        model.agent.enter_insert_mode();
+        model.agent.dispatch(crate::agent::AgentUiAction::Panel(
+            crate::agent::PanelAction::EnterInsert,
+        ));
         assert_eq!(active(&model), Some(AgentSurface::Panel));
         model.current_focus = FocusTarget::Editor;
         assert_eq!(active(&model), None);

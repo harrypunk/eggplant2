@@ -163,12 +163,16 @@ mod tests {
     #[test]
     fn overlays_follow_modal_ownership() {
         let mut model = Model::default();
-        model.agent.open_dialog(Some(crate::agent::EditorContext {
-            buffer: editor::BufferId::from_raw(1),
-            path: std::path::PathBuf::from("/workspace/main.rs"),
-            revision: 1,
-            line: 1,
-        }));
+        model
+            .agent
+            .dispatch(crate::agent::AgentUiAction::OpenDialog {
+                context: Some(crate::agent::EditorContext {
+                    buffer: editor::BufferId::from_raw(1),
+                    path: std::path::PathBuf::from("/workspace/main.rs"),
+                    revision: 1,
+                    line: 1,
+                }),
+            });
         assert!(dialog_overlay(&model).is_none());
 
         assert!(model.modal.open(Context::AgentChatDialog));
@@ -176,7 +180,9 @@ mod tests {
         model.modal.close(Context::AgentChatDialog);
         assert!(dialog_overlay(&model).is_none());
 
-        model.agent.toggle_help();
+        model.agent.dispatch(crate::agent::AgentUiAction::Panel(
+            crate::agent::PanelAction::ToggleHelp,
+        ));
         assert!(help_overlay(&model).is_none());
         assert!(model.modal.open(Context::AgentChatHelp));
         assert!(help_overlay(&model).is_some());
@@ -225,13 +231,17 @@ mod tests {
         };
         model.tools.active_tool = Some(ToolKind::Agent);
         model.tools.visibility = Visibility::Displayed;
-        model.agent.enter_insert_mode();
+        model.agent.dispatch(crate::agent::AgentUiAction::Panel(
+            crate::agent::PanelAction::EnterInsert,
+        ));
         model.agent.set_prompt("/p");
         let provider = Some(vec![crate::agent::PromptCommand::ProviderLogin]);
         assert_eq!(view_commands(&model, AgentSurface::Panel), provider);
         assert_eq!(view_commands(&model, AgentSurface::Dialog), None);
 
-        model.agent.open_dialog(None);
+        model
+            .agent
+            .dispatch(crate::agent::AgentUiAction::OpenDialog { context: None });
         assert!(model.modal.open(Context::AgentChatDialog));
         assert_eq!(view_commands(&model, AgentSurface::Dialog), provider);
         assert_eq!(view_commands(&model, AgentSurface::Panel), None);
@@ -240,9 +250,13 @@ mod tests {
         assert_eq!(view_commands(&model, AgentSurface::Panel), provider);
         assert_eq!(view_commands(&model, AgentSurface::Dialog), None);
 
-        model.agent.enter_normal_mode();
+        model.agent.dispatch(crate::agent::AgentUiAction::Panel(
+            crate::agent::PanelAction::EnterNormal,
+        ));
         assert_eq!(view_commands(&model, AgentSurface::Panel), None);
-        model.agent.enter_insert_mode();
+        model.agent.dispatch(crate::agent::AgentUiAction::Panel(
+            crate::agent::PanelAction::EnterInsert,
+        ));
         model.agent.set_prompt("plain prompt");
         assert_eq!(view_commands(&model, AgentSurface::Panel), None);
         assert_eq!(view_commands(&model, AgentSurface::Dialog), None);
