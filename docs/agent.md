@@ -1,6 +1,6 @@
 # AI agent architecture
 
-Status: M12.1–M12.6 are implemented. Multi-turn chat, OpenAI streaming, bounded tools, approved writes, durable SQLite sessions, `/new`, and `/sessions` restoration are complete. M12.7 covers startup continuation and recent-session pagination; M12.8 will address provider context budgets before any compaction.
+Status: M12.1–M12.6 are implemented. Multi-turn chat, OpenAI streaming, bounded tools, approved writes, durable SQLite sessions, `/new`, and `/sessions` restoration are complete. M12.7 is in progress: latest-workspace startup continuation is implemented, recent-session pagination remains, and M12.8 will address provider context budgets before any compaction.
 
 The agent is a primary Eggplant workflow, not a detached chat window or an excuse to bypass editor safety. It should make a small coding task feel like a natural extension of navigation, search, diagnostics, and editing.
 

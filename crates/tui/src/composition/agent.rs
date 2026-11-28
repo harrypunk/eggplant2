@@ -1,15 +1,18 @@
 use std::sync::Arc;
 
 use color_eyre::eyre::{bail, eyre};
-use eggplant_agent::AgentProvider;
+use eggplant_agent::{AgentProvider, CancellationToken};
 use eggplant_agent_openai::{OpenAiConfig, OpenAiProvider};
-use eggplant_agent_storage::{ModelCatalogStore, ProviderCredentialStore, SessionStore};
+use eggplant_agent_storage::{
+    ModelCatalogStore, ProviderCredentialStore, RecentQuery, SessionStore,
+};
 use eggplant_agent_storage_seaorm::{
     SeaOrmModelCatalogStore, SeaOrmProviderCredentialStore, SeaOrmSessionStore,
 };
 
 use super::openai::OpenAiFactory;
 use crate::{
+    agent::{LoadedSession, load_session},
     config::{Config, default_agent_database_path},
     data_object::Model,
 };
@@ -20,6 +23,7 @@ pub async fn configure(config: &Config, model: &mut Model) -> color_eyre::Result
         config.features.agent.context_window,
     )));
     configure_store(config, model).await?;
+    restore_latest_workspace_session(model).await;
     if let Some(provider) = agent_provider(config)? {
         let model_id = config
             .features
@@ -34,6 +38,69 @@ pub async fn configure(config: &Config, model: &mut Model) -> color_eyre::Result
         return Ok(());
     }
     restore_saved_provider(model).await
+}
+
+async fn restore_latest_workspace_session(model: &mut Model) {
+    let Some(store) = model.agent.runtime().session_store() else {
+        return;
+    };
+    let Some(workspace) = model
+        .workspace
+        .as_ref()
+        .map(|workspace| workspace.root().to_string_lossy().into_owned())
+    else {
+        return;
+    };
+    match latest_workspace_session(store.as_ref(), workspace).await {
+        Ok(Some(LoadedSession {
+            snapshot,
+            created_at,
+            title,
+        })) => {
+            if model
+                .agent
+                .runtime_mut()
+                .restore_session(snapshot, created_at, title)
+                .is_err()
+            {
+                report_restore_error(
+                    model,
+                    "the stored session has an active run and cannot be restored".to_string(),
+                );
+            }
+        }
+        Ok(None) => {}
+        Err(error) => report_restore_error(model, error),
+    }
+}
+
+async fn latest_workspace_session(
+    store: &dyn SessionStore,
+    workspace: String,
+) -> Result<Option<LoadedSession>, String> {
+    let page = store
+        .recent_sessions(RecentQuery {
+            workspace: Some(workspace),
+            limit: 1,
+            ..RecentQuery::default()
+        })
+        .await
+        .map_err(|error| error.to_string())?;
+    let Some(session) = page.sessions.into_iter().next() else {
+        return Ok(None);
+    };
+    load_session(store, session.id, CancellationToken::default())
+        .await
+        .map(Some)
+        .map_err(|error| error.to_string())
+}
+
+fn report_restore_error(model: &mut Model, error: String) {
+    let error = format!("Session restore failed: {error}")
+        .chars()
+        .take(512)
+        .collect();
+    model.agent.runtime_mut().report_storage_error(error);
 }
 
 async fn restore_saved_provider(model: &mut Model) -> color_eyre::Result<()> {
@@ -171,7 +238,62 @@ fn agent_provider(config: &Config) -> color_eyre::Result<Option<Arc<dyn AgentPro
 
 #[cfg(test)]
 mod tests {
+    use eggplant_agent::{MessageRole, RunId, RunStatus, SessionId};
+    use eggplant_agent_storage::{FinalizedRun, MessageRecord, RunRecord, SessionRecord};
+
     use super::*;
+
+    async fn persist_session(
+        store: &SeaOrmSessionStore,
+        id: &str,
+        run_id: u64,
+        updated_at: i64,
+        workspace: &str,
+    ) {
+        let session_id = SessionId::from(id);
+        let run = RunId(run_id);
+        store
+            .finalize_run(
+                FinalizedRun {
+                    session: SessionRecord {
+                        id: session_id.clone(),
+                        created_at: 1,
+                        updated_at,
+                        workspace: Some(workspace.to_string()),
+                        title: Some(format!("title-{id}")),
+                    },
+                    run: RunRecord {
+                        id: run,
+                        session_id: session_id.clone(),
+                        status: RunStatus::Complete,
+                        created_at: 1,
+                        completed_at: Some(updated_at),
+                        provider: "test".to_string(),
+                        model: Some("fake".to_string()),
+                        editor_context: None,
+                    },
+                    messages: [
+                        (MessageRole::User, "question"),
+                        (MessageRole::Assistant, "answer"),
+                    ]
+                    .into_iter()
+                    .enumerate()
+                    .map(|(sequence, (role, text))| MessageRecord {
+                        session_id: session_id.clone(),
+                        run_id: run,
+                        sequence: sequence as u64,
+                        role,
+                        text: format!("{text}-{id}"),
+                        created_at: updated_at,
+                    })
+                    .collect(),
+                    tool_calls: Vec::new(),
+                },
+                CancellationToken::default(),
+            )
+            .await
+            .unwrap();
+    }
 
     #[tokio::test]
     async fn default_sqlite_path_uses_the_injected_ai_data_directory() {
@@ -226,6 +348,99 @@ mod tests {
             .await
             .unwrap();
         assert!(recent.sessions.is_empty());
+    }
+
+    #[tokio::test]
+    async fn startup_restores_latest_session_for_current_workspace() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("agent.db");
+        let store = SeaOrmSessionStore::connect(&path).await.unwrap();
+        let workspace = directory.path().to_string_lossy().into_owned();
+        persist_session(&store, "older", 1, 10, &workspace).await;
+        persist_session(&store, "newer", 2, 20, &workspace).await;
+        persist_session(&store, "other-workspace", 4, 30, "/other/workspace").await;
+        drop(store);
+        let mut config = Config::default();
+        config.features.agent.session_db = Some(path);
+        let mut model =
+            crate::startup::initial_model(Some(directory.path().to_path_buf())).unwrap();
+
+        configure(&config, &mut model).await.unwrap();
+
+        assert_eq!(model.agent.session().id(), &SessionId::from("newer"));
+        assert_eq!(model.agent.runtime().session_title(), Some("title-newer"));
+        assert_eq!(model.agent.session().messages().len(), 2);
+        assert_eq!(model.agent.runtime().provider_history().len(), 2);
+        let next = model
+            .agent
+            .runtime_mut()
+            .begin("next".to_string(), None, 40)
+            .unwrap();
+        assert_eq!(next.id, RunId(3));
+        model.agent.session_mut().complete(next.id);
+        let fresh = model.agent.runtime_mut().new_session().unwrap();
+        assert_ne!(fresh.session_id, SessionId::from("newer"));
+        assert!(model.agent.session().messages().is_empty());
+    }
+
+    #[tokio::test]
+    async fn restore_read_failure_starts_empty_with_a_storage_warning() {
+        #[derive(Debug)]
+        struct FailingStore;
+
+        impl SessionStore for FailingStore {
+            fn finalize_run<'a>(
+                &'a self,
+                _run: FinalizedRun,
+                _cancellation: CancellationToken,
+            ) -> eggplant_agent_storage::StoreFuture<'a, ()> {
+                Box::pin(async { Ok(()) })
+            }
+
+            fn recent_sessions<'a>(
+                &'a self,
+                _query: RecentQuery,
+            ) -> eggplant_agent_storage::StoreFuture<'a, eggplant_agent_storage::RecentPage>
+            {
+                Box::pin(async {
+                    Err(eggplant_agent_storage::StorageError::Backend(
+                        "read failed".to_string(),
+                    ))
+                })
+            }
+
+            fn transcript<'a>(
+                &'a self,
+                _session_id: SessionId,
+                _query: eggplant_agent_storage::TranscriptQuery,
+            ) -> eggplant_agent_storage::StoreFuture<'a, eggplant_agent_storage::TranscriptPage>
+            {
+                unimplemented!()
+            }
+
+            fn search<'a>(
+                &'a self,
+                _query: eggplant_agent_storage::SearchQuery,
+            ) -> eggplant_agent_storage::StoreFuture<'a, eggplant_agent_storage::SearchPage>
+            {
+                unimplemented!()
+            }
+        }
+
+        let directory = tempfile::tempdir().unwrap();
+        let mut model =
+            crate::startup::initial_model(Some(directory.path().to_path_buf())).unwrap();
+        model.agent.set_session_store(Arc::new(FailingStore));
+
+        restore_latest_workspace_session(&mut model).await;
+
+        assert!(model.agent.session().messages().is_empty());
+        assert!(
+            model
+                .agent
+                .storage_error()
+                .is_some_and(|error| error.contains("read failed"))
+        );
     }
 
     #[tokio::test]

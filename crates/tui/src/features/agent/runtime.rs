@@ -252,6 +252,10 @@ impl AgentRuntime {
         self.storage_error.as_deref()
     }
 
+    pub(crate) fn report_storage_error(&mut self, error: String) {
+        self.storage_error = Some(error);
+    }
+
     pub(crate) fn session_created_at(&self) -> Option<i64> {
         self.session_created_at
     }
