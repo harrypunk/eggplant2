@@ -1,8 +1,8 @@
 use std::{collections::BTreeMap, path::Path, sync::Arc};
 
 use eggplant_agent::{
-    AgentRun, CancellationToken, ChatMessage, MessageRole, RunId, SessionId, SessionSnapshot,
-    ToolEvent,
+    AgentRun, AgentSession, CancellationToken, ChatMessage, MessageRole, RunId, SessionId,
+    SessionSnapshot, ToolEvent,
 };
 use eggplant_agent_storage::{
     FinalizedRun, MAX_PAGE_LIMIT, MessageRecord, RunRecord, SessionRecord, SessionStore,
@@ -16,40 +16,106 @@ use crate::{
     manager::effect::{Completion, Effect, FeatureCompletion, FeatureEffect},
 };
 
-use super::AgentRuntime;
+use super::{AgentRuntime, EditorContext};
+
+#[derive(Debug)]
+enum Finalization {
+    NotFinalized,
+    Ready(Box<FinalizedRun>),
+    Invalid(FinalizationError),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum FinalizationError {
+    MissingRunStartedAt(RunId),
+    MissingSessionCreatedAt,
+}
+
+impl std::fmt::Display for FinalizationError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MissingRunStartedAt(run_id) => {
+                write!(formatter, "missing start timestamp for run {}", run_id.0)
+            }
+            Self::MissingSessionCreatedAt => {
+                formatter.write_str("missing session creation timestamp")
+            }
+        }
+    }
+}
 
 pub fn persist_finalized(model: &mut Model) -> Option<Effect> {
     let store = model.agent.runtime().session_store()?;
     let workspace = model.workspace.as_ref().map(|workspace| workspace.root());
-    let run = finalized_run(
+    match finalized_run(
         model.agent.runtime(),
         workspace,
         chrono::Utc::now().timestamp_millis(),
-    )?;
-    Some(Effect::feature(StorageEffect {
-        store,
-        session_id: run.session.id.clone(),
-        run_id: run.run.id,
-        run,
+    ) {
+        Finalization::NotFinalized => None,
+        Finalization::Invalid(error) => Some(crate::notifications::publish_status(
+            model,
+            StatusMessage::error(format!("Agent session storage failed: {error}")),
+            Some("Agent"),
+        )),
+        Finalization::Ready(run) => {
+            let run = (*run).bounded();
+            Some(Effect::feature(StorageEffect {
+                store,
+                session_id: run.session.id.clone(),
+                run_id: run.run.id,
+                run,
+            }))
+        }
+    }
+}
+
+fn finalized_run(runtime: &AgentRuntime, workspace: Option<&Path>, now: i64) -> Finalization {
+    let session = runtime.session();
+    let Some(run) = session.run() else {
+        return Finalization::NotFinalized;
+    };
+    if run.status.is_running() {
+        return Finalization::NotFinalized;
+    }
+    let run_id = run.id;
+    let Some(started) = runtime.run_started_at(run_id) else {
+        return Finalization::Invalid(FinalizationError::MissingRunStartedAt(run_id));
+    };
+    let Some(session_created) = runtime.session_created_at() else {
+        return Finalization::Invalid(FinalizationError::MissingSessionCreatedAt);
+    };
+    let session_id = session.id().clone();
+    let title = session
+        .messages()
+        .iter()
+        .find(|message| message.role == MessageRole::User)
+        .map(|message| message.text.chars().take(160).collect::<String>());
+    Finalization::Ready(Box::new(FinalizedRun {
+        session: SessionRecord {
+            id: session_id.clone(),
+            created_at: session_created,
+            updated_at: now,
+            workspace: workspace.map(|root| root.to_string_lossy().into_owned()),
+            title,
+        },
+        run: RunRecord {
+            id: run_id,
+            session_id: session_id.clone(),
+            status: run.status.clone(),
+            created_at: started,
+            completed_at: Some(now),
+            provider: runtime.provider_name().to_string(),
+            model: runtime.model().map(str::to_string),
+            editor_context: editor_context_record(runtime.run_context(run_id)),
+        },
+        messages: message_records(session, &session_id, run_id, started, now),
+        tool_calls: tool_call_records(session, &session_id, run_id, started, now),
     }))
 }
 
-fn finalized_run(
-    runtime: &AgentRuntime,
-    workspace: Option<&Path>,
-    now: i64,
-) -> Option<FinalizedRun> {
-    let (run_id, status) = runtime
-        .session()
-        .run()
-        .map(|run| (run.id, run.status.clone()))?;
-    if status.is_running() {
-        return None;
-    }
-    let started = runtime.run_started_at(run_id)?;
-    let created = runtime.session_created_at()?;
-    let session_id = runtime.session().id().clone();
-    let editor_context = runtime.run_context(run_id).map(|context| {
+fn editor_context_record(context: Option<&EditorContext>) -> Option<String> {
+    context.map(|context| {
         serde_json::json!({
             "buffer_id": context.buffer.as_raw(),
             "path": context.path,
@@ -57,9 +123,17 @@ fn finalized_run(
             "line": context.line,
         })
         .to_string()
-    });
-    let messages = runtime
-        .session()
+    })
+}
+
+fn message_records(
+    session: &AgentSession,
+    session_id: &SessionId,
+    run_id: RunId,
+    started: i64,
+    now: i64,
+) -> Vec<MessageRecord> {
+    session
         .messages()
         .iter()
         .filter(|message| message.run_id == run_id)
@@ -75,15 +149,17 @@ fn finalized_run(
                 MessageRole::Assistant => now,
             },
         })
-        .collect::<Vec<_>>();
-    let title = runtime
-        .session()
-        .messages()
-        .iter()
-        .find(|message| message.role == MessageRole::User)
-        .map(|message| message.text.chars().take(160).collect::<String>());
-    let tool_calls = runtime
-        .session()
+        .collect()
+}
+
+fn tool_call_records(
+    session: &AgentSession,
+    session_id: &SessionId,
+    run_id: RunId,
+    started: i64,
+    now: i64,
+) -> Vec<ToolCallRecord> {
+    session
         .tool_events()
         .iter()
         .filter(|event| event.run_id == run_id)
@@ -99,28 +175,7 @@ fn finalized_run(
             created_at: started,
             completed_at: event.result.as_ref().map(|_| now),
         })
-        .collect();
-    Some(FinalizedRun {
-        session: SessionRecord {
-            id: session_id.clone(),
-            created_at: created,
-            updated_at: now,
-            workspace: workspace.map(|root| root.to_string_lossy().into_owned()),
-            title,
-        },
-        run: RunRecord {
-            id: run_id,
-            session_id,
-            status,
-            created_at: started,
-            completed_at: Some(now),
-            provider: runtime.provider_name().to_string(),
-            model: runtime.model().map(str::to_string),
-            editor_context,
-        },
-        messages,
-        tool_calls,
-    })
+        .collect()
 }
 
 #[derive(Debug)]
@@ -298,6 +353,14 @@ impl Completion for StorageCompletion {
 mod tests {
     use super::*;
 
+    fn ready(runtime: &AgentRuntime, now: i64) -> FinalizedRun {
+        match finalized_run(runtime, None, now) {
+            Finalization::Ready(run) => *run,
+            Finalization::NotFinalized => panic!("run should be finalized"),
+            Finalization::Invalid(error) => panic!("finalization failed: {error}"),
+        }
+    }
+
     #[test]
     fn finalized_record_uses_runtime_timestamps_without_ui_state() {
         let mut runtime = AgentRuntime::default();
@@ -306,13 +369,109 @@ mod tests {
         let created = runtime.session_created_at();
         let started = runtime.run_started_at(run);
 
-        let record = finalized_run(&runtime, None, 123).unwrap();
+        let record = ready(&runtime, 123);
 
         assert_eq!(record.session.created_at, created.unwrap());
         assert_eq!(record.run.created_at, started.unwrap());
         assert_eq!(record.run.completed_at, Some(123));
         assert_eq!(runtime.session_created_at(), created);
         assert_eq!(runtime.run_started_at(run), started);
+    }
+
+    #[test]
+    fn running_run_is_not_finalized() {
+        let mut runtime = AgentRuntime::default();
+        runtime.begin("question".to_string(), None, 10).unwrap();
+
+        assert!(matches!(
+            finalized_run(&runtime, None, 20),
+            Finalization::NotFinalized
+        ));
+    }
+
+    #[test]
+    fn missing_run_metadata_is_an_explicit_invalid_outcome() {
+        let mut runtime = AgentRuntime::default();
+        runtime
+            .restore_session(
+                SessionSnapshot {
+                    id: SessionId::from("stored"),
+                    run: Some(AgentRun {
+                        id: RunId(4),
+                        status: eggplant_agent::RunStatus::Complete,
+                    }),
+                    messages: Vec::new(),
+                    tool_events: Vec::new(),
+                },
+                10,
+            )
+            .unwrap();
+
+        assert!(matches!(
+            finalized_run(&runtime, None, 20),
+            Finalization::Invalid(FinalizationError::MissingRunStartedAt(RunId(4)))
+        ));
+    }
+
+    #[test]
+    fn finalized_record_projects_only_the_current_run() {
+        let mut runtime = AgentRuntime::default();
+        runtime.set_provider_metadata("test".to_string(), Some("model".to_string()));
+        let first = runtime
+            .begin("first question".to_string(), None, 10)
+            .unwrap()
+            .id;
+        runtime.session_mut().append_delta(first, "first answer");
+        runtime.session_mut().complete(first);
+        let second = runtime
+            .begin("second question".to_string(), None, 30)
+            .unwrap()
+            .id;
+        runtime.session_mut().append_delta(second, "second answer");
+        let call = eggplant_agent::ToolCall {
+            id: "read-1".to_string(),
+            name: "read".to_string(),
+            arguments: "{}".to_string(),
+        };
+        runtime.session_mut().record_tool_call(second, &call);
+        runtime.session_mut().complete_tool_call(
+            second,
+            eggplant_agent::ToolResult {
+                call_id: call.id,
+                status: eggplant_agent::ToolResultStatus::Success,
+                content: "contents".to_string(),
+                truncated: false,
+            },
+        );
+        runtime.session_mut().complete(second);
+
+        let record = ready(&runtime, 40);
+
+        assert_eq!(record.run.id, second);
+        assert_eq!(record.run.provider, "test");
+        assert_eq!(record.run.model.as_deref(), Some("model"));
+        assert_eq!(record.session.title.as_deref(), Some("first question"));
+        assert_eq!(
+            record
+                .messages
+                .iter()
+                .map(|message| message.text.as_str())
+                .collect::<Vec<_>>(),
+            ["second question", "second answer"]
+        );
+        assert_eq!(
+            record
+                .messages
+                .iter()
+                .map(|message| (message.sequence, message.created_at))
+                .collect::<Vec<_>>(),
+            [(0, 30), (1, 40)]
+        );
+        assert_eq!(record.tool_calls.len(), 1);
+        assert_eq!(record.tool_calls[0].run_id, second);
+        assert_eq!(record.tool_calls[0].sequence, 0);
+        assert_eq!(record.tool_calls[0].created_at, 30);
+        assert_eq!(record.tool_calls[0].completed_at, Some(40));
     }
 
     #[test]
@@ -346,10 +505,7 @@ mod tests {
                 );
                 source.session_mut().complete(first);
                 store
-                    .finalize_run(
-                        finalized_run(&source, None, 20).unwrap(),
-                        CancellationToken::default(),
-                    )
+                    .finalize_run(ready(&source, 20), CancellationToken::default())
                     .await
                     .unwrap();
                 let second = source
@@ -359,10 +515,7 @@ mod tests {
                 source.session_mut().append_delta(second, "second answer");
                 source.session_mut().complete(second);
                 store
-                    .finalize_run(
-                        finalized_run(&source, None, 40).unwrap(),
-                        CancellationToken::default(),
-                    )
+                    .finalize_run(ready(&source, 40), CancellationToken::default())
                     .await
                     .unwrap();
 
