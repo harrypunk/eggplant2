@@ -1,6 +1,6 @@
 use std::{future::Future, pin::Pin};
 
-use crate::{AgentEvent, AgentRequest, ThinkingOption};
+use crate::{AgentEvent, AgentRequest, ThinkingOption, TokenEstimator};
 
 /// Callback boundary for ordered provider events.
 pub type AgentEventSink<'a> = Box<dyn FnMut(AgentEvent) + Send + 'a>;
@@ -25,6 +25,11 @@ impl std::error::Error for AgentError {}
 pub trait AgentProvider: std::fmt::Debug + Send + Sync {
     /// Active model context capacity when the frontend configuration supplies it.
     fn context_window(&self) -> Option<u64> {
+        None
+    }
+
+    /// Optional exact token measurement for the active model; unknown remains explicit.
+    fn token_estimator(&self) -> Option<&dyn TokenEstimator> {
         None
     }
 

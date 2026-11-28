@@ -61,8 +61,8 @@ pub struct AgentConfig {
     pub provider: Option<String>,
     pub model: Option<String>,
     pub base_url: Option<String>,
-    /// Optional active-model capacity used to display context occupancy.
-    /// OpenAI-compatible catalog endpoints do not provide this consistently.
+    /// Optional active-model capacity used for context-occupancy reporting and
+    /// capacity-aware context policies. Catalog endpoints do not provide this consistently.
     pub context_window: Option<u64>,
     pub api_key_env: Option<String>,
     /// Optional SQLite path override. The default build uses

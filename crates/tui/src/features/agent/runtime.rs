@@ -1,9 +1,10 @@
 use std::sync::Arc;
 
 use eggplant_agent::{
-    AgentContinuation, AgentEvent, AgentProvider, AgentSession, CancellationToken,
-    ContextProjection, ConversationContextPolicy, FullContext, MessageRole, ProviderMessage, RunId,
-    SessionId, SessionRestoreError, SessionSnapshot, ThinkingId, ThinkingOption,
+    AgentContinuation, AgentEvent, AgentProvider, AgentSession, CancellationToken, ContextCapacity,
+    ContextProjection, ConversationContextPolicy, FullContext, MessageRole, ProviderMessage,
+    RequestContext, RunId, SessionId, SessionRestoreError, SessionSnapshot, ThinkingId,
+    ThinkingOption,
 };
 use eggplant_agent_storage::SessionStore;
 
@@ -213,11 +214,33 @@ impl AgentRuntime {
     }
 
     pub fn provider_history(&self) -> Vec<ProviderMessage> {
-        self.context_projection().history
+        self.context_projection_for("").history
     }
 
     pub fn context_projection(&self) -> ContextProjection {
-        self.context_policy.project(&self.session.answered_turns())
+        self.context_projection_for("")
+    }
+
+    pub fn context_projection_for(&self, prompt: &str) -> ContextProjection {
+        let turns = self.session.answered_turns();
+        let request = RequestContext::new(&turns, prompt);
+        let request = self
+            .provider
+            .as_ref()
+            .and_then(|provider| provider.context_window())
+            .map_or(request, |capacity| {
+                request.with_capacity(ContextCapacity::new(capacity))
+            });
+        let request = self
+            .session
+            .latest_usage()
+            .map_or(request, |usage| request.with_measured_usage(usage));
+        let request = self
+            .provider
+            .as_ref()
+            .and_then(|provider| provider.token_estimator())
+            .map_or(request, |estimator| request.with_estimator(estimator));
+        self.context_policy.project_request(request)
     }
 
     pub fn set_context_policy(&mut self, policy: Arc<dyn ConversationContextPolicy>) {
@@ -389,6 +412,73 @@ mod tests {
             vec![
                 ProviderMessage::user("second".to_string()),
                 ProviderMessage::assistant("second answer".to_string(), Vec::new()),
+            ]
+        );
+    }
+
+    #[test]
+    fn provider_capacity_and_estimator_are_part_of_request_projection() {
+        #[derive(Debug)]
+        struct CapacityProvider;
+
+        impl AgentProvider for CapacityProvider {
+            fn context_window(&self) -> Option<u64> {
+                Some(13)
+            }
+
+            fn token_estimator(&self) -> Option<&dyn eggplant_agent::TokenEstimator> {
+                Some(self)
+            }
+
+            fn stream<'a>(
+                &'a self,
+                _request: eggplant_agent::AgentRequest,
+                _on_event: eggplant_agent::AgentEventSink<'a>,
+            ) -> eggplant_agent::AgentStreamFuture<'a> {
+                Box::pin(async { Ok(()) })
+            }
+        }
+
+        impl eggplant_agent::TokenEstimator for CapacityProvider {
+            fn estimate(&self, input: eggplant_agent::TokenInput<'_>) -> Option<u64> {
+                let history = input
+                    .turns
+                    .iter()
+                    .map(|turn| turn.user.len() + turn.answer.len())
+                    .sum::<usize>();
+                Some((history + input.prompt.len()) as u64)
+            }
+        }
+
+        let mut runtime = AgentRuntime::default();
+        let first = runtime
+            .begin("a much older and longer question".to_string(), None, 10)
+            .unwrap()
+            .id;
+        runtime
+            .session_mut()
+            .append_delta(first, "an equally long answer");
+        runtime.session_mut().complete(first);
+        let second = runtime.begin("keep".to_string(), None, 20).unwrap().id;
+        runtime.session_mut().append_delta(second, "latest");
+        runtime.session_mut().complete(second);
+        runtime.set_provider(Arc::new(CapacityProvider));
+        runtime.set_context_policy(Arc::new(eggplant_agent::BoundedContext::new(
+            10,
+            usize::MAX,
+        )));
+
+        let projection = runtime.context_projection_for("new");
+
+        assert_eq!(projection.omitted_turns, 1);
+        assert_eq!(projection.measurement.capacity_tokens, Some(13));
+        assert_eq!(projection.measurement.estimated_input_tokens, Some(13));
+        assert_eq!(projection.measurement.fits_capacity, Some(true));
+        assert_eq!(
+            projection.history,
+            vec![
+                ProviderMessage::user("keep".to_string()),
+                ProviderMessage::assistant("latest".to_string(), Vec::new()),
             ]
         );
     }

@@ -116,7 +116,10 @@ pub(crate) fn submit(context: &mut impl SubmissionContext) -> Option<Effect> {
 fn start_run(context: &mut impl SubmissionContext, accepted: AcceptedSubmission) -> Option<Effect> {
     let surface = context.submission_surface()?;
     let thinking_id = context.runtime().thinking_id();
-    let history = context.runtime().provider_history();
+    let history = context
+        .runtime()
+        .context_projection_for(&accepted.prompt)
+        .history;
     let editor_context = context.ui().context().cloned();
     let started = context.runtime_mut().begin(
         accepted.prompt.clone(),

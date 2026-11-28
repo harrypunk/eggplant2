@@ -131,7 +131,8 @@ provider = "openai"
 model = "gpt-4o-mini"
 base_url = "https://api.openai.com/v1"
 api_key_env = "OPENAI_API_KEY"
-# Optional active-model capacity used for context percentage in the Agent footer.
+# Optional model input capacity in tokens. Used for occupancy reporting and
+# capacity-aware context policies when an estimator is available.
 # context_window = 200000
 # Optional SQLite path override. Defaults to ~/.eggplant/ai/data.sqlite.
 # session_db = "/home/you/.eggplant/ai/data.sqlite"
