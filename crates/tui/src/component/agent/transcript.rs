@@ -213,6 +213,9 @@ impl PreparedBlock {
                             MessagePart::Answer(text) => {
                                 vec![Self::answer(text, width, part_prefix, styles)]
                             }
+                            MessagePart::Error(text) => {
+                                vec![Self::error(text, width, part_prefix, styles)]
+                            }
                         }
                     })
                     .collect()
@@ -233,6 +236,18 @@ impl PreparedBlock {
                 styles,
             ),
         }
+    }
+
+    fn error(text: &str, width: u16, prefix: Option<RolePrefix>, styles: &UiTheme) -> Self {
+        let prefix = prefix.filter(|prefix| width > prefix.width());
+        let fallback_prefix = prefix.as_ref().map_or_else(
+            || "Error: ".to_string(),
+            |prefix| format!("{}Error: ", prefix.text),
+        );
+        Self::plain(
+            plain_message_lines(text, &fallback_prefix, styles.error),
+            styles,
+        )
     }
 
     fn thinking(text: &str, width: u16, prefix: Option<RolePrefix>, styles: &UiTheme) -> Vec<Self> {
@@ -491,5 +506,44 @@ mod viewport_tests {
         assert_eq!(bottom.top_clip, 0);
         assert!(visible(0..3).is_none());
         assert!(visible(13..20).is_none());
+    }
+}
+
+#[cfg(test)]
+mod error_tests {
+    use ratatui::{Terminal, backend::TestBackend};
+
+    use super::*;
+    use crate::theme::Theme;
+
+    #[test]
+    fn failed_run_renders_error_as_latest_assistant_content() {
+        let mut session = AgentSession::default();
+        let run = session.begin("question".to_string()).unwrap();
+        session.fail(run, "tool step limit reached".to_string());
+        let theme = Theme::default();
+        let mut terminal = Terminal::new(TestBackend::new(80, 12)).unwrap();
+
+        terminal
+            .draw(|frame| {
+                render_transcript(
+                    &session,
+                    frame.area(),
+                    theme.ui(),
+                    PanelNavigation::default(),
+                    AgentInputMode::Normal,
+                    frame.buffer_mut(),
+                );
+            })
+            .unwrap();
+
+        let content = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect::<String>();
+        assert!(content.contains("Agent: Error: tool step limit reached"));
     }
 }

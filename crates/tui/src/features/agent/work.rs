@@ -1139,7 +1139,13 @@ mod tests {
             model.agent.session().run().unwrap().status,
             RunStatus::Failed("injected provider failure".to_string())
         );
-        assert_eq!(model.agent.session().messages().len(), 1);
+        assert_eq!(model.agent.session().messages().len(), 2);
+        assert_eq!(
+            model.agent.session().messages()[1].parts(),
+            &[eggplant_agent::MessagePart::Error(
+                "injected provider failure".to_string()
+            )]
+        );
     }
 
     #[test]

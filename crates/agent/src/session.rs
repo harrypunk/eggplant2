@@ -58,7 +58,7 @@ impl AgentSession {
             .unwrap_or(0);
         let message_skip = messages.len().saturating_sub(MAX_MESSAGES);
         let tool_skip = tool_events.len().saturating_sub(MAX_TOOL_EVENTS);
-        Ok(Self {
+        let mut session = Self {
             id,
             next_id,
             run,
@@ -68,7 +68,27 @@ impl AgentSession {
             usage: TokenUsage::default(),
             latest_usage: None,
             latest_usage_run: None,
-        })
+        };
+        session.restore_failure();
+        Ok(session)
+    }
+
+    fn restore_failure(&mut self) {
+        let Some(AgentRun {
+            id,
+            status: RunStatus::Failed(error),
+        }) = self.run.clone()
+        else {
+            return;
+        };
+        let message = self.ensure_assistant_message(id);
+        if !message
+            .parts()
+            .iter()
+            .any(|part| matches!(part, MessagePart::Error(_)))
+        {
+            append_part(message, MessagePart::Error(error));
+        }
     }
 
     pub fn begin(&mut self, prompt: String) -> Option<RunId> {
@@ -115,6 +135,10 @@ impl AgentSession {
             .as_mut()
             .filter(|run| run.id == id && run.status.is_running())?;
         run.status = RunStatus::Streaming;
+        Some(self.ensure_assistant_message(id))
+    }
+
+    fn ensure_assistant_message(&mut self, id: RunId) -> &mut ChatMessage {
         if !self
             .messages
             .iter()
@@ -131,6 +155,7 @@ impl AgentSession {
             .iter_mut()
             .rev()
             .find(|message| message.run_id == id && message.role == MessageRole::Assistant)
+            .expect("assistant message was just created")
     }
 
     pub fn complete(&mut self, id: RunId) -> bool {
@@ -138,6 +163,10 @@ impl AgentSession {
     }
 
     pub fn fail(&mut self, id: RunId, error: String) -> bool {
+        let Some(message) = self.assistant_message(id) else {
+            return false;
+        };
+        append_part(message, MessagePart::Error(error.clone()));
         self.finish(id, RunStatus::Failed(error))
     }
 
@@ -322,7 +351,8 @@ impl AgentSession {
 fn append_part(message: &mut ChatMessage, part: MessagePart) {
     let appended = match (message.parts.last_mut(), &part) {
         (Some(MessagePart::Thinking(current)), MessagePart::Thinking(delta))
-        | (Some(MessagePart::Answer(current)), MessagePart::Answer(delta)) => {
+        | (Some(MessagePart::Answer(current)), MessagePart::Answer(delta))
+        | (Some(MessagePart::Error(current)), MessagePart::Error(delta)) => {
             current.push_str(delta);
             true
         }

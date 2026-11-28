@@ -241,3 +241,44 @@ fn restore_rejects_an_in_progress_run() {
 
     assert!(matches!(result, Err(SessionRestoreError::RunInProgress)));
 }
+
+#[test]
+fn failure_is_visible_as_error_part_without_joining_answer_history() {
+    let mut session = AgentSession::default();
+    let run = session.begin("question".to_string()).unwrap();
+
+    assert!(session.fail(run, "tool step limit reached".to_string()));
+
+    assert_eq!(session.messages().len(), 2);
+    assert_eq!(session.messages()[1].text, "");
+    assert_eq!(
+        session.messages()[1].parts(),
+        &[MessagePart::Error("tool step limit reached".to_string())]
+    );
+    assert!(session.provider_history().is_empty());
+}
+
+#[test]
+fn restored_failure_recreates_error_part() {
+    let snapshot = SessionSnapshot {
+        id: SessionId::from("failed-session"),
+        run: Some(AgentRun {
+            id: RunId(3),
+            status: RunStatus::Failed("stored failure".to_string()),
+        }),
+        messages: vec![ChatMessage::restored(
+            MessageRole::User,
+            RunId(3),
+            "question".to_string(),
+        )],
+        tool_events: Vec::new(),
+    };
+
+    let session = AgentSession::restore(snapshot).unwrap();
+
+    assert_eq!(session.messages().len(), 2);
+    assert_eq!(
+        session.messages()[1].parts(),
+        &[MessagePart::Error("stored failure".to_string())]
+    );
+}

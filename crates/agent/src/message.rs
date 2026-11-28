@@ -55,6 +55,7 @@ pub enum MessageRole {
 pub enum MessagePart {
     Thinking(String),
     Answer(String),
+    Error(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
