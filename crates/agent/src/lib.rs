@@ -21,7 +21,7 @@ pub use message::{ChatMessage, MessagePart, MessageRole, ProviderMessage, Provid
 pub use provider::{AgentError, AgentEventSink, AgentProvider, AgentStreamFuture};
 pub use request::AgentRequest;
 pub use run::{AgentContinuation, AgentRun, RunId, RunStatus, SessionId};
-pub use session::AgentSession;
+pub use session::{AgentSession, SessionRestoreError, SessionSnapshot};
 pub use thinking::{ThinkingId, ThinkingOption};
 pub use tool::{ToolApproval, ToolCall, ToolEvent, ToolResult, ToolResultStatus};
 pub use usage::TokenUsage;

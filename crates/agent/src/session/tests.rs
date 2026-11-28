@@ -189,3 +189,54 @@ fn provider_history_flattens_answered_turns_without_replaying_thinking() {
     session.begin("active question".to_string()).unwrap();
     assert_eq!(session.provider_history(), expected);
 }
+
+#[test]
+fn restores_finalized_snapshot_and_continues_after_its_latest_run() {
+    let snapshot = SessionSnapshot {
+        id: SessionId::from("stored-session"),
+        run: Some(AgentRun {
+            id: RunId(7),
+            status: RunStatus::Complete,
+        }),
+        messages: vec![
+            ChatMessage::restored(MessageRole::User, RunId(7), "stored question".to_string()),
+            ChatMessage::restored(
+                MessageRole::Assistant,
+                RunId(7),
+                "stored answer".to_string(),
+            ),
+        ],
+        tool_events: vec![ToolEvent {
+            run_id: RunId(7),
+            call_id: "read-1".to_string(),
+            name: "read".to_string(),
+            arguments: "{}".to_string(),
+            result: None,
+        }],
+    };
+
+    let mut session = AgentSession::restore(snapshot).unwrap();
+
+    assert_eq!(session.id(), &SessionId::from("stored-session"));
+    assert_eq!(
+        session.messages()[1].parts(),
+        &[MessagePart::Answer("stored answer".to_string())]
+    );
+    assert_eq!(session.tool_events().len(), 1);
+    assert_eq!(session.begin("next question".to_string()), Some(RunId(8)));
+}
+
+#[test]
+fn restore_rejects_an_in_progress_run() {
+    let result = AgentSession::restore(SessionSnapshot {
+        id: SessionId::from("active-session"),
+        run: Some(AgentRun {
+            id: RunId(2),
+            status: RunStatus::Streaming,
+        }),
+        messages: Vec::new(),
+        tool_events: Vec::new(),
+    });
+
+    assert!(matches!(result, Err(SessionRestoreError::RunInProgress)));
+}

@@ -6,6 +6,20 @@ use crate::{
 const MAX_MESSAGES: usize = 100;
 const MAX_TOOL_EVENTS: usize = 50;
 
+/// Provider-neutral state needed to rehydrate one finalized session.
+#[derive(Debug, Clone)]
+pub struct SessionSnapshot {
+    pub id: SessionId,
+    pub run: Option<AgentRun>,
+    pub messages: Vec<ChatMessage>,
+    pub tool_events: Vec<ToolEvent>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionRestoreError {
+    RunInProgress,
+}
+
 #[derive(Debug, Default)]
 pub struct AgentSession {
     id: SessionId,
@@ -21,6 +35,37 @@ pub struct AgentSession {
 impl AgentSession {
     pub fn id(&self) -> &SessionId {
         &self.id
+    }
+
+    pub fn restore(snapshot: SessionSnapshot) -> Result<Self, SessionRestoreError> {
+        let SessionSnapshot {
+            id,
+            run,
+            messages,
+            tool_events,
+        } = snapshot;
+        if run.as_ref().is_some_and(|run| run.status.is_running()) {
+            return Err(SessionRestoreError::RunInProgress);
+        }
+        let next_id = run
+            .iter()
+            .map(|run| run.id.0)
+            .chain(messages.iter().map(|message| message.run_id.0))
+            .chain(tool_events.iter().map(|event| event.run_id.0))
+            .max()
+            .unwrap_or(0);
+        let message_skip = messages.len().saturating_sub(MAX_MESSAGES);
+        let tool_skip = tool_events.len().saturating_sub(MAX_TOOL_EVENTS);
+        Ok(Self {
+            id,
+            next_id,
+            run,
+            messages: messages.into_iter().skip(message_skip).collect(),
+            tool_events: tool_events.into_iter().skip(tool_skip).collect(),
+            pending_approval: None,
+            usage: TokenUsage::default(),
+            latest_usage: None,
+        })
     }
 
     pub fn begin(&mut self, prompt: String) -> Option<RunId> {

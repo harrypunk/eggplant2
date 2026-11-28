@@ -70,4 +70,20 @@ impl ChatMessage {
     pub fn parts(&self) -> &[MessagePart] {
         &self.parts
     }
+
+    /// Rehydrate answer-only display text without inventing reasoning content.
+    pub fn restored(role: MessageRole, run_id: RunId, text: String) -> Self {
+        let parts = match role {
+            MessageRole::Assistant if !text.is_empty() => {
+                vec![MessagePart::Answer(text.clone())]
+            }
+            MessageRole::User | MessageRole::Assistant => Vec::new(),
+        };
+        Self {
+            role,
+            run_id,
+            text,
+            parts,
+        }
+    }
 }
